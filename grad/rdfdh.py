@@ -227,15 +227,7 @@ class Gradients(dh.rdfdh.RDFDH):
     def __init__(self, mol: gto.Mole, skip_construct=False, *args, **kwargs):
         if not skip_construct:
             super(Gradients, self).__init__(mol, *args, **kwargs)
-        # tune flags
-        self.grad_jk = NotImplemented
-        self.grad_gga = NotImplemented
-        self.grad_pt2 = NotImplemented
-        self.grad_enfunc = NotImplemented
-        self.grad_tot = NotImplemented
-        self.de = NotImplemented
-
-    def initialize(self):
+        # results
         self.grad_jk = NotImplemented
         self.grad_gga = NotImplemented
         self.grad_pt2 = NotImplemented

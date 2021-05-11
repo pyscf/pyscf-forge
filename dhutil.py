@@ -121,4 +121,5 @@ def calc_batch_size(unit_flop, mem_avail, pre_flop=0):
     # mem_avail: in MB
     max_memory = 0.8 * mem_avail - pre_flop * 8 / 1024 ** 2
     batch_size = int(max(max_memory // (unit_flop * 8 / 1024 ** 2), 1))
-    return batch_size
+    # return batch_size
+    return 3

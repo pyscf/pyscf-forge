@@ -242,6 +242,10 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
     return Ax0_cpks_HF_inner
 
 
+def solve_cpks(mf_dh: RDFDH, rhs):
+    return cphf.solve(mf_dh.Ax0_cpks(), mf_dh.e, mf_dh.mo_occ, rhs, max_cycle=mf_dh.cpks_cyc, tol=mf_dh.cpks_tol)[0]
+
+
 # endregion first derivative related
 
 
@@ -520,7 +524,7 @@ class RDFDH(lib.StreamObject):
         sv, so = self.sv, self.so
         D_r = tensors.load("D_rdm1").copy()
         L = tensors.load("L")
-        D_r[sv, so] = cphf.solve(self.Ax0_cpks(), self.e, self.mo_occ, L, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
+        D_r[sv, so] = self.solve_cpks(L)
         tensors.create("D_r", D_r)
 
     def dipole(self):
@@ -548,3 +552,4 @@ class RDFDH(lib.StreamObject):
     energy_elec = energy_elec
     energy_tot = energy_tot
     kernel = kernel
+    solve_cpks = solve_cpks
