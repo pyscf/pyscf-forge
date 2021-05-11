@@ -1,5 +1,6 @@
 import h5py
 from pyscf import lib
+from pyscf.ao2mo.outcore import balance_partition
 
 import numpy as np
 import tempfile
@@ -8,6 +9,7 @@ from functools import wraps, partial
 
 
 # To avoid too slow single-threaded einsum if pyscf-tblis is not available
+
 lib.numpy_helper._numpy_einsum = partial(np.einsum, optimize=True)
 # Doubly hybrid functionals xc code in detail
 XC_DH_MAP = {   # [xc_s, xc_n, cc, c_os, c_ss]
@@ -109,20 +111,10 @@ def gen_batch(minval, maxval, nbatch):
     return [slice(i, (i + nbatch) if i + nbatch < maxval else maxval) for i in range(minval, maxval, nbatch)]
 
 
-def gen_shl_batch(mol, nbatch):
-    res = []
-    p, q = 0, 0
-    sp, sq = 0, 0
-    for sv, v in enumerate(mol.ao_loc_nr()):
-        if v - p <= nbatch:
-            q = v
-            sq = sv
-        else:
-            res.append((slice(sp, sq), slice(p, q)))
-            p, q = q, v
-            sp, sq = sq, sv
-    res.append((slice(sp, sq), slice(p, q)))
-    return res
+def gen_shl_batch(mol, blksize, start_id=0, stop_id=None):
+    ao_loc = mol.ao_loc
+    lst = balance_partition(ao_loc, blksize, start_id, stop_id)
+    return [(t[0], t[1], ao_loc[t[0]], ao_loc[t[1]]) for t in lst]
 
 
 def calc_batch_size(unit_flop, mem_avail, pre_flop=0):

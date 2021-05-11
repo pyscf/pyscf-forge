@@ -253,13 +253,15 @@ class RDFDH(lib.StreamObject):
                  auxbasis_jk: str or dict or None = None,
                  auxbasis_ri: str or dict or None = None,
                  grids: dft.Grids = None,
-                 grids_cpks: dft.Grids = None,
-                 max_memory: float = None):
-        # tune flags
-        self.with_t_ijab = True  # only in energy calculation; force or dipole is forced dump t2 to disk or mem
+                 grids_cpks: dft.Grids = None):
+        # tunable flags
+        self.with_t_ijab = False  # only in energy calculation; polarizability is forced dump t2 to disk or mem
         self._incore_t_ijab = False
         self._incore_Y_mo = False
         self._incore_eri_cpks = False
+        self.cpks_tol = 1e-8
+        self.cpks_cyc = 100
+        self.max_memory = mol.max_memory
         # Parse xc code
         # It's tricky to say that, self.xc refers to SCF xc, and self.xc_dh refers to double hybrid xc
         self.xc_dh = xc
@@ -288,8 +290,6 @@ class RDFDH(lib.StreamObject):
             self.mf_n = dft.RKS(mol, xc=self.xc_n).density_fit(auxbasis=auxbasis_jk)
             self.mf_n.grids = self.mf.grids
             self.mf_n.grids = self.grids
-        # parse maximum memory
-        self.max_memory = max_memory if max_memory else mol.max_memory
         # other preparation
         self.tensors = HybridDict()
         self.mol = mol
@@ -425,14 +425,16 @@ class RDFDH(lib.StreamObject):
             tensors.create("rho" + "in cpks", rho)
             tensors.create("vxc" + self.xc + "in cpks", vxc)
             tensors.create("fxc" + self.xc + "in cpks", fxc)
-            if self.xc_n is None:
-                tensors["vxc" + self.xc_n] = tensors["vxc" + self.xc]
-                tensors["fxc" + self.xc_n] = tensors["fxc" + self.xc]
         if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
             if "rho" in tensors:
                 vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0)[1:3]
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
+            else:
+                rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc_n, C, mo_occ, max_memory=self.get_memory())
+                tensors.create("rho", rho)
+                tensors.create("vxc" + self.xc, vxc)
+                tensors.create("fxc" + self.xc, fxc)
 
     def prepare_pt2(self, dump_t_ijab=True):
         tensors = self.tensors
@@ -451,10 +453,10 @@ class RDFDH(lib.StreamObject):
         if "t_ijab" not in tensors:
             D_jab = mo_energy[so, None, None] - mo_energy[None, sv, None] - mo_energy[None, None, sv]
             flag_t_ijab = True
-        if dump_t_ijab:
-            tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
         else:
             D_jab = None
+        if dump_t_ijab:
+            tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
 
         eng_bi1 = eng_bi2 = 0
         eval_ss = True if abs(c_ss) > 1e-7 else False
@@ -479,7 +481,7 @@ class RDFDH(lib.StreamObject):
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia", G_ia)
 
-    def prepare_lagrangian(self: RDFDH):
+    def prepare_lagrangian(self, gen_W=False):
         tensors = self.tensors
 
         nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
@@ -489,10 +491,20 @@ class RDFDH(lib.StreamObject):
         G_ia = tensors.load("G_ia")
         Y_mo = tensors["Y_mo_ri"]
         Y_ij = np.asarray(Y_mo[:, so, so])
-
         L = np.zeros((nvir, nocc))
+
+        if gen_W:
+            Y_ia = np.asarray(Y_mo[:, so, sv])
+            W_I = np.zeros((nmo, nmo))
+            W_I[so, so] = - 2 * einsum("Pia, Pja -> ij", G_ia, Y_ia)
+            W_I[sv, sv] = - 2 * einsum("Pia, Pib -> ab", G_ia, Y_ia)
+            W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia, Y_mo[:, so, so])
+            tensors.create("W_I", W_I)
+            L += W_I[sv, so]
+        else:
+            L -= 4 * einsum("Pja, Pij -> ai", G_ia, Y_ij)
+
         L += self.Ax0_Core(sv, so, sa, sa)(D_rdm1)
-        L += - 4 * einsum("Pja, Pij -> ai", G_ia, Y_ij)
 
         nbatch = calc_batch_size(nvir ** 2 + nocc * nvir, self.get_memory(), G_ia.size + Y_ij.size)
         for saux in gen_batch(0, naux, nbatch):
@@ -503,18 +515,29 @@ class RDFDH(lib.StreamObject):
 
         tensors.create("L", L)
 
-    def prepare_D_r(self: RDFDH):
+    def prepare_D_r(self):
         tensors = self.tensors
         sv, so = self.sv, self.so
         D_r = tensors.load("D_rdm1").copy()
         L = tensors.load("L")
-        D_r[sv, so] = cphf.solve(self.Ax0_cpks(), self.e, self.mo_occ, L, max_cycle=100, tol=1e-8)[0]
+        D_r[sv, so] = cphf.solve(self.Ax0_cpks(), self.e, self.mo_occ, L, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
         tensors.create("D_r", D_r)
 
-        # # PT2 dipole
-        # h = - self.mol.intor("int1e_r")
-        # d = einsum("tuv, uv -> t", h, self.D + self.C @ D_r @ self.C.T)
-        # d += einsum("A, At -> t", self.mol.atom_charges(), self.mol.atom_coords())
+    def dipole(self):
+        D_r = self.tensors["D_r"]
+        mol, C, D = self.mol, self.C, self.D
+        h = - mol.intor("int1e_r")
+        d = einsum("tuv, uv -> t", h, D + C @ D_r @ C.T)
+        d += einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
+        return d
+
+    def nuc_grad_method(self):
+        # A REALLY DIRTY WAY
+        # https://stackoverflow.com/questions/7078134/
+        from dh.grad.rdfdh import Gradients
+        self.__class__ = Gradients
+        Gradients.__init__(self, self.mol, skip_construct=True)
+        return self
 
     # endregion first derivative related in class
 
