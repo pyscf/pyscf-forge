@@ -365,6 +365,7 @@ class RDFDH(lib.StreamObject):
         self.Co, self.Cv = self.C[:, self.so], self.C[:, self.sv]
         self.eo, self.ev = self.e[self.so], self.e[self.sv]
         self.Co = self.Co.transpose(0, 1)
+        return self
 
     # region first derivative related in class
 
@@ -434,6 +435,7 @@ class RDFDH(lib.StreamObject):
         # part: cpks and Ax0_Core preparation
         eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
         get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())
+        return self
 
     @timing
     def prepare_xc_kernel(self):
@@ -460,6 +462,7 @@ class RDFDH(lib.StreamObject):
                 tensors.create("rho", rho)
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
+        return self
 
     @timing
     def prepare_pt2(self, dump_t_ijab=True):
@@ -508,6 +511,7 @@ class RDFDH(lib.StreamObject):
             kernel(self, eng_bi=(eng_bi1, eng_bi2))
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia_ri", G_ia_ri)
+        return self
 
     @timing
     def prepare_lagrangian(self, gen_W=False):
@@ -543,6 +547,7 @@ class RDFDH(lib.StreamObject):
             L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
 
         tensors.create("L", L)
+        return self
 
     @timing
     def prepare_D_r(self):
@@ -552,8 +557,18 @@ class RDFDH(lib.StreamObject):
         L = tensors.load("L")
         D_r[sv, so] = self.solve_cpks(L)
         tensors.create("D_r", D_r)
+        return self
 
     def dipole(self):
+    # mf.prepare_integral()
+    # mf.prepare_xc_kernel()
+    # mf.prepare_pt2(dump_t_ijab=True)
+    # mf.prepare_lagrangian(gen_W=False)
+        if "D_r" not in self.tensors:
+            if "D_rdm1" not in self.tensors:  # assert that MP2 process haven't been envoked
+                self.prepare_integral().prepare_xc_kernel() \
+                    .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
+                    .prepare_D_r()
         D_r = self.tensors["D_r"]
         mol, C, D = self.mol, self.C, self.D
         h = - mol.intor("int1e_r")
