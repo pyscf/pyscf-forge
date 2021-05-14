@@ -11,23 +11,23 @@ import numpy as np
 einsum = lib.einsum
 
 
-def kernel(mf_dh: Polar):
-    mf_dh.run_scf()
-    mf_dh.prepare_H_1()
-    mf_dh.prepare_integral()
-    mf_dh.prepare_xc_kernel()
-    mf_dh.prepare_pt2(dump_t_ijab=True)
-    mf_dh.prepare_lagrangian(gen_W=False)
-    mf_dh.prepare_D_r()
-    mf_dh.prepare_U_1()
-    if dft.numint.NumInt()._xc_type(mf_dh.xc) == "GGA":
-        mf_dh.prepare_dmU()
-        mf_dh.prepare_polar_Ax1_gga()
-    mf_dh.prepare_pdA_F_0_mo()
-    mf_dh.prepare_pdA_Y_ia_ri()
-    mf_dh.prepare_pt2_deriv()
-    mf_dh.prepare_polar()
-    return mf_dh.de
+def kernel(mf: Polar):
+    mf.run_scf()
+    mf.prepare_H_1()
+    mf.prepare_integral()
+    mf.prepare_xc_kernel()
+    mf.prepare_pt2(dump_t_ijab=True)
+    mf.prepare_lagrangian(gen_W=False)
+    mf.prepare_D_r()
+    mf.prepare_U_1()
+    if dft.numint.NumInt()._xc_type(mf.xc) == "GGA":
+        mf.prepare_dms()
+        mf.prepare_polar_Ax1_gga()
+    mf.prepare_pdA_F_0_mo()
+    mf.prepare_pdA_Y_ia_ri()
+    mf.prepare_pt2_deriv()
+    mf.prepare_polar()
+    return mf.de
 
 
 def get_rho_from_dm_gga(ni, mol, grids, dm):
@@ -94,6 +94,12 @@ class Polar(dh.rdfdh.RDFDH):
         self.pol_corr = NotImplemented
         self.pol_tot = NotImplemented
         self.de = NotImplemented
+    
+    @property
+    def nprop(self):
+        if "H_1_ao" not in self.tensors:
+            self.prepare_H_1()
+        return self.tensors["H_1_ao"].shape[0]
 
     def prepare_H_1(self):
         tensors = self.tensors
@@ -114,24 +120,25 @@ class Polar(dh.rdfdh.RDFDH):
         U_1[:, so, sv] = - U_1_vo.swapaxes(-1, -2)
         tensors.create("U_1", U_1)
 
-    def prepare_dmU(self):
+    def prepare_dms(self):
         tensors = self.tensors
         U_1 = tensors.load("U_1")
         D_r = tensors.load("D_r")
         rho = tensors.load("rho")
         C, Co = self.C, self.Co
         so = self.so
-        mol, ni, grids, xc = self.mol, self.mf._numint, self.mf.grids, self.xc
+        mol, grids, xc = self.mol, self.grids, self.xc
+        ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
         ni.libxc = dft.xcfun
         dmU = C @ U_1[:, :, so] @ Co.T
         dmU += dmU.swapaxes(-1, -2)
-        dmDr = C @ D_r @ C.T
-        dmDr += dmDr.swapaxes(-1, -2)
-        dmX = np.concatenate([dmU, [dmDr]])
+        dmR = C @ D_r @ C.T
+        dmR += dmR.swapaxes(-1, -2)
+        dmX = np.concatenate([dmU, [dmR]])
         rhoX = get_rho_from_dm_gga(ni, mol, grids, dmX)
         _, _, _, kxc = ni.eval_xc(xc, rho, spin=0, deriv=3)
         tensors.create("rhoU", rhoX[:-1])
-        tensors.create("rhoDr", rhoX[-1])
+        tensors.create("rhoR", rhoX[-1])
         tensors.create("kxc" + xc, kxc)
 
     def prepare_pdA_F_0_mo(self):
@@ -215,18 +222,18 @@ class Polar(dh.rdfdh.RDFDH):
         U_1 = tensors.load("U_1")
         rho = tensors.load("rho")
         rhoU = tensors.load("rhoU")
-        rhoDr = tensors.load("rhoDr")
+        rhoR = tensors.load("rhoR")
         fxc = tensors["fxc" + self.xc]
         kxc = tensors["kxc" + self.xc]
 
-        mol, ni, grids = self.mol, self.mf._numint, self.mf.grids
+        mol, ni, grids = self.mol, self.ni, self.grids
         nao = self.nao
         C, Co, so = self.C, self.Co, self.so
 
         Ax1 = np.zeros((3, nao, nao))
         wv2 = np.empty((3, 4, grids.weights.size))
         for i in range(3):
-            wv2[i] = _rks_gga_wv2(rho, rhoU[i], rhoDr, fxc, kxc, grids.weights)
+            wv2[i] = _rks_gga_wv2(rho, rhoU[i], rhoR, fxc, kxc, grids.weights)
         ip = 0
         for ao, mask, weight, _ in ni.block_loop(mol, grids, nao, deriv=1):
             sg = slice(ip, ip + weight.size)
@@ -244,12 +251,12 @@ class Polar(dh.rdfdh.RDFDH):
         so, sv, sa = self.so, self.sv, self.sa
 
         U_1 = tensors.load("U_1")
-        G_ia = tensors.load("G_ia")
+        G_ia_ri = tensors.load("G_ia_ri")
         pdA_G_ia = tensors["pdA_G_ia"]
         Y_mo_ri = tensors["Y_mo_ri"]
 
         SCR3 = np.zeros((3, self.nvir, self.nocc))
-        nbatch = calc_batch_size(10 * self.nmo**2, self.get_memory(), G_ia.size + pdA_G_ia.size)
+        nbatch = calc_batch_size(10 * self.nmo**2, self.get_memory(), G_ia_ri.size + pdA_G_ia.size)
         for saux in gen_batch(0, self.aux_ri.nao, nbatch):
             Y_mo_ri_blk = np.asarray(Y_mo_ri[saux])
             pdA_G_ia_ri_blk = np.asarray(pdA_G_ia[:, saux])
@@ -257,12 +264,12 @@ class Polar(dh.rdfdh.RDFDH):
             pdA_Y_mo_ri_blk = einsum("Ami, Pmj -> APij", U_1[:, :, so], Y_mo_ri_blk[:, :, so])
             pdA_Y_mo_ri_blk += pdA_Y_mo_ri_blk.swapaxes(-1, -2)
             SCR3 -= 4 * einsum("APja, Pij -> Aai", pdA_G_ia_ri_blk, Y_mo_ri_blk[:, so, so])
-            SCR3 -= 4 * einsum("Pja, APij -> Aai", G_ia[saux], pdA_Y_mo_ri_blk)
+            SCR3 -= 4 * einsum("Pja, APij -> Aai", G_ia_ri[saux], pdA_Y_mo_ri_blk)
 
             pdA_Y_mo_ri_blk = einsum("Ama, Pmb -> APab", U_1[:, :, sv], Y_mo_ri_blk[:, :, sv])
             pdA_Y_mo_ri_blk += pdA_Y_mo_ri_blk.swapaxes(-1, -2)
             SCR3 += 4 * einsum("APib, Pab -> Aai", pdA_G_ia_ri_blk, Y_mo_ri_blk[:, sv, sv])
-            SCR3 += 4 * einsum("Pib, APab -> Aai", G_ia[saux, :, :], pdA_Y_mo_ri_blk)
+            SCR3 += 4 * einsum("Pib, APab -> Aai", G_ia_ri[saux, :, :], pdA_Y_mo_ri_blk)
         if self.mf_n:
             pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
             SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]

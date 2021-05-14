@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from pyscf.dft.numint import _dot_ao_dm, _contract_rho
+
 import dh.rdfdh
-from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch
+from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
 import numpy as np
@@ -21,55 +23,75 @@ def kernel(mf_dh: Gradients):
     mf_dh.prepare_lagrangian(gen_W=True)
     mf_dh.prepare_D_r()
     mf_dh.prepare_gradient_jk()
-    if mf_dh.xc != "HF":
-        if mf_dh.xc_n == "HF":
-            raise NotImplementedError("Base functional HF but energy functional GGA is not implemented!")
-        mf_dh.prepare_gradient_gga()
-    else:
-        mf_dh.grad_gga = 0
+    mf_dh.prepare_gradient_gga()
     mf_dh.prepare_gradient_pt2()
     mf_dh.prepare_gradient_enfunc()
     mf_dh.grad_tot = mf_dh.de = mf_dh.grad_jk + mf_dh.grad_gga + mf_dh.grad_pt2 + mf_dh.grad_enfunc
     return mf_dh.grad_tot
 
 
-def get_rho_derivs(ao, dm, mol):
+def _contract_multiple_rho(ao1, ao2):
+    if len(ao1.shape) == 2:
+        return _contract_rho(ao1, ao2)
+    assert len(ao1.shape) == 3
+    res = np.empty(ao1.shape[:2])
+    for i in range(ao1.shape[0]):
+        res[i] = _contract_rho(ao1[i], ao2)
+    return res
+
+
+@timing
+def get_rho_derivs(ao, dm, mol, mask):
     X, Y, Z, XX, XY, XZ, YY, YZ, ZZ = range(1, 10)
     ngrid, natm = ao.shape[1], mol.natm
+    nao = dm.shape[0]
+    shls_slice = (0, mol.nbas)
+    ao_loc = mol.ao_loc_nr()
     # contract for dm
-    aod = einsum("uv, rgv -> rgu", dm, ao[:4])
+    # aod = einsum("uv, rgv -> rgu", dm, ao[:4])  -- 3 lines
+    aod = np.empty((4, ngrid, nao))
+    for i in range(4):
+        aod[i] = _dot_ao_dm(mol, ao[i], dm, mask, shls_slice, ao_loc)
     # rho_01
-    rho_01 = einsum("rgu, gu -> rg", ao[:4], aod[0])
+    # rho_01 = einsum("rgu, gu -> rg", ao[:4], aod[0])
+    rho_01 = _contract_multiple_rho(ao[:4], aod[0])
     rho_01[1:] *= 2
     rho_0, rho_1 = rho_01[0], rho_01[1:]
     # rho_2
     rho_2 = np.empty((3, 3, ngrid))
-    rho_2T = 2 * einsum("Tgu, gu -> Tg", ao[4:10], aod[0])
+    # rho_2T = 2 * einsum("Tgu, gu -> Tg", ao[4:10], aod[0])
+    rho_2T = _contract_multiple_rho(ao[4:10], aod[0])
     for i, j, ij in zip(
             (X , X , X , Y , Y , Z ),
             ( X,  Y,  Z,  Y,  Z,  Z),
             (XX, XY, XZ, YY, YZ, ZZ)):
-        rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * einsum("gu, gu -> g", ao[i], aod[j])
+        # rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * einsum("gu, gu -> g", ao[i], aod[j])
+        rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * _contract_rho(ao[i], aod[j])
         if i != j:
             rho_2[j-1, i-1] = rho_2[i-1, j-1]
 
     # atomic derivatives
+    @timing
     def rho_atom_deriv(A):
         _, _, A0, A1 = mol.aoslice_by_atom()[A]
         sA = slice(A0, A1)
-        rho_A1 = - 2 * einsum("rgu, gu -> rg", ao[1:4, :, sA], aod[0, :, sA])
+        # rho_A1 = - 2 * einsum("rgu, gu -> rg", ao[1:4, :, sA], aod[0, :, sA])
+        rho_A1 = - 2 * _contract_multiple_rho(ao[1:4, :, sA], aod[0, :, sA])
         rho_A2 = np.empty((3, 3, ngrid))
-        rho_A2T = - 2 * einsum("Tgu, gu -> Tg", ao[4:10, :, sA], aod[0, :, sA])
+        # rho_A2T = - 2 * einsum("Tgu, gu -> Tg", ao[4:10, :, sA], aod[0, :, sA])
+        rho_A2T = - 2 * _contract_multiple_rho(ao[4:10, :, sA], aod[0, :, sA])
         for i, j, ij in zip(
             (X , X , X ,  Y, Y , Y ,  Z,  Z, Z ),
             ( X,  Y,  Z, X ,  Y,  Z, X , Y ,  Z),
             (XX, XY, XZ, XY, YY, YZ, XZ, YZ, ZZ)):
-            rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * einsum("gu, gu -> g", ao[i, :, sA], aod[j, :, sA])
+            # rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * einsum("gu, gu -> g", ao[i, :, sA], aod[j, :, sA])
+            rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * _contract_rho(ao[i, :, sA], aod[j, :, sA])
         return rho_A1, rho_A2
 
     return rho_0, rho_1, rho_2, rho_atom_deriv
 
 
+@timing
 def get_H_1_ao(mol: gto.Mole):
     natm, nao = mol.natm, mol.nao
     int1e_ipkin = mol.intor("int1e_ipkin")
@@ -87,6 +109,7 @@ def get_H_1_ao(mol: gto.Mole):
     return H_1_ao
 
 
+@timing
 def get_S_1_ao(mol: gto.Mole):
     natm, nao = mol.natm, mol.nao
     int1e_ipovlp = mol.intor("int1e_ipovlp")
@@ -99,6 +122,7 @@ def get_S_1_ao(mol: gto.Mole):
     return S_1_ao
 
 
+@timing
 def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     mol, aux = dfobj.mol, dfobj.auxmol
     natm, nao, nmo, nocc = mol.natm, mol.nao, C.shape[-1], mol.nelec[0]
@@ -182,7 +206,12 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     return grad_contrib
 
 
+@timing
 def get_gradient_gga(C, D_r, xc_setting, xc_kernel, vxc_n=None, max_memory=2000):
+    # reference HF
+    if xc_kernel[1] is None:
+        return get_gradient_gga_hfref(xc_setting, vxc_n, max_memory)
+
     ni, mol, grids, xc, D = xc_setting
     rho, vxc, fxc = xc_kernel
     natm, nao = mol.natm, mol.nao
@@ -192,9 +221,9 @@ def get_gradient_gga(C, D_r, xc_setting, xc_kernel, vxc_n=None, max_memory=2000)
 
     grad_contrib = np.zeros((natm, 3))
     ig = 0
-    for ao, _, weight, _ in ni.block_loop(mol, grids, nao, deriv=2, max_memory=max_memory):
-        rho_0, rho_1, rho_2, get_rho_A = get_rho_derivs(ao, D, mol)
-        rho_X_0, rho_X_1, rho_X_2, get_rho_X_A = get_rho_derivs(ao, D_r_ao, mol)
+    for ao, mask, weight, _ in ni.block_loop(mol, grids, nao, deriv=2, max_memory=max_memory):
+        rho_0, rho_1, rho_2, get_rho_A = get_rho_derivs(ao, D, mol, mask)
+        rho_X_0, rho_X_1, rho_X_2, get_rho_X_A = get_rho_derivs(ao, D_r_ao, mol, mask)
         gamma_XD = 2 * einsum("rg, rg -> g", rho_X_1, rho_1)
         sg = slice(ig, ig + weight.size)
         fr, fg = vxc[0][sg] * weight, vxc[1][sg] * weight
@@ -202,7 +231,7 @@ def get_gradient_gga(C, D_r, xc_setting, xc_kernel, vxc_n=None, max_memory=2000)
         if vxc_n is None:
             fr_n, fg_n = fr, fg
         else:
-            fr_n, fg_n = vxc_n[0] * weight, vxc_n[1] * weight
+            fr_n, fg_n = vxc_n[0][sg] * weight, vxc_n[1][sg] * weight
 
         for A in range(natm):
             rho_A1, rho_A2 = get_rho_A(A)
@@ -216,6 +245,28 @@ def get_gradient_gga(C, D_r, xc_setting, xc_kernel, vxc_n=None, max_memory=2000)
                     + einsum("g, tg -> t", fr, rho_X_A1)
                     + 2 * einsum("g, trg, rg -> t", fg, rho_A2, rho_X_1)
                     + 2 * einsum("g, rg, trg -> t", fg, rho_1, rho_X_A2)
+                    + einsum("g, tg -> t", fr_n, rho_A1)
+                    + einsum("g, tg -> t", fg_n, gamma_A1))
+        ig += weight.size
+    return grad_contrib
+
+
+@timing
+def get_gradient_gga_hfref(xc_setting, vxc_n, max_memory=2000):
+    ni, mol, grids, xc, D = xc_setting
+    natm, nao = mol.natm, mol.nao
+
+    grad_contrib = np.zeros((natm, 3))
+    ig = 0
+    for ao, mask, weight, _ in ni.block_loop(mol, grids, nao, deriv=2, max_memory=max_memory):
+        rho_0, rho_1, rho_2, get_rho_A = get_rho_derivs(ao, D, mol, mask)
+        sg = slice(ig, ig + weight.size)
+        fr_n, fg_n = vxc_n[0][sg] * weight, vxc_n[1][sg] * weight
+
+        for A in range(natm):
+            rho_A1, rho_A2 = get_rho_A(A)
+            gamma_A1 = 2 * einsum("rg, trg -> tg", rho_1, rho_A2)
+            grad_contrib[A] += (
                     + einsum("g, tg -> t", fr_n, rho_A1)
                     + einsum("g, tg -> t", fg_n, gamma_A1))
         ig += weight.size
@@ -255,15 +306,27 @@ class Gradients(dh.rdfdh.RDFDH):
         self.grad_jk = get_gradient_jk(self.df_jk, self.C, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
 
     def prepare_gradient_gga(self):
+        # assert prepare_xc_kernel has been called
         tensors = self.tensors
         D_r = tensors.load("D_r")
-        xc_setting = self.mf._numint, self.mol, self.grids, self.xc, self.D
-        xc_kernel = tensors["rho"], tensors["vxc" + self.xc], tensors["fxc" + self.xc]
+        xc_setting = self.mf_s._numint, self.mol, self.grids, self.xc, self.D
+        if "rho" not in tensors:
+            self.grad_gga = 0
+            return
+        rho = tensors["rho"]
+        if self.ni._xc_type(self.xc) == "GGA":
+            vxc, fxc = tensors["vxc" + self.xc], tensors["fxc" + self.xc]
+        else:
+            vxc, fxc = None, None
+        xc_kernel = rho, vxc, fxc
         vxc_n = None
         if self.xc_n:
-            vxc_n = self.tensors["vxc" + self.xc_n]
+            vxc_n = self.tensors.get("vxc" + self.xc_n, None)
+            if vxc_n is None and self.ni._xc_type(self.xc_n) == "HF":
+                vxc_n = np.zeros((2, rho.size))
         self.grad_gga = get_gradient_gga(self.C, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
 
+    @timing
     def prepare_gradient_pt2(self):
         tensors = self.tensors
         C, D, e = self.C, self.D, self.e
@@ -331,20 +394,21 @@ class Gradients(dh.rdfdh.RDFDH):
 
         # final contribution from G_ia_ri
         # 4 * einsum("iaP, AiaP -> A", G_ia_ri, gradh.Y_mo_1_ri[:, so, sv]))
-        G_ia = tensors.load("G_ia")
+        G_ia_ri = tensors.load("G_ia_ri")
         for A in range(natm):
-            grad_corr[3*A:3*A+3] += 4 * einsum("Pia, tPia -> t", G_ia, lambda_Y_ia_ri(A))
+            grad_corr[3*A:3*A+3] += 4 * einsum("Pia, tPia -> t", G_ia_ri, lambda_Y_ia_ri(A))
         grad_corr.shape = (natm, 3)
 
         self.grad_pt2 = grad_corr
 
+    @timing
     def prepare_gradient_enfunc(self):
         tensors = self.tensors
         natm = self.mol.natm
         Co, eo, D = self.Co, self.eo, self.D
         so = self.so
 
-        grad_contrib = self.mf.Gradients().grad_nuc()
+        grad_contrib = self.mf_s.Gradients().grad_nuc()
         grad_contrib.shape = (natm * 3,)
 
         H_1_ao = tensors.load("H_1_ao")
