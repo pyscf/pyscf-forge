@@ -5,7 +5,7 @@ from typing import Tuple
 from pyscf.scf import cphf
 
 from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing
-from pyscf import lib, gto, df, dft
+from pyscf import lib, gto, df, dft, scf
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
 import numpy as np
@@ -18,7 +18,7 @@ einsum = lib.einsum
 
 def kernel(mf: RDFDH, **kwargs):
     mf.build()
-    eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss = energy_tot(mf, **kwargs)
+    eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss = mf.energy_tot(**kwargs)
     mf.e_tot = mf.eng_tot = eng_tot
     mf.eng_nc = eng_nc
     mf.eng_pt2 = eng_pt2
@@ -29,7 +29,7 @@ def kernel(mf: RDFDH, **kwargs):
 
 
 @timing
-def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, **_):
+def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, restricted=True, **_):
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
             mf.run_scf()
@@ -38,15 +38,17 @@ def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, **_):
         mo_coeff = mf.mo_coeff
     mo_occ = mf.mo_occ
     if mo_occ is NotImplemented:
-        mo_occ = np.zeros((mo_coeff.shape[1], ))
-        mo_occ[:mf.mf_s.mol.nelec[0]] = 2
+        if restricted:
+            mo_occ = scf.hf.get_occ(mf.mf_s)
+        else:
+            mo_occ = scf.uhf.get_occ(mf.mf_s)
     dm = mf.mf_s.make_rdm1(mo_coeff, mo_occ)
     eng_nc = mf.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
     return eng_nc
 
 
 @timing
-def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia=None, t_ijab_blk=None, eval_ss=True, **_):
+def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
     # prepare mo_coeff, mo_energy
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
@@ -57,27 +59,27 @@ def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia=N
             mf.run_scf()
         mo_energy = mf.mo_energy
     # prepare essential dimensions
-    if Y_ia is None:
+    if Y_ia_ri is None:
         nmo = mo_coeff.shape[1]
         nocc = mf.nocc
         nvir = nmo - nocc
     else:
-        nocc, nvir = Y_ia.shape[1:]
+        nocc, nvir = Y_ia_ri.shape[1:]
         nmo = nocc + nvir
     so, sv = slice(0, nocc), slice(nocc, nmo)
     iaslice = (0, nocc, nocc, nmo)
-    # prepare Y_ia (cderi in MO occ-vir block)
-    if Y_ia is None:
+    # prepare Y_ia_ri (cderi in MO occ-vir block)
+    if Y_ia_ri is None:
         if dfobj is None:
             dfobj = mf.df_ri
-        Y_ia = get_cderi_mo(dfobj, mo_coeff, pqslice=iaslice, max_memory=mf.get_memory())
+        Y_ia_ri = get_cderi_mo(dfobj, mo_coeff, pqslice=iaslice, max_memory=mf.get_memory())
     # evaluate energy
     eng_bi1 = eng_bi2 = 0
     D_jab = mo_energy[so, None, None] - mo_energy[None, sv, None] - mo_energy[None, None, sv]
-    nbatch = mf.calc_batch_size(2 * nocc * nvir ** 2, Y_ia.size + D_jab.size)
+    nbatch = mf.calc_batch_size(2 * nocc * nvir ** 2, Y_ia_ri.size + D_jab.size)
     for sI in gen_batch(0, nocc, nbatch):  # batch (i)
         D_ijab = mo_energy[sI, None, None, None] + D_jab
-        g_ijab = einsum("Pia, Pjb -> ijab", Y_ia[:, sI], Y_ia)
+        g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[:, sI], Y_ia_ri)
         t_ijab = g_ijab / D_ijab
         eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
         if eval_ss:
@@ -88,12 +90,9 @@ def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia=N
 
 
 def energy_elec_pt2(mf: RDFDH, params=None, eng_bi=None, **kwargs):
-    if params is None:
-        cc, c_os, c_ss = mf.cc, mf.c_os, mf.c_ss
-    else:
-        cc, c_os, c_ss = params
+    cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
     eval_ss = True if abs(c_ss) > 1e-7 else False
-    eng_bi1, eng_bi2 = eng_bi if eng_bi else energy_elec_mp2(mf, eval_ss=eval_ss, **kwargs)
+    eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=eval_ss, **kwargs)
     return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),  # Total
             eng_bi1,                                          # OS
             eng_bi1 - eng_bi2)                                # SS
@@ -104,26 +103,19 @@ def energy_nuc(mf: RDFDH, **_):
 
 
 def energy_elec(mf: RDFDH, **kwargs):
-    eng_nc = energy_elec_nc(mf, **kwargs)[0]
+    eng_nc = mf.energy_elec_nc(**kwargs)[0]
     nocc, nvir = mf.nocc, mf.nvir
     t_ijab_blk = None
     if mf.with_t_ijab:
-        if "t_ijab" in mf.tensors:
-            if mf.tensors["t_ijab"].shape == (nocc, nocc, nvir, nvir):
-                t_ijab_blk = mf.tensors["t_ijab"]
-            else:
-                mf.tensors.delete("t_ijab")
-                t_ijab_blk = mf.tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=mf._incore_t_ijab)
-        else:
-            t_ijab_blk = mf.tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=mf._incore_t_ijab)
-    eng_pt2, eng_os, eng_ss = energy_elec_pt2(mf, t2_blk=t_ijab_blk, **kwargs)
+        t_ijab_blk = mf.tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=mf._incore_t_ijab)
+    eng_pt2, eng_os, eng_ss = mf.energy_elec_pt2(t2_blk=t_ijab_blk, **kwargs)
     eng_elec = eng_nc + eng_pt2
     return eng_elec, eng_nc, eng_pt2, eng_os, eng_ss
 
 
 def energy_tot(mf: RDFDH, **kwargs):
-    eng_elec, eng_nc, eng_pt2, eng_os, eng_ss = energy_elec(mf, **kwargs)
-    eng_nuc = energy_nuc(mf)
+    eng_elec, eng_nc, eng_pt2, eng_os, eng_ss = mf.energy_elec(**kwargs)
+    eng_nuc = mf.energy_nuc()
     eng_tot = eng_elec + eng_nuc
     return eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss
 
@@ -257,15 +249,15 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
 
 class RDFDH(lib.StreamObject):
 
-    mf_s: dft.rks.RKS
-
     def __init__(self,
                  mol: gto.Mole,
                  xc: str or tuple = "XYG3",
                  auxbasis_jk: str or dict or None = None,
                  auxbasis_ri: str or dict or None = None,
                  grids: dft.Grids = None,
-                 grids_cpks: dft.Grids = None):
+                 grids_cpks: dft.Grids = None,
+                 unrestricted: bool = False,  # only for class initialization
+                 ):
         # tunable flags
         self.with_t_ijab = False  # only in energy calculation; polarizability is forced dump t2 to disk or mem
         self._incore_t_ijab = False
@@ -284,7 +276,10 @@ class RDFDH(lib.StreamObject):
         auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
         self.same_aux = True if auxbasis_jk == auxbasis_ri or auxbasis_ri is None else False
         # parse scf method
-        mf_s = dft.RKS(mol, xc=self.xc).density_fit(auxbasis=auxbasis_jk)
+        if unrestricted:
+            mf_s = dft.UKS(mol, xc=self.xc).density_fit(auxbasis=auxbasis_jk)
+        else:
+            mf_s = dft.KS(mol, xc=self.xc).density_fit(auxbasis=auxbasis_jk)
         self.grids = grids if grids else mf_s.grids                        # type: dft.grid.Grids
         self.grids_cpks = grids_cpks if grids_cpks else self.grids         # type: dft.grid.Grids
         self.mf_s = mf_s                                                   # type: dft.rks.RKS
@@ -293,7 +288,10 @@ class RDFDH(lib.StreamObject):
         self.xc_n = None if self.xc_n == self.xc else self.xc_n            # type: str or None
         self.mf_n = self.mf_s                                              # type: dft.rks.RKS
         if self.xc_n:
-            self.mf_n = dft.RKS(mol, xc=self.xc_n).density_fit(auxbasis=auxbasis_jk)
+            if unrestricted:
+                self.mf_n = dft.UKS(mol, xc=self.xc_n).density_fit(auxbasis=auxbasis_jk)
+            else:
+                self.mf_n = dft.KS(mol, xc=self.xc_n).density_fit(auxbasis=auxbasis_jk)
             self.mf_n.grids = self.mf_s.grids
             self.mf_n.grids = self.grids
         # parse hybrid coefficients
@@ -353,7 +351,7 @@ class RDFDH(lib.StreamObject):
         mf = self.mf_s
         if mf.e_tot == 0:
             mf.run()
-        # prepare 
+        # prepare
         self.C = self.mo_coeff = mf.mo_coeff
         self.e = self.mo_energy = mf.mo_energy
         self.mo_occ = mf.mo_occ
@@ -364,7 +362,6 @@ class RDFDH(lib.StreamObject):
         self.so, self.sv, self.sa = slice(0, nocc), slice(nocc, nmo), slice(0, nmo)
         self.Co, self.Cv = self.C[:, self.so], self.C[:, self.sv]
         self.eo, self.ev = self.e[self.so], self.e[self.sv]
-        self.Co = self.Co.transpose(0, 1)
         return self
 
     # region first derivative related in class
@@ -560,10 +557,6 @@ class RDFDH(lib.StreamObject):
         return self
 
     def dipole(self):
-    # mf.prepare_integral()
-    # mf.prepare_xc_kernel()
-    # mf.prepare_pt2(dump_t_ijab=True)
-    # mf.prepare_lagrangian(gen_W=False)
         if "D_r" not in self.tensors:
             if "D_rdm1" not in self.tensors:  # assert that MP2 process haven't been envoked
                 self.prepare_integral().prepare_xc_kernel() \

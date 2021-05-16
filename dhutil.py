@@ -61,13 +61,13 @@ class HybridDict(dict):
         self.chkfile = h5py.File(self.chkfile_name, "r+")
 
     def create(self, name, data=None, incore=True, shape=None, dtype=None, **kwargs):
-        # if name in self:
-        #     try:  # don't create a new space if tensor already exists
-        #         if self[name].shape == shape:
-        #             self[name][:] = 0
-        #     except:
-        #         pass
-        #     self.delete(name)
+        if name in self:
+            try:  # don't create a new space if tensor already exists
+                if self[name].shape == shape:
+                    self[name][:] = 0
+                    return self.get(name)
+            except ValueError:  # in h5py.h5d.create: Unable to create dataset (name already exists)
+                self.delete(name)
         dtype = dtype if dtype is not None else np.float64
         if not incore:
             self.chkfile.create_dataset(name, shape=shape, dtype=dtype, data=data, **kwargs)
