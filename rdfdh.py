@@ -152,38 +152,38 @@ def get_cderi_mo(dfobj: df.DF, C, Y_mo=None, pqslice=None, max_memory=2000):
 
 
 @timing
-def get_eri_cpks(Y_mo, nocc, cx, eri_cpks=None, max_memory=2000):
-    naux, nmo, _ = Y_mo.shape
+def get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
+    naux, nmo, _ = Y_mo_jk.shape
     nvir = nmo - nocc
     so, sv = slice(0, nocc), slice(nocc, nmo)
     # prepare space if bulk of eri_cpks is not provided
     if eri_cpks is None:
         eri_cpks = np.empty((nvir, nocc, nvir, nocc))
     # copy some tensors to memory
-    Y_ai = np.asarray(Y_mo[:, sv, so])
-    Y_ij = np.asarray(Y_mo[:, so, so])
+    Y_ai_jk = np.asarray(Y_mo_jk[:, sv, so])
+    Y_ij_jk = np.asarray(Y_mo_jk[:, so, so])
 
-    nbatch = calc_batch_size(nvir*naux + 2*nocc**2*nvir, max_memory, Y_ai.size + Y_ij.size)
+    nbatch = calc_batch_size(nvir*naux + 2*nocc**2*nvir, max_memory, Y_ai_jk.size + Y_ij_jk.size)
     for sA in gen_batch(nocc, nmo, nbatch):
         sAvir = slice(sA.start - nocc, sA.stop - nocc)
         eri_cpks[sAvir] = (
-            + 4 * einsum("Pai, Pbj -> aibj", Y_ai[:, sAvir], Y_ai)
-            - cx * einsum("Paj, Pbi -> aibj", Y_ai[:, sAvir], Y_ai)
-            - cx * einsum("Pij, Pab -> aibj", Y_ij, Y_mo[:, sA, sv]))
+            + 4 * einsum("Pai, Pbj -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
+            - cx * einsum("Paj, Pbi -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
+            - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, Y_mo_jk[:, sA, sv]))
 
 
-def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo, max_memory=2000):
-    naux, nmo, _ = Y_mo.shape
-    nI, nA = si.stop - si.start, sa.stop - sa.start
+def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
+    naux, nmo, _ = Y_mo_jk.shape
+    ni, na = si.stop - si.start, sa.stop - sa.start
 
     @timing
     def Ax0_Core_HF_inner(X):
         X_shape = X.shape
         X = X.reshape((-1, X_shape[-2], X_shape[-1]))
-        res = np.zeros((X.shape[0], nI, nA))
+        res = np.zeros((X.shape[0], ni, na))
         nbatch = calc_batch_size(nmo**2, max_memory, X.size + res.size)
         for saux in gen_batch(0, naux, nbatch):
-            Y_mo_blk = np.asarray(Y_mo[saux])
+            Y_mo_blk = np.asarray(Y_mo_jk[saux])
             res += (
                 + 4 * einsum("Pia, Pjb, Ajb -> Aia", Y_mo_blk[:, si, sa], Y_mo_blk[:, sj, sb], X)
                 - cx * einsum("Pib, Pja, Ajb -> Aia", Y_mo_blk[:, si, sb], Y_mo_blk[:, sj, sa], X)
@@ -276,6 +276,7 @@ class RDFDH(lib.StreamObject):
         auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
         self.same_aux = True if auxbasis_jk == auxbasis_ri or auxbasis_ri is None else False
         # parse scf method
+        self.unrestricted = unrestricted
         if unrestricted:
             mf_s = dft.UKS(mol, xc=self.xc).density_fit(auxbasis=auxbasis_jk)
         else:
@@ -367,9 +368,9 @@ class RDFDH(lib.StreamObject):
     # region first derivative related in class
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
-        Y_mo = self.tensors["Y_mo_jk"]
+        Y_mo_jk = self.tensors["Y_mo_jk"]
         cx = cx if cx else self.cx
-        return Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo, max_memory=self.get_memory())
+        return Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.get_memory())
 
     def Ax0_Core_KS(self, si, sa, sj, sb, xc=None, cpks=False):
         xc = xc if xc else self.xc
@@ -419,16 +420,14 @@ class RDFDH(lib.StreamObject):
         C = self.C
         nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
 
-        # part: Y_mo
-        if "Y_mo_jk" not in tensors:
-            tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.get_memory())
-        if "Y_mo_ri" not in tensors:
-            if self.same_aux:
-                tensors["Y_mo_ri"] = tensors["Y_mo_jk"]
-            else:
-                tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-                get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
+        # part: Y_mo_jk
+        tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
+        get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.get_memory())
+        if self.same_aux:
+            tensors["Y_mo_ri"] = tensors["Y_mo_jk"]
+        else:
+            tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
+            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
         # part: cpks and Ax0_Core preparation
         eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
         get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())
@@ -441,21 +440,21 @@ class RDFDH(lib.StreamObject):
         C, mo_occ = self.C, self.mo_occ
         ni = self.ni
         if ni._xc_type(self.xc) == "GGA":
-            rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc, C, mo_occ, max_memory=self.get_memory())
+            rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
             tensors.create("rho", rho)
             tensors.create("vxc" + self.xc, vxc)
             tensors.create("fxc" + self.xc, fxc)
-            rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids_cpks, self.xc, C, mo_occ, max_memory=self.get_memory())
+            rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids_cpks, self.xc, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
             tensors.create("rho" + "in cpks", rho)
             tensors.create("vxc" + self.xc + "in cpks", vxc)
             tensors.create("fxc" + self.xc + "in cpks", fxc)
         if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
             if "rho" in tensors:
-                vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0)[1:3]
+                vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0, spin=self.unrestricted)[1:3]
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
             else:
-                rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc_n, C, mo_occ, max_memory=self.get_memory())
+                rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc_n, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
                 tensors.create("rho", rho)
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
@@ -465,32 +464,28 @@ class RDFDH(lib.StreamObject):
     def prepare_pt2(self, dump_t_ijab=True):
         tensors = self.tensors
         nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
-        mo_energy = self.mo_energy
+        e = self.e
         naux = self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
         cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
 
         D_rdm1 = np.zeros((nmo, nmo))
         G_ia_ri = np.zeros((naux, nocc, nvir))
-        Y_ia = np.asarray(tensors["Y_mo_ri"][:, so, sv])
+        Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
 
-        dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab
-        flag_t_ijab = False
-        if "t_ijab" not in tensors:
-            D_jab = mo_energy[so, None, None] - mo_energy[None, sv, None] - mo_energy[None, None, sv]
-            flag_t_ijab = True
-        else:
-            D_jab = None
+        dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab  # t_ijab to be dumped
+        eval_t_ijab = True if "t_ijab" not in tensors else False     # t_ijab to be evaluated
+        D_jab = e[so, None, None] - e[None, sv, None] - e[None, None, sv] if eval_t_ijab else None
         if dump_t_ijab:
             tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
 
         eng_bi1 = eng_bi2 = 0
         eval_ss = True if abs(c_ss) > 1e-7 else False
-        nbatch = self.calc_batch_size(4 * nocc * nvir ** 2, Y_ia.size + G_ia_ri.size)
+        nbatch = self.calc_batch_size(4 * nocc * nvir ** 2, Y_ia_ri.size + G_ia_ri.size)
         for sI in gen_batch(0, nocc, nbatch):
-            if flag_t_ijab:
-                D_ijab = mo_energy[sI, None, None, None] + D_jab
-                g_ijab = einsum("Pia, Pjb -> ijab", Y_ia[:, sI], Y_ia)
+            if eval_t_ijab:
+                D_ijab = e[sI, None, None, None] + D_jab
+                g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[:, sI], Y_ia_ri)
                 t_ijab = g_ijab / D_ijab
                 if self.eng_pt2 is NotImplemented:
                     eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
@@ -501,7 +496,7 @@ class RDFDH(lib.StreamObject):
             T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
             D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
             D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
-            G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia)
+            G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)
             if dump_t_ijab:
                 tensors["t_ijab"][sI] = t_ijab
         if self.eng_tot is NotImplemented:
@@ -513,32 +508,31 @@ class RDFDH(lib.StreamObject):
     @timing
     def prepare_lagrangian(self, gen_W=False):
         tensors = self.tensors
-
         nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
         so, sv, sa = self.so, self.sv, self.sa
 
         D_rdm1 = tensors.load("D_rdm1")
         G_ia_ri = tensors.load("G_ia_ri")
-        Y_mo = tensors["Y_mo_ri"]
-        Y_ij = np.asarray(Y_mo[:, so, so])
+        Y_mo_ri = tensors["Y_mo_ri"]
+        Y_ij_ri = np.asarray(Y_mo_ri[:, so, so])
         L = np.zeros((nvir, nocc))
 
         if gen_W:
-            Y_ia = np.asarray(Y_mo[:, so, sv])
+            Y_ia = np.asarray(Y_mo_ri[:, so, sv])
             W_I = np.zeros((nmo, nmo))
             W_I[so, so] = - 2 * einsum("Pia, Pja -> ij", G_ia_ri, Y_ia)
             W_I[sv, sv] = - 2 * einsum("Pia, Pib -> ab", G_ia_ri, Y_ia)
-            W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_mo[:, so, so])
+            W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_mo_ri[:, so, so])
             tensors.create("W_I", W_I)
             L += W_I[sv, so]
         else:
-            L -= 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_ij)
+            L -= 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_ij_ri)
 
         L += self.Ax0_Core(sv, so, sa, sa)(D_rdm1)
 
-        nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij.size)
+        nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
         for saux in gen_batch(0, naux, nbatch):
-            L += 4 * einsum("Pib, Pab -> ai", G_ia_ri[saux], Y_mo[saux, sv, sv])
+            L += 4 * einsum("Pib, Pab -> ai", G_ia_ri[saux], Y_mo_ri[saux, sv, sv])
 
         if self.xc_n:
             L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
@@ -558,10 +552,9 @@ class RDFDH(lib.StreamObject):
 
     def dipole(self):
         if "D_r" not in self.tensors:
-            if "D_rdm1" not in self.tensors:  # assert that MP2 process haven't been envoked
-                self.prepare_integral().prepare_xc_kernel() \
-                    .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
-                    .prepare_D_r()
+            self.prepare_integral().prepare_xc_kernel() \
+                .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
+                .prepare_D_r()
         D_r = self.tensors["D_r"]
         mol, C, D = self.mol, self.C, self.D
         h = - mol.intor("int1e_r")

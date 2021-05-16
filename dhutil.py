@@ -83,7 +83,11 @@ class HybridDict(dict):
     def delete(self, key):
         val = self.pop(key)
         if isinstance(val, h5py.Dataset):
-            del self.chkfile[key]
+            try:
+                del self.chkfile[key]
+            except KeyError:  # h5py.h5g.GroupID.unlink: Couldn't delete link
+                # another key maps to the same h5py dataset value, and this value has been deleted
+                pass
 
     def load(self, key):
         return np.asarray(self.get(key))
