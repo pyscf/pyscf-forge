@@ -439,6 +439,8 @@ class RDFDH(lib.StreamObject):
         tensors = self.tensors
         C, mo_occ = self.C, self.mo_occ
         ni = self.ni
+        if "rho" in tensors:
+            return self
         if ni._xc_type(self.xc) == "GGA":
             rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
             tensors.create("rho", rho)

@@ -1,33 +1,23 @@
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING
+if TYPE_CHECKING:
+    from dh.polar.udfdh import Polar
 
 from pyscf.scf import ucphf
 import h5py
 from dh import RDFDH
-from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing
+from dh.dhutil import gen_batch, calc_batch_size, timing, tot_size
 from pyscf import lib, gto, df, dft
-from pyscf.ao2mo import _ao2mo
-from pyscf.scf._response_functions import _gen_uhf_response
 import numpy as np
 
-from dh.rdfdh import get_cderi_mo
+from dh.rdfdh import get_cderi_mo, kernel
 
 einsum = lib.einsum
 α, β = 0, 1
 αα, αβ, ββ = 0, 1, 2
 
 ndarray = np.ndarray or h5py.Dataset
-
-
-def tot_size(*args):
-    size = 0
-    for i in args:
-        if isinstance(i, np.ndarray):
-            size += i.size
-        else:
-            size += tot_size(*i)
-    return size
 
 
 # region energy evaluation
@@ -132,7 +122,7 @@ def get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
             eri_cpks[σς] = np.empty((nvir[σ], nocc[σ], nvir[ς], nocc[ς]))
     Y_ai_jk = [np.asarray(Y_mo_jk[σ][:, sv[σ], so[σ]]) for σ in (α, β)]
     Y_ij_jk = [np.asarray(Y_mo_jk[σ][:, so[σ], so[σ]]) for σ in (α, β)]
-    nbatch = calc_batch_size(mvir*naux + 2*mocc**2*mvir, max_memory, tot_size(Y_ai_jk, Y_ij_jk))
+    nbatch = calc_batch_size(mvir * naux + 2 * mocc ** 2 * mvir, max_memory, tot_size(Y_ai_jk, Y_ij_jk))
     for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
         for sA in gen_batch(nocc[σ], nmo, nbatch):
             sAvir = slice(sA.start - nocc[σ], sA.stop - nocc[σ])
@@ -225,7 +215,7 @@ class UDFDH(RDFDH):
                  unrestricted: bool = True  # only for class initialization
                  ):
         super(UDFDH, self).__init__(mol, xc, auxbasis_jk, auxbasis_ri, grids, grids_cpks, unrestricted)
-        self.nocc = mol.nelec
+        self.nocc = mol.nelec  # type: Tuple[int, int]
         self.mvir = NotImplemented
         self.mocc = max(max(self.nocc), 1)
 
@@ -340,6 +330,7 @@ class UDFDH(RDFDH):
         naux = self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
         cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
+        eval_ss = True if abs(c_ss) > 1e-7 else False
 
         D_rdm1 = np.zeros((2, nmo, nmo))
         G_ia_ri = [np.zeros((naux, nocc[σ], nvir[σ])) for σ in (α, β)]
@@ -349,10 +340,11 @@ class UDFDH(RDFDH):
         eval_t_ijab = True if "t_ijab" + str(αα) not in tensors else False     # t_ijab to be evaluated
         if dump_t_ijab:
             for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
+                if σς in (αα, ββ) and not eval_ss:
+                    continue
                 tensors.create("t_ijab" + str(σς), shape=(nocc[σ], nocc[ς], nvir[σ], nvir[ς]), incore=self._incore_t_ijab)
 
         eng_bi1, eng_bi2 = [0, 0, 0], [0, 0, 0]
-        eval_ss = True if abs(c_ss) > 1e-7 else False
         nbatch = self.calc_batch_size(2 * mocc * mvir ** 2, tot_size(Y_ia_ri) + mocc * mvir ** 2)
         # situation αβ
         for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
@@ -382,11 +374,11 @@ class UDFDH(RDFDH):
                     D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
                     D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
                     D_rdm1[β, sv[β], sv[β]] += einsum("jica, jicb -> ab", T_ijab, t_ijab)
-                    G_ia_ri[α] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
-                    G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α])
+                    G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
+                    G_ia_ri[β][:, sI] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α])
 
         if self.eng_tot is NotImplemented:
-            self.kernel(eng_bi=(eng_bi1, eng_bi2))
+            kernel(self, eng_bi=(eng_bi1, eng_bi2))
 
         tensors.create("D_rdm1", D_rdm1)
         for σ in (α, β):
@@ -407,7 +399,7 @@ class UDFDH(RDFDH):
         # initialize by directly calling Ax0_Core
         L = list(self.Ax0_Core(sv, so, sa, sa)(D_rdm1))
 
-        nbatch = self.calc_batch_size(mvir**2 + mocc*mvir, tot_size(G_ia_ri + Y_ij_ri))
+        nbatch = self.calc_batch_size(mvir ** 2 + mocc * mvir, tot_size(G_ia_ri + Y_ij_ri))
         if gen_W:
             raise NotImplementedError("generate W will be available soon!")
         else:
@@ -443,10 +435,18 @@ class UDFDH(RDFDH):
         D_r = self.tensors["D_r"]
         mol, C, D = self.mol, self.C, self.D
         h = - mol.intor("int1e_r")
-        d = np.einsum("Auv, suv -> A", h, D)
+        d = np.einsum("Auv, suv -> A", h, D)  # seems to be wrong if lib.einsum used
         d += np.einsum("Auv, spq, sup, svq -> A", h, D_r, C, C, optimize=True)
         d += np.einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
         return d
+
+    def polar_method(self) -> Polar:
+        # A REALLY DIRTY WAY transform to son class https://stackoverflow.com/questions/7078134/
+        # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
+        from dh.polar.udfdh import Polar
+        self.__class__ = Polar
+        Polar.__init__(self, self.mol, skip_construct=True)
+        return self  # type: Polar
 
     energy_elec_mp2 = energy_elec_mp2
     energy_elec_pt2 = energy_elec_pt2

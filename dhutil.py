@@ -66,7 +66,9 @@ class HybridDict(dict):
                 if self[name].shape == shape:
                     self[name][:] = 0
                     return self.get(name)
-            except ValueError:  # in h5py.h5d.create: Unable to create dataset (name already exists)
+            except (ValueError, AttributeError):
+                # ValueError -- in h5py.h5d.create: Unable to create dataset (name already exists)
+                # AttributeError -- [certain other type] object has no attribute 'shape'
                 self.delete(name)
         dtype = dtype if dtype is not None else np.float64
         if not incore:
@@ -126,3 +128,28 @@ def calc_batch_size(unit_flop, mem_avail, pre_flop=0):
     max_memory = 0.8 * mem_avail - pre_flop * 8 / 1024 ** 2
     batch_size = int(max(max_memory // (unit_flop * 8 / 1024 ** 2), 1))
     return batch_size
+
+
+def get_rho_from_dm_gga(ni, mol, grids, dm):
+    dm_shape = dm.shape
+    dm = dm.reshape((-1, dm_shape[-2], dm_shape[-1]))
+    nset, nao, _ = dm.shape
+    rho = np.empty((nset, 4, grids.weights.size))
+    ip = 0
+    for ao, mask, weight, _ in ni.block_loop(mol, grids, nao, deriv=1):
+        ngrid = weight.size
+        for i in range(nset):
+            rho[i, :, ip:ip+ngrid] = ni.eval_rho(mol, ao, dm[i], mask, "GGA", hermi=1)
+        ip += ngrid
+    rho.shape = list(dm_shape[:-2]) + list(rho.shape[-2:])
+    return rho
+
+
+def tot_size(*args):
+    size = 0
+    for i in args:
+        if isinstance(i, np.ndarray):
+            size += i.size
+        else:
+            size += tot_size(*i)
+    return size
