@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Tuple, TYPE_CHECKING
+if TYPE_CHECKING:
+    from dh.grad.rdfdh import Gradients
+    from dh.polar.rdfdh import Polar
 
 from pyscf.scf import cphf
 
@@ -307,7 +310,7 @@ class RDFDH(lib.StreamObject):
         # other preparation
         self.tensors = HybridDict()
         self.mol = mol
-        self.nao = mol.nao
+        self.nao = mol.nao  # type: int
         self.nocc = mol.nelec[0]
         # variables awaits to be build
         self.mo_coeff = NotImplemented
@@ -564,15 +567,16 @@ class RDFDH(lib.StreamObject):
         d += einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
         return d
 
-    def nuc_grad_method(self):
-        # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
+    # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
+    # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
+
+    def nuc_grad_method(self) -> Gradients:
         from dh.grad.rdfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self
 
-    def polar_method(self):
-        # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
+    def polar_method(self) -> Polar:
         from dh.polar.rdfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)

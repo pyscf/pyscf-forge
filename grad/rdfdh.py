@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho
 
-import dh.rdfdh
+from dh import RDFDH
 from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
@@ -30,7 +30,7 @@ def kernel(mf_dh: Gradients):
     return mf_dh.grad_tot
 
 
-def _contract_multiple_rho(ao1, ao2):
+def contract_multiple_rho(ao1, ao2):
     if len(ao1.shape) == 2:
         return _contract_rho(ao1, ao2)
     assert len(ao1.shape) == 3
@@ -54,13 +54,13 @@ def get_rho_derivs(ao, dm, mol, mask):
         aod[i] = _dot_ao_dm(mol, ao[i], dm, mask, shls_slice, ao_loc)
     # rho_01
     # rho_01 = einsum("rgu, gu -> rg", ao[:4], aod[0])
-    rho_01 = _contract_multiple_rho(ao[:4], aod[0])
+    rho_01 = contract_multiple_rho(ao[:4], aod[0])
     rho_01[1:] *= 2
     rho_0, rho_1 = rho_01[0], rho_01[1:]
     # rho_2
     rho_2 = np.empty((3, 3, ngrid))
     # rho_2T = 2 * einsum("Tgu, gu -> Tg", ao[4:10], aod[0])
-    rho_2T = _contract_multiple_rho(ao[4:10], aod[0])
+    rho_2T = contract_multiple_rho(ao[4:10], aod[0])
     for i, j, ij in zip(
             (X , X , X , Y , Y , Z ),
             ( X,  Y,  Z,  Y,  Z,  Z),
@@ -76,10 +76,10 @@ def get_rho_derivs(ao, dm, mol, mask):
         _, _, A0, A1 = mol.aoslice_by_atom()[A]
         sA = slice(A0, A1)
         # rho_A1 = - 2 * einsum("rgu, gu -> rg", ao[1:4, :, sA], aod[0, :, sA])
-        rho_A1 = - 2 * _contract_multiple_rho(ao[1:4, :, sA], aod[0, :, sA])
+        rho_A1 = - 2 * contract_multiple_rho(ao[1:4, :, sA], aod[0, :, sA])
         rho_A2 = np.empty((3, 3, ngrid))
         # rho_A2T = - 2 * einsum("Tgu, gu -> Tg", ao[4:10, :, sA], aod[0, :, sA])
-        rho_A2T = - 2 * _contract_multiple_rho(ao[4:10, :, sA], aod[0, :, sA])
+        rho_A2T = - 2 * contract_multiple_rho(ao[4:10, :, sA], aod[0, :, sA])
         for i, j, ij in zip(
             (X , X , X ,  Y, Y , Y ,  Z,  Z, Z ),
             ( X,  Y,  Z, X ,  Y,  Z, X , Y ,  Z),
@@ -122,6 +122,27 @@ def get_S_1_ao(mol: gto.Mole):
     return S_1_ao
 
 
+def generator_L_1(aux):
+    # derivative of cholesky lower triangular 2c2e integral
+    # this involves direct inverse of 2c2e integral, so their should be no auxiliary basis dependency
+    # L here does not refer to PT2 lagrangian
+    L = np.linalg.cholesky(aux.intor("int2c2e"))
+    L_inv = np.linalg.inv(L)
+    l = np.zeros_like(L)
+    for i in range(l.shape[0]):
+        l[i, :i] = 1
+        l[i, i] = 1 / 2
+    int2c2e_1 = aux.intor("int2c2e_ip1")
+
+    def lambda_L_1(A):
+        _, _, A0a, A1a = aux.aoslice_by_atom()[A]
+        m = L_inv[:, A0a:A1a] @ int2c2e_1[:, A0a:A1a] @ L_inv.T
+        m += m.swapaxes(-1, -2)
+        L_1 = - L @ (l * m)
+        return L_1
+    return L_inv, lambda_L_1
+
+
 @timing
 def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     mol, aux = dfobj.mol, dfobj.auxmol
@@ -146,21 +167,7 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
 
     Y_ip = np.asarray(Y_mo[:, so])
 
-    L = np.linalg.cholesky(aux.intor("int2c2e"))
-    L_inv = np.linalg.inv(L)
-    l = np.zeros_like(L)
-    for i in range(l.shape[0]):
-        l[i, :i] = 1
-        l[i, i] = 1 / 2
-    int2c2e_1 = aux.intor("int2c2e_ip1")
-
-    def lambda_L_1(A):
-        _, _, A0a, A1a = aux.aoslice_by_atom()[A]
-        m = L_inv[:, A0a:A1a] @ int2c2e_1[:, A0a:A1a] @ L_inv.T
-        m += m.swapaxes(-1, -2)
-        L_1 = - L @ (l * m)
-        return L_1
-
+    L_inv, L_1_gen = generator_L_1(aux)
     int3c2e_ip1_gen = int3c_wrapper(mol, aux, "int3c2e_ip1", "s1")
     int3c2e_ip2_gen = int3c_wrapper(mol, aux, "int3c2e_ip2", "s1")
     C0, C1 = C[:, so], cx * C @ D_r_symm + 0.5 * cx_n * C @ D_mo
@@ -191,7 +198,7 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
             Y_1_dot_D -= einsum("tuvQ, PQ, uv -> tP", int3c2e_ip2, L_inv[:, sp], D)
             Y_1_dot_D_r -= einsum("tuvQ, PQ, uv -> tP", int3c2e_ip2, L_inv[:, sp], D_r_ao)
 
-        L_1 = lambda_L_1(A)
+        L_1 = L_1_gen(A)
         L_1_dot_inv = einsum("tRQ, PR -> tPQ", L_1, L_inv)
         Y_1_mo_D_r -= einsum("Qiq, qp, tPQ -> tPip", Y_ip, cx * D_r_symm + 0.5 * cx_n * D_mo, L_1_dot_inv)
         Y_1_dot_D -= einsum("Q, tPQ -> tP", Y_dot_D, L_1_dot_inv)
@@ -273,7 +280,7 @@ def get_gradient_gga_hfref(xc_setting, vxc_n, max_memory=2000):
     return grad_contrib
 
 
-class Gradients(dh.rdfdh.RDFDH):
+class Gradients(RDFDH):
 
     def __init__(self, mol: gto.Mole, skip_construct=False, *args, **kwargs):
         if not skip_construct:
@@ -335,7 +342,6 @@ class Gradients(dh.rdfdh.RDFDH):
         # this algorithm asserts naux = aux.nao, i.e. no linear dependency in auxiliary basis
         assert naux == aux_ri.nao
         so, sv, sa = self.so, self.sv, self.sa
-        max_memory = self.get_memory()
 
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
@@ -351,52 +357,40 @@ class Gradients(dh.rdfdh.RDFDH):
         grad_corr += einsum("uv, Auv -> A", W_ao, S_1_ao)
 
         # generate L_1_ri
-        L_ri = np.linalg.cholesky(aux_ri.intor("int2c2e"))
-        L_inv_ri = np.linalg.inv(L_ri)
-        l = np.zeros_like(L_ri)
-        for i in range(l.shape[0]):
-            l[i, :i] = 1
-            l[i, i] = 1 / 2
-        int2c2e_1 = aux_ri.intor("int2c2e_ip1")
-
-        def lambda_L_1_ri(A):
-            shA0a, shA1a, A0a, A1a = aux_ri.aoslice_by_atom()[A]
-            m = L_inv_ri[:, A0a:A1a] @ int2c2e_1[:, A0a:A1a] @ L_inv_ri.T
-            m += m.swapaxes(-1, -2)
-            return - L_ri @ (l * m)
+        L_inv, L_1_gen = generator_L_1(aux_ri)
 
         # generate Y_1_ia_ri
         int3c2e_ip1_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip1", "s1")
         int3c2e_ip2_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip2", "s1")
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
 
-        def lambda_Y_ia_ri(A):
-            L_1_ri = lambda_L_1_ri(A)
+        def lambda_Y_1_ia_ri(A):
+            L_1_ri = L_1_gen(A)
             Y_1_ia_ri = np.zeros((3, naux, nocc, nvir))
             shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
             shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
 
-            nbatch = calc_batch_size(3*(nao+nocc)*naux, max_memory, Y_1_ia_ri.size)
+            nbatch = calc_batch_size(3*(nao+nocc)*naux, self.get_memory(), Y_1_ia_ri.size)
             for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
                 su = slice(U0, U1)
                 int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
-                Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv_ri, C[su, so], C[:, sv])
-                Y_1_ia_ri -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv_ri, C[su, sv], C[:, so])
+                Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[su, so], C[:, sv])
+                Y_1_ia_ri -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[su, sv], C[:, so])
 
-            nbatch = calc_batch_size(3*nao*(nao+nocc), max_memory, Y_1_ia_ri.size)
+            nbatch = calc_batch_size(3*nao*(nao+nocc), self.get_memory(), Y_1_ia_ri.size)
             for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
                 sp = slice(P0, P1)
                 int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
-                Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip2, L_inv_ri[:, sp], C[:, so], C[:, sv])
+                Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip2, L_inv[:, sp], C[:, so], C[:, sv])
 
-            Y_1_ia_ri -= einsum("Qia, tRQ, PR -> tPia", Y_ia_ri, L_1_ri, L_inv_ri)
+            Y_1_ia_ri -= einsum("Qia, tRQ, PR -> tPia", Y_ia_ri, L_1_ri, L_inv)
             return Y_1_ia_ri
 
         # final contribution from G_ia_ri
         # 4 * einsum("iaP, AiaP -> A", G_ia_ri, gradh.Y_mo_1_ri[:, so, sv]))
         G_ia_ri = tensors.load("G_ia_ri")
         for A in range(natm):
-            grad_corr[3*A:3*A+3] += 4 * einsum("Pia, tPia -> t", G_ia_ri, lambda_Y_ia_ri(A))
+            grad_corr[3*A:3*A+3] += 4 * einsum("Pia, tPia -> t", G_ia_ri, lambda_Y_1_ia_ri(A))
         grad_corr.shape = (natm, 3)
 
         self.grad_pt2 = grad_corr

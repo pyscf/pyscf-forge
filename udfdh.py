@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
+    from dh.grad.udfdh import Gradients
     from dh.polar.udfdh import Polar
 
 from pyscf.scf import ucphf
@@ -395,23 +396,34 @@ class UDFDH(RDFDH):
         G_ia_ri = [tensors.load("G_ia_ri" + str(σ)) for σ in (α, β)]
         Y_mo_ri = [tensors["Y_mo_ri" + str(σ)] for σ in (α, β)]
         Y_ij_ri = [np.asarray(Y_mo_ri[σ][:, so[σ], so[σ]]) for σ in (α, β)]
+        Y_ia_ri = [np.asarray(Y_mo_ri[σ][:, so[σ], sv[σ]]) for σ in (α, β)]
 
         # initialize by directly calling Ax0_Core
         L = list(self.Ax0_Core(sv, so, sa, sa)(D_rdm1))
 
-        nbatch = self.calc_batch_size(mvir ** 2 + mocc * mvir, tot_size(G_ia_ri + Y_ij_ri))
         if gen_W:
-            raise NotImplementedError("generate W will be available soon!")
+            W_I = np.zeros((2, nmo, nmo))
+            for σ in (α, β):
+                W_I[σ][so[σ], so[σ]] = - 0.5 * einsum("Pia, Pja -> ij", G_ia_ri[σ], Y_ia_ri[σ])
+                W_I[σ][sv[σ], sv[σ]] = - 0.5 * einsum("Pia, Pib -> ab", G_ia_ri[σ], Y_ia_ri[σ])
+                W_I[σ][sv[σ], so[σ]] = - einsum("Pja, Pij -> ai", G_ia_ri[σ], Y_ij_ri[σ])
+                L[σ] += W_I[σ][sv[σ], so[σ]]
+                tensors.create("W_I", W_I)
         else:
             for σ in (α, β):
-                L[σ] -= einsum("Pja, Pij -> ai", G_ia_ri[σ], Y_mo_ri[σ][:, so[σ], so[σ]])
-                for saux in gen_batch(0, naux, nbatch):
-                    L[σ] += einsum("Pib, Pab -> ai", G_ia_ri[σ][saux], Y_mo_ri[σ][saux, sv[σ], sv[σ]])
-            if self.xc_n:
-                F_0_ao_n = self.mf_n.get_fock(dm=self.D)
-                F_0_ai_n = [self.Cv[σ].T @ F_0_ao_n[σ] @ self.Co[σ] for σ in (α, β)]
-                for σ in (α, β):
-                    L[σ] += 2 * F_0_ai_n[σ]
+                L[σ] -= einsum("Pja, Pij -> ai", G_ia_ri[σ], Y_ij_ri[σ])
+
+        nbatch = self.calc_batch_size(mvir ** 2 + mocc * mvir, tot_size(G_ia_ri + Y_ij_ri))
+        for σ in (α, β):
+            for saux in gen_batch(0, naux, nbatch):
+                L[σ] += einsum("Pib, Pab -> ai", G_ia_ri[σ][saux], Y_mo_ri[σ][saux, sv[σ], sv[σ]])
+
+        if self.xc_n:
+            F_0_ao_n = self.mf_n.get_fock(dm=self.D)
+            F_0_ai_n = [self.Cv[σ].T @ F_0_ao_n[σ] @ self.Co[σ] for σ in (α, β)]
+            for σ in (α, β):
+                L[σ] += 2 * F_0_ai_n[σ]
+
         for σ in (α, β):
             tensors.create("L" + str(σ), L[σ])
         return self
@@ -440,13 +452,20 @@ class UDFDH(RDFDH):
         d += np.einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
         return d
 
+    # A REALLY DIRTY WAY transform to son class https://stackoverflow.com/questions/7078134/
+    # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
+
+    def nuc_grad_method(self) -> Gradients:
+        from dh.grad.udfdh import Gradients
+        self.__class__ = Gradients
+        Gradients.__init__(self, self.mol, skip_construct=True)
+        return self
+
     def polar_method(self) -> Polar:
-        # A REALLY DIRTY WAY transform to son class https://stackoverflow.com/questions/7078134/
-        # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
         from dh.polar.udfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)
-        return self  # type: Polar
+        return self
 
     energy_elec_mp2 = energy_elec_mp2
     energy_elec_pt2 = energy_elec_pt2
