@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-from pyscf.dft.numint import _scale_ao, _dot_ao_ao
-from pyscf.scf import ucphf
+from pyscf.dft.numint import _scale_ao
 
 from dh import UDFDH
 import dh.polar.rdfdh
-from dh.dhutil import calc_batch_size, gen_batch, get_rho_from_dm_gga, tot_size
+from dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size
 from pyscf import gto, lib, dft
 import numpy as np
 import itertools

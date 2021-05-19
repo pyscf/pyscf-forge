@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pyscf.dft.numint import _dot_ao_dm, _contract_rho
-
 from dh import UDFDH
-from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, tot_size
-from dh.grad.rdfdh import contract_multiple_rho, get_rho_derivs, get_H_1_ao, get_S_1_ao, generator_L_1
+from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size
+from dh.grad.rdfdh import contract_multiple_rho, get_H_1_ao, get_S_1_ao, generator_L_1
 import dh.grad.rdfdh
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper

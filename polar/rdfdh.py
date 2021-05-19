@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-from pyscf.scf import cphf
-
 from dh import RDFDH
-from dh.dhutil import calc_batch_size, gen_batch, get_rho_from_dm_gga
+from dh.dhutil import gen_batch, get_rho_from_dm_gga
 from pyscf import gto, lib, dft
 import numpy as np
 
