@@ -227,13 +227,13 @@ class Polar(UDFDH, dh.polar.rdfdh.Polar):
             D_jab = eo[ς][:, None, None] - ev[σ][None, :, None] - ev[ς][None, None, :]
             for sI in gen_batch(0, nocc[σ], nbatch):
                 t_ijab = np.asarray(tensors["t_ijab" + str(σς)][sI])
-                D_ijab = eo[σ][:, None, None, None] + D_jab
+                D_ijab = eo[σ][sI, None, None, None] + D_jab
 
                 pdA_t_ijab = einsum("APia, Pjb -> Aijab", pdA_Y_ia_ri[σ][:, :, sI], Y_ia_ri[ς])
                 pdA_t_ijab += einsum("APjb, Pia -> Aijab", pdA_Y_ia_ri[ς], Y_ia_ri[σ][:, sI])
                 for sK in gen_batch(0, nocc[σ], nbatch):
                     t_kjab = t_ijab if sK == sI else tensors["t_ijab" + str(σς)][sK]
-                    pdA_t_ijab -= einsum("Aki, kjab -> Aijab", pdA_F_0_mo[σ][:, so[σ], so[σ]], t_kjab)
+                    pdA_t_ijab -= einsum("Aki, kjab -> Aijab", pdA_F_0_mo[σ][:, sK, sI], t_kjab)
                 pdA_t_ijab -= einsum("Akj, ikab -> Aijab", pdA_F_0_mo[ς][:, so[ς], so[ς]], t_ijab)
                 pdA_t_ijab += einsum("Aca, ijcb -> Aijab", pdA_F_0_mo[σ][:, sv[σ], sv[σ]], t_ijab)
                 pdA_t_ijab += einsum("Acb, ijac -> Aijab", pdA_F_0_mo[ς][:, sv[ς], sv[ς]], t_ijab)
@@ -241,21 +241,28 @@ class Polar(UDFDH, dh.polar.rdfdh.Polar):
                 if σς in (αα, ββ):
                     T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
                     pdA_T_ijab = cc * 0.5 * c_ss * (pdA_t_ijab - pdA_t_ijab.swapaxes(-1, -2))
-                    pdA_D_rdm1[σ][:, so[σ], so[σ]] -= 2 * einsum("ikab, Ajkab -> Aij", T_ijab, pdA_t_ijab)
+                    pdA_D_rdm1[σ][:, so[σ], so[σ]] -= 2 * einsum("kiba, Akjba -> Aij", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[σ][:, sv[σ], sv[σ]] += 2 * einsum("ijac, Aijbc -> Aab", T_ijab, pdA_t_ijab)
                     pdA_G_ia_ri[σ][:, :, sI] += 4 * einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri[σ])
                     pdA_G_ia_ri[σ][:, :, sI] += 4 * einsum("Aijab, Pjb -> APia", pdA_T_ijab, Y_ia_ri[σ])
                 else:
                     T_ijab = cc * c_os * t_ijab
                     pdA_T_ijab = cc * c_os * pdA_t_ijab
-                    pdA_D_rdm1[α][:, so[α], so[α]] -= einsum("ikab, Ajkab -> Aij", T_ijab, pdA_t_ijab)
+                    for sJ in gen_batch(0, nocc[α], nbatch):
+                        if sI == sJ:
+                            T_jkab = T_ijab
+                        else:
+                            t_jkab = tensors["t_ijab" + str(αβ)][sJ]
+                            T_jkab = cc * c_os * t_jkab
+                        pdA_D_rdm1[α][:, sI, sJ] -= einsum("jkba, Aikba -> Aij", T_jkab, pdA_t_ijab)
+                    # pdA_D_rdm1[α][:, so[α], so[α]] -= einsum("ikab, Ajkab -> Aij", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[β][:, so[β], so[β]] -= einsum("kiba, Akjba -> Aij", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[α][:, sv[α], sv[α]] += einsum("ijac, Aijbc -> Aab", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[β][:, sv[β], sv[β]] += einsum("jica, Ajicb -> Aab", T_ijab, pdA_t_ijab)
                     pdA_G_ia_ri[α][:, :, sI] += 2 * einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri[β])
-                    pdA_G_ia_ri[β][:, :, sI] += 2 * einsum("jiba, APjb -> APia", T_ijab, pdA_Y_ia_ri[α])
                     pdA_G_ia_ri[α][:, :, sI] += 2 * einsum("Aijab, Pjb -> APia", pdA_T_ijab, Y_ia_ri[β])
-                    pdA_G_ia_ri[β][:, :, sI] += 2 * einsum("Ajiba, Pjb -> APia", pdA_T_ijab, Y_ia_ri[α])
+                    pdA_G_ia_ri[β] += 2 * einsum("jiba, APjb -> APia", T_ijab, pdA_Y_ia_ri[α][:, :, sI])
+                    pdA_G_ia_ri[β] += 2 * einsum("Ajiba, Pjb -> APia", pdA_T_ijab, Y_ia_ri[α][:, sI])
         pdA_D_rdm1[:] += pdA_D_rdm1.swapaxes(-1, -2)
         return self
 
