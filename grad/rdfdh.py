@@ -12,6 +12,9 @@ einsum = lib.einsum
 
 
 def kernel(mf_dh: Gradients):
+    # unrestricted method requires dump t_ijab_αβ to disk; controling αβ and SS dumping is too hard for me
+    dump_t_ijab = True if mf_dh.unrestricted else mf_dh.with_t_ijab
+
     mf_dh.build()
     if mf_dh.mo_coeff is NotImplemented:
         mf_dh.run_scf()
@@ -19,7 +22,7 @@ def kernel(mf_dh: Gradients):
     mf_dh.prepare_S_1()
     mf_dh.prepare_integral()
     mf_dh.prepare_xc_kernel()
-    mf_dh.prepare_pt2(dump_t_ijab=mf_dh.with_t_ijab)
+    mf_dh.prepare_pt2(dump_t_ijab=dump_t_ijab)
     mf_dh.prepare_lagrangian(gen_W=True)
     mf_dh.prepare_D_r()
     mf_dh.prepare_gradient_jk()
