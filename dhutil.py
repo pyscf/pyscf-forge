@@ -1,3 +1,7 @@
+import os
+import pickle
+import shutil
+
 import h5py
 from pyscf import lib
 from pyscf.ao2mo.outcore import balance_partition
@@ -93,6 +97,44 @@ class HybridDict(dict):
 
     def load(self, key):
         return np.asarray(self.get(key))
+
+    def dump(self, h5_path="tensors.h5", dat_path="tensors.dat"):
+        dct = {}
+        for key, val in self.items():
+            if not isinstance(val, h5py.Dataset):
+                dct[key] = val
+        with open(dat_path, "wb") as f:
+            pickle.dump(dct, f)
+        self.chkfile.close()
+        shutil.copy(self.chkfile_name, h5_path)
+        self.chkfile = h5py.File(self.chkfile_name, "r+")
+        # re-update keys stored on disk
+        for key in HybridDict.get_dataset_keys(self.chkfile):
+            self[key] = self.chkfile[key]
+
+    @staticmethod
+    def get_dataset_keys(f):
+        # get h5py dataset keys to the bottom level https://stackoverflow.com/a/65924963/7740992
+        keys = []
+        f.visit(lambda key: keys.append(key) if isinstance(f[key], h5py.Dataset) else None)
+        return keys
+
+    @staticmethod
+    def pick(h5_path, dat_path):
+        tensors = HybridDict()
+        tensors.chkfile.close()
+        file_name = tensors.chkfile_name
+        os.remove(file_name)
+        shutil.copyfile(h5_path, file_name)
+        tensors.chkfile = h5py.File(file_name, "r+")
+
+        for key in HybridDict.get_dataset_keys(tensors.chkfile):
+            tensors[key] = tensors.chkfile[key]
+
+        with open(dat_path, "rb") as f:
+            dct = pickle.load(f)
+        tensors.update(dct)
+        return tensors
 
 
 def timing(f):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import pickle
 from typing import Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
     from dh.grad.rdfdh import Gradients
@@ -566,6 +568,42 @@ class RDFDH(lib.StreamObject):
         d = einsum("tuv, uv -> t", h, D + C @ D_r @ C.T)
         d += einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
         return d
+
+    def dump_intermediates(self, dir_path="scratch"):
+        os.makedirs(dir_path, exist_ok=True)
+        # tensors
+        tensors = self.tensors
+        h5_path = dir_path + "/tensors.h5"
+        dat_path = dir_path + "/tensors.dat"
+        tensors.dump(h5_path, dat_path)
+        # scf
+        # scf_path = dir_path + "/scf.h5"
+        # if self.mf_s.chkfile:
+        #     shutil.copy(self.mf_s.chkfile, scf_path)
+        # class attributes, without results
+        att_path = dir_path + "/attributes.dat"
+        dct = {
+            "C": self.C,
+            "e": self.e,
+            "D": self.D,
+            "mo_occ": self.mo_occ,
+            "mf_s_e_tot": self.mf_s.e_tot,
+        }
+        with open(att_path, "wb") as f:
+            pickle.dump(dct, f)
+
+    def load_intermediates(self, dir_path="scratch"):
+        h5_path = dir_path + "/tensors.h5"
+        dat_path = dir_path + "/tensors.dat"
+        self.tensors = HybridDict.pick(h5_path, dat_path)
+        att_path = dir_path + "/attributes.dat"
+        with open(att_path, "rb") as f:
+            dct = pickle.load(f)
+        self.mf_s.mo_coeff = dct["C"]
+        self.mf_s.mo_energy = dct["e"]
+        self.mf_s.mo_occ = dct["mo_occ"]
+        self.mf_s.e_tot = dct["mf_s_e_tot"]
+        self.run_scf()
 
     # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
     # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
