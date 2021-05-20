@@ -69,7 +69,7 @@ def energy_elec_mp2(mf: UDFDH,
         D_jab = eo[ς][:, None, None] - ev[σ][None, :, None] - ev[ς][None, None, :]
         for sI in gen_batch(0, nocc[σ], nbatch):
             if σς == αβ or eval_ss:  # if c_ss == 0, then SS contribution is not counted
-                D_ijab = eo[σ][:, None, None, None] + D_jab
+                D_ijab = eo[σ][sI, None, None, None] + D_jab
                 g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[σ][:, sI], Y_ia_ri[ς])
                 t_ijab = g_ijab / D_ijab
                 eng_bi1[σς] += einsum("ijab, ijab ->", t_ijab, g_ijab)
@@ -147,9 +147,9 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
         res = [np.zeros_like(x) for x in X]
         nbatch = calc_batch_size(mocc**2*mvir, max_memory, 0)
         for sA in gen_batch(0, nvir[α], nbatch):
-            res[α][:, sA] += einsum("aibj, Abj -> Aai", eri_cpks[αα], X[α])
+            res[α][:, sA] += einsum("aibj, Abj -> Aai", eri_cpks[αα][sA], X[α])
         for sA in gen_batch(0, nvir[β], nbatch):
-            res[β][:, sA] += einsum("aibj, Abj -> Aai", eri_cpks[ββ], X[β])
+            res[β][:, sA] += einsum("aibj, Abj -> Aai", eri_cpks[ββ][sA], X[β])
         for sA in gen_batch(0, nvir[α], nbatch):
             eri_cpks_batch = eri_cpks[αβ][sA]
             res[α][:, sA] += einsum("aibj, Abj -> Aai", eri_cpks_batch, X[β])
@@ -354,7 +354,7 @@ class UDFDH(RDFDH):
             D_jab = eo[ς][:, None, None] - ev[σ][None, :, None] - ev[ς][None, None, :] if eval_t_ijab else None
             for sI in gen_batch(0, nocc[σ], nbatch):
                 if eval_t_ijab:
-                    D_ijab = eo[σ][:, None, None, None] + D_jab
+                    D_ijab = eo[σ][sI, None, None, None] + D_jab
                     g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[σ][:, sI], Y_ia_ri[ς])
                     t_ijab = g_ijab / D_ijab
                     eng_bi1[σς] += einsum("ijab, ijab ->", t_ijab, g_ijab)
@@ -366,17 +366,33 @@ class UDFDH(RDFDH):
                     t_ijab = tensors["t_ijab" + str(σς)][sI]
                 if σς in (αα, ββ):
                     T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
-                    D_rdm1[σ, so[σ], so[σ]] -= 2 * einsum("ikab, jkab -> ij", T_ijab, t_ijab)
+                    D_rdm1[σ, so[σ], so[σ]] -= 2 * einsum("kiab, kjab -> ij", T_ijab, t_ijab)
                     D_rdm1[σ, sv[σ], sv[σ]] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
-                    G_ia_ri[σ] += 4 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[σ])
+                    G_ia_ri[σ][:, sI] += 4 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[σ])
                 else:  # σς == αβ
                     T_ijab = cc * c_os * t_ijab
-                    D_rdm1[α, so[α], so[α]] -= einsum("ikab, jkab -> ij", T_ijab, t_ijab)
+                    # D_rdm1[α, so[α], so[α]] -= einsum("ikab, jkab -> ij", T_ijab, t_ijab)
+                    # D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
+                    # D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
+                    # D_rdm1[β, sv[β], sv[β]] += einsum("jica, jicb -> ab", T_ijab, t_ijab)
+                    # G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
+                    # G_ia_ri[β][:, sI] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α])
+                    for sJ in gen_batch(0, nocc[α], nbatch):
+                        if sI == sJ:
+                            t_jkab = t_ijab
+                        elif sI.start < sJ.start:
+                            continue
+                        else:
+                            t_jkab = tensors["t_ijab" + str(αβ)][sJ]
+                        D_tmp = einsum("ikab, jkab -> ij", T_ijab, t_jkab)
+                        D_rdm1[α, sI, sJ] -= D_tmp
+                        if sI != sJ:
+                            D_rdm1[α, sJ, sI] -= D_tmp.swapaxes(-1, -2)
                     D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
                     D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
                     D_rdm1[β, sv[β], sv[β]] += einsum("jica, jicb -> ab", T_ijab, t_ijab)
                     G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
-                    G_ia_ri[β][:, sI] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α])
+                    G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α][:, sI])
 
         if self.eng_tot is NotImplemented:
             kernel(self, eng_bi=(eng_bi1, eng_bi2))

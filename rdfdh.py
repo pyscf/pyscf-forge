@@ -268,6 +268,7 @@ class RDFDH(lib.StreamObject):
         self._incore_t_ijab = False
         self._incore_Y_mo = False
         self._incore_eri_cpks = False
+        self._fixed_batch = False
         self.cpks_tol = 1e-8
         self.cpks_cyc = 100
         self.max_memory = mol.max_memory
@@ -335,6 +336,8 @@ class RDFDH(lib.StreamObject):
         return max(self.max_memory - lib.current_memory()[0], 500)
 
     def calc_batch_size(self, unit_flop, pre_flop=0, fixed_mem=None):
+        if self._fixed_batch:
+            return self._fixed_batch
         if fixed_mem:
             return calc_batch_size(unit_flop, fixed_mem, pre_flop)
         else:
