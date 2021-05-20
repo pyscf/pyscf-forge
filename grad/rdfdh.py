@@ -217,6 +217,24 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
 
 
 @timing
+def alter_gradient_jk(mf_s, D_r, cx, cx_n):
+    mf_s_hess = mf_s.Hessian()
+    C = mf_s.mo_coeff
+    D_r_symm = (D_r + D_r.T) / 2
+    D_r_ao = C @ D_r_symm @ C.T
+    D = mf_s.make_rdm1()
+
+    grad_contrib = np.zeros((mf_s.mol.natm, 3))
+    for tup in df.hessian.rhf._gen_jk(mf_s_hess, C, mf_s.mo_occ):
+        A, _, vj, vk = tup
+        grad_contrib[A] = (
+            0.5 * (einsum("tuv, uv -> t", vj, D) - 0.5 * cx_n * einsum("tuv, uv -> t", vk, D))
+            + (einsum("tuv, uv -> t", vj, D_r_ao) - 0.5 * cx * einsum("tuv, uv -> t", vk, D_r_ao)))
+
+    return grad_contrib
+
+
+@timing
 def get_gradient_gga(C, D_r, xc_setting, xc_kernel, vxc_n=None, max_memory=2000):
     # reference HF
     if xc_kernel[1] is None:
@@ -335,6 +353,34 @@ class Gradients(RDFDH):
             if vxc_n is None and self.ni._xc_type(self.xc_n) == "HF":
                 vxc_n = np.zeros((2, rho.size))
         self.grad_gga = get_gradient_gga(self.C, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
+
+    @timing
+    def alter_gradient_gga(self):
+        tensors = self.tensors
+        if "rho" not in tensors:
+            self.grad_gga = 0
+            return self
+        # --- LAZY CODE ---
+        from pyscf import grad, hessian
+        ni, mol, grids = self.ni, self.mol, self.grids
+        natm = mol.natm
+        C, D = self.C, self.D
+        grad_contrib = np.zeros((natm, 3))
+
+        xc = self.xc_n if self.xc_n else self.xc
+        if self.ni._xc_type(xc) == "GGA":  # energy functional contribution
+            veff_1_gga = grad.rks.get_vxc(ni, mol, grids, xc, D)[1]
+            for A, (_, _, A0, A1) in enumerate(mol.aoslice_by_atom()):
+                grad_contrib[A] += 2 * einsum("tuv, uv -> t", veff_1_gga[:, A0:A1], D[A0:A1])
+
+        if self.ni._xc_type(self.xc) == "GGA":  # reference functional skeleton fock derivative contribution
+            D_r = tensors.load("D_r")
+            D_r_symm = (D_r + D_r.swapaxes(-1, -2)) / 2
+            D_r_ao = einsum("up, pq, vq -> uv", C, D_r_symm, C)
+
+            F_1_ao_dfa = np.array(hessian.rks._get_vxc_deriv1(self.mf_s.Hessian(), C, self.mo_occ, 2000))
+            grad_contrib += einsum("uv, Atuv -> At", D_r_ao, F_1_ao_dfa)
+        return grad_contrib
 
     @timing
     def prepare_gradient_pt2(self):
