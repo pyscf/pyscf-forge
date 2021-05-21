@@ -285,7 +285,8 @@ class Polar(RDFDH):
         D_r = tensors.load("D_r")
         pdA_D_rdm1 = tensors.load("pdA_D_rdm1")
 
-        SCR1 = self.Ax0_Core(sa, sa, sa, sa)(D_r)
+        # SCR1 = self.Ax0_Core(sa, sa, sa, sa)(D_r)
+        SCR1 = self.Ax0_Core_resp(sa, sa, sa, sa)(D_r)  # resp is faster in this case
         SCR2 = H_1_mo + self.Ax0_Core(sa, sa, sv, so)(U_1[:, sv, so])
         SCR3 = self.get_SCR3()
 

@@ -56,20 +56,20 @@ def get_rho_derivs(ao, dm, mol, mask):
     for i in range(4):
         aod[i] = _dot_ao_dm(mol, ao[i], dm, mask, shls_slice, ao_loc)
     # rho_01
-    # rho_01 = einsum("rgu, gu -> rg", ao[:4], aod[0])
-    rho_01 = contract_multiple_rho(ao[:4], aod[0])
+    rho_01 = einsum("rgu, gu -> rg", ao[:4], aod[0])
+    # rho_01 = contract_multiple_rho(ao[:4], aod[0])
     rho_01[1:] *= 2
     rho_0, rho_1 = rho_01[0], rho_01[1:]
     # rho_2
     rho_2 = np.empty((3, 3, ngrid))
-    # rho_2T = 2 * einsum("Tgu, gu -> Tg", ao[4:10], aod[0])
-    rho_2T = contract_multiple_rho(ao[4:10], aod[0])
+    rho_2T = 2 * einsum("Tgu, gu -> Tg", ao[4:10], aod[0])
+    # rho_2T = contract_multiple_rho(ao[4:10], aod[0])
     for i, j, ij in zip(
             (X , X , X , Y , Y , Z ),
             ( X,  Y,  Z,  Y,  Z,  Z),
             (XX, XY, XZ, YY, YZ, ZZ)):
-        # rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * einsum("gu, gu -> g", ao[i], aod[j])
-        rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * _contract_rho(ao[i], aod[j])
+        rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * einsum("gu, gu -> g", ao[i], aod[j])
+        # rho_2[i-1, j-1] = rho_2T[ij-4] + 2 * _contract_rho(ao[i], aod[j])
         if i != j:
             rho_2[j-1, i-1] = rho_2[i-1, j-1]
 
@@ -78,17 +78,17 @@ def get_rho_derivs(ao, dm, mol, mask):
     def rho_atom_deriv(A):
         _, _, A0, A1 = mol.aoslice_by_atom()[A]
         sA = slice(A0, A1)
-        # rho_A1 = - 2 * einsum("rgu, gu -> rg", ao[1:4, :, sA], aod[0, :, sA])
-        rho_A1 = - 2 * contract_multiple_rho(ao[1:4, :, sA], aod[0, :, sA])
+        rho_A1 = - 2 * einsum("rgu, gu -> rg", ao[1:4, :, sA], aod[0, :, sA])
+        # rho_A1 = - 2 * contract_multiple_rho(ao[1:4, :, sA], aod[0, :, sA])
         rho_A2 = np.empty((3, 3, ngrid))
-        # rho_A2T = - 2 * einsum("Tgu, gu -> Tg", ao[4:10, :, sA], aod[0, :, sA])
-        rho_A2T = - 2 * contract_multiple_rho(ao[4:10, :, sA], aod[0, :, sA])
+        rho_A2T = - 2 * einsum("Tgu, gu -> Tg", ao[4:10, :, sA], aod[0, :, sA])
+        # rho_A2T = - 2 * contract_multiple_rho(ao[4:10, :, sA], aod[0, :, sA])
         for i, j, ij in zip(
             (X , X , X ,  Y, Y , Y ,  Z,  Z, Z ),
             ( X,  Y,  Z, X ,  Y,  Z, X , Y ,  Z),
             (XX, XY, XZ, XY, YY, YZ, XZ, YZ, ZZ)):
-            # rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * einsum("gu, gu -> g", ao[i, :, sA], aod[j, :, sA])
-            rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * _contract_rho(ao[i, :, sA], aod[j, :, sA])
+            rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * einsum("gu, gu -> g", ao[i, :, sA], aod[j, :, sA])
+            # rho_A2[i-1, j-1] = rho_A2T[ij-4] - 2 * _contract_rho(ao[i, :, sA], aod[j, :, sA])
         return rho_A1, rho_A2
 
     return rho_0, rho_1, rho_2, rho_atom_deriv

@@ -177,6 +177,48 @@ def get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
             - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, Y_mo_jk[:, sA, sv]))
 
 
+@timing
+def alter_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
+    naux, nmo, _ = Y_mo_jk.shape
+    nvir = nmo - nocc
+    so, sv = slice(0, nocc), slice(nocc, nmo)
+    # prepare space if bulk of eri_cpks is not provided
+    if eri_cpks is None:
+        eri_cpks = np.empty((nvir, nocc, nvir, nocc))
+    # copy some tensors to memory
+    Y_ai_jk = np.asarray(Y_mo_jk[:, sv, so])
+    Y_ij_jk = np.asarray(Y_mo_jk[:, so, so])
+
+    nbatch = calc_batch_size(nvir*naux + 2*nocc**2*nvir, max_memory, Y_ai_jk.size + Y_ij_jk.size)
+
+    def save(r0, r1, buf):
+        eri_cpks[r0:r1] = buf.reshape(r1-r0, nocc, nvir, nocc)
+
+    def load(r0, r1, pre):
+        if r1 >= nvir:
+            return
+        r0, r1 = r0 + nbatch, min(r1+nbatch, nvir)
+        pre[:, :r1-r0] = Y_mo_jk[:, r0:r1, sv]
+
+    buf_load = np.zeros((naux, nbatch, nvir))
+    pre_load = np.zeros((naux, nbatch, nvir))
+
+    with lib.call_in_background(load) as bload:
+        load(0-nbatch, 0, pre_load)
+        for sA in gen_batch(nocc, nmo, nbatch):
+            print(sA)
+            nA = sA.stop - sA.start
+            sAvir = slice(sA.start - nocc, sA.stop - nocc)
+            buf_load, pre_load = pre_load, buf_load
+            bload(sA.start, sA.stop, pre_load)
+            buf_save = (
+                + 4 * einsum("Pai, Pbj -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
+                - cx * einsum("Paj, Pbi -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
+                - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, buf_load[:, :nA]))
+            save(sAvir.start, sAvir.stop, buf_save)
+
+
+
 def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
     naux, nmo, _ = Y_mo_jk.shape
     ni, na = si.stop - si.start, sa.stop - sa.start
@@ -189,10 +231,11 @@ def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
         nbatch = calc_batch_size(nmo**2, max_memory, X.size + res.size)
         for saux in gen_batch(0, naux, nbatch):
             Y_mo_blk = np.asarray(Y_mo_jk[saux])
-            res += (
-                + 4 * einsum("Pia, Pjb, Ajb -> Aia", Y_mo_blk[:, si, sa], Y_mo_blk[:, sj, sb], X)
-                - cx * einsum("Pib, Pja, Ajb -> Aia", Y_mo_blk[:, si, sb], Y_mo_blk[:, sj, sa], X)
-                - cx * einsum("Pij, Pab, Ajb -> Aia", Y_mo_blk[:, si, sj], Y_mo_blk[:, sa, sb], X))
+            for A in range(X.shape[0]):  # explicitly split X to X[A] to avoid einsum more than 2 oprehends
+                res[A] += (
+                    + 4 * einsum("Pia, Pjb, jb -> ia", Y_mo_blk[:, si, sa], Y_mo_blk[:, sj, sb], X[A])
+                    - cx * einsum("Pib, Pja, jb -> ia", Y_mo_blk[:, si, sb], Y_mo_blk[:, sj, sa], X[A])
+                    - cx * einsum("Pij, Pab, jb -> ia", Y_mo_blk[:, si, sj], Y_mo_blk[:, sa, sb], X[A]))
         res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
         return res
     return Ax0_Core_HF_inner
@@ -247,6 +290,37 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
         res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
         return res
     return Ax0_cpks_HF_inner
+
+
+def alter_Ax0_cpks_HF(eri_cpks, max_memory=2000):
+    nvir, nocc = eri_cpks.shape[:2]
+
+    @timing
+    def alter_Ax0_cpks_HF_inner(X):
+        X_shape = X.shape
+        X = X.reshape((-1, X_shape[-2], X_shape[-1]))
+        res = np.zeros_like(X)
+        nbatch = calc_batch_size(nocc**2 * nvir, max_memory, 0)
+
+        def load(r0, r1, buf):
+            if r1 >= nvir:
+                return
+            r0, r1 = r0 + nbatch, min(r1 + nbatch, nvir)
+            buf[:r1-r0] = eri_cpks[r0:r1]
+
+        buf_load = np.empty((nbatch, nocc, nvir, nocc))
+        pre_load = np.empty((nbatch, nocc, nvir, nocc))
+        load(- nbatch, 0, eri_cpks[0:min(nvir, nbatch)])
+
+        with lib.call_in_background(load) as bload:
+            for sA in gen_batch(0, nvir, nbatch):
+                nA = sA.stop - sA.start
+                buf_load, pre_load = pre_load, buf_load
+                bload(sA.start, sA.stop, pre_load)
+                res[:, sA] = einsum("aibj, Abj -> Aai", buf_load[:nA], X)
+            res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
+        return res
+    return alter_Ax0_cpks_HF_inner
 
 
 # endregion first derivative related
@@ -345,6 +419,8 @@ class RDFDH(lib.StreamObject):
 
     @timing
     def build(self):
+        # make sure that grids in SCF run should be the same to other energy evaluations
+        self.mf_s.grids = self.mf_n.grids = self.grids
         if self.df_jk.auxmol is None:
             self.df_jk.build()
             self.aux_jk = self.df_jk.auxmol
@@ -354,8 +430,6 @@ class RDFDH(lib.StreamObject):
 
     @timing
     def run_scf(self):
-        # make sure that grids in SCF run should be the same to other energy evaluations
-        self.mf_s.grids = self.mf_n.grids = self.grids
         self.build()
         mf = self.mf_s
         if mf.e_tot == 0:
@@ -538,7 +612,8 @@ class RDFDH(lib.StreamObject):
         else:
             L -= 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_ij_ri)
 
-        L += self.Ax0_Core(sv, so, sa, sa)(D_rdm1)
+        # L += self.Ax0_Core(sv, so, sa, sa)(D_rdm1)
+        L += self.Ax0_Core_resp(sv, so, sa, sa)(D_rdm1)  # resp is faster
 
         nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
         for saux in gen_batch(0, naux, nbatch):
@@ -595,7 +670,7 @@ class RDFDH(lib.StreamObject):
         with open(att_path, "wb") as f:
             pickle.dump(dct, f)
 
-    def load_intermediates(self, dir_path="scratch"):
+    def load_intermediates(self, dir_path="scratch", rerun_scf=False):
         h5_path = dir_path + "/tensors.h5"
         dat_path = dir_path + "/tensors.dat"
         self.tensors = HybridDict.pick(h5_path, dat_path)
@@ -606,7 +681,10 @@ class RDFDH(lib.StreamObject):
         self.mf_s.mo_energy = dct["e"]
         self.mf_s.mo_occ = dct["mo_occ"]
         self.mf_s.e_tot = dct["mf_s_e_tot"]
+        if rerun_scf:  # probably required for validation of dft grids
+            self.mf_s.kernel(dm=self.mf_s.make_rdm1())
         self.run_scf()
+        return self
 
     # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
     # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
