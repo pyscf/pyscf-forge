@@ -109,14 +109,14 @@ class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
     @timing
     def prepare_H_1(self):
         H_1_ao = get_H_1_ao(self.mol)
-        H_1_mo = einsum("sup, Auv, svq -> sApq", self.C, H_1_ao, self.C)
+        H_1_mo = np.array([einsum("up, Auv, vq -> Apq", self.C[σ], H_1_ao, self.C[σ]) for σ in (α, β)])
         self.tensors.create("H_1_ao", H_1_ao)
         self.tensors.create("H_1_mo", H_1_mo)
 
     @timing
     def prepare_S_1(self):
         S_1_ao = get_S_1_ao(self.mol)
-        S_1_mo = einsum("sup, Auv, svq -> sApq", self.C, S_1_ao, self.C)
+        S_1_mo = np.array([einsum("up, Auv, vq -> Apq", self.C[σ], S_1_ao, self.C[σ]) for σ in (α, β)])
         self.tensors.create("S_1_ao", S_1_ao)
         self.tensors.create("S_1_mo", S_1_mo)
 

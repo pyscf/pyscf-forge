@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from typing import Tuple, TYPE_CHECKING
+
+from pyscf.lib.numpy_helper import ANTIHERMI
+
 if TYPE_CHECKING:
     from dh.grad.udfdh import Gradients
     from dh.polar.udfdh import Polar
@@ -8,7 +11,7 @@ if TYPE_CHECKING:
 from pyscf.scf import ucphf
 import h5py
 from dh import RDFDH
-from dh.dhutil import gen_batch, calc_batch_size, timing, tot_size
+from dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
 from pyscf import lib, gto, df, dft
 import numpy as np
 
@@ -372,7 +375,8 @@ class UDFDH(RDFDH):
                 else:
                     t_ijab = tensors["t_ijab" + str(σς)][sI]
                 if σς in (αα, ββ):
-                    T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
+                    # T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
+                    T_ijab = cc * 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
                     D_rdm1[σ, so[σ], so[σ]] -= 2 * einsum("kiab, kjab -> ij", T_ijab, t_ijab)
                     D_rdm1[σ, sv[σ], sv[σ]] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
                     G_ia_ri[σ][:, sI] += 4 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[σ])

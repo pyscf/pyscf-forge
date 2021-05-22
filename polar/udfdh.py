@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from pyscf.dft.numint import _scale_ao
+from pyscf.lib.numpy_helper import ANTIHERMI
 
 from dh import UDFDH
 import dh.polar.rdfdh
-from dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size
+from dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
 from pyscf import gto, lib, dft
 import numpy as np
 import itertools
@@ -239,8 +240,10 @@ class Polar(UDFDH, dh.polar.rdfdh.Polar):
                 pdA_t_ijab += einsum("Acb, ijac -> Aijab", pdA_F_0_mo[ς][:, sv[ς], sv[ς]], t_ijab)
                 pdA_t_ijab /= D_ijab
                 if σς in (αα, ββ):
-                    T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
-                    pdA_T_ijab = cc * 0.5 * c_ss * (pdA_t_ijab - pdA_t_ijab.swapaxes(-1, -2))
+                    # T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
+                    # pdA_T_ijab = cc * 0.5 * c_ss * (pdA_t_ijab - pdA_t_ijab.swapaxes(-1, -2))
+                    T_ijab = cc * 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
+                    pdA_T_ijab = cc * 0.5 * c_ss * hermi_sum_last2dim(pdA_t_ijab, hermi=ANTIHERMI, inplace=False)
                     pdA_D_rdm1[σ][:, so[σ], so[σ]] -= 2 * einsum("kiba, Akjba -> Aij", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[σ][:, sv[σ], sv[σ]] += 2 * einsum("ijac, Aijbc -> Aab", T_ijab, pdA_t_ijab)
                     pdA_G_ia_ri[σ][:, :, sI] += 4 * einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri[σ])
@@ -307,12 +310,14 @@ class Polar(UDFDH, dh.polar.rdfdh.Polar):
                 pdA_G_blk = np.asarray(pdA_G_ia_ri[σ][:, saux])
                 # pdA_Y_ij part
                 pdA_Y_blk = einsum("Ami, Pmj -> APij", U_1[σ][:, :, so[σ]], Y_blk[:, :, so[σ]])
-                pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+                # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+                hermi_sum_last2dim(pdA_Y_blk)
                 SCR3[σ] -= einsum("APja, Pij -> Aai", pdA_G_blk, Y_blk[:, so[σ], so[σ]])
                 SCR3[σ] -= einsum("Pja, APij -> Aai", G_blk, pdA_Y_blk)
                 # pdA_Y_ab part
                 pdA_Y_blk = einsum("Ama, Pmb -> APab", U_1[σ][:, :, sv[σ]], Y_blk[:, :, sv[σ]])
-                pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+                # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+                hermi_sum_last2dim(pdA_Y_blk)
                 SCR3[σ] += einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv[σ], sv[σ]])
                 SCR3[σ] += einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
             if self.xc_n:

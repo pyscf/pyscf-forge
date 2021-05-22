@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dh import RDFDH
-from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim_inplace
+from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf import gto, lib, dft
 import numpy as np
 
@@ -164,7 +164,7 @@ class Polar(RDFDH):
         tensors.create("pdA_Y_ia_ri", pdA_Y_ia_ri)
         return self
 
-    def prepare_pt2_deriv(self, fast_trans=True):
+    def prepare_pt2_deriv(self):
         tensors = self.tensors
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
@@ -196,12 +196,10 @@ class Polar(RDFDH):
             pdA_t_ijab /= D_ijab
 
             cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
-            if fast_trans:
-                T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
-                pdA_T_ijab = restricted_biorthogonalize(pdA_t_ijab, cc, c_os, c_ss)
-            else:
-                T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
-                pdA_T_ijab = cc * ((c_os + c_ss) * pdA_t_ijab - c_ss * pdA_t_ijab.swapaxes(-1, -2))
+            # T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
+            # pdA_T_ijab = cc * ((c_os + c_ss) * pdA_t_ijab - c_ss * pdA_t_ijab.swapaxes(-1, -2))
+            T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
+            pdA_T_ijab = restricted_biorthogonalize(pdA_t_ijab, cc, c_os, c_ss)
 
             pdA_G_ia_ri[:, :, sI] += einsum("Aijab, Pjb -> APia", pdA_T_ijab, Y_ia_ri)
             pdA_G_ia_ri[:, :, sI] += einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri)
@@ -266,13 +264,13 @@ class Polar(RDFDH):
             # pdA_Y_ij part
             pdA_Y_blk = einsum("Ami, Pmj -> APij", U_1[:, :, so], Y_blk[:, :, so])
             # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
-            hermi_sum_last2dim_inplace(pdA_Y_blk)
+            hermi_sum_last2dim(pdA_Y_blk)
             SCR3 -= 4 * einsum("APja, Pij -> Aai", pdA_G_blk, Y_blk[:, so, so])
             SCR3 -= 4 * einsum("Pja, APij -> Aai", G_blk, pdA_Y_blk)
             # pdA_Y_ab part
             pdA_Y_blk = einsum("Ama, Pmb -> APab", U_1[:, :, sv], Y_blk[:, :, sv])
             # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
-            hermi_sum_last2dim_inplace(pdA_Y_blk)
+            hermi_sum_last2dim(pdA_Y_blk)
             SCR3 += 4 * einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv, sv])
             SCR3 += 4 * einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
         if self.xc_n:

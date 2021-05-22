@@ -4,6 +4,7 @@ import shutil
 
 import h5py
 from pyscf import lib
+from pyscf.lib.numpy_helper import HERMITIAN, ANTIHERMI
 from pyscf.ao2mo.outcore import balance_partition
 
 import numpy as np
@@ -167,7 +168,6 @@ def gen_shl_batch(mol, blksize, start_id=0, stop_id=None):
 
 def calc_batch_size(unit_flop, mem_avail, pre_flop=0):
     # mem_avail: in MB
-    print("DEBUG: mem_avail", mem_avail)
     max_memory = 0.8 * mem_avail - pre_flop * 8 / 1024 ** 2
     batch_size = int(max(max_memory // (unit_flop * 8 / 1024 ** 2), 1))
     return batch_size
@@ -215,10 +215,11 @@ def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
         return res
 
 
-def hermi_sum_last2dim_inplace(tsr, hermi=1):
+def hermi_sum_last2dim(tsr, inplace=True, hermi=1):
     # shameless call lib.hermi_sum, just for a tensor wrapper
     tsr_shape = tsr.shape
     tsr.shape = (-1, tsr.shape[-1], tsr.shape[-2])
-    res = lib.hermi_sum(tsr, axes=(0, 2, 1), hermi=hermi, inplace=True)
+    res = lib.hermi_sum(tsr, axes=(0, 2, 1), hermi=hermi, inplace=inplace)
+    tsr.shape = tsr_shape
     res.shape = tsr_shape
     return res
