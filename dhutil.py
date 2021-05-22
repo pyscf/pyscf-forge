@@ -212,3 +212,12 @@ def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
         res *= coef_1
         res += coef_0 * t_ijab
         return res
+
+
+def hermi_sum_last2dim_inplace(tsr, hermi=1):
+    # shameless call lib.hermi_sum, just for a tensor wrapper
+    tsr_shape = tsr.shape
+    tsr.shape = (-1, tsr.shape[-1], tsr.shape[-2])
+    res = lib.hermi_sum(tsr, axes=(0, 2, 1), hermi=hermi, inplace=True)
+    res.shape = tsr_shape
+    return res

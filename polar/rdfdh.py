@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dh import RDFDH
-from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize
+from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim_inplace
 from pyscf import gto, lib, dft
 import numpy as np
 
@@ -265,12 +265,14 @@ class Polar(RDFDH):
             pdA_G_blk = np.asarray(pdA_G_ia_ri[:, saux])
             # pdA_Y_ij part
             pdA_Y_blk = einsum("Ami, Pmj -> APij", U_1[:, :, so], Y_blk[:, :, so])
-            pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+            # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+            hermi_sum_last2dim_inplace(pdA_Y_blk)
             SCR3 -= 4 * einsum("APja, Pij -> Aai", pdA_G_blk, Y_blk[:, so, so])
             SCR3 -= 4 * einsum("Pja, APij -> Aai", G_blk, pdA_Y_blk)
             # pdA_Y_ab part
             pdA_Y_blk = einsum("Ama, Pmb -> APab", U_1[:, :, sv], Y_blk[:, :, sv])
-            pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+            # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+            hermi_sum_last2dim_inplace(pdA_Y_blk)
             SCR3 += 4 * einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv, sv])
             SCR3 += 4 * einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
         if self.xc_n:
