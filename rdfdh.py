@@ -177,46 +177,6 @@ def get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
             - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, Y_mo_jk[:, sA, sv]))
 
 
-@timing
-def alter_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
-    naux, nmo, _ = Y_mo_jk.shape
-    nvir = nmo - nocc
-    so, sv = slice(0, nocc), slice(nocc, nmo)
-    # prepare space if bulk of eri_cpks is not provided
-    if eri_cpks is None:
-        eri_cpks = np.empty((nvir, nocc, nvir, nocc))
-    # copy some tensors to memory
-    Y_ai_jk = np.asarray(Y_mo_jk[:, sv, so])
-    Y_ij_jk = np.asarray(Y_mo_jk[:, so, so])
-
-    nbatch = calc_batch_size(nvir*naux + 2*nocc**2*nvir, max_memory, Y_ai_jk.size + Y_ij_jk.size)
-
-    def save(r0, r1, buf):
-        eri_cpks[r0:r1] = buf.reshape(r1-r0, nocc, nvir, nocc)
-
-    def load(r0, r1, pre):
-        if r1 >= nvir:
-            return
-        r0, r1 = r0 + nbatch, min(r1+nbatch, nvir)
-        pre[:, :r1-r0] = Y_mo_jk[:, r0:r1, sv]
-
-    buf_load = np.zeros((naux, nbatch, nvir))
-    pre_load = np.zeros((naux, nbatch, nvir))
-
-    with lib.call_in_background(load) as bload:
-        load(0-nbatch, 0, pre_load)
-        for sA in gen_batch(nocc, nmo, nbatch):
-            nA = sA.stop - sA.start
-            sAvir = slice(sA.start - nocc, sA.stop - nocc)
-            buf_load, pre_load = pre_load, buf_load
-            bload(sA.start, sA.stop, pre_load)
-            buf_save = (
-                + 4 * einsum("Pai, Pbj -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
-                - cx * einsum("Paj, Pbi -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
-                - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, buf_load[:, :nA]))
-            save(sAvir.start, sAvir.stop, buf_save)
-
-
 
 def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
     naux, nmo, _ = Y_mo_jk.shape
@@ -289,37 +249,6 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
         res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
         return res
     return Ax0_cpks_HF_inner
-
-
-def alter_Ax0_cpks_HF(eri_cpks, max_memory=2000):
-    nvir, nocc = eri_cpks.shape[:2]
-
-    @timing
-    def alter_Ax0_cpks_HF_inner(X):
-        X_shape = X.shape
-        X = X.reshape((-1, X_shape[-2], X_shape[-1]))
-        res = np.zeros_like(X)
-        nbatch = calc_batch_size(nocc**2 * nvir, max_memory, 0)
-
-        def load(r0, r1, buf):
-            if r1 >= nvir:
-                return
-            r0, r1 = r0 + nbatch, min(r1 + nbatch, nvir)
-            buf[:r1-r0] = eri_cpks[r0:r1]
-
-        buf_load = np.empty((nbatch, nocc, nvir, nocc))
-        pre_load = np.empty((nbatch, nocc, nvir, nocc))
-        load(- nbatch, 0, eri_cpks[0:min(nvir, nbatch)])
-
-        with lib.call_in_background(load) as bload:
-            for sA in gen_batch(0, nvir, nbatch):
-                nA = sA.stop - sA.start
-                buf_load, pre_load = pre_load, buf_load
-                bload(sA.start, sA.stop, pre_load)
-                res[:, sA] = einsum("aibj, Abj -> Aai", buf_load[:nA], X)
-            res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
-        return res
-    return alter_Ax0_cpks_HF_inner
 
 
 # endregion first derivative related

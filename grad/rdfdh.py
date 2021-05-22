@@ -217,7 +217,7 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
 
 
 @timing
-def alter_gradient_jk(mf_s, D_r, cx, cx_n):
+def get_gradient_jk_by_pyscf(mf_s, D_r, cx, cx_n):
     mf_s_hess = mf_s.Hessian()
     C = mf_s.mo_coeff
     D_r_symm = (D_r + D_r.T) / 2
@@ -355,7 +355,7 @@ class Gradients(RDFDH):
         self.grad_gga = get_gradient_gga(self.C, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
 
     @timing
-    def alter_gradient_gga(self):
+    def prepare_gradient_gga_by_pyscf(self):
         tensors = self.tensors
         if "rho" not in tensors:
             self.grad_gga = 0
