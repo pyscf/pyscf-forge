@@ -48,6 +48,7 @@ def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, restricted=True
         else:
             mo_occ = scf.uhf.get_occ(mf.mf_s)
     dm = mf.mf_s.make_rdm1(mo_coeff, mo_occ)
+    dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
     eng_nc = mf.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
     return eng_nc
 
