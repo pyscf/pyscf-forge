@@ -111,6 +111,7 @@ def energy_elec(mf: UDFDH, params=None, **kwargs):
 # region first derivative related
 
 
+@timing
 def get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
     naux, nmo, _ = Y_mo_jk[0].shape
     nvir = nmo - nocc[α], nmo - nocc[β]
@@ -141,6 +142,7 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
     nocc = eri_cpks[αα].shape[1], eri_cpks[ββ].shape[1]
     mvir, mocc = max(nvir), max(nocc)
 
+    @timing
     def Ax0_cpks_HF_inner(X):
         prop_shape = X[0].shape[:-2]
         X = [X[σ].reshape(-1, X[σ].shape[-2], X[σ].shape[-1]) for σ in (α, β)]
@@ -165,6 +167,7 @@ def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
     ni = [si[σ].stop - si[σ].start for σ in (α, β)]
     na = [sa[σ].stop - sa[σ].start for σ in (α, β)]
 
+    @timing
     def Ax0_Core_HF_inner(X):
         prop_shape = X[0].shape[:-2]
         X = [X[σ].reshape(-1, X[σ].shape[-2], X[σ].shape[-1]) for σ in (α, β)]
@@ -189,6 +192,7 @@ def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
     ni, mol, grids, xc, dm = xc_setting
     rho, vxc, fxc = xc_kernel
 
+    @timing
     def Ax0_Core_KS_inner(X):
         prop_shape = X[0].shape[:-2]
         X = [X[σ].reshape(-1, X[σ].shape[-2], X[σ].shape[-1]) for σ in (α, β)]
@@ -220,6 +224,7 @@ class UDFDH(RDFDH):
         self.mvir = NotImplemented
         self.mocc = max(max(self.nocc), 1)
 
+    @timing
     def run_scf(self):
         self.mf_s.grids = self.mf_n.grids = self.grids
         self.build()
@@ -285,6 +290,7 @@ class UDFDH(RDFDH):
             return [ax0_hf[σ] + ax0_ks[σ] for σ in (α, β)]
         return Ax0_cpks_inner
 
+    @timing
     def solve_cpks(self, rhs):
         nocc, nvir = self.nocc, self.nvir
 
@@ -323,7 +329,8 @@ class UDFDH(RDFDH):
         get_eri_cpks([tensors["Y_mo_jk" + str(σ)] for σ in (α, β)], nocc, self.cx, eri_cpks, self.get_memory())
         return self
 
-    def prepare_pt2(self, dump_t_ijab=True):
+    @timing
+    def prepare_pt2(self, dump_t_ijab=True, fast_trans=True):
         tensors = self.tensors
         nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
         mocc, mvir = max(nocc), max(nvir)
@@ -403,6 +410,7 @@ class UDFDH(RDFDH):
 
         return self
 
+    @timing
     def prepare_lagrangian(self, gen_W=False):
         tensors = self.tensors
         nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
@@ -444,6 +452,7 @@ class UDFDH(RDFDH):
             tensors.create("L" + str(σ), L[σ])
         return self
 
+    @timing
     def prepare_D_r(self):
         tensors = self.tensors
         sv, so = self.sv, self.so

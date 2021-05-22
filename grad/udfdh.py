@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dh import UDFDH
-from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size
+from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing
 from dh.grad.rdfdh import contract_multiple_rho, get_H_1_ao, get_S_1_ao, generator_L_1
 import dh.grad.rdfdh
 from pyscf import gto, lib, df
@@ -14,6 +14,7 @@ einsum = lib.einsum
 αα, αβ, ββ = 0, 1, 2
 
 
+@timing
 def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     mol, aux = dfobj.mol, dfobj.auxmol
     natm, nao, nmo, nocc = mol.natm, mol.nao, C.shape[-1], mol.nelec
@@ -105,12 +106,14 @@ class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
         self.grad_tot = NotImplemented
         self.de = NotImplemented
 
+    @timing
     def prepare_H_1(self):
         H_1_ao = get_H_1_ao(self.mol)
         H_1_mo = einsum("sup, Auv, svq -> sApq", self.C, H_1_ao, self.C)
         self.tensors.create("H_1_ao", H_1_ao)
         self.tensors.create("H_1_mo", H_1_mo)
 
+    @timing
     def prepare_S_1(self):
         S_1_ao = get_S_1_ao(self.mol)
         S_1_mo = einsum("sup, Auv, svq -> sApq", self.C, S_1_ao, self.C)
@@ -124,6 +127,7 @@ class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
         cx_n = self.cx_n if self.xc_n else self.cx
         self.grad_jk = get_gradient_jk(self.df_jk, self.C, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
 
+    @timing
     def prepare_gradient_gga(self):
         tensors = self.tensors
         if "rho" not in tensors:
@@ -153,6 +157,7 @@ class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
         self.grad_gga = grad_contrib
         return self
 
+    @timing
     def prepare_gradient_pt2(self):
         tensors = self.tensors
         C, D, e = self.C, self.D, self.e
@@ -210,6 +215,7 @@ class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
                 grad_corr[A] += einsum("Pia, tPia -> t", G_ia_ri[σ], Y_1_ia_ri[σ])
         self.grad_pt2 = grad_corr
 
+    @timing
     def prepare_gradient_enfunc(self):
         tensors = self.tensors
         natm = self.mol.natm

@@ -206,7 +206,6 @@ def alter_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
     with lib.call_in_background(load) as bload:
         load(0-nbatch, 0, pre_load)
         for sA in gen_batch(nocc, nmo, nbatch):
-            print(sA)
             nA = sA.stop - sA.start
             sAvir = slice(sA.start - nocc, sA.stop - nocc)
             buf_load, pre_load = pre_load, buf_load
@@ -410,6 +409,7 @@ class RDFDH(lib.StreamObject):
         return max(self.max_memory - lib.current_memory()[0], 500)
 
     def calc_batch_size(self, unit_flop, pre_flop=0, fixed_mem=None):
+        print("DEBUG: self.get_memory", self.get_memory())
         if self._fixed_batch:
             return self._fixed_batch
         if fixed_mem:
