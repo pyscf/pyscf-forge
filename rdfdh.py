@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 
 from pyscf.scf import cphf
 
-from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing
+from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
 from pyscf import lib, gto, df, dft, scf
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
@@ -545,7 +545,7 @@ class RDFDH(lib.StreamObject):
         return self
 
     @timing
-    def prepare_pt2(self, dump_t_ijab=True):
+    def prepare_pt2(self, dump_t_ijab=True, fast_trans=True):
         tensors = self.tensors
         nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
         e = self.e
@@ -577,7 +577,10 @@ class RDFDH(lib.StreamObject):
                         eng_bi2 += einsum("ijab, ijba ->", t_ijab, g_ijab)
             else:
                 t_ijab = tensors["t_ijab"][sI]
-            T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
+            if fast_trans:
+                T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
+            else:
+                T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
             D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
             D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
             G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)

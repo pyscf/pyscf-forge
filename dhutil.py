@@ -195,3 +195,20 @@ def tot_size(*args):
         else:
             size += tot_size(*i)
     return size
+
+
+def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
+    # accomplish task: cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
+    coef_0 = cc * (c_os + c_ss)
+    coef_1 = - cc * c_ss
+    # handle different situations
+    if abs(coef_1) < 1e-7:  # SS, do not make transpose
+        return coef_0 * t_ijab
+    else:
+        t_shape = t_ijab.shape
+        t_ijab = t_ijab.reshape(-1, t_ijab.shape[-2], t_ijab.shape[-1])
+        res = lib.transpose(t_ijab, axes=(0, 2, 1)).reshape(t_shape)
+        t_ijab = t_ijab.reshape(t_shape)
+        res *= coef_1
+        res += coef_0 * t_ijab
+        return res

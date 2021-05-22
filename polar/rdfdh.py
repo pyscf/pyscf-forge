@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dh import RDFDH
-from dh.dhutil import gen_batch, get_rho_from_dm_gga
+from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize
 from pyscf import gto, lib, dft
 import numpy as np
 
@@ -164,7 +164,7 @@ class Polar(RDFDH):
         tensors.create("pdA_Y_ia_ri", pdA_Y_ia_ri)
         return self
 
-    def prepare_pt2_deriv(self):
+    def prepare_pt2_deriv(self, fast_trans=True):
         tensors = self.tensors
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
@@ -196,8 +196,12 @@ class Polar(RDFDH):
             pdA_t_ijab /= D_ijab
 
             cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
-            T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
-            pdA_T_ijab = cc * ((c_os + c_ss) * pdA_t_ijab - c_ss * pdA_t_ijab.swapaxes(-1, -2))
+            if fast_trans:
+                T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
+                pdA_T_ijab = restricted_biorthogonalize(pdA_t_ijab, cc, c_os, c_ss)
+            else:
+                T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
+                pdA_T_ijab = cc * ((c_os + c_ss) * pdA_t_ijab - c_ss * pdA_t_ijab.swapaxes(-1, -2))
 
             pdA_G_ia_ri[:, :, sI] += einsum("Aijab, Pjb -> APia", pdA_T_ijab, Y_ia_ri)
             pdA_G_ia_ri[:, :, sI] += einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri)
