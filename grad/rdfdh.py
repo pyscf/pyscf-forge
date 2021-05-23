@@ -3,7 +3,7 @@ from __future__ import annotations
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho
 
 from dh import RDFDH
-from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing
+from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
 import numpy as np
@@ -17,7 +17,7 @@ def kernel(mf_dh: Gradients, **kwargs):
 
     mf_dh.build()
     if mf_dh.mo_coeff is NotImplemented:
-        mf_dh.run_scf(kwargs)
+        mf_dh.run_scf(**kwargs)
     mf_dh.prepare_H_1()
     mf_dh.prepare_S_1()
     mf_dh.prepare_integral()
@@ -303,7 +303,7 @@ def get_gradient_gga_hfref(xc_setting, vxc_n, max_memory=2000):
 
 class Gradients(RDFDH):
 
-    def __init__(self, mol: gto.Mole, skip_construct=False, *args, **kwargs):
+    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
             super(Gradients, self).__init__(mol, *args, **kwargs)
         # results
@@ -472,4 +472,5 @@ class Gradients(RDFDH):
         return self
 
     kernel = kernel
+    as_scanner = as_scanner_grad
 

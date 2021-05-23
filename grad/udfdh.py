@@ -95,7 +95,7 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
 
 class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
 
-    def __init__(self, mol: gto.Mole, skip_construct=False, *args, **kwargs):
+    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
             super(Gradients, self).__init__(mol, *args, **kwargs)
         # results

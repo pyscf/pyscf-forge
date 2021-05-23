@@ -69,7 +69,7 @@ def _rks_gga_wv2(rho0, rho1, rho2, fxc, kxc, weight):
 
 class Polar(RDFDH):
 
-    def __init__(self, mol: gto.Mole, skip_construct=False, *args, **kwargs):
+    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
             super(Polar, self).__init__(mol, *args, **kwargs)
         self.pol_scf = NotImplemented

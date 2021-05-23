@@ -228,12 +228,12 @@ class UDFDH(RDFDH):
         self.mocc = max(max(self.nocc), 1)
 
     @timing
-    def run_scf(self):
+    def run_scf(self, **kwargs):
         self.mf_s.grids = self.mf_n.grids = self.grids
         self.build()
         mf = self.mf_s
         if mf.e_tot == 0:
-            mf.run()
+            mf.kernel(**kwargs)
         # prepare
         C = self.C = self.mo_coeff = mf.mo_coeff
         e = self.e = self.mo_energy = mf.mo_energy

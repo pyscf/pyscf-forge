@@ -3,8 +3,8 @@ import pickle
 import shutil
 
 import h5py
-from pyscf import lib
-from pyscf.lib.numpy_helper import HERMITIAN, ANTIHERMI
+from pyscf import lib, gto
+from pyscf.lib.numpy_helper import HERMITIAN
 from pyscf.ao2mo.outcore import balance_partition
 
 import numpy as np
@@ -223,7 +223,7 @@ def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
         return res
 
 
-def hermi_sum_last2dim(tsr, inplace=True, hermi=1):
+def hermi_sum_last2dim(tsr, inplace=True, hermi=HERMITIAN):
     # shameless call lib.hermi_sum, just for a tensor wrapper
     tsr_shape = tsr.shape
     tsr.shape = (-1, tsr.shape[-1], tsr.shape[-2])
@@ -231,3 +231,59 @@ def hermi_sum_last2dim(tsr, inplace=True, hermi=1):
     tsr.shape = tsr_shape
     res.shape = tsr_shape
     return res
+
+
+def as_scanner_grad(mf: lib.StreamObject, consequent_dm_guess=True):
+    # A very, very, very, very, very strange way to define gradient scanner function
+    # Important issue need to be stressed five times!
+    # TODO avoid directly calling __init__ to initialize a DFDH object
+
+    if isinstance(mf, lib.GradScanner):
+        return mf
+
+    class Scanner(mf.__class__, lib.GradScanner):
+
+        e_tot = 0
+
+        def __init__(self, g):
+            # this class is intended not to call lib.GradScanner initializer
+            # which envokes mf.base, but dfdh does not use .base currently
+            self.__dict__.update(g.__dict__)
+
+        def __call__(self, mol_or_geom, **kwargs):
+            if isinstance(mol_or_geom, gto.Mole):
+                mol = mol_or_geom
+            else:
+                mol = self.mol.set_geom_(mol_or_geom, inplace=False)
+
+            self.mol = mol.build()
+
+            # If second integration grids are created for RKS and UKS
+            # gradients
+            if getattr(self, 'grids', None):
+                self.grids.reset(mol).build()
+                self.grids_cpks.reset(mol).build()
+
+            self.mf_s.mol = self.mf_n.mol = self.mol
+
+            mf.__class__.__init__(self,
+                mol,
+                xc=self.xc_dh,
+                auxbasis_jk=self.auxbasis_jk,
+                auxbasis_ri=self.auxbasis_ri,
+                grids=self.grids,
+                grids_cpks=self.grids_cpks,
+                unrestricted=self.unrestricted)
+
+            dm = None
+            if consequent_dm_guess:
+                dm = self.D
+            if dm is NotImplemented:
+                dm = None
+
+            self.tensors = HybridDict()
+            self.kernel(dm=dm, **kwargs)
+            return self.e_tot, self.de
+    return Scanner(mf)
+
+

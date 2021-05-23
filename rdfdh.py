@@ -281,8 +281,8 @@ class RDFDH(lib.StreamObject):
         xc_list = parse_xc_dh(xc) if isinstance(xc, str) else xc           # type: Tuple[str, str, float, float, float]
         self.xc, self.xc_n, self.cc, self.c_os, self.c_ss = xc_list
         # parse auxiliary basis
-        auxbasis_jk = auxbasis_jk if auxbasis_jk else df.make_auxbasis(mol, mp2fit=False)
-        auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
+        self.auxbasis_jk = auxbasis_jk = auxbasis_jk if auxbasis_jk else df.make_auxbasis(mol, mp2fit=False)
+        self.auxbasis_ri = auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
         self.same_aux = True if auxbasis_jk == auxbasis_ri or auxbasis_ri is None else False
         # parse scf method
         self.unrestricted = unrestricted
@@ -335,6 +335,14 @@ class RDFDH(lib.StreamObject):
         self.nmo = self.nao
         self.nvir = self.nmo - self.nocc
 
+    @property
+    def base(self):
+        return self
+
+    @property
+    def converged(self):
+        return self.mf_s.converged
+
     def get_memory(self):  # leave at least 500MB space anyway
         return max(self.max_memory - lib.current_memory()[0], 500)
 
@@ -359,10 +367,11 @@ class RDFDH(lib.StreamObject):
 
     @timing
     def run_scf(self, **kwargs):
+        self.mf_s.grids = self.mf_n.grids = self.grids
         self.build()
         mf = self.mf_s
         if mf.e_tot == 0:
-            mf.run(kwargs)
+            mf.kernel(**kwargs)
         # prepare
         self.C = self.mo_coeff = mf.mo_coeff
         self.e = self.mo_energy = mf.mo_energy
