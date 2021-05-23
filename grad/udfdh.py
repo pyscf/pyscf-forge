@@ -241,3 +241,7 @@ class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
         grad_contrib.shape = (natm, 3)
         self.grad_enfunc = grad_contrib
 
+    def base_method(self) -> UDFDH:
+        self.__class__ = UDFDH
+        return self
+

@@ -467,5 +467,9 @@ class Gradients(RDFDH):
 
         self.grad_enfunc = grad_contrib
 
+    def base_method(self) -> RDFDH:
+        self.__class__ = RDFDH
+        return self
+
     kernel = kernel
 

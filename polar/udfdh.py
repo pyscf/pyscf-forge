@@ -362,5 +362,9 @@ class Polar(UDFDH, dh.polar.rdfdh.Polar):
         self.de = self.pol_tot = pol_scf + pol_corr
         return self
 
+    def base_method(self) -> UDFDH:
+        self.__class__ = UDFDH
+        return self
+
 
 

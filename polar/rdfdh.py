@@ -312,4 +312,8 @@ class Polar(RDFDH):
         self.de = self.pol_tot = pol_scf + pol_corr
         return self
 
+    def base_method(self) -> RDFDH:
+        self.__class__ = RDFDH
+        return self
+
     kernel = kernel
