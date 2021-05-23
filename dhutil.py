@@ -66,15 +66,23 @@ class HybridDict(dict):
         self.chkfile = h5py.File(self.chkfile_name, "r+")
 
     def create(self, name, data=None, incore=True, shape=None, dtype=None, **kwargs):
+        # create logic check
+        if data is None and shape is None:
+            raise ValueError("Provide either data or shape!")
+        if data is not None and shape is not None:
+            raise ValueError("Data and shape shouldn't be provided together!")
         if name in self:
             try:  # don't create a new space if tensor already exists
-                if self[name].shape == shape:
-                    self[name][:] = 0
-                    return self.get(name)
+                # data provided or shape not aligned is not considered here
+                if shape and isinstance(self[name], h5py.Dataset) == (not incore):
+                    if self[name].shape == shape:
+                        self[name][:] = 0
+                        return self.get(name)
             except (ValueError, AttributeError):
                 # ValueError -- in h5py.h5d.create: Unable to create dataset (name already exists)
                 # AttributeError -- [certain other type] object has no attribute 'shape'
-                self.delete(name)
+                pass
+            self.delete(name)
         dtype = dtype if dtype is not None else np.float64
         if not incore:
             self.chkfile.create_dataset(name, shape=shape, dtype=dtype, data=data, **kwargs)

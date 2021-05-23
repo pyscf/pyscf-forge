@@ -11,13 +11,13 @@ import numpy as np
 einsum = lib.einsum
 
 
-def kernel(mf_dh: Gradients):
+def kernel(mf_dh: Gradients, **kwargs):
     # unrestricted method requires dump t_ijab_αβ to disk; controling αβ and SS dumping is too hard for me
     dump_t_ijab = True if mf_dh.unrestricted else mf_dh.with_t_ijab
 
     mf_dh.build()
     if mf_dh.mo_coeff is NotImplemented:
-        mf_dh.run_scf()
+        mf_dh.run_scf(kwargs)
     mf_dh.prepare_H_1()
     mf_dh.prepare_S_1()
     mf_dh.prepare_integral()

@@ -358,11 +358,11 @@ class RDFDH(lib.StreamObject):
             self.aux_ri = self.df_ri.auxmol
 
     @timing
-    def run_scf(self):
+    def run_scf(self, **kwargs):
         self.build()
         mf = self.mf_s
         if mf.e_tot == 0:
-            mf.run()
+            mf.run(kwargs)
         # prepare
         self.C = self.mo_coeff = mf.mo_coeff
         self.e = self.mo_energy = mf.mo_energy
@@ -434,11 +434,11 @@ class RDFDH(lib.StreamObject):
         # part: Y_mo_jk
         tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
         get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.get_memory())
-        if self.same_aux:
-            tensors["Y_mo_ri"] = tensors["Y_mo_jk"]
-        else:
-            tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
+        # if self.same_aux:  # I decided repeat a space, not using the same.
+        #     tensors["Y_mo_ri"] = tensors["Y_mo_jk"]
+        # else:
+        tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
+        get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
         # part: cpks and Ax0_Core preparation
         eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
         get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())
@@ -487,7 +487,8 @@ class RDFDH(lib.StreamObject):
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
 
         dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab  # t_ijab to be dumped
-        eval_t_ijab = True if "t_ijab" not in tensors else False     # t_ijab to be evaluated
+        # eval_t_ijab = True if "t_ijab" not in tensors else False     # t_ijab to be evaluated
+        eval_t_ijab = True  # to avoid any possible conflict for `as_scanner`
         D_jab = e[so, None, None] - e[None, sv, None] - e[None, None, sv] if eval_t_ijab else None
         if dump_t_ijab:
             tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
