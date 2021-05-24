@@ -1,7 +1,11 @@
 from __future__ import annotations
-
-from dh import RDFDH
-from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
+# dh import
+try:
+    from dh.rdfdh import RDFDH
+    from dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
+except ImportError:
+    from pyscf.dh.rdfdh import RDFDH
+    from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf import gto, lib, dft
 import numpy as np
 

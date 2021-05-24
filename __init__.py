@@ -1,12 +1,11 @@
-from dh.rdfdh import RDFDH
-from dh.udfdh import UDFDH
+from . import rdfdh, udfdh, dhutil
 from pyscf import gto
 
 
 def DFDH(mol: gto.Mole, *args, **kwargs):
     if mol.spin != 0:
-        return UDFDH(mol, *args, **kwargs)
+        return udfdh.UDFDH(mol, *args, **kwargs)
     else:
-        return RDFDH(mol, *args, **kwargs)
+        return rdfdh.RDFDH(mol, *args, **kwargs)
 
 

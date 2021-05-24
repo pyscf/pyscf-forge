@@ -1,18 +1,22 @@
 from __future__ import annotations
-
-import os
-import pickle
+# dh import
+try:
+    from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
+except ImportError:
+    from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
+# typing import
 from typing import Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
     from dh.grad.rdfdh import Gradients
     from dh.polar.rdfdh import Polar
-
+# pyscf import
 from pyscf.scf import cphf
-
-from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
 from pyscf import lib, gto, df, dft, scf
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
+# other import
+import os
+import pickle
 import numpy as np
 
 einsum = lib.einsum
@@ -630,17 +634,22 @@ class RDFDH(lib.StreamObject):
     # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
 
     def nuc_grad_method(self) -> Gradients:
-        from dh.grad.rdfdh import Gradients
+        try:
+            from dh.grad.rdfdh import Gradients
+        except ImportError:
+            from pyscf.dh.grad.rdfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self
 
     def polar_method(self) -> Polar:
-        from dh.polar.rdfdh import Polar
+        try:
+            from dh.polar.rdfdh import Polar
+        except ImportError:
+            from pyscf.dh.polar.rdfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
-
 
     # endregion first derivative related in class
 

@@ -226,7 +226,7 @@ def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
 def hermi_sum_last2dim(tsr, inplace=True, hermi=HERMITIAN):
     # shameless call lib.hermi_sum, just for a tensor wrapper
     tsr_shape = tsr.shape
-    tsr.shape = (-1, tsr.shape[-1], tsr.shape[-2])
+    tsr = tsr.reshape(-1, tsr.shape[-2], tsr.shape[-1])
     res = lib.hermi_sum(tsr, axes=(0, 2, 1), hermi=hermi, inplace=inplace)
     tsr.shape = tsr_shape
     res.shape = tsr_shape

@@ -1,11 +1,19 @@
 from __future__ import annotations
-
-from dh import UDFDH
-from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing
-from dh.grad.rdfdh import contract_multiple_rho, get_H_1_ao, get_S_1_ao, generator_L_1
-import dh.grad.rdfdh
+# dh import
+try:
+    from dh.udfdh import UDFDH
+    from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing
+    from dh.grad.rdfdh import get_H_1_ao, get_S_1_ao, generator_L_1
+    from dh.grad.rdfdh import Gradients as RGradients
+except ImportError:
+    from pyscf.dh.udfdh import UDFDH
+    from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing
+    from pyscf.dh.grad.rdfdh import get_H_1_ao, get_S_1_ao, generator_L_1
+    from pyscf.dh.grad.rdfdh import Gradients as RGradients
+# pyscf import
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
+# other import
 import numpy as np
 import itertools
 
@@ -93,7 +101,7 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     return grad_contrib
 
 
-class Gradients(UDFDH, dh.grad.rdfdh.Gradients):
+class Gradients(UDFDH, RGradients):
 
     def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:

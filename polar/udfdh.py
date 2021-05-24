@@ -1,12 +1,18 @@
 from __future__ import annotations
-
+# dh import
+try:
+    from dh.udfdh import UDFDH
+    from dh.polar.rdfdh import Polar as RPolar
+    from dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
+except ImportError:
+    from pyscf.dh.udfdh import UDFDH
+    from pyscf.dh.polar.rdfdh import Polar as RPolar
+    from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
+# pyscf import
+from pyscf import gto, lib, dft
 from pyscf.dft.numint import _scale_ao
 from pyscf.lib.numpy_helper import ANTIHERMI
-
-from dh import UDFDH
-import dh.polar.rdfdh
-from dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
-from pyscf import gto, lib, dft
+# other import
 import numpy as np
 import itertools
 
@@ -107,7 +113,7 @@ def _uks_gga_wv2_generator(fxc, kxc, weight):
     return _uks_gga_wv2_inner
 
 
-class Polar(UDFDH, dh.polar.rdfdh.Polar):
+class Polar(UDFDH, RPolar):
 
     def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
