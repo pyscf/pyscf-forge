@@ -338,7 +338,7 @@ class Gradients(RDFDH):
         cx_n = self.cx_n if self.xc_n else self.cx
         self.grad_jk = get_gradient_jk(self.df_jk, self.C, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
 
-    def prepare_gradient_gga(self):
+    def prepare_gradient_gga_legacy(self):
         # assert prepare_xc_kernel has been called
         tensors = self.tensors
         D_r = tensors.load("D_r")
@@ -360,7 +360,7 @@ class Gradients(RDFDH):
         self.grad_gga = get_gradient_gga(self.C, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
 
     @timing
-    def prepare_gradient_gga_by_pyscf(self):
+    def prepare_gradient_gga(self):
         tensors = self.tensors
         if "rho" not in tensors:
             self.grad_gga = 0
