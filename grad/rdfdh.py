@@ -385,7 +385,8 @@ class Gradients(RDFDH):
 
             F_1_ao_dfa = np.array(hessian.rks._get_vxc_deriv1(self.mf_s.Hessian(), C, self.mo_occ, 2000))
             grad_contrib += einsum("uv, Atuv -> At", D_r_ao, F_1_ao_dfa)
-        return grad_contrib
+        self.grad_gga = grad_contrib
+        return self
 
     @timing
     def prepare_gradient_pt2(self):
