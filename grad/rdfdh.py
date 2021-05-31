@@ -10,8 +10,10 @@ except ImportError:
 from pyscf import gto, lib, df
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
+from pyscf.dftd3 import itrf
 # other import
 import numpy as np
+import ctypes
 
 einsum = lib.einsum
 
@@ -471,6 +473,25 @@ class Gradients(RDFDH):
             grad_contrib -= 2 * einsum("Aij, ij -> A", S_1_mo[:, so, so], nc_F_0_ij)
         grad_contrib.shape = (natm, 3)
 
+        # handle dftd3 situation
+        mol = self.mol
+        if "D3" in self.xc_add:
+            drv = itrf.libdftd3.wrapper_params
+            params = np.asarray(self.xc_add["D3"][0], order="F")
+            version = self.xc_add["D3"][1]
+            coords = np.asarray(mol.atom_coords(), order="F")
+            itype = np.asarray(mol.atom_charges(), order="F")
+            edisp = np.zeros(1)
+            grad = np.zeros((mol.natm, 3))
+            drv(
+                ctypes.c_int(mol.natm),  # natoms
+                coords.ctypes.data_as(ctypes.c_void_p),  # coords
+                itype.ctypes.data_as(ctypes.c_void_p),  # itype
+                params.ctypes.data_as(ctypes.c_void_p),  # params
+                ctypes.c_int(version),  # version
+                edisp.ctypes.data_as(ctypes.c_void_p),  # edisp
+                grad.ctypes.data_as(ctypes.c_void_p))  # grads)
+            grad_contrib += grad
         self.grad_enfunc = grad_contrib
 
     def base_method(self) -> RDFDH:

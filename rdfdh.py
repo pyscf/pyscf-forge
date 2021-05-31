@@ -14,10 +14,12 @@ from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
+from pyscf.dftd3 import itrf
 # other import
 import os
 import pickle
 import numpy as np
+import ctypes
 
 einsum = lib.einsum
 
@@ -109,7 +111,27 @@ def energy_elec_pt2(mf: RDFDH, params=None, eng_bi=None, **kwargs):
 
 
 def energy_nuc(mf: RDFDH, **_):
-    return mf.mol.energy_nuc()
+    mol = mf.mol
+    eng_nuc = mol.energy_nuc()
+    # handle dftd3 situation
+    if "D3" in mf.xc_add:
+        drv = itrf.libdftd3.wrapper_params
+        params = np.asarray(mf.xc_add["D3"][0], order="F")
+        version = mf.xc_add["D3"][1]
+        coords = np.asarray(mol.atom_coords(), order="F")
+        itype = np.asarray(mol.atom_charges(), order="F")
+        edisp = np.zeros(1)
+        grad = np.zeros((mol.natm, 3))
+        drv(
+            ctypes.c_int(mol.natm),                  # natoms
+            coords.ctypes.data_as(ctypes.c_void_p),  # coords
+            itype.ctypes.data_as(ctypes.c_void_p),   # itype
+            params.ctypes.data_as(ctypes.c_void_p),  # params
+            ctypes.c_int(version),                   # version
+            edisp.ctypes.data_as(ctypes.c_void_p),   # edisp
+            grad.ctypes.data_as(ctypes.c_void_p))    # grads)
+        eng_nuc += float(edisp)
+    return eng_nuc
 
 
 def energy_elec(mf: RDFDH, **kwargs):
@@ -281,9 +303,20 @@ class RDFDH(lib.StreamObject):
         self.max_memory = mol.max_memory
         # Parse xc code
         # It's tricky to say that, self.xc refers to SCF xc, and self.xc_dh refers to double hybrid xc
+        # There should be three kinds of possible inputs:
+        # 1) String: "XYG3"
+        # 2) Tuple: ("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP", 0.3211, 1, 1)
+        # 3) Additional: (("0.69*HF + 0.31*PBE, 0.44*P86", None, 1, 0.52, 0.22), {"D3": ([0.48, 0, 0, 5.6, 0], 4)})
         self.xc_dh = xc
-        xc_list = parse_xc_dh(xc) if isinstance(xc, str) else xc           # type: Tuple[str, str, float, float, float]
+        if isinstance(xc, str):
+            xc_list, xc_add = parse_xc_dh(xc)
+        elif len(xc) == 5:  # here should assert xc is a tuple/list with 2 or 5 elements
+            xc_list = xc
+            xc_add = {}
+        else:  # assert len(xc) == 2
+            xc_list, xc_add = xc
         self.xc, self.xc_n, self.cc, self.c_os, self.c_ss = xc_list
+        self.xc_add = xc_add
         # parse auxiliary basis
         self.auxbasis_jk = auxbasis_jk = auxbasis_jk if auxbasis_jk else df.make_auxbasis(mol, mp2fit=False)
         self.auxbasis_ri = auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
