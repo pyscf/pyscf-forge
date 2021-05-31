@@ -154,8 +154,9 @@ class Polar(UDFDH, RPolar):
         C, Co = self.C, self.Co
         so = self.so
         mol, grids, xc = self.mol, self.grids, self.xc
-        ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
-        ni.libxc = dft.xcfun
+        # ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
+        # ni.libxc = dft.xcfun
+        ni = self.ni
         dmU = np.array([C[σ] @ U_1[σ, :, :, so[σ]] @ C[σ, :, so[σ]].T for σ in (α, β)])
         dmU += dmU.swapaxes(-1, -2)
         dmR = np.array([C[σ] @ D_r[σ] @ C[σ].T for σ in (α, β)])

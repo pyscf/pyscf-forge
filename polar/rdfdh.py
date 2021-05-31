@@ -6,7 +6,7 @@ try:
 except ImportError:
     from pyscf.dh.rdfdh import RDFDH
     from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
-from pyscf import gto, lib, dft
+from pyscf import gto, lib
 import numpy as np
 
 einsum = lib.einsum
@@ -35,9 +35,9 @@ def _rks_gga_wv2(rho0, rho1, rho2, fxc, kxc, weight):
     frr, frg, fgg = fxc[:3]
     frrr, frrg, frgg, fggg = kxc
 
-    sigma01 = 2 * einsum("rg, rg -> g", rho0[1:], rho1[1:])
-    sigma02 = 2 * einsum("rg, rg -> g", rho0[1:], rho2[1:])
-    sigma12 = 2 * einsum("rg, rg -> g", rho1[1:], rho2[1:])
+    sigma01 = 2 * np.einsum("rg, rg -> g", rho0[1:], rho1[1:], optimize=True)
+    sigma02 = 2 * np.einsum("rg, rg -> g", rho0[1:], rho2[1:], optimize=True)
+    sigma12 = 2 * np.einsum("rg, rg -> g", rho1[1:], rho2[1:], optimize=True)
     r1r2 = rho1[0] * rho2[0]
     r1s2 = rho1[0] * sigma02
     s1r2 = sigma01 * rho2[0]
@@ -116,8 +116,9 @@ class Polar(RDFDH):
         C, Co = self.C, self.Co
         so = self.so
         mol, grids, xc = self.mol, self.grids, self.xc
-        ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
-        ni.libxc = dft.xcfun
+        # ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
+        # ni.libxc = dft.xcfun
+        ni = self.ni
         dmU = C @ U_1[:, :, so] @ Co.T
         dmU += dmU.swapaxes(-1, -2)
         dmR = C @ D_r @ C.T
