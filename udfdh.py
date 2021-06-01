@@ -323,9 +323,7 @@ class UDFDH(RDFDH):
         for σ in α, β:
             y = tensors.create("Y_mo_jk" + str(σ), shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
             get_cderi_mo(self.df_jk, C[σ], y, max_memory=self.get_memory())
-            if self.same_aux:
-                tensors["Y_mo_ri" + str(σ)] = y
-            else:
+            if self.eval_pt2:
                 y = tensors.create("Y_mo_ri" + str(σ), shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
                 get_cderi_mo(self.df_ri, C[σ], y, max_memory=self.get_memory())
         eri_cpks = [None, None, None]
