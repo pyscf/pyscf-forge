@@ -306,19 +306,22 @@ class Polar(UDFDH, RPolar):
         nocc, nvir, nmo = self.nocc, self.nvir, self.nmo
         nprop = self.nprop
 
+        SCR3 = [np.zeros((nprop, nvir[σ], nocc[σ])) for σ in (α, β)]
+
+        for σ in (α, β):
+            if self.xc_n:
+                pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
+                SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
+        if not self.eval_pt2:
+            return SCR3
+
         U_1 = tensors.load("U_1")
         G_ia_ri = [tensors.load("G_ia_ri" + str(σ)) for σ in (α, β)]
         pdA_G_ia_ri = [tensors.load("pdA_G_ia_ri" + str(σ)) for σ in (α, β)]
         Y_mo_ri = [tensors["Y_mo_ri" + str(σ)] for σ in (α, β)]
 
-        SCR3 = [np.zeros((nprop, nvir[σ], nocc[σ])) for σ in (α, β)]
         nbatch = self.calc_batch_size(10 * nmo**2, tot_size(G_ia_ri, pdA_G_ia_ri, U_1))
         for σ in (α, β):
-            if self.xc_n:
-                pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
-                SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
-            if not self.eval_pt2:
-                continue
             for saux in gen_batch(0, naux, nbatch):
                 G_blk = G_ia_ri[σ][saux]
                 Y_blk = np.asarray(Y_mo_ri[σ][saux])

@@ -259,17 +259,17 @@ class Polar(RDFDH):
         naux = self.df_ri.get_naoaux()
         nprop = self.nprop
 
-        U_1 = tensors.load("U_1")
-        G_ia_ri = tensors.load("G_ia_ri")
-        pdA_G_ia_ri = tensors.load("pdA_G_ia_ri")
-        Y_mo_ri = tensors["Y_mo_ri"]
-
         SCR3 = np.zeros((nprop, self.nvir, self.nocc))
         if self.xc_n:
             pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
             SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]
         if not self.eval_pt2:
             return SCR3
+
+        U_1 = tensors.load("U_1")
+        G_ia_ri = tensors.load("G_ia_ri")
+        pdA_G_ia_ri = tensors.load("pdA_G_ia_ri")
+        Y_mo_ri = tensors["Y_mo_ri"]
 
         nbatch = self.calc_batch_size(10 * self.nmo**2, G_ia_ri.size + pdA_G_ia_ri.size)
         for saux in gen_batch(0, naux, nbatch):
