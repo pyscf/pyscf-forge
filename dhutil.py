@@ -40,8 +40,10 @@ XC_DH_MAP = {   # [xc_s, xc_n, cc, c_os, c_ss]
     "dsdblypd3": ("0.71*HF + 0.29*B88, 0.54*LYP", None, 1, 0.47, 0.40),
     "dsdpbeb95d3": ("0.66*HF + 0.34*PBE, 0.55*B95", None, 0.46, 0.09),
     "b2plypd3": ("0.53*HF + 0.47*B88, 0.73*LYP", None, 0.27, 1, 1),
+    "hfb3lyp": ("HF", "B3LYP", 0, 0, 0),
+    "hfpbe0": ("HF", "PBE0", 0, 0, 0),
 }
-
+# Additional parameters for doubly hybrids (mostly dftd3)
 XC_DH_ADD_MAP = {
     "dsdpbep86d3": {"D3": ([0.48, 0, 0, 5.6, 0], 4)},
     "dsdpbepbed3": {"D3": ([0.78, 0, 0, 6.1, 0], 4)},

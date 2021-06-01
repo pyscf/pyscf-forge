@@ -104,6 +104,9 @@ def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_r
 def energy_elec_pt2(mf: RDFDH, params=None, eng_bi=None, **kwargs):
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
     eval_ss = True if abs(c_ss) > 1e-7 else False
+    eval_os = True if abs(c_os) > 1e-7 else False
+    if not (eval_os or eval_ss):  # not a PT2 functional
+        return 0, 0, 0
     eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=eval_ss, **kwargs)
     return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),  # Total
             eng_bi1,                                          # OS
