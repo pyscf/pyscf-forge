@@ -25,7 +25,8 @@ def kernel(mf: Polar):
         mf.prepare_dms()
         mf.prepare_polar_Ax1_gga()
     mf.prepare_pdA_F_0_mo()
-    mf.prepare_pdA_Y_ia_ri()
+    if mf.eval_pt2:
+        mf.prepare_pdA_Y_ia_ri()
     mf.prepare_pt2_deriv()
     mf.prepare_polar()
     return mf.de

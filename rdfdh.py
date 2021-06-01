@@ -496,8 +496,9 @@ class RDFDH(lib.StreamObject):
         # if self.same_aux:  # I decided repeat a space, not using the same.
         #     tensors["Y_mo_ri"] = tensors["Y_mo_jk"]
         # else:
-        tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-        get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
+        if self.eval_pt2:
+            tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
+            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
         # part: cpks and Ax0_Core preparation
         eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
         get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())

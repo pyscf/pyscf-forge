@@ -220,12 +220,15 @@ class Polar(UDFDH, RPolar):
         eo, ev = self.eo, self.ev
         nprop = self.nprop
 
+        pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(2, nprop, nmo, nmo))
+        if not self.eval_pt2:
+            return self
+
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
         Y_ia_ri = [tensors["Y_mo_ri" + str(σ)][:, so[σ], sv[σ]] for σ in (α, β)]
         pdA_Y_ia_ri = [tensors["pdA_Y_ia_ri" + str(σ)] for σ in (α, β)]
 
         pdA_G_ia_ri = [tensors.create("pdA_G_ia_ri" + str(σ), shape=(nprop, naux, nocc[σ], nvir[σ])) for σ in (α, β)]
-        pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(2, nprop, nmo, nmo))
 
         nbatch = self.calc_batch_size(8*mocc*mvir**2, tot_size(Y_ia_ri, pdA_Y_ia_ri, pdA_G_ia_ri, pdA_F_0_mo, pdA_D_rdm1))
         eval_ss = True if abs(c_ss) > 1e-7 else False
@@ -311,6 +314,11 @@ class Polar(UDFDH, RPolar):
         SCR3 = [np.zeros((nprop, nvir[σ], nocc[σ])) for σ in (α, β)]
         nbatch = self.calc_batch_size(10 * nmo**2, tot_size(G_ia_ri, pdA_G_ia_ri, U_1))
         for σ in (α, β):
+            if self.xc_n:
+                pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
+                SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
+            if not self.eval_pt2:
+                continue
             for saux in gen_batch(0, naux, nbatch):
                 G_blk = G_ia_ri[σ][saux]
                 Y_blk = np.asarray(Y_mo_ri[σ][saux])
@@ -327,9 +335,6 @@ class Polar(UDFDH, RPolar):
                 hermi_sum_last2dim(pdA_Y_blk)
                 SCR3[σ] += einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv[σ], sv[σ]])
                 SCR3[σ] += einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
-            if self.xc_n:
-                pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
-                SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
         return SCR3
 
     def prepare_polar(self):
