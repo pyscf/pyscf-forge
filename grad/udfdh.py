@@ -181,6 +181,10 @@ class Gradients(UDFDH, RGradients):
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("spq, sApq -> A", D_r, H_1_mo)
+        if not self.eval_pt2:
+            grad_corr.shape = (natm, 3)
+            self.grad_pt2 = grad_corr
+            return
 
         W_I = tensors.load("W_I")
         W_II = - einsum("spq, sq -> spq", D_r, e)

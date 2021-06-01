@@ -86,11 +86,9 @@ def energy_elec_mp2(mf: UDFDH,
 
 def energy_elec_pt2(mf: UDFDH, params=None, eng_bi=None, **kwargs):
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
-    eval_ss = True if abs(c_ss) > 1e-7 else False
-    eval_os = True if abs(c_os) > 1e-7 else False
-    if not (eval_os or eval_ss):  # not a PT2 functional
+    if not mf.eval_pt2:  # not a PT2 functional
         return 0, 0, 0
-    eng_bi1, eng_bi2 = eng_bi if eng_bi else energy_elec_mp2(mf, eval_ss=eval_ss, **kwargs)
+    eng_bi1, eng_bi2 = eng_bi if eng_bi else energy_elec_mp2(mf, eval_ss=mf.eval_ss, **kwargs)
     eng_os = eng_bi1[αβ]
     eng_ss = 0.5 * (eng_bi1[αα] + eng_bi1[ββ] - eng_bi2[αα] - eng_bi2[ββ])
     eng_pt2 = cc * (c_os * eng_os + c_ss * eng_ss)
@@ -348,6 +346,10 @@ class UDFDH(RDFDH):
         eval_ss = True if abs(c_ss) > 1e-7 else False
 
         D_rdm1 = np.zeros((2, nmo, nmo))
+        if not self.eval_pt2:
+            tensors.create("D_rdm1", D_rdm1)
+            return self
+
         G_ia_ri = [np.zeros((naux, nocc[σ], nvir[σ])) for σ in (α, β)]
         Y_ia_ri = [np.asarray(tensors["Y_mo_ri" + str(σ)][:, so[σ], sv[σ]]) for σ in (α, β)]
 
@@ -425,13 +427,26 @@ class UDFDH(RDFDH):
         mvir, mocc = max(nvir), max(nocc)
         so, sv, sa = self.so, self.sv, self.sa
         D_rdm1 = tensors.load("D_rdm1")
+
+        L = [np.zeros((nvir[σ], nocc[σ])) for σ in (α, β)]
+        if self.xc_n:
+            F_0_ao_n = self.mf_n.get_fock(dm=self.D)
+            F_0_ai_n = [self.Cv[σ].T @ F_0_ao_n[σ] @ self.Co[σ] for σ in (α, β)]
+            for σ in (α, β):
+                L[σ] += 2 * F_0_ai_n[σ]
+        if not self.eval_pt2:
+            for σ in (α, β):
+                tensors.create("L" + str(σ), L[σ])
+            return self
+
         G_ia_ri = [tensors.load("G_ia_ri" + str(σ)) for σ in (α, β)]
         Y_mo_ri = [tensors["Y_mo_ri" + str(σ)] for σ in (α, β)]
         Y_ij_ri = [np.asarray(Y_mo_ri[σ][:, so[σ], so[σ]]) for σ in (α, β)]
         Y_ia_ri = [np.asarray(Y_mo_ri[σ][:, so[σ], sv[σ]]) for σ in (α, β)]
 
-        # initialize by directly calling Ax0_Core
-        L = list(self.Ax0_Core(sv, so, sa, sa)(D_rdm1))
+        r = self.Ax0_Core(sv, so, sa, sa)(D_rdm1)
+        for σ in (α, β):
+            L[σ] += r[σ]
 
         if gen_W:
             W_I = np.zeros((2, nmo, nmo))
@@ -449,12 +464,6 @@ class UDFDH(RDFDH):
         for σ in (α, β):
             for saux in gen_batch(0, naux, nbatch):
                 L[σ] += einsum("Pib, Pab -> ai", G_ia_ri[σ][saux], Y_mo_ri[σ][saux, sv[σ], sv[σ]])
-
-        if self.xc_n:
-            F_0_ao_n = self.mf_n.get_fock(dm=self.D)
-            F_0_ai_n = [self.Cv[σ].T @ F_0_ao_n[σ] @ self.Co[σ] for σ in (α, β)]
-            for σ in (α, β):
-                L[σ] += 2 * F_0_ai_n[σ]
 
         for σ in (α, β):
             tensors.create("L" + str(σ), L[σ])
