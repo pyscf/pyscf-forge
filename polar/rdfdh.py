@@ -176,12 +176,15 @@ class Polar(RDFDH):
         eo, ev = self.eo, self.ev
         nprop = self.nprop
 
+        pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(nprop, nmo, nmo))
+        if not self.eval_pt2:
+            return self
+
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
         pdA_Y_ia_ri = tensors["pdA_Y_ia_ri"]
 
         pdA_G_ia_ri = tensors.create("pdA_G_ia_ri", shape=(nprop, naux, nocc, nvir))
-        pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(nprop, nmo, nmo))
 
         nbatch = self.calc_batch_size(8*nocc*nvir**2, Y_ia_ri.size + pdA_F_0_mo.size + pdA_Y_ia_ri.size)
         D_jab = eo[None, :, None, None] - ev[None, None, :, None] - ev[None, None, None, :]
@@ -261,6 +264,12 @@ class Polar(RDFDH):
         Y_mo_ri = tensors["Y_mo_ri"]
 
         SCR3 = np.zeros((nprop, self.nvir, self.nocc))
+        if self.xc_n:
+            pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
+            SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]
+        if not self.eval_pt2:
+            return SCR3
+
         nbatch = self.calc_batch_size(10 * self.nmo**2, G_ia_ri.size + pdA_G_ia_ri.size)
         for saux in gen_batch(0, naux, nbatch):
             G_blk = G_ia_ri[saux]
@@ -278,9 +287,6 @@ class Polar(RDFDH):
             hermi_sum_last2dim(pdA_Y_blk)
             SCR3 += 4 * einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv, sv])
             SCR3 += 4 * einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
-        if self.xc_n:
-            pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
-            SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]
 
         return SCR3
 

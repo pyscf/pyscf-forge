@@ -102,12 +102,10 @@ def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_r
 
 
 def energy_elec_pt2(mf: RDFDH, params=None, eng_bi=None, **kwargs):
-    cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
-    eval_ss = True if abs(c_ss) > 1e-7 else False
-    eval_os = True if abs(c_os) > 1e-7 else False
-    if not (eval_os or eval_ss):  # not a PT2 functional
+    if not mf.eval_pt2:  # not a PT2 functional
         return 0, 0, 0
-    eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=eval_ss, **kwargs)
+    cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
+    eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
     return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),  # Total
             eng_bi1,                                          # OS
             eng_bi1 - eng_bi2)                                # SS
@@ -394,6 +392,18 @@ class RDFDH(lib.StreamObject):
         else:
             return calc_batch_size(unit_flop, self.get_memory(), pre_flop)
 
+    @property
+    def eval_ss(self):
+        return abs(self.cc * self.c_ss) > 1e-7
+
+    @property
+    def eval_os(self):
+        return abs(self.cc * self.c_os) > 1e-7
+
+    @property
+    def eval_pt2(self):
+        return self.eval_ss or self.eval_os
+
     @timing
     def build(self):
         # make sure that grids in SCF run should be the same to other energy evaluations
@@ -532,6 +542,14 @@ class RDFDH(lib.StreamObject):
         cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
 
         D_rdm1 = np.zeros((nmo, nmo))
+
+        if not self.eval_pt2:  # not a PT2 functional
+            if self.eng_tot is NotImplemented:
+                tensors.create("D_rdm1", D_rdm1)
+                kernel(self, eng_bi=(0, 0))
+                return self
+        # a PT2 functional
+
         G_ia_ri = np.zeros((naux, nocc, nvir))
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
 
@@ -543,7 +561,6 @@ class RDFDH(lib.StreamObject):
             tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
 
         eng_bi1 = eng_bi2 = 0
-        eval_ss = True if abs(c_ss) > 1e-7 else False
         nbatch = self.calc_batch_size(4 * nocc * nvir ** 2, Y_ia_ri.size + G_ia_ri.size)
         for sI in gen_batch(0, nocc, nbatch):
             if eval_t_ijab:
@@ -552,7 +569,7 @@ class RDFDH(lib.StreamObject):
                 t_ijab = g_ijab / D_ijab
                 if self.eng_pt2 is NotImplemented:
                     eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
-                    if eval_ss:
+                    if self.eval_ss:
                         eng_bi2 += einsum("ijab, ijba ->", t_ijab, g_ijab)
             else:
                 t_ijab = tensors["t_ijab"][sI]
@@ -575,11 +592,17 @@ class RDFDH(lib.StreamObject):
         nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
         so, sv, sa = self.so, self.sv, self.sa
 
+        L = np.zeros((nvir, nocc))
+        if self.xc_n:  # non-consistent functional
+            L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
+        if not self.eval_pt2:  # not a PT2 functional
+            tensors.create("L", L)
+            return self
+
         D_rdm1 = tensors.load("D_rdm1")
         G_ia_ri = tensors.load("G_ia_ri")
         Y_mo_ri = tensors["Y_mo_ri"]
         Y_ij_ri = np.asarray(Y_mo_ri[:, so, so])
-        L = np.zeros((nvir, nocc))
 
         if gen_W:
             Y_ia = np.asarray(Y_mo_ri[:, so, sv])
@@ -598,9 +621,6 @@ class RDFDH(lib.StreamObject):
         nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
         for saux in gen_batch(0, naux, nbatch):
             L += 4 * einsum("Pib, Pab -> ai", G_ia_ri[saux], Y_mo_ri[saux, sv, sv])
-
-        if self.xc_n:
-            L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
 
         tensors.create("L", L)
         return self
