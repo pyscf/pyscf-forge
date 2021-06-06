@@ -40,7 +40,7 @@ def kernel(mf: RDFDH, **kwargs):
 
 
 @timing
-def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, restricted=True, **_):
+def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, **_):
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
             mf.run_scf()
@@ -49,7 +49,7 @@ def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, restricted=True
         mo_coeff = mf.mo_coeff
     mo_occ = mf.mo_occ
     if mo_occ is NotImplemented:
-        if restricted:
+        if not mf.unrestricted:
             mo_occ = scf.hf.get_occ(mf.mf_s)
         else:
             mo_occ = scf.uhf.get_occ(mf.mf_s)
