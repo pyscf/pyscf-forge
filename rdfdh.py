@@ -46,8 +46,8 @@ def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, **_):
             mf.run_scf()
             if mf.xc_n is None:  # if bDH-like functional, just return SCF energy
                 return mf.mf_s.e_tot - mf.mf_s.energy_nuc(), None
-        mo_coeff = mf.mo_coeff
-    mo_occ = mf.mo_occ
+        mo_coeff = mf.mf_s.mo_coeff
+    mo_occ = mf.mf_s.mo_occ
     if mo_occ is NotImplemented:
         if not mf.unrestricted:
             mo_occ = scf.hf.get_occ(mf.mf_s)
