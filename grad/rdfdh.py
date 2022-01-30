@@ -10,7 +10,12 @@ except ImportError:
 from pyscf import gto, lib, df
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
-from pyscf.dftd3 import itrf
+try:
+    from pyscf.dftd3 import itrf
+except ImportError:
+    print('''Warning: dftd3 not found. You cannot using functionals with "-D3" suffix 
+             before installing pyscf-dftd3. See https://github.com/pyscf/dftd3 and
+             https://github.com/ajz34/dh#dftd3-extension ''') 
 # other import
 import numpy as np
 import ctypes

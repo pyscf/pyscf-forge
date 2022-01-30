@@ -14,7 +14,12 @@ from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
-from pyscf.dftd3 import itrf
+try:
+    from pyscf.dftd3 import itrf
+except ImportError:
+    print('''Warning: dftd3 not found. You cannot using functionals with "-D3" suffix 
+             before installing pyscf-dftd3. See https://github.com/pyscf/dftd3 and
+             https://github.com/ajz34/dh#dftd3-extension ''') 
 # other import
 import os
 import pickle
