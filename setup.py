@@ -13,13 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NAME = 'pyscf-template'
+NAME = 'pyscf-mcpdft'
 AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
-DESCRIPTION  = 'PySCF extension module template'
+DESCRIPTION  = 'PySCF extension module MC-PDFT'
 SO_EXTENSIONS = {
+    'pyscf.lib.libpdft': ['pyscf/mcpdft/nr_numint.c']
 }
 DEPENDENCIES = ['pyscf', 'numpy']
+VERSION = '0.1.0'
 
 #######################################################################
 # Unless not working, nothing below needs to be changed.
