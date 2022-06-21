@@ -45,4 +45,7 @@ and [*JCTC* **2020**, *16*, 2274](http://dx.doi.org/10.1021/acs.jctc.9b01178)
         1. Single-state CASSCF wave function: [*JCTC* **2018**, *14*, 126](http://dx.doi.org/10.1021/acs.jctc.7b00967)
         2. State-averaged CASSCF wave functions: [*JCP* **2020**, *153*, 014106](http://dx.doi.org/10.1063/5.0007040)
         3. CMS-PDFT: **in press**
+    - Permanent electric dipole moment (non-hybrid functionals only) for:
+        1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586](http://dx.doi.org/10.1021/acs.jctc.1c00915)
+        2. (**in testing**) State-averaged CASSCF wave functions
 
