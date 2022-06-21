@@ -584,13 +584,15 @@ class _PDFT ():
 
     def get_energy_decomposition (self, mo_coeff=None, ci=None, ot=None,
                                   otxc=None, grids_level=None,
-                                  grids_attr=None, verbose=None):
+                                  grids_attr=None, split_x_c=None,
+                                  verbose=None):
         if mo_coeff is None: mo_coeff = self.mo_coeff
         if ci is None: ci = self.ci
         if verbose is None: verbose = self.verbose
         return get_energy_decomposition (
             self, mo_coeff=mo_coeff, ci=ci, ot=ot, otxc=otxc,
-            grids_level=grids_level, grids_attr=grids_attr, verbose=verbose
+            grids_level=grids_level, grids_attr=grids_attr, 
+            split_x_c=split_x_c, verbose=verbose
         )
 
     def state_average_mix (self, fcisolvers=None, weights=(0.5,0.5)):
