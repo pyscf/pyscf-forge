@@ -353,6 +353,8 @@ class _MSPDFT (MultiStateMCPDFTSolver):
     def kernel (self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
                 grids_attr=None, **kwargs):
         self.otfnal.reset (mol=self.mol) # scanner mode safety 
+        if ci0 is None and isinstance (getattr (self, 'ci', None), list):
+            ci0 = [c.copy () for c in self.ci]
         self.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
         diab_conv, self.ci = self.diabatize (ci=self.ci, ci0=ci0, **kwargs)
         self.converged = self.converged and diab_conv
