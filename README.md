@@ -48,4 +48,5 @@ and [*JCTC* **2020**, *16*, 2274](http://dx.doi.org/10.1021/acs.jctc.9b01178)
     - Permanent electric dipole moment (non-hybrid functionals only) for:
         1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586](http://dx.doi.org/10.1021/acs.jctc.1c00915)
         2. (**in testing**) State-averaged CASSCF wave functions
-* Multi-configuration density-coherence functional theory total energy for CASSCF wave functions: [*JCTC* **2021**, *17*, 5733](http://dx.doi.org/10.1021/acs.jctc.1c00679)
+* Multi-configuration density-coherence functional theory (MC-DCFT)
+total energy for CASSCF wave functions: [*JCTC* **2021**, *17*, 5733](http://dx.doi.org/10.1021/acs.jctc.1c00679)
