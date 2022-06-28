@@ -24,7 +24,10 @@ from pyscf.mcscf import mc1step, newton_casscf
 from pyscf.grad import rhf as rhf_grad
 from pyscf.grad import casscf as casscf_grad
 from pyscf.grad import sacasscf as sacasscf_grad
+from pyscf import __config__
 from itertools import product
+
+CONV_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_conv_tol_diabatize', 1e-8)
 
 try:
     from mrh.my_pyscf.fci.csf import CSFFCISolver
@@ -214,6 +217,13 @@ class Gradients (mcpdft_grad.Gradients):
         r, g = get_diabfns (self.base.diabatization)
         self._diab_response = r
         self._diab_grad = g
+        self.conv_rtol = 0
+        def_tol0 = getattr (self.base, 'conv_tol_grad', None)
+        if def_tol0 is None:
+            def_tol0 = np.sqrt (getattr (self.base, 'conv_tol', 1e-7))
+        def_tol1 = getattr (self.base, 'conv_tol_diabatize',
+                            CONV_TOL_DIABATIZE)
+        self.conv_atol = min (def_tol0, def_tol1)
         self.nlag += self.nis
 
     @property
