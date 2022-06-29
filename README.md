@@ -43,11 +43,11 @@ Features
     - Global hybrid functionals: [*JPCL* **2020**, *11*, 10158] and
       [*JCTC* **2020**, *16*, 2274]
     - Notes:
-        1. Translation of ``meta'' KS-DFT functionals which depend on the
+        1. Translation of 'meta' KS-DFT functionals which depend on the
            kinetic energy density and/or Laplacian is not supported.
         2. Range-separated hybrid on-top functionals are not supported.
         3. Translation of functionals defined as global hybrids at the Libxc or
-           PySCF level is not supported, except for ``tPBE0'' and ``ftPBE0''.
+           PySCF level is not supported, except for 'tPBE0' and 'ftPBE0'.
            Other global hybrid functionals are specified using PySCF's custom
            XC parser; see [examples/mcpdft/02-hybrid_functionals.py] for more
            information.
