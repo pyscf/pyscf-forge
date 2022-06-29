@@ -64,7 +64,7 @@ Features
 * Multi-configuration density-coherence functional theory (MC-DCFT)
   total energy: [*JCTC* **2021**, *17*, 5733]
 
-[comment]: # Hyperlink references
+[](Hyperlink references)
 [*JCTC* **2020**, *16*, 7444]: http://dx.doi.org/10.1021/acs.jctc.0c00908
 [*JCTC* **2014**, *10*, 3669]: http://dx.doi.org/10.1021/ct500483t
 [*JCTC* **2015**, *11*, 4077]: http://dx.doi.org/10.1021/acs.jctc.5b00609
