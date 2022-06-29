@@ -31,17 +31,26 @@ Features
 -------
 * Multi-configuration pair-density functional theory (MC-PDFT) total electronic
   energy calculations for wave functions of various types.
-    - CASCI, single or multiple states
+    - CASCI
     - CASSCF
-    - State-averaged CASSCF (including "mixed" solver with different spins and
-      point groups)
+    - State-averaged CASSCF (including "mixed" solver with different spins
+      and/or point groups)
     - Compressed multi-state MC-PDFT (CMS-PDFT): [*JCTC* **2020**, *16*, 7444]
 * On-the-fly generation of on-top density functionals from underlying KS-DFT
-  exchange-correlation functionals defined in LibXC.
+  LDA or GGA exchange-correlation functionals defined in Libxc.
     - Translated functionals: [*JCTC* **2014**, *10*, 3669]
     - Fully-translated functionals: [*JCTC* **2015**, *11*, 4077]
     - Global hybrid functionals: [*JPCL* **2020**, *11*, 10158] and
       [*JCTC* **2020**, *16*, 2274]
+    - Notes:
+        1. Translation of ``meta'' KS-DFT functionals which depend on the
+           kinetic energy density and/or Laplacian is not supported.
+        2. Range-separated hybrid on-top functionals are not supported.
+        3. Translation of functionals defined as global hybrids at the Libxc or
+           PySCF level is not supported, except for ``tPBE0'' and ``ftPBE0''.
+           Other global hybrid functionals are specified using PySCF's custom
+           XC parser; see [examples/mcpdft/02-hybrid_functionals.py] for more
+           information.
 * Additional properties
     - Decomposition of total electronic energy into core, Coulomb, on-top
       components
@@ -53,8 +62,9 @@ Features
         1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
         2. (**in testing**) State-averaged CASSCF wave functions
 * Multi-configuration density-coherence functional theory (MC-DCFT)
-  total energy for CASSCF wave functions: [*JCTC* **2021**, *17*, 5733]
+  total energy: [*JCTC* **2021**, *17*, 5733]
 
+[comment]: # Hyperlink references
 [*JCTC* **2020**, *16*, 7444]: http://dx.doi.org/10.1021/acs.jctc.0c00908
 [*JCTC* **2014**, *10*, 3669]: http://dx.doi.org/10.1021/ct500483t
 [*JCTC* **2015**, *11*, 4077]: http://dx.doi.org/10.1021/acs.jctc.5b00609
@@ -64,4 +74,3 @@ Features
 [*JCP* **2020**, *153*, 014106]: http://dx.doi.org/10.1063/5.0007040
 [*JCTC* **2021**, *17*, 7586]: http://dx.doi.org/10.1021/acs.jctc.1c00915
 [*JCTC* **2021**, *17*, 5733]: http://dx.doi.org/10.1021/acs.jctc.1c00679
-
