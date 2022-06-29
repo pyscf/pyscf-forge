@@ -48,8 +48,8 @@ Features
         2. Range-separated hybrid on-top functionals are not supported.
         3. Translation of functionals defined as global hybrids at the Libxc or
            PySCF level is not supported, except for 'tPBE0' and 'ftPBE0'.
-           Other global hybrid functionals are specified using PySCF's custom
-           XC parser; see [examples/mcpdft/02-hybrid_functionals.py] for more
+           Other global hybrid functionals are specified using PySCF's [custom
+           XC parser]; see [examples/mcpdft/02-hybrid_functionals.py] for more
            information.
 * Additional properties
     - Decomposition of total electronic energy into core, Coulomb, on-top
@@ -77,4 +77,4 @@ Features
 
 [comment]: <> (Links)
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
-
+[custom XC parser]: link
