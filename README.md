@@ -36,15 +36,15 @@ Features
     - State-averaged CASSCF (including "mixed" solver with different spins and
       point groups)
     - Compressed multi-state MC-PDFT (CMS-PDFT): 
-      [*JCTC* **2020**, *16*, 7444](doi.org/10.1021/acs.jctc.0c00908)
+      [*JCTC* **2020**, *16*, 7444]
 * On-the-fly generation of on-top density functionals from underlying KS-DFT
   exchange-correlation functionals defined in LibXC.
     - Translated functionals:
-      [*JCTC* **2014**, *10*, 3669](doi.org/10.1021/ct500483t)
+      [*JCTC* **2014**, *10*, 3669](http://doi.org/10.1021/ct500483t)
     - Fully-translated functionals:
-      [*JCTC* **2015**, *11*, 4077](doi.org/10.1021/acs.jctc.5b00609)
+      [*JCTC* **2015**, *11*, 4077](http://doi.org/10.1021/acs.jctc.5b00609)
     - Global hybrid functionals: 
-      [*JPCL* **2020**, *11*, 10158](doi.org/10.1021/acs.jpclett.0c02956) and
+      [*JPCL* **2020**, *11*, 10158](http://doi.org/10.1021/acs.jpclett.0c02956) and
       [*JCTC* **2020**, *16*, 2274](doi.org/10.1021/acs.jctc.9b01178)
 * Additional properties
     - Decomposition of total electronic energy into core, Coulomb, on-top
@@ -62,3 +62,7 @@ Features
 * Multi-configuration density-coherence functional theory (MC-DCFT)
   total energy for CASSCF wave functions: 
   [*JCTC* **2021**, *17*, 5733](doi.org/10.1021/acs.jctc.1c00679)
+
+
+[*JCTC* **2020**, *16*, 7444]: http://doi.org/10.1021/acs.jctc.0c00908
+
