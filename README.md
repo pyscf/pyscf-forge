@@ -35,34 +35,33 @@ Features
     - CASSCF
     - State-averaged CASSCF (including "mixed" solver with different spins and
       point groups)
-    - Compressed multi-state MC-PDFT (CMS-PDFT): 
-      [*JCTC* **2020**, *16*, 7444]
+    - Compressed multi-state MC-PDFT (CMS-PDFT): [*JCTC* **2020**, *16*, 7444]
 * On-the-fly generation of on-top density functionals from underlying KS-DFT
   exchange-correlation functionals defined in LibXC.
-    - Translated functionals:
-      [*JCTC* **2014**, *10*, 3669](http://doi.org/10.1021/ct500483t)
-    - Fully-translated functionals:
-      [*JCTC* **2015**, *11*, 4077](http://doi.org/10.1021/acs.jctc.5b00609)
-    - Global hybrid functionals: 
-      [*JPCL* **2020**, *11*, 10158](http://doi.org/10.1021/acs.jpclett.0c02956) and
-      [*JCTC* **2020**, *16*, 2274](doi.org/10.1021/acs.jctc.9b01178)
+    - Translated functionals: [*JCTC* **2014**, *10*, 3669]
+    - Fully-translated functionals: [*JCTC* **2015**, *11*, 4077]
+    - Global hybrid functionals: [*JPCL* **2020**, *11*, 10158] and
+      [*JCTC* **2020**, *16*, 2274]
 * Additional properties
     - Decomposition of total electronic energy into core, Coulomb, on-top
       components
     - Analytical nuclear gradients (non-hybrid functionals only) for:
-        1. Single-state CASSCF wave function:
-           [*JCTC* **2018**, *14*, 126](doi.org/10.1021/acs.jctc.7b00967)
-        2. State-averaged CASSCF wave functions:
-           [*JCP* **2020**, *153*, 014106](doi.org/10.1063/5.0007040)
+        1. Single-state CASSCF wave function: [*JCTC* **2018**, *14*, 126]
+        2. State-averaged CASSCF wave functions: [*JCP* **2020**, *153*, 014106]
         3. CMS-PDFT: **in press**
     - Permanent electric dipole moment (non-hybrid functionals only) for:
-        1. Single-state CASSCF wave function:
-           [*JCTC* **2021**, *17*, 7586](doi.org/10.1021/acs.jctc.1c00915)
+        1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
         2. (**in testing**) State-averaged CASSCF wave functions
 * Multi-configuration density-coherence functional theory (MC-DCFT)
-  total energy for CASSCF wave functions: 
-  [*JCTC* **2021**, *17*, 5733](doi.org/10.1021/acs.jctc.1c00679)
+  total energy for CASSCF wave functions: [*JCTC* **2021**, *17*, 5733]
 
-
-[*JCTC* **2020**, *16*, 7444]: http://doi.org/10.1021/acs.jctc.0c00908
+[*JCTC* **2020**, *16*, 7444]: http://dx.doi.org/10.1021/acs.jctc.0c00908
+[*JCTC* **2014**, *10*, 3669]: http://dx.doi.org/10.1021/ct500483t
+[*JCTC* **2015**, *11*, 4077]: http://dx.doi.org/10.1021/acs.jctc.5b00609
+[*JPCL* **2020**, *11*, 10158]: http://dx.doi.org/10.1021/acs.jpclett.0c02956
+[*JCTC* **2020**, *16*, 2274]: http://dx.doi.org/10.1021/acs.jctc.9b01178
+[*JCTC* **2018**, *14*, 126]: http://dx.doi.org/10.1021/acs.jctc.7b00967
+[*JCP* **2020**, *153*, 014106]: http://dx.doi.org/10.1063/5.0007040
+[*JCTC* **2021**, *17*, 7586]: http://dx.doi.org/10.1021/acs.jctc.1c00915
+[*JCTC* **2021**, *17*, 5733]: http://dx.doi.org/10.1021/acs.jctc.1c00679
 
