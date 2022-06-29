@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import math
 import numpy as np
 from scipy import linalg
 from pyscf import mcpdft
@@ -28,6 +29,8 @@ from pyscf import __config__
 from itertools import product
 
 CONV_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_conv_tol_diabatize', 1e-8)
+SING_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_sing_tol_diabatize', 1e-8)
+SING_STEP_TOL = getattr(__config__, 'grad_mspdft_sing_step_tol', 2*math.pi)
 
 try:
     from mrh.my_pyscf.fci.csf import CSFFCISolver
@@ -213,17 +216,18 @@ class Gradients (mcpdft_grad.Gradients):
     project_Aop = sacasscf_grad.Gradients.project_Aop
 
     def __init__(self, mc):
+        self.conv_rtol = 0
+        def_tol0 = getattr (mc, 'conv_tol_grad', None)
+        if def_tol0 is None:
+            def_tol0 = np.sqrt (getattr (mc, 'conv_tol', 1e-7))
+        def_tol1 = getattr (mc, 'conv_tol_diabatize',
+                            CONV_TOL_DIABATIZE)
+        self.conv_atol = min (def_tol0, def_tol1)
+        self.sing_step_tol = SING_STEP_TOL
         mcpdft_grad.Gradients.__init__(self, mc)
         r, g = get_diabfns (self.base.diabatization)
         self._diab_response = r
         self._diab_grad = g
-        self.conv_rtol = 0
-        def_tol0 = getattr (self.base, 'conv_tol_grad', None)
-        if def_tol0 is None:
-            def_tol0 = np.sqrt (getattr (self.base, 'conv_tol', 1e-7))
-        def_tol1 = getattr (self.base, 'conv_tol_diabatize',
-                            CONV_TOL_DIABATIZE)
-        self.conv_atol = min (def_tol0, def_tol1)
         self.nlag += self.nis
 
     @property
@@ -315,7 +319,7 @@ class Gradients (mcpdft_grad.Gradients):
 
     def get_wfn_response (self, si_bra=None, si_ket=None, state=None, mo=None,
             ci=None, si=None, eris=None, veff1=None, veff2=None,
-            _freeze_is=False, **kwargs):
+            _freeze_is=False, d2f=None, **kwargs):
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
         if si is None: si = self.base.si
@@ -323,6 +327,7 @@ class Gradients (mcpdft_grad.Gradients):
         ket, bra = _unpack_state (state)
         if si_bra is None: si_bra = si[:,bra]
         if si_ket is None: si_ket = si[:,ket]
+        if d2f is None: d2f = self.base.diabatizer (ci=ci)[2]
         log = lib.logger.new_logger (self, self.verbose)
         si_diag = si_bra * si_ket
         nroots, ngorb, nci = self.nroots, self.ngorb, self.nci
@@ -358,6 +363,16 @@ class Gradients (mcpdft_grad.Gradients):
         g_is = g_is_pdft + g_is_heff
         if _freeze_is: g_is[:] = 0.0
         g_all = self.pack_uniq_var (g_orb, g_ci, g_is)
+
+        # DEBUG
+        d2f_evals, d2f_evecs = linalg.eigh (d2f)
+        g_is_modes = np.dot (g_is, d2f_evecs)
+        g_is_pdft = np.dot (g_is_pdft, d2f_evecs)
+        g_is_heff = np.dot (g_is_heff, d2f_evecs)
+        log.debug ("IS sector Lagrange multiplier solution:")
+        for i, (denom, num) in enumerate (zip (d2f_evals, g_is_modes)):
+            log.debug ('%d %e / %e = %e (%e %e)', i, -num, denom, -num/denom,
+                       g_is_pdft[i], g_is_heff[i])
 
         return g_all
 
@@ -596,7 +611,11 @@ class MSPDFTLagPrec (sacasscf_grad.SACASLagPrec):
         sacasscf_grad.SACASLagPrec.__init__(self, Adiag=Adiag,
             level_shift=level_shift, ci=ci, grad_method=grad_method)
         self.grad_method = grad_method
-        self.sing_tol = getattr (grad_method.base, 'sing_tol_diabatize', 1e-8)
+        self.sing_tol = getattr (grad_method.base, 'sing_tol_diabatize',
+                                 SING_TOL_DIABATIZE)
+        self.sing_step_tol = getattr (grad_method.base, 'sing_step_tol',
+                                      SING_STEP_TOL)
+        self.sing_warned = False
         self.log = logger.new_logger (self.grad_method,
             self.grad_method.verbose)
         self._init_d2f (d2f=d2f, **kwargs)
@@ -608,13 +627,9 @@ class MSPDFTLagPrec (sacasscf_grad.SACASLagPrec):
         idx_sing = np.abs (self.d2f_evals) < self.sing_tol
         self.log.debug ('IS component Hessian eigenvalues: {}'.format (
             self.d2f_evals))
-        if np.any (idx_sing):
-            self.log.warn (('Model-space frame-rotation Hessian is singular! '
-                'Response equations may not be solvable to arbitrary '
-                'precision!'))
+        if np.any (idx_sing): self.do_sing_warn ()
         self.d2f_evals = self.d2f_evals[~idx_sing]
         self.d2f_evecs = self.d2f_evecs[:,~idx_sing]
-
 
     def unpack_uniq_var (self, x):
         return self.grad_method.unpack_uniq_var (x)
@@ -632,8 +647,20 @@ class MSPDFTLagPrec (sacasscf_grad.SACASLagPrec):
     def is_prec (self, xis): 
         xis = np.dot (xis, self.d2f_evecs)
         Mxis = xis/self.d2f_evals
+        idx_sing = (np.abs (Mxis) >= self.sing_step_tol)
+        if np.any (idx_sing): self.do_sing_warn ()
+        Mxis[idx_sing] = 0
         Mxis = np.dot (self.d2f_evecs, Mxis)
         return Mxis
+
+    def do_sing_warn (self):
+        if self.sing_warned: return
+        self.log.warn (('Model-space frame-rotation Hessian is singular! '
+                        'Response equations may not be solvable to arbitrary '
+                        'precision!'))
+        self.sing_warned = True
+
+
 
 if __name__ == '__main__':
     # Test mspdft_heff_response and mspdft_heff_HellmannFeynman by trying to
