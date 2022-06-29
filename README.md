@@ -49,8 +49,8 @@ Features
         3. Translation of functionals defined as global hybrids at the Libxc or
            PySCF level is not supported, except for 'tPBE0' and 'ftPBE0'.
            Other global hybrid functionals are specified using PySCF's [custom
-           XC parser]; see [examples/mcpdft/02-hybrid_functionals.py] for more
-           information.
+           functional parser]; see [examples/mcpdft/02-hybrid_functionals.py]
+           for more information.
 * Additional properties
     - Decomposition of total electronic energy into core, Coulomb, on-top
       components
@@ -64,7 +64,7 @@ Features
 * Multi-configuration density-coherence functional theory (MC-DCFT)
   total energy: [*JCTC* **2021**, *17*, 5733]
 
-[comment]: <> (References)
+[comment]: <> (Reference hyperlinks)
 [*JCTC* **2020**, *16*, 7444]: http://dx.doi.org/10.1021/acs.jctc.0c00908
 [*JCTC* **2014**, *10*, 3669]: http://dx.doi.org/10.1021/ct500483t
 [*JCTC* **2015**, *11*, 4077]: http://dx.doi.org/10.1021/acs.jctc.5b00609
@@ -75,6 +75,6 @@ Features
 [*JCTC* **2021**, *17*, 7586]: http://dx.doi.org/10.1021/acs.jctc.1c00915
 [*JCTC* **2021**, *17*, 5733]: http://dx.doi.org/10.1021/acs.jctc.1c00679
 
-[comment]: <> (Links)
+[comment]: <> (Code hyperlinks)
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
-[custom XC parser]: link
+[custom functional parser]: https://github.com/pyscf/pyscf/blob/master/examples/dft/24-custom_xc_functional.py
