@@ -37,7 +37,7 @@ Features
       and/or point groups)
     - Compressed multi-state MC-PDFT (CMS-PDFT): [*JCTC* **2020**, *16*, 7444]
 * On-the-fly generation of on-top density functionals from underlying KS-DFT
-  LDA or GGA exchange-correlation functionals defined in Libxc.
+  'LDA' or 'GGA' exchange-correlation functionals as defined in Libxc.
     - Translated functionals: [*JCTC* **2014**, *10*, 3669]
     - Fully-translated functionals: [*JCTC* **2015**, *11*, 4077]
     - Global hybrid functionals: [*JPCL* **2020**, *11*, 10158] and
@@ -49,8 +49,7 @@ Features
         3. Translation of functionals defined as global hybrids at the Libxc or
            PySCF level is not supported, except for 'tPBE0' and 'ftPBE0'.
            Other global hybrid functionals are specified using PySCF's [custom
-           functional parser]; see [examples/mcpdft/02-hybrid_functionals.py]
-           for more information.
+           functional parser]; see [examples/mcpdft/02-hybrid_functionals.py].
 * Additional properties
     - Decomposition of total electronic energy into core, Coulomb, on-top
       components
