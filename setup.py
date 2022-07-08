@@ -21,7 +21,7 @@ SO_EXTENSIONS = {
     'pyscf.lib.libpdft': ['pyscf/mcpdft/nr_numint.c']
 }
 DEPENDENCIES = ['pyscf', 'numpy']
-VERSION = '0.1.0'
+VERSION = '1.0.0'
 
 #######################################################################
 # Unless not working, nothing below needs to be changed.
