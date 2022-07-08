@@ -1,9 +1,9 @@
 Multi-configuration pair-density functional theory module for PySCF
 =========================
 
-2022-06-21
+2022-07-08
 
-* Version 0.1
+* Version 1.0
 
 Install
 -------
