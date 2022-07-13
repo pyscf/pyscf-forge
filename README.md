@@ -61,7 +61,7 @@ Features
         1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
         2. (**in testing**) State-averaged CASSCF wave functions
 * Multi-configuration density-coherence functional theory (MC-DCFT)
-  total energy: [*JCTC* **2021**, *17*, 5733]
+  total energy: [*JCTC* **2021**, *17*, 2775]
 
 [comment]: <> (Reference hyperlinks)
 [*JCTC* **2020**, *16*, 7444]: http://dx.doi.org/10.1021/acs.jctc.0c00908
@@ -72,7 +72,7 @@ Features
 [*JCTC* **2018**, *14*, 126]: http://dx.doi.org/10.1021/acs.jctc.7b00967
 [*JCP* **2020**, *153*, 014106]: http://dx.doi.org/10.1063/5.0007040
 [*JCTC* **2021**, *17*, 7586]: http://dx.doi.org/10.1021/acs.jctc.1c00915
-[*JCTC* **2021**, *17*, 5733]: http://dx.doi.org/10.1021/acs.jctc.1c00679
+[*JCTC* **2021**, *17*, 2775]: http://dx.doi.org/10.1021/acs.jctc.0c01346
 
 [comment]: <> (Code hyperlinks)
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
