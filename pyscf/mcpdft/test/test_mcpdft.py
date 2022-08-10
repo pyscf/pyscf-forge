@@ -95,7 +95,7 @@ class KnownValues(unittest.TestCase):
                         my_kwargs['mo_coeff'] = mc0.mo_coeff
                     with self.subTest (symm=symm, scf=scf, init=init_name):
                         mc = cls (my_init, 'tPBE', 5, 2).run (**my_kwargs)
-                        self.assertAlmostEqual (mc.e_tot, ref_e, 7)
+                        self.assertAlmostEqual (mc.e_tot, ref_e, delta=1e-6)
                         self.assertTrue (mc.converged)
 
     def test_df (self):
@@ -310,8 +310,8 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (mc.e_mcscf, e_mcscf, 9)
             mc.compute_pdft_energy_()
             with self.subTest (case='SS', part='pdft2', symmetry=bool(ix)):
-                self.assertAlmostEqual (mc.e_tot, e_tot, 6)
-                self.assertAlmostEqual (mc.e_ot, e_ot, 6)
+                self.assertAlmostEqual (mc.e_tot, e_tot, delta=1e-6)
+                self.assertAlmostEqual (mc.e_ot, e_ot, delta=1e-6)
         mo_ref = 0.9908324004974881
         ci_ref = 0.988599145861302
         ref_avg = -7.7986453
