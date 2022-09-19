@@ -21,10 +21,13 @@ from pyscf import mcpdft
 #from pyscf.df.grad import dfmcpdft as mcpdft_grad
 import unittest
 
-h2co_casscf66_631g_xyz = '''C  0.534004  0.000000  0.000000
+h2co_casscf66_631g_xyz = \
+'''
+C  0.534004  0.000000  0.000000
 O -0.676110  0.000000  0.000000
 H  1.102430  0.000000  0.920125
-H  1.102430  0.000000 -0.920125'''
+H  1.102430  0.000000 -0.920125
+'''
 mol_nosymm = gto.M (atom = h2co_casscf66_631g_xyz, basis = '6-31g', symmetry = False, output='/dev/null', verbose = 0)
 mol_symm = gto.M (atom = h2co_casscf66_631g_xyz, basis = '6-31g', symmetry = True, output='/dev/null', verbose = 0)
 def get_mc_ref (mol, ri=False, sa2=False):
