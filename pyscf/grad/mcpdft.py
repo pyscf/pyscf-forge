@@ -111,7 +111,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     hcore_deriv = mf_grad.hcore_generator(mol)
     s1 = mf_grad.get_ovlp(mol)
     if auxbasis_response:
-        de_aux += vj.aux
+        de_aux += np.squeeze (vj.aux)
 
     # MRH: Now I have to compute the gradient of the on-top energy
     # This involves derivatives of the orbitals that construct rho and Pi and

@@ -65,4 +65,8 @@ mygradpath = os.path.join (mypath, 'grad')
 from pyscf import grad
 grad.__path__.append (mygradpath)
 grad.__path__=list(set(grad.__path__))
+mydfgradpath = os.path.join (os.path.join (mypath, 'df'), 'grad')
+from pyscf.df import grad as df_grad
+df_grad.__path__.append (mydfgradpath)
+df_grad.__path__=list(set(df_grad.__path__))
 
