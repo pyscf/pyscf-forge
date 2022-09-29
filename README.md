@@ -59,7 +59,10 @@ Features
         3. CMS-PDFT: **in press**
     - Permanent electric dipole moment (non-hybrid functionals only) for:
         1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
-        2. (**in testing**) State-averaged CASSCF wave functions
+        2. State-averaged CASSCF wave functions
+        3. CMS-PDFT
+    - Transition electric dipole moment (non-hybrid functionals only) for:
+        1. CMS-PDFT
 * Multi-configuration density-coherence functional theory (MC-DCFT)
   total energy: [*JCTC* **2021**, *17*, 2775]
 
