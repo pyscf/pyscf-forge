@@ -21,7 +21,6 @@ from pyscf import mcpdft
 #from pyscf.fci import csf_solver
 from pyscf.grad.cmspdft import diab_response, diab_grad, diab_response_o0, diab_grad_o0
 from pyscf.grad import mspdft as mspdft_grad
-#from pyscf.df.grad import dfsacasscf, dfmspdft
 import unittest, math
 
 def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
@@ -44,7 +43,6 @@ def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     if symmetry and (cas_irrep is not None):
         mo = mc.sort_mo_by_irrep (cas_irrep)
     mc.kernel (mo)
-    if density_fit: return dfmspdft.Gradients (mc)
     return mc.nuc_grad_method ()
 
 def tearDownModule():

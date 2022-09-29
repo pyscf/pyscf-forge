@@ -18,6 +18,8 @@ from scipy import linalg
 from pyscf import lib
 from pyscf.mcscf.addons import StateAverageMCSCFSolver
 from pyscf.mcscf.addons import StateAverageMixFCISolver
+from pyscf.mcscf.df import _DFCASSCF
+from pyscf.mcscf import mc1step
 from pyscf.fci import direct_spin1
 from pyscf import mcpdft
 from pyscf import __config__
@@ -511,10 +513,23 @@ class _MSPDFT (MultiStateMCPDFTSolver):
                           self.weights[i], self.e_states[i])
 
     def nuc_grad_method (self):
-        from pyscf.grad.mspdft import Gradients
+        if not isinstance (self, mc1step.CASSCF):
+            raise NotImplementedError ("CASCI-based PDFT nuclear gradients")
+        elif getattr (self, 'frozen', None) is not None:
+            raise NotImplementedError ("PDFT nuclear gradients with frozen orbitals")
+        elif isinstance (self, _DFCASSCF):
+            from pyscf.df.grad.mspdft import Gradients
+        else:
+            from pyscf.grad.mspdft import Gradients
         return Gradients (self)
 
     def dip_moment (self, unit='Debye', origin='Coord_Center', state=None):
+        if not isinstance (self, mc1step.CASSCF):
+            raise NotImplementedError ("CASCI-based PDFT dipole moments")
+        elif getattr (self, 'frozen', None) is not None:
+            raise NotImplementedError ("PDFT dipole moments with frozen orbitals")
+        elif isinstance (self, _DFCASSCF):
+            raise NotImplementedError ("PDFT dipole moments with density-fitting ERIs")
         # Monkeypatch for double prop folders
         # TODO: more elegant solution
         import os
@@ -536,6 +551,12 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         return mol_dipole
 
     def trans_moment (self, unit='Debye', origin='Coord_Center', state=None):
+        if not isinstance (self, mc1step.CASSCF):
+            raise NotImplementedError ("CASCI-based PDFT dipole moments")
+        elif getattr (self, 'frozen', None) is not None:
+            raise NotImplementedError ("PDFT dipole moments with frozen orbitals")
+        elif isinstance (self, _DFCASSCF):
+            raise NotImplementedError ("PDFT dipole moments with density-fitting ERIs")
         # Monkeypatch for double prop folders
         # TODO: more elegant solution
         import os

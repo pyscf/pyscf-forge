@@ -19,7 +19,6 @@ from pyscf import gto, scf, df, fci
 from pyscf.fci.addons import fix_spin_
 from pyscf import mcpdft
 #from pyscf.fci import csf_solver
-#from pyscf.df.grad import dfmcpdft as mcpdft_grad
 import unittest
 
 h2co_casscf66_631g_xyz = '''C  0.534004  0.000000  0.000000
@@ -57,8 +56,8 @@ class KnownValues(unittest.TestCase):
         for mol in (mol_nosymm, mol_symm):
             mc_conv, ref_conv = get_mc_ref (mol, ri=False, sa2=False)
             mc_conv_grad = mc_conv.nuc_grad_method ()
-            mc_df, ref_df = None, None #TODO: DF support get_mc_ref (mol, ri=True, sa2=False)
-            mc_df_grad = None #TODO: DF support (mc_df)
+            mc_df, ref_df = get_mc_ref (mol, ri=True, sa2=False)
+            mc_df_grad = mc_df.nuc_grad_method ()
             for lbl, mc_grad, ref in (('conv', mc_conv_grad, ref_conv), ('DF', mc_df_grad, ref_df)):
                 if lbl=="DF": continue #TODO: DF support
                 with self.subTest (symm=mol.symmetry, eri=lbl):
@@ -69,8 +68,8 @@ class KnownValues(unittest.TestCase):
         for mol in (mol_nosymm, mol_symm):
             mc_conv, ref_conv = get_mc_ref (mol, ri=False, sa2=True)
             mc_conv_grad = mc_conv.nuc_grad_method ()
-            mc_df, ref_df = None, None #TODO: DF support get_mc_ref (mol, ri=True, sa2=True)
-            mc_df_grad = None #TODO: DF support (mc_df)
+            mc_df, ref_df = get_mc_ref (mol, ri=True, sa2=True)
+            mc_df_grad = mc_df.nuc_grad_method ()
             for lbl, mc_grad, ref in (('conv', mc_conv_grad, ref_conv), ('DF', mc_df_grad, ref_df)):
                 if lbl=="DF": continue #TODO: DF support
                 with self.subTest (symm=mol.symmetry, eri=lbl):

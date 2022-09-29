@@ -22,9 +22,9 @@ from functools import partial
 # I need to resolve the __init__ and get_ham_response members. Otherwise everything should be fine! 
 class Gradients (dfsacasscf_grad.Gradients, mcpdft_grad.Gradients):
     
-    def __init__(self, pdft):
+    def __init__(self, pdft, state=None):
         self.auxbasis_response = True
-        mcpdft_grad.Gradients.__init__(self, pdft)
+        mcpdft_grad.Gradients.__init__(self, pdft, state=state)
 
     # TODO: rewrite the partialized fn to take the actual caller, use getattr,
     # and delete this

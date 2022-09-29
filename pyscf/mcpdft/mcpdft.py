@@ -26,6 +26,7 @@ from pyscf.fci.direct_spin1 import _unpack_nelec
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, state_average_mix
 from pyscf.mcscf.addons import state_average_mix_, StateAverageMixFCISolver
 from pyscf.mcscf.addons import StateAverageFCISolver
+from pyscf.mcscf.df import _DFCASSCF
 from pyscf.mcpdft import pdft_veff
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf.mcpdft.otfnal import otfnal, transfnal, get_transfnal
@@ -559,13 +560,26 @@ class _PDFT ():
         return pdft_veff1, pdft_veff2
 
     def _state_average_nuc_grad_method (self, state=None):
-        from pyscf.grad.mcpdft import Gradients
+        if not isinstance (self, mc1step.CASSCF):
+            raise NotImplementedError ("CASCI-based PDFT nuclear gradients")
+        elif getattr (self, 'frozen', None) is not None:
+            raise NotImplementedError ("PDFT nuclear gradients with frozen orbitals")
+        elif isinstance (self, _DFCASSCF):
+            from pyscf.df.grad.mcpdft import Gradients
+        else:
+            from pyscf.grad.mcpdft import Gradients
         return Gradients (self, state=state)
 
     def nuc_grad_method (self):
         return self._state_average_nuc_grad_method (state=None)
 
     def dip_moment (self, unit='Debye', origin='Coord_Center', state=0):
+        if not isinstance (self, mc1step.CASSCF):
+            raise NotImplementedError ("CASCI-based PDFT dipole moments")
+        elif getattr (self, 'frozen', None) is not None:
+            raise NotImplementedError ("PDFT dipole moments with frozen orbitals")
+        elif isinstance (self, _DFCASSCF):
+            raise NotImplementedError ("PDFT dipole moments with density-fitting ERIs")
         # Monkeypatch for double prop folders
         # TODO: more elegant solution
         import os
