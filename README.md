@@ -9,12 +9,12 @@ Install
 -------
 * Install to python site-packages folder
 ```
-pip install git+https://github.com/pyscf/mcpdft
+pip install git+https://github.com/MatthewRHermes/mcpdft
 ```
 
 * Install in a custom folder for development
 ```
-git clone https://github.com/pyscf/mcpdft /home/abc/local/path
+git clone https://github.com/MatthewRHermes/mcpdft /home/abc/local/path
 
 # Set pyscf extended module path
 echo 'export PYSCF_EXT_PATH=/home/abc/local/path:$PYSCF_EXT_PATH' >> ~/.bashrc
