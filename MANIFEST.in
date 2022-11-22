@@ -1,0 +1,7 @@
+include MANIFEST.in
+include README.md setup.py CHANGELOG LICENSE
+
+prune pyscf/lib/build pyscf/build
+
+recursive-include pyscf *.dat *.so *.dylib
+recursive-exclude pyscf *.c *.h
