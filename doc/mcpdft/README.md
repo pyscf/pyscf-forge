@@ -1,7 +1,7 @@
 Multi-configuration pair-density functional theory module for PySCF
 =========================
 
-2022-07-08
+2022-11-27
 
 * Version 1.0
 
@@ -9,12 +9,12 @@ Install
 -------
 * Install to python site-packages folder
 ```
-pip install git+https://github.com/MatthewRHermes/mcpdft
+pip install git+https://github.com/pyscf/pyscf-forge
 ```
 
 * Install in a custom folder for development
 ```
-git clone https://github.com/MatthewRHermes/mcpdft /home/abc/local/path
+git clone https://github.com/pyscf/pyscf-forge /home/abc/local/path
 
 # Set pyscf extended module path
 echo 'export PYSCF_EXT_PATH=/home/abc/local/path:$PYSCF_EXT_PATH' >> ~/.bashrc
