@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NAME = 'pyscf-force'
+NAME = 'pyscf-forge'
 AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
 DESCRIPTION  = 'PySCF extension modules'
