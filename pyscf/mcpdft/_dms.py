@@ -191,9 +191,9 @@ def casdm1s_to_dm1s (mc, casdm1s, mo_coeff=None, ncore=None, ncas=None):
 
     return dm1s
 
-def make_weighted_casdm1s2(mc, ci=None, weights=None):
-    '''Compute the weighted average 1- and 2-electron CAS densities.
-    1-electron CAS is returned as spin-separated.
+
+def make_weighted_casdm1s(mc, ci=None, weights=None):
+    '''Compute the weighted average 1-electron spin-separated CAS density.
 
     Args:
         mc : instance of class _PDFT
@@ -206,8 +206,7 @@ def make_weighted_casdm1s2(mc, ci=None, weights=None):
             calculation
 
     Returns:
-        A tuple, the first is casdm1s and the second is casdm2 where they are
-        weighted averages where the weights are given.
+        Weighted average of casdm1s
     '''
     if ci is None: ci = mc.ci
     if weights is None: weights = mc.weights
@@ -217,10 +216,31 @@ def make_weighted_casdm1s2(mc, ci=None, weights=None):
     # more cost-effective than what is currently in the _dms file.
     fcisolver, _, nelecas = _get_fcisolver(mc, ci)
     casdm1s_all = [fcisolver.make_rdm1s(c, ncas, nelecas) for c in ci]
-    casdm2_all = [fcisolver.make_rdm2(c, ncas, nelecas) for c in ci]
-
     casdm1s_0 = np.tensordot(weights, casdm1s_all, axes=1)
-    casdm2_0 = np.tensordot(weights, casdm2_all, axes=1)
+    return tuple(casdm1s_0)
 
-    return tuple(casdm1s_0), casdm2_0
+def make_weighted_casdm2(mc, ci=None, weights=None):
+    '''Compute the weighted average 2-electron spin-summed CAS density.
 
+    Args:
+        mc : instance of class _PDFT
+
+        ci : list of ndarrays of length nroots
+            CI vectors should be from a converged CASSCF/CASCI calculation
+
+        weights : ndarray of length nroots
+            Weight for each state. If none, uses weights from SA-CASSCF
+            calculation
+
+    Returns:
+        Weighted average of casdm2
+    '''
+    if ci is None: ci = mc.ci
+    if weights is None: weights = mc.weights
+    ncas = mc.ncas
+
+    # There might be a better way to construct all of them, but this should be
+    # more cost-effective than what is currently in the _dms file.
+    fcisolver, _, nelecas = _get_fcisolver(mc, ci)
+    casdm2_all = [fcisolver.make_rdm2(c, ncas, nelecas) for c in ci]
+    return np.tensordot(weights, casdm2_all, axes=1)
