@@ -191,7 +191,7 @@ def casdm1s_to_dm1s (mc, casdm1s, mo_coeff=None, ncore=None, ncas=None):
 
     return dm1s
 
-def make_weighted_casdm1s2(mc, ci=None, weights=None, ncas=None):
+def make_weighted_casdm1s2(mc, ci=None, weights=None):
     '''Compute the weighted average 1- and 2-electron CAS densities.
     1-electron CAS is returned as spin-separated.
 
@@ -205,16 +205,13 @@ def make_weighted_casdm1s2(mc, ci=None, weights=None, ncas=None):
             Weight for each state. If none, uses weights from SA-CASSCF
             calculation
 
-        ncas : float
-            Number of active space MOs
-
     Returns:
         A tuple, the first is casdm1s and the second is casdm2 where they are
         weighted averages where the weights are given.
     '''
     if ci is None: ci = mc.ci
     if weights is None: weights = mc.weights
-    if ncas is None: ncas = mc.ncas
+    ncas = mc.ncas
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.
