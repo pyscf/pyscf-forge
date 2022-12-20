@@ -124,8 +124,8 @@ def _parse_xc_formula (xc_code):
 def assemble_xc_formula (facs, terms):
     code = []
     for fac, term in zip (facs, terms):
-        if fac==1.0: code.append ('{:s}'.format (fac))
-        elif fac==-1.0: code.append ('-{:s}'.format (fac))
+        if fac==1.0: code.append ('{:s}'.format (term))
+        elif fac==-1.0: code.append ('-{:s}'.format (term))
         elif fac==0.0: continue
         else:
             fac = '{:.16f}'.format (round (fac,14))
