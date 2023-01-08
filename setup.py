@@ -18,6 +18,7 @@ AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
 DESCRIPTION  = 'PySCF extension modules'
 SO_EXTENSIONS = {
+    'pyscf.lib.libpdft': ['pyscf/mcpdft/nr_numint.c']
 }
 DEPENDENCIES = ['pyscf', 'numpy']
 VERSION = '1.0.0'
