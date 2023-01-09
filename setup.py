@@ -128,10 +128,11 @@ settings = {
     'author': metadata.get('AUTHOR', None),
     'author_email': metadata.get('AUTHOR_EMAIL', None),
     'install_requires': metadata.get('DEPENDENCIES', []),
+    'ext_modules': [
+        Extension('pyscf_lib_placeholder', [])
+    ] + [make_ext(k, v) for k, v in SO_EXTENSIONS.items()],
     'cmdclass': {'build_ext': CMakeBuildExt},
 }
-if 'SO_EXTENSIONS' in metadata:
-    settings['ext_modules'] = [make_ext(k, v) for k, v in SO_EXTENSIONS.items()]
 
 setup(
     include_package_data=True,
