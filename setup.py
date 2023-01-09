@@ -79,7 +79,7 @@ def make_ext(pkg_name, srcs,
 class CMakeBuildExt(build_ext):
     def run(self):
         extension = self.extensions[0]
-        assert extension.name == 'pyscf_lib_placeholder'
+        #assert extension.name == 'pyscf_lib_placeholder'
         self.build_cmake(extension)
 
     def build_cmake(self, extension):
