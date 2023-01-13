@@ -14,7 +14,7 @@ def get_lih (r, functional='ftLDA,VWN3', quasi=False):
     n_states = 2
     weights = [1.0/float(n_states), ] * n_states
     mc = mc.state_average(weights)
-    mc = lpdft.lmspdft(mc, quasi=quasi).run()
+    mc = lpdft.lpdft(mc, quasi=quasi).run()
     return mol, mf, mc
 
 def setUpModule():
@@ -37,8 +37,8 @@ class KnownValues(unittest.TestCase):
 
     def test_lih_adiabat(self):
         e_mcscf_avg = np.dot (mc.e_mcscf, mc.weights)
-        hcoup = abs(mc.heff_lin[1,0])
-        hdiag = [mc.heff_lin[0,0], mc.heff_lin[1,1]] 
+        hcoup = abs(mc.lpdft_ham[1,0])
+        hdiag = [mc.lpdft_ham[0,0], mc.lpdft_ham[1,1]] 
 
         e_states = mc.e_states
 
@@ -61,8 +61,8 @@ class KnownValues(unittest.TestCase):
 
     def test_lih_quasi_adiabat(self):
         e_mcscf_avg = np.dot (mc.e_mcscf, mc.weights)
-        hcoup = abs(mc.heff_lin[1,0])
-        hdiag = [mc.heff_lin[0,0], mc.heff_lin[1,1]] 
+        hcoup = abs(mc.lpdft_ham[1,0])
+        hdiag = [mc.lpdft_ham[0,0], mc.lpdft_ham[1,1]] 
 
         e_states = mc_quasi.e_states
         
@@ -91,5 +91,5 @@ class KnownValues(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    print("Full Tests for Linear-PDFT")
+    print("Full Tests for Linearized-PDFT")
     unittest.main()

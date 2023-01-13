@@ -13,7 +13,7 @@ from pyscf.mcpdft import _dms
 
 
 # TODO once, PR is merged with mrh this function will exist in the _dms file instead
-def weighted_average_densities(mc, ci=None, weights=None, ncas=None):
+def weighted_average_densities(mc, ci=None, weights=None):
     '''Compute the weighted average 1- and 2-electron CAS densities. 
     1-electron CAS is returned as spin-separated.
     
@@ -27,32 +27,17 @@ def weighted_average_densities(mc, ci=None, weights=None, ncas=None):
             Weight for each state. If none, uses weights from SA-CASSCF
             calculation
 
-        ncas : float
-            Number of active space MOs
-
     Returns:
         A tuple, the first is casdm1s and the second is casdm2 where they are 
         weighted averages where the weights are given.
     '''
-    if ci is None: ci = mc.ci
-    if weights is None: weights = mc.weights
-    if ncas is None: ncas = mc.ncas
 
-    # There might be a better way to construct all of them, but this should be
-    # more cost-effective than what is currently in the _dms file.
-    fcisolver, _, nelecas = _dms._get_fcisolver(mc, ci)
-    casdm1s_all = [fcisolver.make_rdm1s(c, ncas, nelecas) for c in ci]
-    casdm2_all = [fcisolver.make_rdm2(c, ncas, nelecas) for c in ci]
-
-    casdm1s_0 = np.tensordot(weights, casdm1s_all, axes=1)
-    casdm2_0 = np.tensordot(weights, casdm2_all, axes=1)
-
-    return tuple(casdm1s_0), casdm2_0
+    return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
-def get_effhconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
+def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
                   ot=None, ncas=None, ncore=None):
-    ''' Compute h_const for the linear PDFT Hamiltonian
+    ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
         mc : instance of class _PDFT
@@ -115,7 +100,7 @@ def get_effhconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
     # Deal with 2-electron on-top potential energy
     e_veff2 = veff2_0.energy_core
     e_veff2 += np.tensordot(veff2_0.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
-    e_veff2 += 0.5*np.tensordot(mc.get_h2eff_lin(veff2_0), casdm2_0, axes=4)
+    e_veff2 += 0.5*np.tensordot(mc.get_h2lpdft(veff2_0), casdm2_0, axes=4)
 
     # h_nuc + Eot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
     energy_core = mc.energy_nuc() + e_ot_0 - e_j - e_veff1 - e_veff2
@@ -124,7 +109,7 @@ def get_effhconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
 
 def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
                             mo_coeff=None, ncas=None, ncore=None, ot=None):
-    '''Compute the CAS one-particle linear PDFT Hamiltonian
+    '''Compute the CAS one-particle L-PDFT Hamiltonian
 
     Args:
         mc : instance of a _PDFT object
@@ -175,7 +160,7 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
 
     # h_pq + V_pq + J_pq all in AO integrals
     hcore_eff = mc.get_hcore() + veff1_0 + v_j
-    energy_core = mc.get_effhconst(veff1_0, veff2_0, casdm1s_0,
+    energy_core = mc.get_lpdfthconst(veff1_0, veff2_0, casdm1s_0,
                                    casdm2_0, ot=ot)
 
     if mo_core.size != 0:
@@ -214,8 +199,8 @@ def get_transformed_h2eff_for_cas(mc, veff2_0, ncore=None, ncas=None):
     return veff2_0.papa[ncore:nocc, :, ncore:nocc, :]
 
 
-def make_heff_lin_(mc, mo_coeff=None, ci=None, ot=None):
-    '''Compute the linear PDFT Hamiltonian
+def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
+    '''Compute the L-PDFT Hamiltonian
 
     Args:
         mo_coeff : ndarray of shape (nao, nmo)
@@ -228,7 +213,7 @@ def make_heff_lin_(mc, mo_coeff=None, ci=None, ot=None):
         ot : an instance of on-top functional class - see otfnal.py
 
     Returns:
-        heff_lin : ndarray of shape (nroots, nroots)
+        lpdft_ham : ndarray of shape (nroots, nroots)
             Linear approximation to the MC-PDFT energy expressed as a
             hamiltonian in the basis provided by the CI vectors.
     '''
@@ -255,15 +240,16 @@ def make_heff_lin_(mc, mo_coeff=None, ci=None, ot=None):
                                         casdm2=casdm2_0)
 
     # This is all standard procedure for generating the hamiltonian in PySCF
-    h1, h0 = mc.get_h1eff_lin(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
-    h2 = mc.get_h2eff_lin(veff2_0)
+    h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
+    h2 = mc.get_h2lpdft(veff2_0)
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
     hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
-    heff = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
-    idx = np.diag_indices_from(heff)
-    heff[idx] += h0
+    
+    lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
+    idx = np.diag_indices_from(lpdft_ham)
+    lpdft_ham[idx] += h0
 
-    return heff
+    return lpdft_ham 
 
 
 def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
@@ -276,15 +262,15 @@ def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
 
     log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
-    mc.heff_lin = mc.make_heff_lin_()
+    mc.lpdft_ham = mc.make_lpdft_ham_()
     if quasi:
-        log.note("Replacing diagonal element of linear PDFT Hamiltonian with MC-PDFT energies")
+        log.note("Replacing diagonal element of L-PDFT Hamiltonian with MC-PDFT energies")
         mc.hdiag_pdft = mc.compute_pdft_energy_(
             otxc=otxc, grids_level=grids_level, grids_attr=grids_attr)[-1]
-        mc.e_states, mc.si_pdft = mc._eig_si(mc.get_heff_pdft())
+        mc.e_states, mc.si_lpdft = mc._eig_si(mc.get_qlpdft_ham())
 
     else:
-        mc.e_states, mc.si_pdft = mc._eig_si(mc.heff_lin)
+        mc.e_states, mc.si_lpdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
 
@@ -293,14 +279,14 @@ def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
         mc.mo_coeff, mc.mo_energy)
 
 
-class _LMSPDFT:
+class _LPDFT:
 
     def __init__(self, mc, quasi=False):
         self.__dict__.update(mc.__dict__)
-        keys = set(('heff_lin', 'hdiag_pdft', 'si_pdft', 'quasi'))
-        self.heff_lin = None
+        keys = set(('lpdft_ham', 'hdiag_pdft', 'si_lpdft', 'quasi'))
+        self.lpdft_ham = None
         self.hdiag_pdft = None
-        self.si_pdft = None
+        self.si_lpdft = None
         self.quasi = quasi
         self._keys = set((self.__dict__.keys())).union(keys)
 
@@ -316,66 +302,50 @@ class _LMSPDFT:
     def e_states(self, x):
         self._e_states = x
 
-    make_heff_lin_ = make_heff_lin_
-    make_heff_lin_.__doc__ = make_heff_lin_.__doc__
+    make_lpdft_ham_ = make_lpdft_ham_
+    make_lpdft_ham_.__doc__ = make_lpdft_ham_.__doc__
 
-    get_effhconst = get_effhconst
-    get_effhconst.__doc__ = get_effhconst.__doc__
+    get_lpdfthconst = get_lpdfthconst
+    get_lpdfthconst.__doc__ = get_lpdfthconst.__doc__
 
-    get_h1eff_lin = transformed_h1e_for_cas
-    get_h1eff_lin.__doc__ = transformed_h1e_for_cas.__doc__
+    get_h1lpdft = transformed_h1e_for_cas
+    get_h1lpdft.__doc__ = transformed_h1e_for_cas.__doc__
 
-    get_h2eff_lin = get_transformed_h2eff_for_cas
-    get_h2eff_lin.__doc__ = get_transformed_h2eff_for_cas.__doc__
+    get_h2lpdft = get_transformed_h2eff_for_cas
+    get_h2lpdft.__doc__ = get_transformed_h2eff_for_cas.__doc__
 
     get_casdm12_0 = weighted_average_densities
     get_casdm12_0.__doc__ = weighted_average_densities.__doc__
 
-    def get_heff_pdft(self):
+    def get_qlpdft_ham(self):
         '''The QL-PDFT effective Hamiltonian matrix
-            ( EPDFT_0    H_10*^lin  ...)
-            ( H_10^lin   EPDFT_1    ...)
-            ( ...        ...        ...)
+            ( EPDFT_0       H_10*^L-PDFT  ...)
+            ( H_10^L-PDFT   EPDFT_1       ...)
+            ( ...           ...           ...)
 
         Returns:
-            heff_pdft : ndarray of shape (nroots, nroots)
-                Contains the linear PDFT Hamiltonian on the off-diagonals
+            qlpdft_ham : ndarray of shape (nroots, nroots)
+                Contains the L-PDFT Hamiltonian on the off-diagonals
                 and PDFT energies on the diagonals
         '''
-        idx = np.diag_indices_from(self.heff_lin)
-        heff_pdft = self.heff_lin.copy()
-        heff_pdft[idx] = self.hdiag_pdft
-        return heff_pdft
+        idx = np.diag_indices_from(self.lpdft_ham)
+        qlpdft_ham = self.lpdft_ham.copy()
+        qlpdft_ham[idx] = self.hdiag_pdft
+        return qlpdft_ham 
 
-    def get_hlin_offdiag(self):
-        '''Off-diagonal elements of the linear PDFT Hamiltonian matrix
-            ( 0          H_10*^lin  ...)
-            ( H_10^lin   0          ...)
-            ( ...        ...        ...)
+    def get_lpdft_diag(self):
+        '''Diagonal elements of the L-PDFT Hamiltonian matrix
+            (H_00^L-PDFT, H_11^L-PDFT, H_22^L-PDFT, ...)
 
         Returns:
-            heff_offdiag : ndarray of shape (nroots, nroots)
-                Contains the linear PDFT Hamiltonian on the off-diagonals
-                and 0 on the diagonals
-        '''
-        idx = np.diag_indices_from(self.heff_lin)
-        heff_offdiag = self.heff_lin.copy()
-        heff_offdiag[idx] = 0.0
-        return heff_offdiag
-
-    def get_hlin_diag(self):
-        '''Diagonal elements of the linear PDFT Hamiltonian matrix
-            (H_00^lin, H_11^lin, H_22^lin, ...)
-
-        Returns:
-            hlin_diag : ndarray of shape (nroots)
+            lpdft_diag : ndarray of shape (nroots)
                 Contains the linear approximation to the MC-PDFT energy. These
-                are also the diagonal elements of the linear PDFT Hamiltonian
+                are also the diagonal elements of the L-PDFT Hamiltonian
                 matrix.
         '''
-        idx = np.diag_indices_from(self.heff_lin)
-        heff_diag = self.heff_lin.copy()
-        return heff_diag[idx]
+        idx = np.diag_indices_from(self.lpdft_ham)
+        lpdft_ham = self.lpdft_ham.copy()
+        return lpdft_ham[idx]
 
     def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
                grids_attr=None, verbose=None, quasi=None):
@@ -419,12 +389,12 @@ class _LMSPDFT:
 
     def hybrid_kernel(self, lam=0):
         #self.heff_hyb = (1.0-lam) * self.get_heff_pdft()
-        self.heff_hyb = (1.0-lam) * self.heff_lin
-        idx = np.diag_indices_from(self.heff_hyb)
-        self.heff_hyb[idx] += lam * self.e_mcscf
-        self.e_hyb_states, self.si_hyb_pdft = self._eig_si(self.heff_hyb)
+        self.hlpdft_ham = (1.0-lam) * self.lpdft_ham
+        idx = np.diag_indices_from(self.hlpdft_ham)
+        self.hlpdft_ham[idx] += lam * self.e_mcscf
+        self.e_hlpdft, self.si_hlpdft = self._eig_si(self.hlpdft_ham)
     
-        return self.e_hyb_states, self.si_hyb_pdft
+        return self.e_hlpdft, self.si_hlpdft
         
 
     def _finalize_ql(self):
@@ -432,29 +402,29 @@ class _LMSPDFT:
         nroots = len(self.e_states)
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square', None):
-            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
+            ci = np.tensordot(self.si_lpdft, np.asarray(self.ci), axes=1)
             ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
-                log.note('  State %d weight %g  EMSPDFT = %.15g  S^2 = %.7f',
+                log.note('  State %d weight %g  ELPDFT = %.15g  S^2 = %.7f',
                          i, self.weights[i], self.e_states[i], ss[i])
 
         else:
             for i in range(nroots):
-                log.note('  State %d weight %g  EMSPDFT = %.15g', i,
+                log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
 
-    def _eig_si(self, heff):
-        return linalg.eigh(heff)
+    def _eig_si(self, ham):
+        return linalg.eigh(ham)
 
 
-def lmspdft(mc, quasi=False):
+def lpdft(mc, quasi=False):
     mcbase_class = mc.__class__
 
-    class LMSPDFT(_LMSPDFT, mcbase_class):
+    class LPDFT(_LPDFT, mcbase_class):
         pass
 
-    return LMSPDFT(mc, quasi=quasi)
+    return LPDFT(mc, quasi=quasi)
 
 
 if __name__ == "__main__":
@@ -479,6 +449,6 @@ if __name__ == "__main__":
 
     mc = mc.state_average([1.0 / float(N_STATES), ] * N_STATES)
 
-    sc = qlpdft(mc)
+    sc = lpdft(mc)
     sc.kernel()
 
