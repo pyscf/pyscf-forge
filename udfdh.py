@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 from pyscf import lib, gto, df, dft
 from pyscf.scf import ucphf
 from pyscf.lib.numpy_helper import ANTIHERMI
+from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
 # other import
 import h5py
 import numpy as np
@@ -196,6 +197,8 @@ def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
     C = mo_coeff
     ni, mol, grids, xc, dm = xc_setting
     rho, vxc, fxc = xc_kernel
+    vxc_ = transform_vxc(rho, vxc, "GGA", spin=1)
+    fxc_ = transform_fxc(rho, vxc, fxc, "GGA", spin=1)
 
     @timing
     def Ax0_Core_KS_inner(X):
@@ -203,7 +206,7 @@ def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
         X = [X[σ].reshape(-1, X[σ].shape[-2], X[σ].shape[-1]) for σ in (α, β)]
         dmX = np.array([C[σ][:, sj[σ]] @ X[σ] @ C[σ][:, sb[σ]].T for σ in (α, β)])
         dmX += dmX.swapaxes(-1, -2)
-        ax_ao = ni.nr_uks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc, fxc=fxc)
+        ax_ao = ni.nr_uks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc_, fxc=fxc_)
         res = [C[σ][:, si[σ]].T @ ax_ao[σ] @ C[σ][:, sa[σ]] for σ in (α, β)]
         for σ in α, β:
             res[σ].shape = list(prop_shape) + list(res[σ].shape[-2:])

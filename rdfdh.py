@@ -3,7 +3,8 @@ from __future__ import annotations
 try:
     from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
 except ImportError:
-    from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
+    from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
+    get_rho_from_dm_gga
 # typing import
 from typing import Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
+from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
 try:
@@ -237,6 +239,8 @@ def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
     C = mo_coeff
     ni, mol, grids, xc, dm = xc_setting
     rho, vxc, fxc = xc_kernel
+    vxc_ = transform_vxc(rho, vxc, "GGA", spin=0)
+    fxc_ = transform_fxc(rho, vxc, fxc, "GGA", spin=0)
 
     @timing
     def Ax0_Core_KS_inner(X):
@@ -244,7 +248,7 @@ def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
         X = X.reshape((-1, X_shape[-2], X_shape[-1]))
         dmX = C[:, sj] @ X @ C[:, sb].T
         dmX += dmX.swapaxes(-1, -2)
-        ax_ao = ni.nr_rks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc, fxc=fxc)
+        ax_ao = ni.nr_rks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc_, fxc=fxc_)
         res = 2 * C[:, si].T @ ax_ao @ C[:, sa]
         res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
         return res
@@ -513,16 +517,18 @@ class RDFDH(lib.StreamObject):
     def prepare_xc_kernel(self):
         mol = self.mol
         tensors = self.tensors
-        C, mo_occ = self.C, self.mo_occ
         ni = self.ni
+        spin = 1 if self.unrestricted else 0
         if "rho" in tensors:
             return self
         if ni._xc_type(self.xc) == "GGA":
-            rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
+            rho = get_rho_from_dm_gga(ni, mol, self.grids, self.D)
+            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
             tensors.create("rho", rho)
             tensors.create("vxc" + self.xc, vxc)
             tensors.create("fxc" + self.xc, fxc)
-            rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids_cpks, self.xc, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
+            rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
+            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
             tensors.create("rho" + "in cpks", rho)
             tensors.create("vxc" + self.xc + "in cpks", vxc)
             tensors.create("fxc" + self.xc + "in cpks", fxc)
@@ -532,7 +538,8 @@ class RDFDH(lib.StreamObject):
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
             else:
-                rho, vxc, fxc = ni.cache_xc_kernel(mol, self.grids, self.xc_n, C, mo_occ, max_memory=self.get_memory(), spin=self.unrestricted)
+                rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
+                _, vxc, fxc, _ = ni.eval_xc(self.xc_n, rho, spin=spin, deriv=2)
                 tensors.create("rho", rho)
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
@@ -553,7 +560,7 @@ class RDFDH(lib.StreamObject):
             if self.eng_tot is NotImplemented:
                 tensors.create("D_rdm1", D_rdm1)
                 kernel(self, eng_bi=(0, 0))
-                return self
+            return self
         # a PT2 functional
 
         G_ia_ri = np.zeros((naux, nocc, nvir))
