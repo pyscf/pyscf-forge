@@ -291,7 +291,8 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     if ot.grids.coords is None:
         ot.grids.build(with_non0tab=True)
     ngrids = ot.grids.coords.shape[0]
-    pdft_blksize = max(BLKSIZE, min(pdft_blksize, ngrids, BLKSIZE*1200))
+    ngrids_blk = int (ngrids / BLKSIZE) * BLKSIZE
+    pdft_blksize = max(BLKSIZE, min(pdft_blksize, ngrids_blk, BLKSIZE*1200))
     logger.debug (ot, ('{} MB used of {} available; block size of {} chosen'
         'for grid with {} points').format (current_memory ()[0], max_memory,
         pdft_blksize, ngrids))
