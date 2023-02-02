@@ -18,6 +18,7 @@ AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
 DESCRIPTION  = 'PySCF extension modules'
 SO_EXTENSIONS = {
+    'pyscf.lib.libpdft': ['pyscf/mcpdft/nr_numint.c']
 }
 DEPENDENCIES = ['pyscf', 'numpy']
 VERSION = '1.0.0'
@@ -78,7 +79,7 @@ def make_ext(pkg_name, srcs,
 class CMakeBuildExt(build_ext):
     def run(self):
         extension = self.extensions[0]
-        assert extension.name == 'pyscf_lib_placeholder'
+        #assert extension.name == 'pyscf_lib_placeholder'
         self.build_cmake(extension)
 
     def build_cmake(self, extension):
@@ -127,10 +128,11 @@ settings = {
     'author': metadata.get('AUTHOR', None),
     'author_email': metadata.get('AUTHOR_EMAIL', None),
     'install_requires': metadata.get('DEPENDENCIES', []),
+    'ext_modules': [
+        Extension('pyscf_lib_placeholder', [])
+    ] + [make_ext(k, v) for k, v in SO_EXTENSIONS.items()],
     'cmdclass': {'build_ext': CMakeBuildExt},
 }
-if 'SO_EXTENSIONS' in metadata:
-    settings['ext_modules'] = [make_ext(k, v) for k, v in SO_EXTENSIONS.items()]
 
 setup(
     include_package_data=True,
