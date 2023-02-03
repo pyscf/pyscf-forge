@@ -83,7 +83,13 @@ def make_one_casdm2 (mc, ci, state=0):
     '''
     ncas = mc.ncas
     fcisolver, ci, nelecas = _get_fcisolver (mc, ci, state=state)
-    return fcisolver.make_rdm2 (ci, ncas, nelecas)
+    try:
+        casdm2 = fcisolver.make_rdm2 (ci, ncas, nelecas)
+    except AttributeError as e:
+        # Hail Mary: maybe the fcisolver class only has make_rdm12
+        # but not make_rdm2 implemented?
+        _, casdm2 = fcisolver.make_rdm12 (ci, ncas, nelecas)
+    return casdm2
     
 
 def dm2_cumulant (dm2, dm1s):
