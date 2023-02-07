@@ -87,6 +87,7 @@ if(NOT PYSCF_SOURCE_DIR)
 endif()
 message(STATUS "Include pyscf source dir: ${PYSCF_SOURCE_DIR}")
 include_directories(${PYSCF_SOURCE_DIR}/lib ${PYSCF_SOURCE_DIR}/lib/deps/include)
+include_directories(${CINT_DIR}/include)
 configure_file(
   "${PYSCF_SOURCE_DIR}/lib/config.h.in"
   "${PYSCF_SOURCE_DIR}/lib/config.h")
