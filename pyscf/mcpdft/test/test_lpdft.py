@@ -63,6 +63,11 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
     def test_lih_4_states_adiabat(self):
+        e_mcscf_avg = np.dot(mc_4.e_mcscf, mc_4.weights)
+        hdiag = mc_4.get_lpdft_diag()
+        hcoup = mc_4.lpdft_ham[np.triu_indices(4, k=1)]
+        e_states = mc_4.e_states
+
         # References values from
         #     - PySCF       commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
         #     - PySCF-forge commit 00183c314ebbf541f8461e7b7e5ee9e346fd6ff5
@@ -70,11 +75,6 @@ class KnownValues(unittest.TestCase):
         HDIAG_EXPECTED = [-7.997842598062071, -7.84720560226191, -7.80476518947314, -7.804765211915506]
         HCOUP_EXPECTED = [-0.01479405057250327,0,0,0,0,0]
         E_STATES_EXPECTED = [-7.999281764601187, -7.8457664246019005, -7.804765192541955, -7.804765192508891]
-
-        e_mcscf_avg = np.dot(mc_4.e_mcscf, mc_4.weights)
-        hdiag = mc_4.get_lpdft_diag()
-        hcoup = mc_4.lpdft_ham[np.triu_indices(4, k=1)]
-        e_states = mc_4.e_states
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
