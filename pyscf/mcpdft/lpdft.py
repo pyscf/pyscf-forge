@@ -272,13 +272,30 @@ def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
 
 
 class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
+    '''Linerized PDFT
 
+    Saved Results
+
+        e_tot : float
+            Weighted-average L-PDFT final energy
+        e_states : ndarray of shape (nroots)
+            L-PDFT final energies of the adiabatic states
+        ci : list of length (nroots) of ndarrays
+            CI vectors in the optimized adiabatic basis of MC-SCF. Related to the
+            L-PDFT adiabat CI vectors by the expansion coefficients ``si_pdft''.
+        si_pdft : ndarray of shape (nroots, nroots)
+            Expansion coefficients of the L-PDFT adiabats in terms of the optimized
+            MC-SCF adiabats
+        e_mcscf : ndarray of shape (nroots)
+            Energies of the MC-SCF adiabatic states
+        lpdft_ham : ndarray of shape (nroots, nroots)
+            L-PDFT Hamiltonian in the MC-SCF adiabatic basis
+    '''
 
     def __init__(self, mc):
         self.__dict__.update(mc.__dict__)
-        keys = set(('lpdft_ham', 'hdiag_pdft', 'si_pdft'))
+        keys = set(('lpdft_ham', 'si_pdft'))
         self.lpdft_ham = None
-        self.hdiag_pdft = None
         self.si_pdft = None
         self._keys = set((self.__dict__.keys())).union(keys)
 
@@ -308,22 +325,6 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
 
     get_casdm12_0 = weighted_average_densities
     get_casdm12_0.__doc__ = weighted_average_densities.__doc__
-
-    def get_qlpdft_ham(self):
-        '''The QL-PDFT effective Hamiltonian matrix
-            ( EPDFT_0       H_10*^L-PDFT  ...)
-            ( H_10^L-PDFT   EPDFT_1       ...)
-            ( ...           ...           ...)
-
-        Returns:
-            qlpdft_ham : ndarray of shape (nroots, nroots)
-                Contains the L-PDFT Hamiltonian on the off-diagonals
-                and PDFT energies on the diagonals
-        '''
-        idx = np.diag_indices_from(self.lpdft_ham)
-        qlpdft_ham = self.lpdft_ham.copy()
-        qlpdft_ham[idx] = self.hdiag_pdft
-        return qlpdft_ham 
 
     def get_lpdft_diag(self):
         '''Diagonal elements of the L-PDFT Hamiltonian matrix

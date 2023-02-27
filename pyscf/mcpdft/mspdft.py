@@ -236,7 +236,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         si_pdft : ndarray of shape (nroots, nroots)
             Synonym of si
         e_mcscf : ndarray of shape (nroots)
-            Energies of the MS-SCF adiabatic states
+            Energies of the MC-SCF adiabatic states
         si_mcscf : ndarray of shape (nroots, nroots)
             Expansion coefficients for the MC-SCF adiabats in terms of
             the optimized diabatic states
