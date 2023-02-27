@@ -21,6 +21,14 @@ from pyscf.mcscf.addons import StateAverageFCISolver
 from pyscf.mcscf.addons import StateAverageMixFCISolver
 from scipy import linalg
 
+# DMRG solvers require special handling but dmrgscf is not always installed
+try:
+    from pyscf import dmrgscf
+    DMRGCI = dmrgscf.DMRGCI
+except ImportError as e:
+    class DMRGCI (object):
+        pass
+
 def _get_fcisolver (mc, ci, state=0):
     '''Find the appropriate FCI solver, CI vector, and nelecas tuple to
     build single-state reduced density matrices. If state_average or
@@ -49,6 +57,8 @@ def _get_fcisolver (mc, ci, state=0):
         elif isinstance (mc.fcisolver, StateAverageFCISolver):
             fcisolver = fcisolver._base_class (mc._scf.mol)
             fcisolver.__dict__.update(mc.fcisolver.__dict__)
+    if isinstance (fcisolver, DMRGCI):
+        ci = state # DMRGCI takes state index in place of ci vector
     return fcisolver, ci, nelecas
 
 def make_one_casdm1s (mc, ci, state=0):
@@ -73,7 +83,13 @@ def make_one_casdm2 (mc, ci, state=0):
     '''
     ncas = mc.ncas
     fcisolver, ci, nelecas = _get_fcisolver (mc, ci, state=state)
-    return fcisolver.make_rdm2 (ci, ncas, nelecas)
+    try:
+        casdm2 = fcisolver.make_rdm2 (ci, ncas, nelecas)
+    except AttributeError as e:
+        # Hail Mary: maybe the fcisolver class only has make_rdm12
+        # but not make_rdm2 implemented?
+        _, casdm2 = fcisolver.make_rdm12 (ci, ncas, nelecas)
+    return casdm2
     
 
 def dm2_cumulant (dm2, dm1s):
