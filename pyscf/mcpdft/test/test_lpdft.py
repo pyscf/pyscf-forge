@@ -5,17 +5,16 @@ from pyscf.mcpdft import lpdft
 import unittest
 
 
-def get_lih (r, n_states=2, weights=None, functional='ftLDA,VWN3'):
+def get_lih (r, n_states=2, functional='ftLDA,VWN3'):
     mol = gto.M (atom='Li 0 0 0\nH {} 0 0'.format (r), basis='sto3g',
                  output='/dev/null', verbose=0)
     mf = scf.RHF (mol).run ()
     mc = mcpdft.CASSCF (mf, functional, 2, 2, grids_level=1)
     mc.fix_spin_(ss=0)
-    if weights is None:
-        weights = [1.0/float(n_states), ] * n_states
+    weights = [1.0/float(n_states), ] * n_states
     
-    mc = mc.state_average(weights)
-    mc = lpdft.lpdft(mc).run()
+    mc = mc.multi_state(weights, "lin")
+    mc = mc.run()
     return mol, mf, mc
 
 def setUpModule():

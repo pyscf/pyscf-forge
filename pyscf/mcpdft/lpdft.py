@@ -8,7 +8,7 @@ from pyscf import ao2mo
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
-
+from pyscf import mcpdft
 from pyscf.mcpdft import _dms
 
 
@@ -271,7 +271,8 @@ def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
         mc.mo_coeff, mc.mo_energy)
 
 
-class _LPDFT:
+class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
+
 
     def __init__(self, mc):
         self.__dict__.update(mc.__dict__)
@@ -373,7 +374,6 @@ class _LPDFT:
 
 
     def hybrid_kernel(self, lam=0):
-        #self.heff_hyb = (1.0-lam) * self.get_heff_pdft()
         self.hlpdft_ham = (1.0-lam) * self.lpdft_ham
         idx = np.diag_indices_from(self.hlpdft_ham)
         self.hlpdft_ham[idx] += lam * self.e_mcscf
@@ -403,12 +403,39 @@ class _LPDFT:
         return linalg.eigh(ham)
 
 
-def lpdft(mc):
+def linear_multi_state(mc, weights=(0.5,0.5), **kwargs):
+    ''' Build linearized multi-state MC-PDFT method object
+
+    Args:
+        mc : instance of class _PDFT
+
+    Kwargs:
+        weights : sequence of floats
+
+    Returns:
+        si : instance of class _LPDFT
+    '''
+    from pyscf.mcscf.addons import StateAverageMCSCFSolver, StateAverageMixFCISolver
+
+    if isinstance (mc, mcpdft.MultiStateMCPDFTSolver):
+        raise RuntimeError ('already a multi-state PDFT solver')
+
+    if isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        raise RuntimeError("state-average mix type")
+
+    if not isinstance(mc, StateAverageMCSCFSolver):
+        base_name = mc.__class__.__name__
+        mc = mc.state_average(weights=weights, **kwargs)
+
+    else:
+        base_name = mc.__class__.bases__[0].__name__
+
     mcbase_class = mc.__class__
 
     class LPDFT(_LPDFT, mcbase_class):
         pass
 
+    LPDFT.__name__ = "LIN" + base_name
     return LPDFT(mc)
 
 

@@ -618,10 +618,15 @@ class _PDFT ():
          state_average_mix_(self, fcisolvers, weights)
          return self
 
-    def multi_state (self, weights=(0.5,0.5), diabatization='CMS'):
-        from pyscf.mcpdft.mspdft import multi_state
-        return multi_state (self, weights=weights,
-                                  diabatization=diabatization)
+    def multi_state (self, weights=(0.5,0.5), method='CMS'):
+        if method.upper() == "LIN":
+            from pyscf.mcpdft.lpdft import linear_multi_state
+            return linear_multi_state(self, weights=weights)
+
+        else:
+            from pyscf.mcpdft.mspdft import multi_state
+            return multi_state (self, weights=weights,
+                                      diabatization=method)
 
     def state_interaction (self, weights=(0.5,0.5), diabatization='CMS'):
         logger.warn (self, ('"state_interaction" for multi-state PDFT is '
