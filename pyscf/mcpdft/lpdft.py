@@ -12,7 +12,6 @@ from pyscf.fci import direct_spin1
 from pyscf.mcpdft import _dms
 
 
-# TODO once, PR is merged with mrh this function will exist in the _dms file instead
 def weighted_average_densities(mc, ci=None, weights=None):
     '''Compute the weighted average 1- and 2-electron CAS densities. 
     1-electron CAS is returned as spin-separated.
@@ -253,7 +252,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
 
 
 def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-               grids_attr=None, verbose=logger.NOTE, quasi=False):
+               grids_attr=None, verbose=logger.NOTE):
     if otxc is None:
         otxc = mc.otfnal
 
@@ -263,14 +262,7 @@ def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
     log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
     mc.lpdft_ham = mc.make_lpdft_ham_()
-    if quasi:
-        log.note("Replacing diagonal element of L-PDFT Hamiltonian with MC-PDFT energies")
-        mc.hdiag_pdft = mc.compute_pdft_energy_(
-            otxc=otxc, grids_level=grids_level, grids_attr=grids_attr)[-1]
-        mc.e_states, mc.si_lpdft = mc._eig_si(mc.get_qlpdft_ham())
-
-    else:
-        mc.e_states, mc.si_lpdft = mc._eig_si(mc.lpdft_ham)
+    mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
 
@@ -281,13 +273,12 @@ def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
 
 class _LPDFT:
 
-    def __init__(self, mc, quasi=False):
+    def __init__(self, mc):
         self.__dict__.update(mc.__dict__)
-        keys = set(('lpdft_ham', 'hdiag_pdft', 'si_lpdft', 'quasi'))
+        keys = set(('lpdft_ham', 'hdiag_pdft', 'si_pdft'))
         self.lpdft_ham = None
         self.hdiag_pdft = None
-        self.si_lpdft = None
-        self.quasi = quasi
+        self.si_pdft = None
         self._keys = set((self.__dict__.keys())).union(keys)
 
     @property
@@ -348,7 +339,7 @@ class _LPDFT:
         return lpdft_ham[idx]
 
     def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-               grids_attr=None, verbose=None, quasi=None):
+               grids_attr=None, verbose=None):
         '''
         Returns:
             6 elements, they are
@@ -369,18 +360,12 @@ class _LPDFT:
         else:
             self.mo_coeff = mo_coeff
 
-        if quasi is None:
-            quasi = self.quasi
-        
-        else:
-            self.quasi = quasi
-
         log = logger.new_logger(self, verbose)
 
         if ci0 is None and isinstance(getattr(self, 'ci', None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, otxc, grids_level, grids_attr, verbose=log, quasi=quasi)
+        kernel(self, mo_coeff, ci0, otxc, grids_level, grids_attr, verbose=log)
         self._finalize_ql()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
@@ -402,7 +387,7 @@ class _LPDFT:
         nroots = len(self.e_states)
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square', None):
-            ci = np.tensordot(self.si_lpdft, np.asarray(self.ci), axes=1)
+            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
             ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
@@ -418,13 +403,13 @@ class _LPDFT:
         return linalg.eigh(ham)
 
 
-def lpdft(mc, quasi=False):
+def lpdft(mc):
     mcbase_class = mc.__class__
 
     class LPDFT(_LPDFT, mcbase_class):
         pass
 
-    return LPDFT(mc, quasi=quasi)
+    return LPDFT(mc)
 
 
 if __name__ == "__main__":
