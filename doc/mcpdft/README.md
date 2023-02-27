@@ -36,6 +36,7 @@ Features
     - State-averaged CASSCF (including "mixed" solver with different spins
       and/or point groups)
     - Compressed multi-state MC-PDFT (CMS-PDFT): [*JCTC* **2020**, *16*, 7444]
+    - Linearized PDFT (L-PDFT): [**Submitted**, Available on ChemRxiv]
 * On-the-fly generation of on-top density functionals from underlying KS-DFT
   'LDA' or 'GGA' exchange-correlation functionals as defined in Libxc.
     - Translated functionals: [*JCTC* **2014**, *10*, 3669]
@@ -76,6 +77,7 @@ Features
 [*JCP* **2020**, *153*, 014106]: http://dx.doi.org/10.1063/5.0007040
 [*JCTC* **2021**, *17*, 7586]: http://dx.doi.org/10.1021/acs.jctc.1c00915
 [*JCTC* **2021**, *17*, 2775]: http://dx.doi.org/10.1021/acs.jctc.0c01346
+[**Submitted**, Available on ChemRxiv]: http://dx.doi.org/10.26434/chemrxiv-2023-7d0gv
 
 [comment]: <> (Code hyperlinks)
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py

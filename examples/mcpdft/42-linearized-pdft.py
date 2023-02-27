@@ -34,5 +34,5 @@ print (fmt_str.format ('CASSCF', mc_sa.e_mcscf[0], mc_sa.e_mcscf[1],
     mc_sa.e_mcscf[1]-mc_sa.e_mcscf[0]))
 print (fmt_str.format ('MC-PDFT', mc_sa.e_states[0], mc_sa.e_states[1],
     mc_sa.e_states[1]-mc_sa.e_states[0]))
-print (fmt_str.format ('CMS-PDFT', mc_ms.e_states[0], mc_ms.e_states[1],
+print (fmt_str.format ('L-PDFT', mc_ms.e_states[0], mc_ms.e_states[1],
     mc_ms.e_states[1]-mc_ms.e_states[0]))
