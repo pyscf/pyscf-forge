@@ -231,7 +231,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         raise NotImplementedError("range-separated on-top functionals")
     if abs(hyb[0] - hyb[1]) > 1e-11:
         raise NotImplementedError("hybrid functionals with different exchange, correlations components")
-    
+
     ncas = mc.ncas
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
@@ -462,6 +462,6 @@ if __name__ == "__main__":
 
     mc = mc.state_average([1.0 / float(N_STATES), ] * N_STATES)
 
-    sc = lpdft(mc)
+    sc = linear_multi_state(mc)
     sc.kernel()
 
