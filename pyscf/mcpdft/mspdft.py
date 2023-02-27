@@ -600,8 +600,14 @@ def get_diabfns (obj):
     if obj.upper () == 'CMS':
         from pyscf.mcpdft.cmspdft import e_coul as diabatizer
         diabatize = si_newton
+
+    elif obj.upper() == "XMS":
+        from pyscf.mcpdft.xmspdft import safock_energy as diabatizer
+        from pyscf.mcpdft.xmspdft import solve_safock as diabatize
+
     else:
         raise RuntimeError ('MS-PDFT type not supported')
+
     return diabatizer, diabatize
 
 def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
