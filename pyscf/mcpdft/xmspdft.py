@@ -58,8 +58,8 @@ def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
     dm1 = dm1s[0] + dm1s[1]
     v_j, v_k = mc._scf.get_jk(dm=dm1)
 
-    hcore_eff = mc.get_hcore() + v_j - v_k/2.0
-    energy_core = mc._scf.energy_nuc ()
+    hcore_eff = mc.get_hcore() + v_j - v_k / 2.0
+    energy_core = mc._scf.energy_nuc()
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
@@ -68,6 +68,7 @@ def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
     h1eff = reduce(np.dot, (mo_cas.conj().T, hcore_eff, mo_cas))
 
     return h1eff, energy_core
+
 
 def make_fock_mcscf(mc, mo_coeff=None, ci=None, weights=None):
     '''Compute the SA-Fock Hamiltonian/Matrix
@@ -108,7 +109,8 @@ def make_fock_mcscf(mc, mo_coeff=None, ci=None, weights=None):
 
 
 def diagonalize_safock(mc, mo_coeff=None, ci=None):
-    '''Diagonalizes the SA-Fock matrix. Returns the eigenvalues and eigenvectors.'''
+    '''Diagonalizes the SA-Fock matrix. Returns the eigenvalues and
+    eigenvectors. '''
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
 
@@ -138,15 +140,36 @@ def safock_energy(mc, **kwargs):
             Should be the Lagrange multiplier terms. Currently returning None
             since we cannot do gradients yet.
     '''
-    dsa_fock = np.zeros(int(mc.fcisolver.nroots*(mc.fcisolver.nroots-1)/2))
+    dsa_fock = np.zeros(
+        int(mc.fcisolver.nroots * (mc.fcisolver.nroots - 1) / 2))
     # TODO fix, this redundacy...no need to compute fock matrix twice..
     e_states, _ = diagonalize_safock(mc)
 
     return np.dot(e_states, mc.weights), dsa_fock, None
 
 
-def solve_safock(mc, mo_coeff=None, ci=None,):
-    '''Diabatize Function'''
+def solve_safock(mc, mo_coeff=None, ci=None, ):
+    '''Diabatize Function. Finds the SA-Fock Eigenstates within the model space
+    spanned by the CI vectors.
+
+    Args:
+        mc : instance of class _PDFT
+
+        mo_coeff : ndarray of shape (nao,nmo)
+            A full set of molecular orbital coefficients. Taken from
+            self if not provided.
+
+        ci : ndarray of shape (nroots)
+            CI vectors should be from a converged CASSCF/CASCI calculation
+
+    Returns:
+        conv : bool
+            Always true. If there is a convergence issue, scipy will raise an
+            exception.
+
+        ci : list of ndarrays of length = nroots
+            CI vectors of the optimized diabatic states
+    '''
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
 
