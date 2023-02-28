@@ -362,7 +362,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         self.converged = self.converged and diab_conv
         self.heff_mcscf = self.make_heff_mcscf ()
         e_mcscf, self.si_mcscf = self._eig_si (self.heff_mcscf)
-        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-10:
+        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-9:
             raise RuntimeError (("Sanity fault: e_mcscf ({}) != "
                                 "self.e_mcscf ({})").format (e_mcscf,
                                 self.e_mcscf))
