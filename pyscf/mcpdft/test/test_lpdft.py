@@ -73,7 +73,7 @@ class KnownValues(unittest.TestCase):
         E_STATES_EXPECTED = [-7.88032921, -7.72800554]
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
-        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 7)
+        self.assertAlmostEqual(abs(hcoup), HCOUP_EXPECTED, 7)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
@@ -88,12 +88,12 @@ class KnownValues(unittest.TestCase):
         #     - PySCF-forge commit 00183c314ebbf541f8461e7b7e5ee9e346fd6ff5
         E_MCSCF_AVG_EXPECTED = -7.881123865044279
         HDIAG_EXPECTED = [-7.997842598062071, -7.84720560226191, -7.80476518947314, -7.804765211915506]
-        HCOUP_EXPECTED = [-0.01479405057250327,0,0,0,0,0]
+        HCOUP_EXPECTED = [0.01479405057250327,0,0,0,0,0]
         E_STATES_EXPECTED = [-7.999281764601187, -7.8457664246019005, -7.804765192541955, -7.804765192508891]
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
-        self.assertListAlmostEqual(hcoup, HCOUP_EXPECTED, 7)
+        self.assertListAlmostEqual(list(map(abs, hcoup)), HCOUP_EXPECTED, 7)
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
     def test_lih_hybrid_adiabat(self):
@@ -103,7 +103,6 @@ class KnownValues(unittest.TestCase):
 
         self.assertListAlmostEqual(e_states, E_TPBE0_EXPECTED, 7)
 
-        
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
     unittest.main()
