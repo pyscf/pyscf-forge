@@ -22,27 +22,30 @@ from pyscf.mcpdft import _dms
 from pyscf.fci import direct_spin1
 
 
-def weighted_average_densities(mc, ci=None, weights=None):
-    '''Compute the weighted average 1- and 2-electron CAS densities.
-    1-electron CAS is returned as spin-separated.
+def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
+    '''Compute the CAS SA Fock Matrix 1-electron integrals.
 
     Args:
         mc : instance of class _PDFT
-        ci : list of ndarrays of length nroots
-            CI vectors should be from a converged CASSCF/CASCI calculation
-        weights : ndarray of length nroots
-            Weight for each state. If none, uses weights from SA-CASSCF
-            calculation
+
+        sa_casdm1s : ndarray of shape (2,ncas,ncas)
+            Spin-separated 1-RDM in the active space generated from the state-
+            average density.
+
+        mo_coeff : ndarray of shape (nao,nmo)
+            A full set of molecular orbital coefficients. Taken from
+            self if not provided.
+
+        ncas : int
+            Number of active space molecular orbitals
+
+        ncore : int
+            Number of core molecular orbitals
+
     Returns:
-        A tuple, the first is casdm1s and the second is casdm2 where they are
-        weighted averages where the weights are given.
+        A tuple, the first is the one-electron integrals defined in the CAS
+        space and the second is the constant, core part.
     '''
-
-    return _dms.make_weighted_casdm1s(mc, ci=ci,
-                                      weights=weights), _dms.make_weighted_casdm2(
-        mc, ci=ci, weights=weights)
-
-def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ncas is None: ncas = mc.ncas
     if ncore is None: ncore = mc.ncore
@@ -67,13 +70,35 @@ def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
     return h1eff, energy_core
 
 def make_fock_mcscf(mc, mo_coeff=None, ci=None, weights=None):
+    '''Compute the SA-Fock Hamiltonian/Matrix
+
+    Args:
+        mc : instance of class _PDFT
+
+        mo_coeff : ndarray of shape (nao,nmo)
+            A full set of molecular orbital coefficients. Taken from
+            self if not provided.
+
+        ci : ndarray of shape (nroots)
+            CI vectors should be from a converged CASSCF/CASCI calculation
+
+        weights : ndarray of length nroots
+            Weight for each state. If none, uses weights from SA-CASSCF
+            calculation
+
+    Returns:
+        safock_ham : ndarray of shape (nroots,nroots)
+            State-average Fock matrix expressed in the basis provided by the CI
+            vectors.
+
+    '''
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
 
     ncas = mc.ncas
 
-    sa_casdm1s = _dms.make_weighted_casdm1s(mc, ci=ci)
-    h1, h0 = fock_h1e_for_cas(mc, sa_casdm1s)
+    sa_casdm1s = _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights)
+    h1, h0 = fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=mo_coeff)
     hc_all = [direct_spin1.contract_1e(h1, c, ncas, mc.nelecas) for c in ci]
     safock_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
     idx = np.diag_indices_from(safock_ham)
@@ -82,12 +107,26 @@ def make_fock_mcscf(mc, mo_coeff=None, ci=None, weights=None):
     return safock_ham
 
 
-def safock_energy(mc, mo_coeff=None, ci=None, h2eff=None, eris=None):
+def diagonalize_safock(mc, mo_coeff=None, ci=None):
+    '''Diagonalizes the SA-Fock matrix. Returns the eigenvalues and eigenvectors.'''
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
+    if ci is None: ci = mc.ci
+
+    fock = make_fock_mcscf(mc, mo_coeff=mo_coeff, ci=ci)
+    return linalg.eigh(fock)
+
+
+def safock_energy(mc, **kwargs):
     '''Diabatizer Function
 
     The "objective" function we are optimizing when solving for the
     SA-Fock eigenstates is that the SA-Fock energy (average) is
     minimized with the constraint to the final states being orthonormal.
+    Its the whole saddle point thing similar to in SA-MC-PDFT gradients. For now
+    I just omit this whole issue since the first derivative is by default 0 and
+    don't worry about the Hessian (or second derivatives) since I don't care.
+    It should fail if we try and do gradients but I can put a hard
+    RaiseImplementation error
 
     Returns:
         SA-Fock Energy : float
@@ -106,20 +145,12 @@ def safock_energy(mc, mo_coeff=None, ci=None, h2eff=None, eris=None):
     return np.dot(e_states, mc.weights), dsa_fock, None
 
 
-def diagonalize_safock(mc, mo_coeff=None, ci=None):
-    if mo_coeff is None: mo_coeff = mc.mo_coeff
-    if ci is None: ci = mc.ci
-
-    fock = make_fock_mcscf(mc, mo_coeff=mo_coeff, ci=ci)
-    return linalg.eigh(fock)
-
-
-def solve_safock(mc, mo_coeff=None, ci=None):
+def solve_safock(mc, mo_coeff=None, ci=None,):
     '''Diabatize Function'''
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
 
-    e_states, si_pdft = diagonalize_safock(mc, mo_coeff, ci)
+    e_states, si_pdft = diagonalize_safock(mc, mo_coeff=mo_coeff, ci=ci)
 
     ci = np.tensordot(si_pdft.T, ci, 1)
     conv = True

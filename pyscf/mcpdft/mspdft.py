@@ -417,7 +417,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
                                  axes=((1,2),(1,2)))
             u, svals, vh = linalg.svd (ovlp)
             ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh)) 
-        return self._diabatize (self, ci, **kwargs)
+        return self._diabatize (self, ci=ci, **kwargs)
 
     def diabatizer (self, mo_coeff=None, ci=None):
         '''Computes the value, gradient vector, and Hessian matrix with
