@@ -277,17 +277,13 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     return lpdft_ham
 
 
-def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-           grids_attr=None, verbose=logger.NOTE):
-    if otxc is None:
-        otxc = mc.otfnal
+def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
+    if ot is None: ot = mc.otfnal
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
 
-    if mo_coeff is None:
-        mo_coeff = mc.mo_coeff
-
-    log = logger.new_logger(mc, verbose)
+    #log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
-    mc.lpdft_ham = mc.make_lpdft_ham_()
+    mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
     mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
@@ -366,8 +362,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         lpdft_ham = self.lpdft_ham.copy()
         return lpdft_ham[idx]
 
-    def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-               grids_attr=None, verbose=None):
+    def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
         '''
         Returns:
             6 elements, they are
@@ -381,8 +376,9 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         They are attributes of the QLPDFT object, which can be accessed by
         .e_tot, .e_mcscf, .e_cas, .ci, .mo_coeff, .mo_energy
         '''
-        self.otfnal.reset(mol=self.mol)  # scanner mode safety
-        if otxc is None: otxc = self.otfnal
+        if ot is None: ot = self.otfnal
+        ot.reset(mol=self.mol)  # scanner mode safety
+
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
         else:
@@ -393,7 +389,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci0 is None and isinstance(getattr(self, 'ci', None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, otxc, grids_level, grids_attr, verbose=log)
+        kernel(self, mo_coeff, ci0, ot=ot, verbose=log)
         self._finalize_ql()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
