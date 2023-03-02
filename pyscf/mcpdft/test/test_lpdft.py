@@ -71,8 +71,8 @@ class KnownValues(unittest.TestCase):
         # Below reference values from 
         #   - PySCF commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
         #   - mrh   commit c5fc02f1972c1c8793061f20ed6989e73638fc5e
-        HCOUP_EXPECTED = 0.016636807982732867 
-        HDIAG_EXPECTED = [-7.878489930907849, -7.729844823595374] 
+        HCOUP_EXPECTED = 0.01663680
+        HDIAG_EXPECTED = [-7.87848993, -7.72984482]
 
         E_STATES_EXPECTED = [-7.88032921, -7.72800554]
 
@@ -90,10 +90,10 @@ class KnownValues(unittest.TestCase):
         # References values from
         #     - PySCF       commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
         #     - PySCF-forge commit 00183c314ebbf541f8461e7b7e5ee9e346fd6ff5
-        E_MCSCF_AVG_EXPECTED = -7.881123865044279
-        HDIAG_EXPECTED = [-7.997842598062071, -7.84720560226191, -7.80476518947314, -7.804765211915506]
-        HCOUP_EXPECTED = [0.01479405057250327,0,0,0,0,0]
-        E_STATES_EXPECTED = [-7.999281764601187, -7.8457664246019005, -7.804765192541955, -7.804765192508891]
+        E_MCSCF_AVG_EXPECTED = -7.88112386
+        HDIAG_EXPECTED = [-7.99784259, -7.84720560, -7.80476518, -7.80476521]
+        HCOUP_EXPECTED = [0.01479405,0,0,0,0,0]
+        E_STATES_EXPECTED = [-7.99928176, -7.84576642, -7.80476519, -7.80476519]
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
@@ -113,8 +113,8 @@ class KnownValues(unittest.TestCase):
         # References values from
         #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
         #     - PySCF-forge commit a7b8b3bb291e528088f9cefab007438d9e0f4701
-        E_MCSCF_AVG_EXPECTED = -7.789021829749845
-        E_TPBE_STATES_EXPECTED = [-7.933899093928112, -7.781719596023711]
+        E_MCSCF_AVG_EXPECTED = -7.78902182
+        E_TPBE_STATES_EXPECTED = [-7.93389909, -7.78171959]
 
 
         self.assertAlmostEqual(e_mcscf_tpbe_avg, E_MCSCF_AVG_EXPECTED, 7)
