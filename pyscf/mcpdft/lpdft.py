@@ -17,8 +17,6 @@ from functools import reduce
 import numpy as np
 from scipy import linalg
 
-from pyscf import ao2mo
-from pyscf import lib
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
 from pyscf import mcpdft
@@ -48,7 +46,7 @@ def weighted_average_densities(mc, ci=None, weights=None):
 
 
 def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
-                  ot=None, ncas=None, ncore=None):
+                    ot=None, ncas=None, ncore=None):
     ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
@@ -93,6 +91,13 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
 
     nocc = ncore + ncas
 
+    hyb = ot._numint.hybrid_coeff(ot.otxc)
+    if abs(hyb[0] - hyb[1]) > 1e-11:
+        raise NotImplementedError(
+            "hybrid functionals with different exchange, correlations components")
+
+    hyb = 1.0 - hyb[0]
+
     # Get the 1-RDM matrices
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
@@ -100,7 +105,7 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
 
     # Eot for zeroth order state
     e_ot_0 = mc.energy_dft(ot=ot, mo_coeff=mo_coeff, casdm1s=casdm1s_0,
-                          casdm2=casdm2_0)
+                           casdm2=casdm2_0)
 
     # Coulomb energy for zeroth order state
     vj = mc._scf.get_j(dm=dm1)
@@ -112,10 +117,10 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
     # Deal with 2-electron on-top potential energy
     e_veff2 = veff2_0.energy_core
     e_veff2 += np.tensordot(veff2_0.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
-    e_veff2 += 0.5*np.tensordot(mc.get_h2lpdft(veff2_0), casdm2_0, axes=4)
+    e_veff2 += 0.5 * np.tensordot(mc.get_h2lpdft(veff2_0), casdm2_0, axes=4)
 
     # h_nuc + Eot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
-    energy_core = mc.energy_nuc() + e_ot_0 - e_j - e_veff1 - e_veff2
+    energy_core = hyb * mc.energy_nuc() + e_ot_0 - hyb * e_j - e_veff1 - e_veff2
     return energy_core
 
 
@@ -166,14 +171,21 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
     mo_core = mo_coeff[:, :ncore]
     mo_cas = mo_coeff[:, ncore:nocc]
 
+    hyb = ot._numint.hybrid_coeff(ot.otxc)
+    if abs(hyb[0] - hyb[1]) > 1e-11:
+        raise NotImplementedError(
+            "hybrid functionals with different exchange, correlations components")
+
+    hyb = 1.0 - hyb[0]
+
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
     dm1 = dm1s[0] + dm1s[1]
     v_j = mc._scf.get_j(dm=dm1)
 
     # h_pq + V_pq + J_pq all in AO integrals
-    hcore_eff = mc.get_hcore() + veff1_0 + v_j
+    hcore_eff = hyb * mc.get_hcore() + veff1_0 + hyb * v_j
     energy_core = mc.get_lpdfthconst(veff1_0, veff2_0, casdm1s_0,
-                                   casdm2_0, ot=ot)
+                                     casdm2_0, ot=ot)
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
@@ -236,45 +248,42 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
 
     ot.reset(mol=mc.mol)
 
-    # This is some error checking since we cannot actually use hybrid functionals 
-    # to explicitly construct the heff YET!
-    spin = abs(mc.nelecas[0]-mc.nelecas[1])
+    spin = abs(mc.nelecas[0] - mc.nelecas[1])
     omega, _, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
     if abs(omega) > 1e-11:
         raise NotImplementedError("range-separated on-top functionals")
     if abs(hyb[0] - hyb[1]) > 1e-11:
-        raise NotImplementedError("hybrid functionals with different exchange, correlations components")
+        raise NotImplementedError(
+            "hybrid functionals with different exchange, correlations components")
+
+    cas_hyb = hyb[0]
 
     ncas = mc.ncas
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
     veff1_0, veff2_0 = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
-                                        casdm2=casdm2_0)
+                                        casdm2=casdm2_0, drop_mcwfn=True)
 
     # This is all standard procedure for generating the hamiltonian in PySCF
     h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
     h2 = mc.get_h2lpdft(veff2_0)
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
     hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
-    
+
     lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
     idx = np.diag_indices_from(lpdft_ham)
-    lpdft_ham[idx] += h0
+    lpdft_ham[idx] += h0 + cas_hyb * mc.e_mcscf
 
-    return lpdft_ham 
+    return lpdft_ham
 
 
-def kernel(mc, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-               grids_attr=None, verbose=logger.NOTE):
-    if otxc is None:
-        otxc = mc.otfnal
+def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
+    if ot is None: ot = mc.otfnal
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
 
-    if mo_coeff is None:
-        mo_coeff = mc.mo_coeff
-
-    log = logger.new_logger(mc, verbose)
+    #log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
-    mc.lpdft_ham = mc.make_lpdft_ham_()
+    mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
     mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
@@ -353,8 +362,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         lpdft_ham = self.lpdft_ham.copy()
         return lpdft_ham[idx]
 
-    def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-               grids_attr=None, verbose=None):
+    def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
         '''
         Returns:
             6 elements, they are
@@ -368,9 +376,10 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         They are attributes of the QLPDFT object, which can be accessed by
         .e_tot, .e_mcscf, .e_cas, .ci, .mo_coeff, .mo_energy
         '''
-        self.otfnal.reset(mol=self.mol)  # scanner mode safety
-        if otxc is None: otxc = self.otfnal
-        if mo_coeff is None: 
+        if ot is None: ot = self.otfnal
+        ot.reset(mol=self.mol)  # scanner mode safety
+
+        if mo_coeff is None:
             mo_coeff = self.mo_coeff
         else:
             self.mo_coeff = mo_coeff
@@ -380,29 +389,21 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci0 is None and isinstance(getattr(self, 'ci', None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, otxc, grids_level, grids_attr, verbose=log)
+        kernel(self, mo_coeff, ci0, ot=ot, verbose=log)
         self._finalize_ql()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
             self.mo_coeff, self.mo_energy)
 
-
-    def hybrid_kernel(self, lam=0):
-        self.hlpdft_ham = (1.0-lam) * self.lpdft_ham
-        idx = np.diag_indices_from(self.hlpdft_ham)
-        self.hlpdft_ham[idx] += lam * self.e_mcscf
-        self.e_hlpdft, self.si_hlpdft = self._eig_si(self.hlpdft_ham)
-    
-        return self.e_hlpdft, self.si_hlpdft
-        
-
     def _finalize_ql(self):
         log = logger.Logger(self.stdout, self.verbose)
         nroots = len(self.e_states)
         log.note("%s (final) states:", self.__class__.__name__)
-        if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square', None):
+        if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
+                                                  None):
             ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
-            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
+            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[
+                0]
 
             for i in range(nroots):
                 log.note('  State %d weight %g  ELPDFT = %.15g  S^2 = %.7f',
@@ -417,7 +418,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         return linalg.eigh(ham)
 
 
-def linear_multi_state(mc, weights=(0.5,0.5), **kwargs):
+def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
     ''' Build linearized multi-state MC-PDFT method object
 
     Args:
@@ -429,10 +430,11 @@ def linear_multi_state(mc, weights=(0.5,0.5), **kwargs):
     Returns:
         si : instance of class _LPDFT
     '''
-    from pyscf.mcscf.addons import StateAverageMCSCFSolver, StateAverageMixFCISolver
+    from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
+        StateAverageMixFCISolver
 
-    if isinstance (mc, mcpdft.MultiStateMCPDFTSolver):
-        raise RuntimeError ('already a multi-state PDFT solver')
+    if isinstance(mc, mcpdft.MultiStateMCPDFTSolver):
+        raise RuntimeError('already a multi-state PDFT solver')
 
     if isinstance(mc.fcisolver, StateAverageMixFCISolver):
         raise RuntimeError("state-average mix type")
@@ -477,4 +479,3 @@ if __name__ == "__main__":
 
     sc = linear_multi_state(mc)
     sc.kernel()
-

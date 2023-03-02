@@ -195,7 +195,7 @@ class _ERIS(object):
 
 def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
             max_memory=2000, hermi=1, paaa_only=False, aaaa_only=False,
-            jk_pc=False):
+            jk_pc=False, drop_mcwfn=False):
     '''Get the 1- and 2-body effective potential from MC-PDFT.
 
     Args:
@@ -227,6 +227,8 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         jk_pc : logical
             If true, compute the ppii=pipi elements of veff2
             (otherwise, these are set to zero)
+        drop_mcwfn : logical
+                If true, drops the normal CASSCF wave function contribution (ie the ``Hartree exchange-correlation'') from the response
 
     Returns:
         veff1 : ndarray of shape (nao, nao)
@@ -247,7 +249,12 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     hyb_x, hyb_c = hyb
     if abs (omega) > 1e-11:
         raise NotImplementedError ("range-separated on-top functionals")
-    if abs (hyb_x) > 1e-11 or abs (hyb_c) > 1e-11:
+
+    if drop_mcwfn:
+        if abs(hyb_x - hyb_c) > 1e-11:
+            raise NotImplementedError("effective potential for hybrid functionals with different exchange, correlations components")
+
+    elif abs (hyb_x) > 1e-11 or abs (hyb_c) > 1e-11:
         raise NotImplementedError ("effective potential for hybrid functionals")
 
     veff1 = np.zeros ((nao, nao), dtype=dm1s.dtype)

@@ -16,7 +16,6 @@
 import numpy as np
 from pyscf import gto, scf 
 from pyscf import mcpdft
-from pyscf.mcpdft import lpdft
 import unittest
 
 
@@ -35,17 +34,22 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
     
     mc = mc.multi_state(weights, "lin")
     mc = mc.run()
-    return mol, mf, mc
+    return mc
 
 def setUpModule():
-    global mol, mf, mc, mc_4
-    mol, mf, mc = get_lih(1.5)
-    mol, mf, mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
+    global mc, mc_4, mc_tpbe, mc_tpbe0
+    mc = get_lih(1.5)
+    mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
+    mc_tpbe = get_lih(1.5, functional="tPBE")
+    mc_tpbe0 = get_lih(1.5, functional="tPBE0")
 
 def tearDownModule():
-    global mol, mf, mc, mc_4
-    mol.stdout.close()
-    del mol, mf, mc, mc_4
+    global  mc, mc_4, mc_tpbe0, mc_tpbe
+    mc.mol.stdout.close()
+    mc_4.mol.stdout.close()
+    mc_tpbe0.mol.stdout.close()
+    mc_tpbe.mol.stdout.close()
+    del mc, mc_4, mc_tpbe0, mc_tpbe
 
 class KnownValues(unittest.TestCase):
 
@@ -67,8 +71,8 @@ class KnownValues(unittest.TestCase):
         # Below reference values from 
         #   - PySCF commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
         #   - mrh   commit c5fc02f1972c1c8793061f20ed6989e73638fc5e
-        HCOUP_EXPECTED = 0.016636807982732867 
-        HDIAG_EXPECTED = [-7.878489930907849, -7.729844823595374] 
+        HCOUP_EXPECTED = 0.01663680
+        HDIAG_EXPECTED = [-7.87848993, -7.72984482]
 
         E_STATES_EXPECTED = [-7.88032921, -7.72800554]
 
@@ -86,22 +90,38 @@ class KnownValues(unittest.TestCase):
         # References values from
         #     - PySCF       commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
         #     - PySCF-forge commit 00183c314ebbf541f8461e7b7e5ee9e346fd6ff5
-        E_MCSCF_AVG_EXPECTED = -7.881123865044279
-        HDIAG_EXPECTED = [-7.997842598062071, -7.84720560226191, -7.80476518947314, -7.804765211915506]
-        HCOUP_EXPECTED = [0.01479405057250327,0,0,0,0,0]
-        E_STATES_EXPECTED = [-7.999281764601187, -7.8457664246019005, -7.804765192541955, -7.804765192508891]
+        E_MCSCF_AVG_EXPECTED = -7.88112386
+        HDIAG_EXPECTED = [-7.99784259, -7.84720560, -7.80476518, -7.80476521]
+        HCOUP_EXPECTED = [0.01479405,0,0,0,0,0]
+        E_STATES_EXPECTED = [-7.99928176, -7.84576642, -7.80476519, -7.80476519]
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
         self.assertListAlmostEqual(list(map(abs, hcoup)), HCOUP_EXPECTED, 7)
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
-    def test_lih_hybrid_adiabat(self):
-        e_states, _ = mc.hybrid_kernel(0.25)
 
-        E_TPBE0_EXPECTED = [-7.874005199186947, -7.726756781565399]
+    def test_lih_hybrid_tPBE_adiabat(self):
+        e_mcscf_tpbe_avg = np.dot(mc_tpbe.e_mcscf, mc_tpbe.weights)
+        e_mcscf_tpbe0_avg = np.dot(mc_tpbe0.e_mcscf, mc_tpbe0.weights)
 
-        self.assertListAlmostEqual(e_states, E_TPBE0_EXPECTED, 7)
+        hlpdft_ham = 0.75 * mc_tpbe.lpdft_ham
+        idx = np.diag_indices_from(hlpdft_ham)
+        hlpdft_ham[idx] += 0.25 * mc_tpbe.e_mcscf
+        e_hlpdft, si_hlpdft = mc_tpbe._eig_si(hlpdft_ham)
+
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit a7b8b3bb291e528088f9cefab007438d9e0f4701
+        E_MCSCF_AVG_EXPECTED = -7.78902182
+        E_TPBE_STATES_EXPECTED = [-7.93389909, -7.78171959]
+
+
+        self.assertAlmostEqual(e_mcscf_tpbe_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf_tpbe_avg, e_mcscf_tpbe0_avg, 9)
+        self.assertListAlmostEqual(mc_tpbe.e_states, E_TPBE_STATES_EXPECTED, 7)
+        self.assertListAlmostEqual(mc_tpbe0.e_states, e_hlpdft, 9)
+        self.assertListAlmostEqual(hlpdft_ham.flatten(), mc_tpbe0.lpdft_ham.flatten(), 9)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")

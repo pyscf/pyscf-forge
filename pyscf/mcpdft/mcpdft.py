@@ -499,7 +499,7 @@ class _PDFT ():
 
     def get_pdft_veff (self, mo=None, ci=None, state=0, casdm1s=None,
             casdm2=None, incl_coul=False, paaa_only=False, aaaa_only=False,
-            jk_pc=False):
+            jk_pc=False, drop_mcwfn=False):
         '''Get the 1- and 2-body MC-PDFT effective potentials for a set
         of mos and ci vectors
 
@@ -530,6 +530,8 @@ class _PDFT ():
                 If true, calculate the ppii=pipi 2-body effective
                 potential in veff2.j_pc and veff2.k_pc. Otherwise these
                 arrays are filled with zeroes.
+            drop_mcwfn : logical
+                If true, drops the normal CASSCF wave function contribution (ie the ``Hartree exchange-correlation'') from the response
 
         Returns:
             veff1 : ndarray of shape (nao, nao)
@@ -552,7 +554,7 @@ class _PDFT ():
 
         pdft_veff1, pdft_veff2 = pdft_veff.kernel (self.otfnal, dm1s, 
             cascm2, mo, ncore, ncas, max_memory=self.max_memory, 
-            paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc)
+            paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc, drop_mcwfn=drop_mcwfn)
         
         if incl_coul:
             pdft_veff1 += self._scf.get_j (self.mol, dm1s[0] + dm1s[1])
