@@ -37,14 +37,15 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
     return mol, mf, mc
 
 def setUpModule():
-    global mol, mf, mc, mc_4
+    global mol, mf, mc, mc_4, mc_hybrid
     mol, mf, mc = get_lih(1.5)
     mol, mf, mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
+    mol, mf, mc_hybrid = get_lih(1.5, functional="tPBE")
 
 def tearDownModule():
-    global mol, mf, mc, mc_4
+    global mol, mf, mc, mc_4, mc_hybrid
     mol.stdout.close()
-    del mol, mf, mc, mc_4
+    del mol, mf, mc, mc_4, mc_hybrid
 
 class KnownValues(unittest.TestCase):
 
@@ -95,12 +96,24 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(list(map(abs, hcoup)), HCOUP_EXPECTED, 7)
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
-    def test_lih_hybrid_adiabat(self):
-        e_states, _ = mc.hybrid_kernel(0.25)
+    def test_lih_LDA_hybrid_adiabat(self):
+        e_hyb_states, _ = mc.hybrid_kernel(0.25)
 
-        E_TPBE0_EXPECTED = [-7.874005199186947, -7.726756781565399]
+        E_STATES_HYB_EXPECTED = [-7.874005199186947, -7.726756781565399]
 
-        self.assertListAlmostEqual(e_states, E_TPBE0_EXPECTED, 7)
+        self.assertListAlmostEqual(e_hyb_states, E_STATES_HYB_EXPECTED, 7)
+
+    def test_lih_tPBE0_adiabat(self):
+        e_mcscf_avg = np.dot(mc_hybrid.e_mcscf, mc_hybrid.weights)
+        e_hyb_states, _ = mc_hybrid.hybrid_kernel(0.25)
+
+        E_MCSCF_AVG_EXPECTED = -7.78902185
+        E_STATES_EXPECTED = [-7.933899093928117, -7.781719596023714]
+        E_STATES_HYB_EXPECTED = [-7.914145011137491, -7.767079921201307]
+
+        self.assertListAlmostEqual(e_hyb_states, E_STATES_HYB_EXPECTED, 7)
+        self.assertListAlmostEqual(mc_hybrid.e_states, E_STATES_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
