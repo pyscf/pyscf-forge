@@ -91,6 +91,13 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
 
     nocc = ncore + ncas
 
+    hyb = ot._numint.hybrid_coeff(ot.otxc)
+    if abs(hyb[0] - hyb[1]) > 1e-11:
+        raise NotImplementedError(
+            "hybrid functionals with different exchange, correlations components")
+
+    hyb = 1.0 - hyb[0]
+
     # Get the 1-RDM matrices
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
@@ -113,7 +120,7 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
     e_veff2 += 0.5*np.tensordot(mc.get_h2lpdft(veff2_0), casdm2_0, axes=4)
 
     # h_nuc + Eot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
-    energy_core = mc.energy_nuc() + e_ot_0 - e_j - e_veff1 - e_veff2
+    energy_core = hyb*mc.energy_nuc() + e_ot_0 - hyb*e_j - e_veff1 - e_veff2
     return energy_core
 
 
@@ -164,12 +171,18 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
     mo_core = mo_coeff[:, :ncore]
     mo_cas = mo_coeff[:, ncore:nocc]
 
+    hyb = ot._numint.hybrid_coeff(ot.otxc)
+    if abs(hyb[0] - hyb[1]) > 1e-11:
+        raise NotImplementedError("hybrid functionals with different exchange, correlations components")
+
+    hyb = 1.0 - hyb[0]
+
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
     dm1 = dm1s[0] + dm1s[1]
     v_j = mc._scf.get_j(dm=dm1)
 
     # h_pq + V_pq + J_pq all in AO integrals
-    hcore_eff = mc.get_hcore() + veff1_0 + v_j
+    hcore_eff = hyb*mc.get_hcore() + veff1_0 + hyb*v_j
     energy_core = mc.get_lpdfthconst(veff1_0, veff2_0, casdm1s_0,
                                    casdm2_0, ot=ot)
 
@@ -243,11 +256,13 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     if abs(hyb[0] - hyb[1]) > 1e-11:
         raise NotImplementedError("hybrid functionals with different exchange, correlations components")
 
+    cas_hyb = hyb[0]
+
     ncas = mc.ncas
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
     veff1_0, veff2_0 = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
-                                        casdm2=casdm2_0)
+                                        casdm2=casdm2_0, drop_mcwfn=True)
 
     # This is all standard procedure for generating the hamiltonian in PySCF
     h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
@@ -257,7 +272,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     
     lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
     idx = np.diag_indices_from(lpdft_ham)
-    lpdft_ham[idx] += h0
+    lpdft_ham[idx] += h0 + cas_hyb*mc.e_mcscf
 
     return lpdft_ham 
 
@@ -383,15 +398,6 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
             self.mo_coeff, self.mo_energy)
-
-
-    def hybrid_kernel(self, lam=0):
-        self.hlpdft_ham = (1.0-lam) * self.lpdft_ham
-        idx = np.diag_indices_from(self.hlpdft_ham)
-        self.hlpdft_ham[idx] += lam * self.e_mcscf
-        self.e_hlpdft, self.si_hlpdft = self._eig_si(self.hlpdft_ham)
-    
-        return self.e_hlpdft, self.si_hlpdft
         
 
     def _finalize_ql(self):

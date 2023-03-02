@@ -34,18 +34,22 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
     
     mc = mc.multi_state(weights, "lin")
     mc = mc.run()
-    return mol, mf, mc
+    return mc
 
 def setUpModule():
-    global mol, mf, mc, mc_4, mc_hybrid
-    mol, mf, mc = get_lih(1.5)
-    mol, mf, mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
-    mol, mf, mc_hybrid = get_lih(1.5, functional="tPBE")
+    global mc, mc_4, mc_tpbe, mc_tpbe0
+    mc = get_lih(1.5)
+    mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
+    mc_tpbe = get_lih(1.5, functional="tPBE")
+    mc_tpbe0 = get_lih(1.5, functional="tPBE0")
 
 def tearDownModule():
-    global mol, mf, mc, mc_4, mc_hybrid
-    mol.stdout.close()
-    del mol, mf, mc, mc_4, mc_hybrid
+    global  mc, mc_4, mc_tpbe0, mc_tpbe
+    mc.mol.stdout.close()
+    mc_4.mol.stdout.close()
+    mc_tpbe0.mol.stdout.close()
+    mc_tpbe.mol.stdout.close()
+    del mc, mc_4, mc_tpbe0, mc_tpbe
 
 class KnownValues(unittest.TestCase):
 
@@ -96,24 +100,28 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(list(map(abs, hcoup)), HCOUP_EXPECTED, 7)
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
-    def test_lih_LDA_hybrid_adiabat(self):
-        e_hyb_states, _ = mc.hybrid_kernel(0.25)
 
-        E_STATES_HYB_EXPECTED = [-7.874005199186947, -7.726756781565399]
+    def test_lih_hybrid_tPBE_adiabat(self):
+        e_mcscf_tpbe_avg = np.dot(mc_tpbe.e_mcscf, mc_tpbe.weights)
+        e_mcscf_tpbe0_avg = np.dot(mc_tpbe0.e_mcscf, mc_tpbe0.weights)
 
-        self.assertListAlmostEqual(e_hyb_states, E_STATES_HYB_EXPECTED, 7)
+        hlpdft_ham = 0.75 * mc_tpbe.lpdft_ham
+        idx = np.diag_indices_from(hlpdft_ham)
+        hlpdft_ham[idx] += 0.25 * mc_tpbe.e_mcscf
+        e_hlpdft, si_hlpdft = mc_tpbe._eig_si(hlpdft_ham)
 
-    def test_lih_tPBE0_adiabat(self):
-        e_mcscf_avg = np.dot(mc_hybrid.e_mcscf, mc_hybrid.weights)
-        e_hyb_states, _ = mc_hybrid.hybrid_kernel(0.25)
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit a7b8b3bb291e528088f9cefab007438d9e0f4701
+        E_MCSCF_AVG_EXPECTED = -7.789021829749845
+        E_TPBE_STATES_EXPECTED = [-7.933899093928112, -7.781719596023711]
 
-        E_MCSCF_AVG_EXPECTED = -7.78902185
-        E_STATES_EXPECTED = [-7.933899093928117, -7.781719596023714]
-        E_STATES_HYB_EXPECTED = [-7.914145011137491, -7.767079921201307]
 
-        self.assertListAlmostEqual(e_hyb_states, E_STATES_HYB_EXPECTED, 7)
-        self.assertListAlmostEqual(mc_hybrid.e_states, E_STATES_EXPECTED, 7)
-        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf_tpbe_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf_tpbe_avg, e_mcscf_tpbe0_avg, 9)
+        self.assertListAlmostEqual(mc_tpbe.e_states, E_TPBE_STATES_EXPECTED, 7)
+        self.assertListAlmostEqual(mc_tpbe0.e_states, e_hlpdft, 9)
+        self.assertListAlmostEqual(hlpdft_ham.flatten(), mc_tpbe0.lpdft_ham.flatten(), 9)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
