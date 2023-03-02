@@ -17,8 +17,6 @@ from functools import reduce
 import numpy as np
 from scipy import linalg
 
-from pyscf import ao2mo
-from pyscf import lib
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
 from pyscf import mcpdft

@@ -16,7 +16,6 @@
 import numpy as np
 from pyscf import gto, scf 
 from pyscf import mcpdft
-from pyscf.mcpdft import lpdft
 import unittest
 
 
