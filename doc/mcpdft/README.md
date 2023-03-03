@@ -78,7 +78,7 @@ Features
 [*JCTC* **2021**, *17*, 7586]: http://dx.doi.org/10.1021/acs.jctc.1c00915
 [*JCTC* **2021**, *17*, 2775]: http://dx.doi.org/10.1021/acs.jctc.0c01346
 [*Mol Phys* **2022**, 120]: http://dx.doi.org/10.1080/00268976.2022.2110534
-[*Faraday Discuss* **2020**, *224, 348-372]: http://dx.doi.org/10.1039/D0FD00037J
+[*Faraday Discuss* **2020**, 224, 348-372]: http://dx.doi.org/10.1039/D0FD00037J
 
 [comment]: <> (Code hyperlinks)
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
