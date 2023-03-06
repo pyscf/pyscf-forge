@@ -13,17 +13,18 @@ def get_lih(r, weights=None):
     mc.fix_spin_(ss=0)
     if weights is None: weights = [0.5,0.5]
     mc = mc.multi_state (weights, 'xms').run (conv_tol=1e-8)
-    return mol, mf, mc
+    return mc
 
 def setUpModule():
-    global mol, mf, mc, mc_unequal
-    mol, mf, mc = get_lih(1.5)
-    mol, mf, mc_unequal = get_lih(1.5, weights=[0.9, 0.1])
+    global mc, mc_unequal
+    mc = get_lih(1.5)
+    mc_unequal = get_lih(1.5, weights=[0.9, 0.1])
 
 def tearDownModule():
-    global mol, mf, mc, mc_unequal
-    mol.stdout.close()
-    del mol, mf, mc, mc_unequal
+    global mc, mc_unequal
+    mc.mol.stdout.close()
+    mc_unequal.mol.stdout.close()
+    del mc, mc_unequal
 
 class KnownValues(unittest.TestCase):
 
@@ -70,6 +71,22 @@ class KnownValues(unittest.TestCase):
     def test_lih_adiabats(self):
         E_STATES_EXPECTED = [-7.858628517291297, -7.69980510010583]
         self.assertListAlmostEqual(mc.e_states, E_STATES_EXPECTED, 9)
+
+    def test_lih_unequal(self):
+        e_mcscf_avg = np.dot(mc_unequal.e_mcscf, mc_unequal.weights)
+        hcoup = abs(mc_unequal.heff_mcscf[1, 0])
+        ct_mcscf = abs(mc_unequal.si_mcscf[0, 0])
+
+        HCOUP_EXPECTED = 0.006844540922301437
+        CT_MCSCF_EXPECTED = 0.9990626861718451
+        E_MCSCF_AVG_EXPECTED = -7.8479729055935685
+        E_STATES_EXPECTED = [-7.869843475893866, -7.696820527732333]
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 9)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 9)
+        self.assertAlmostEqual(ct_mcscf, CT_MCSCF_EXPECTED, 9)
+        self.assertListAlmostEqual(mc_unequal.e_states, E_STATES_EXPECTED, 9)
+
 
 if __name__ == "__main__":
     print("Full Tests for XMS-PDFT")
