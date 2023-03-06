@@ -5,23 +5,25 @@ from pyscf.mcpdft import xmspdft
 
 import unittest
 
-def get_lih(r):
+def get_lih(r, weights=None):
     mol = gto.M (atom='Li 0 0 0\nH {} 0 0'.format (r), basis='sto3g',
                  output='/dev/null', verbose=0)
     mf = scf.RHF (mol).run ()
     mc = mcpdft.CASSCF (mf, 'ftLDA,VWN3', 2, 2, grids_level=1)
     mc.fix_spin_(ss=0)
-    mc = mc.multi_state ([0.5,0.5], 'xms').run (conv_tol=1e-8)
+    if weights is None: weights = [0.5,0.5]
+    mc = mc.multi_state (weights, 'xms').run (conv_tol=1e-8)
     return mol, mf, mc
 
 def setUpModule():
-    global mol, mf, mc
+    global mol, mf, mc, mc_unequal
     mol, mf, mc = get_lih(1.5)
+    mol, mf, mc_unequal = get_lih(1.5, weights=[0.9, 0.1])
 
 def tearDownModule():
-    global mol, mf, mc
+    global mol, mf, mc, mc_unequal
     mol.stdout.close()
-    del mol, mf, mc
+    del mol, mf, mc, mc_unequal
 
 class KnownValues(unittest.TestCase):
 
@@ -56,6 +58,14 @@ class KnownValues(unittest.TestCase):
 
         self.assertListAlmostEqual(safock.diagonal(), EXPECTED_SA_FOCK_DIAG, 9)
         self.assertAlmostEqual(abs(safock[0,1]),EXPECTED_SA_FOCK_OFFDIAG, 9)
+
+    def test_lih_safock_unequal(self):
+        safock = xmspdft.make_fock_mcscf(mc, ci=mc.get_ci_adiabats(uci="MCSCF"), weights=[1,0])
+        EXPECTED_SA_FOCK_DIAG = [-4.194714957289011, -3.8317682977263754]
+        EXPECTED_SA_FOCK_OFFDIAG = 0.006987847963283834
+
+        self.assertListAlmostEqual(safock.diagonal(), EXPECTED_SA_FOCK_DIAG, 9)
+        self.assertAlmostEqual(abs(safock[0, 1]), EXPECTED_SA_FOCK_OFFDIAG, 9)
 
     def test_lih_adiabats(self):
         E_STATES_EXPECTED = [-7.858628517291297, -7.69980510010583]
