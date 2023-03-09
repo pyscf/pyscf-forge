@@ -192,11 +192,8 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
 
     return conv, list (ci)
 
-class MultiStateMCPDFTSolver ():
-    pass
-    # tag
 
-class _MSPDFT (MultiStateMCPDFTSolver):
+class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
     '''MS-PDFT 
 
     Extra attributes for MS-PDFT:
@@ -239,7 +236,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         si_pdft : ndarray of shape (nroots, nroots)
             Synonym of si
         e_mcscf : ndarray of shape (nroots)
-            Energies of the MS-SCF adiabatic states
+            Energies of the MC-SCF adiabatic states
         si_mcscf : ndarray of shape (nroots, nroots)
             Expansion coefficients for the MC-SCF adiabats in terms of
             the optimized diabatic states
@@ -619,7 +616,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
         si : instance of class _MSPDFT
     '''
 
-    if isinstance (mc, MultiStateMCPDFTSolver):
+    if isinstance (mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError ('already a multi-state PDFT solver')
     if isinstance (mc.fcisolver, StateAverageMixFCISolver):
         raise RuntimeError ('state-average mix type')

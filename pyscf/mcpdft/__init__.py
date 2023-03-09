@@ -56,6 +56,10 @@ def CASCIPDFT (mc_or_mf_or_mol, ot, ncas, nelecas, ncore=None, **kwargs):
 CASSCF=CASSCFPDFT
 CASCI=CASCIPDFT
 
+class MultiStateMCPDFTSolver ():
+    pass
+    # tag
+
 
 # Monkeypatch for double grad folders
 # TODO: more elegant solution
