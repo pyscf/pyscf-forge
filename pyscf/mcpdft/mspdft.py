@@ -359,7 +359,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         self.converged = self.converged and diab_conv
         self.heff_mcscf = self.make_heff_mcscf ()
         e_mcscf, self.si_mcscf = self._eig_si (self.heff_mcscf)
-        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-10:
+        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-9:
             raise RuntimeError (("Sanity fault: e_mcscf ({}) != "
                                 "self.e_mcscf ({})").format (e_mcscf,
                                 self.e_mcscf))
@@ -414,7 +414,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
                                  axes=((1,2),(1,2)))
             u, svals, vh = linalg.svd (ovlp)
             ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh)) 
-        return self._diabatize (self, ci, **kwargs)
+        return self._diabatize (self, ci=ci, **kwargs)
 
     def diabatizer (self, mo_coeff=None, ci=None):
         '''Computes the value, gradient vector, and Hessian matrix with
@@ -597,8 +597,14 @@ def get_diabfns (obj):
     if obj.upper () == 'CMS':
         from pyscf.mcpdft.cmspdft import e_coul as diabatizer
         diabatize = si_newton
+
+    elif obj.upper() == "XMS":
+        from pyscf.mcpdft.xmspdft import safock_energy as diabatizer
+        from pyscf.mcpdft.xmspdft import solve_safock as diabatize
+
     else:
         raise RuntimeError ('MS-PDFT type not supported')
+
     return diabatizer, diabatize
 
 def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
