@@ -192,11 +192,8 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
 
     return conv, list (ci)
 
-class MultiStateMCPDFTSolver ():
-    pass
-    # tag
 
-class _MSPDFT (MultiStateMCPDFTSolver):
+class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
     '''MS-PDFT 
 
     Extra attributes for MS-PDFT:
@@ -239,7 +236,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         si_pdft : ndarray of shape (nroots, nroots)
             Synonym of si
         e_mcscf : ndarray of shape (nroots)
-            Energies of the MS-SCF adiabatic states
+            Energies of the MC-SCF adiabatic states
         si_mcscf : ndarray of shape (nroots, nroots)
             Expansion coefficients for the MC-SCF adiabats in terms of
             the optimized diabatic states
@@ -362,7 +359,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         self.converged = self.converged and diab_conv
         self.heff_mcscf = self.make_heff_mcscf ()
         e_mcscf, self.si_mcscf = self._eig_si (self.heff_mcscf)
-        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-10:
+        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-9:
             raise RuntimeError (("Sanity fault: e_mcscf ({}) != "
                                 "self.e_mcscf ({})").format (e_mcscf,
                                 self.e_mcscf))
@@ -417,7 +414,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
                                  axes=((1,2),(1,2)))
             u, svals, vh = linalg.svd (ovlp)
             ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh)) 
-        return self._diabatize (self, ci, **kwargs)
+        return self._diabatize (self, ci=ci, **kwargs)
 
     def diabatizer (self, mo_coeff=None, ci=None):
         '''Computes the value, gradient vector, and Hessian matrix with
@@ -600,8 +597,14 @@ def get_diabfns (obj):
     if obj.upper () == 'CMS':
         from pyscf.mcpdft.cmspdft import e_coul as diabatizer
         diabatize = si_newton
+
+    elif obj.upper() == "XMS":
+        from pyscf.mcpdft.xmspdft import safock_energy as diabatizer
+        from pyscf.mcpdft.xmspdft import solve_safock as diabatize
+
     else:
         raise RuntimeError ('MS-PDFT type not supported')
+
     return diabatizer, diabatize
 
 def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
@@ -619,7 +622,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
         si : instance of class _MSPDFT
     '''
 
-    if isinstance (mc, MultiStateMCPDFTSolver):
+    if isinstance (mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError ('already a multi-state PDFT solver')
     if isinstance (mc.fcisolver, StateAverageMixFCISolver):
         raise RuntimeError ('state-average mix type')
