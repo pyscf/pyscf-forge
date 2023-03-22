@@ -58,11 +58,34 @@ def get_water(functional='tpbe', basis='6-31g'):
     mc.run()
     return mc
 
-def get_cc(r, functional='tPBE', basis='6-31G'):
-    mol = gto.Mole(atom=[
-        ['C', (0., 0., -r / 2)],
-        ['C', (0., 0., r / 2)], ], basis=basis, unit='B', symmetry=True, output='/dev/null', verbose=0)
-    mol.build()
+# def get_cc(r, functional='tPBE', basis='6-31G'):
+#     mol = gto.Mole(atom=[
+#         ['C', (0., 0., -r / 2)],
+#         ['C', (0., 0., r / 2)], ], basis=basis, unit='B', symmetry=True, output='/dev/null', verbose=0)
+#     mol.build()
+#
+#     mf = scf.RHF(mol).run()
+#
+#     weights = np.ones(3) / 3
+#     solver1 = fci.direct_spin1_symm.FCI(mol)
+#     solver1.spin = 2
+#     solver1 = fci.addons.fix_spin(solver1, shift=.2, ss=2)
+#     solver1.nroots = 1
+#     solver2 = fci.direct_spin0_symm.FCI(mol)
+#     solver2.spin = 0
+#     solver2.nroots = 2
+#
+#     mc = mcpdft.CASSCF(mf, functional, 6, 6, grids_level=1)
+#     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
+#     mc.run()
+#     return mc
+
+def get_water_triplet(functional='tPBE', basis="6-31G"):
+    mol = gto.M(atom='''
+    O     0.    0.000    0.1174
+    H     0.    0.757   -0.4696
+    H     0.   -0.757   -0.4696
+       ''', symmetry=True, basis=basis, output='/dev/null', verbose=0)
 
     mf = scf.RHF(mol).run()
 
@@ -75,30 +98,30 @@ def get_cc(r, functional='tPBE', basis='6-31G'):
     solver2.spin = 0
     solver2.nroots = 2
 
-    mc = mcpdft.CASSCF(mf, functional, 6, 6, grids_level=1)
+    mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc
 
 
 def setUpModule():
-    global lih, lih_4, lih_tpbe, lih_tpbe0, water, cc
+    global lih, lih_4, lih_tpbe, lih_tpbe0, water, t_water
     lih = get_lih(1.5)
     lih_4 = get_lih(1.5, n_states=4, basis="6-31G")
     lih_tpbe = get_lih(1.5, functional="tPBE")
     lih_tpbe0 = get_lih(1.5, functional="tPBE0")
     water = get_water()
-    cc = get_cc(1.8)
+    t_water = get_water_triplet()
 
 def tearDownModule():
-    global lih, lih_4, lih_tpbe0, lih_tpbe, water, cc
+    global lih, lih_4, lih_tpbe0, lih_tpbe, water, t_water
     lih.mol.stdout.close()
     lih_4.mol.stdout.close()
     lih_tpbe0.mol.stdout.close()
     lih_tpbe.mol.stdout.close()
     water.mol.stdout.close()
-    cc.mol.stdout.close()
-    del lih, lih_4, lih_tpbe0, lih_tpbe, water, cc
+    t_water.mol.stdout.close()
+    del lih, lih_4, lih_tpbe0, lih_tpbe, water, t_water
 
 class KnownValues(unittest.TestCase):
 
@@ -179,7 +202,7 @@ class KnownValues(unittest.TestCase):
 
         # References values from
         #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
-        #     - PySCF-forge commit 5338d3060033d60b47e0c89cfcfe9427c34ff24a
+        #     - PySCF-forge commit 2c75a59604c458069ebda550e84a866ec1be45dc
         E_MCSCF_AVG_EXPECTED = -75.81489195169507
         HDIAG_EXPECTED = [-76.29913074162732, -75.93502437481517]
 
@@ -188,8 +211,24 @@ class KnownValues(unittest.TestCase):
         # The off-diagonal should be identical to zero because of symmetry
         self.assertListAlmostEqual(e_states, hdiag, 10)
 
-    def test_C2_spin_samix(self):
-        print(cc.e_states)
+    def test_water_spin_samix(self):
+        e_mcscf_avg = np.dot(t_water.e_mcscf, t_water.weights)
+        hdiag = t_water.get_lpdft_diag()
+        e_states = t_water.e_states
+        hcoup = t_water.get_lpdft_ham()[1,2]
+
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit 2c75a59604c458069ebda550e84a866ec1be45dc
+        E_MCSCF_AVG_EXPECTED = -75.75552048294597
+        HDIAG_EXPECTED = [-76.01218048502902, -76.31379141689696, -75.92134410312458]
+        E_STATES_EXPECTED = [-76.01218048502898, -76.3168078608912, -75.91832765913041]
+        HCOUP_EXPECTED = 0.03453830159471619
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
+        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 7)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
