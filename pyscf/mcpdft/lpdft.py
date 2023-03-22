@@ -436,12 +436,15 @@ def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
     if isinstance(mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError('already a multi-state PDFT solver')
 
-    if isinstance(mc.fcisolver, StateAverageMixFCISolver):
-        raise RuntimeError("state-average mix type")
+    # if isinstance(mc.fcisolver, StateAverageMixFCISolver):
+    #     raise RuntimeError("state-average mix type")
 
     if not isinstance(mc, StateAverageMCSCFSolver):
         base_name = mc.__class__.__name__
         mc = mc.state_average(weights=weights, **kwargs)
+
+    elif isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        base_name = mc.__class__.__name__
 
     else:
         base_name = mc.__class__.bases__[0].__name__

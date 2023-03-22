@@ -14,7 +14,7 @@
 # limitations under the License.
 #
 import numpy as np
-from pyscf import gto, scf 
+from pyscf import gto, scf, fci
 from pyscf import mcpdft
 import unittest
 
@@ -36,20 +36,46 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
     mc = mc.run()
     return mc
 
+def get_water(functional='tpbe', basis='6-31g'):
+    mol = gto.M(atom='''
+ O     0.    0.000    0.1174
+ H     0.    0.757   -0.4696
+ H     0.   -0.757   -0.4696
+    ''',symmetry=True, basis=basis, output='/dev/null', verbose=0)
+
+    mf = scf.RHF(mol).run()
+
+    weights = [0.5, 0.5]
+    solver1 = fci.direct_spin1_symm.FCI(mol)
+    solver1.wfnsym = 'A1'
+    solver1.spin = 0
+    solver2 = fci.direct_spin1_symm.FCI(mol)
+    solver2.wfnsym = 'A2'
+    solver2.spin = 0
+
+    mcc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mcc = mcc.state_average_mix_([solver1, solver2], weights)
+    mcc = mcc.multi_state(weights, "lin")
+    mcc.run()
+    return mcc
+
+
+
 def setUpModule():
-    global mc, mc_4, mc_tpbe, mc_tpbe0
+    global mc, mc_4, mc_tpbe, mc_tpbe0, water
     mc = get_lih(1.5)
     mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
     mc_tpbe = get_lih(1.5, functional="tPBE")
     mc_tpbe0 = get_lih(1.5, functional="tPBE0")
+    water = get_water()
 
 def tearDownModule():
-    global  mc, mc_4, mc_tpbe0, mc_tpbe
+    global  mc, mc_4, mc_tpbe0, mc_tpbe, water
     mc.mol.stdout.close()
     mc_4.mol.stdout.close()
     mc_tpbe0.mol.stdout.close()
     mc_tpbe.mol.stdout.close()
-    del mc, mc_4, mc_tpbe0, mc_tpbe
+    del mc, mc_4, mc_tpbe0, mc_tpbe, water
 
 class KnownValues(unittest.TestCase):
 
@@ -122,6 +148,9 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(mc_tpbe.e_states, E_TPBE_STATES_EXPECTED, 7)
         self.assertListAlmostEqual(mc_tpbe0.e_states, e_hlpdft, 9)
         self.assertListAlmostEqual(hlpdft_ham.flatten(), mc_tpbe0.lpdft_ham.flatten(), 9)
+
+    def test_water_samix(self):
+        print(water.e_states)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
