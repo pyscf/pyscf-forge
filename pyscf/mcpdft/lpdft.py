@@ -239,9 +239,11 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         ot : an instance of on-top functional class - see otfnal.py
 
     Returns:
-        lpdft_ham : ndarray of shape (nroots, nroots)
+        lpdft_ham : ndarray of shape (nroots, nroots) or (nirreps, nroots, nroots)
             Linear approximation to the MC-PDFT energy expressed as a
-            hamiltonian in the basis provided by the CI vectors.
+            hamiltonian in the basis provided by the CI vectors. If
+            StateAverageMix, then returns the block diagonal of the lpdft
+            hamiltonian for each irrep.
     '''
 
     if mo_coeff is None: mo_coeff = mc.mo_coeff
@@ -272,33 +274,42 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
 
     if isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        nstates = len(ci)
+        lpdft_ham = []
+
         # This is one hell of a monkey-patch solution
         # Idea: states in different irreps (spatial or spin) will have zero off-diagonal elements
         # so, we just construct each block of the matrix and then patch it all together
         # I exploit the solvers being the same for each irrep...so this is not super safe
-        nstates = len(ci)
         hc_all = [_dms.contract_2e(mc, h2eff, ci, state) for state in range(nstates)]
         solvers = [_dms._get_fcisolver(mc, ci, state)[0] for state in range(nstates)]
 
-        lpdft_ham = np.zeros((nstates, nstates))
         last_idx = 0
         for idx, s in enumerate(solvers):
             if s is not solvers[last_idx]:
                 ci_irrep = ci[last_idx:idx]
                 hc_all_irrep = hc_all[last_idx:idx]
-                lpdft_ham[last_idx:idx, last_idx:idx] = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+                lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+                diag_idx = np.diag_indices_from(lpdft_irrep)
+                lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[last_idx:idx]
+
+                lpdft_ham.append(lpdft_irrep)
+
                 last_idx = idx
 
         ci_irrep = ci[last_idx:]
         hc_all_irrep = hc_all[last_idx:]
-        lpdft_ham[last_idx:, last_idx:] = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+        lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+        diag_idx = np.diag_indices_from(lpdft_irrep)
+        lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[last_idx:]
+
+        lpdft_ham.append(lpdft_irrep)
 
     else:
         hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
         lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
-
-    idx = np.diag_indices_from(lpdft_ham)
-    lpdft_ham[idx] += h0 + cas_hyb * mc.e_mcscf
+        idx = np.diag_indices_from(lpdft_ham)
+        lpdft_ham[idx] += h0 + cas_hyb * mc.e_mcscf
 
     return lpdft_ham
 
@@ -310,7 +321,26 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
     #log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
-    mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
+    if isinstance(mc.lpdft_ham, np.ndarray) and mc.lpdft_ham.ndim == 2:
+        mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
+
+    else:
+        nstates = len(mc.ci)
+        si_pdft = np.zeros((nstates, nstates))
+        e_states = np.zeros(nstates)
+        solved_states = 0
+        for irrep_ham in mc.lpdft_ham:
+            nstates_irrep = irrep_ham.shape[0]
+            e, si = mc._eig_si(irrep_ham)
+
+            upper = nstates_irrep + solved_states
+
+            e_states[solved_states:upper] = e
+            si_pdft[solved_states:upper, solved_states:upper] = si
+            solved_states = nstates_irrep
+
+        mc.si_pdft = si_pdft
+        mc.e_states = e_states
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
 
@@ -384,9 +414,19 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 are also the diagonal elements of the L-PDFT Hamiltonian
                 matrix.
         '''
-        idx = np.diag_indices_from(self.lpdft_ham)
-        lpdft_ham = self.lpdft_ham.copy()
-        return lpdft_ham[idx]
+        if isinstance(self.lpdft_ham, np.ndarray) and self.lpdft_ham.ndim == 2:
+            idx = np.diag_indices_from(self.lpdft_ham)
+            lpdft_ham = self.lpdft_ham.copy()
+            return lpdft_ham[idx]
+
+        else:
+            diag_elements = []
+            for irrep_ham in self.lpdft_ham:
+                idx = np.diag_indices_from(irrep_ham)
+                irrep_copy = irrep_ham.copy()
+                diag_elements.extend(irrep_copy[idx])
+
+            return np.asarray(diag_elements)
 
     def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
         '''
@@ -426,9 +466,12 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         nroots = len(self.e_states)
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
-                                                  None) and not isinstance(self.fcisolver, StateAverageMixFCISolver):
-            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
+                                                  None):
+            if isinstance(self.fcisolver, StateAverageMixFCISolver):
+                print(self.si_pdft)
+                return
 
+            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
             ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):

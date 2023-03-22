@@ -177,7 +177,6 @@ class KnownValues(unittest.TestCase):
     def test_water_spatial_samix(self):
         e_mcscf_avg = np.dot(water.e_mcscf, water.weights)
         hdiag = water.get_lpdft_diag()
-        hcoup = water.lpdft_ham[0,1]
         e_states = water.e_states
 
         # References values from
@@ -185,12 +184,10 @@ class KnownValues(unittest.TestCase):
         #     - PySCF-forge commit 5338d3060033d60b47e0c89cfcfe9427c34ff24a
         E_MCSCF_AVG_EXPECTED = -75.81489195169507
         HDIAG_EXPECTED = [-76.29913074162732, -75.93502437481517]
-        HCOUP_EXPECTED = 0.0
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
         # The off-diagonal should be identical to zero because of symmetry
-        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 10)
         self.assertListAlmostEqual(e_states, hdiag, 10)
 
     def test_C2_spin_samix(self):
