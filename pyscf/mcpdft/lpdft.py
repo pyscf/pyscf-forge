@@ -426,21 +426,10 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         nroots = len(self.e_states)
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
-                                                  None):
-            if isinstance(mc.fcisolver, StateAverageMixFCISolver):
-                solvers = [_dms._get_fcisolver(mc, self.ci, state)[0] for state in range(nroots)]
+                                                  None) and not isinstance(self.fcisolver, StateAverageMixFCISolver):
+            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
 
-                last_idx = 0
-                ss = []
-                for idx, s in enumerate(solvers):
-                    if s is not solvers[last_idx]:
-                        ci = np.tensordot(self.si_pdft[last_idx:idx,last_idx:idx], np.asarray(self.ci[last_idx:idx,last_idx:idx]), axes=1)
-                        ss.extend(s.states_spin_square(ci, self.ncas, self.nelecas)[0])
-                        last_idx = idx
-
-            else:
-                ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
-                ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
+            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
                 log.note('  State %d weight %g  ELPDFT = %.15g  S^2 = %.7f',
