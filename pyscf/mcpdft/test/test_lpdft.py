@@ -58,22 +58,49 @@ def get_water(functional='tpbe', basis='6-31g'):
     mc.run()
     return mc
 
+def get_cc(r, functional='tPBE', basis='cc-pvdz'):
+    mol = gto.Mole(atom=[
+        ['C', (0., 0., -r / 2)],
+        ['C', (0., 0., r / 2)], ], basis=basis, unit='B', symmetry=True, output='tmp.log', verbose=5)
+
+    mf = scf.RHF(mol)
+    mf.irrep_nelec = {'A1g': 4, 'E1gx': 0, 'E1gy': 0, 'A1u': 4,
+                      'E1uy': 2, 'E1ux': 2, 'E2gx': 0, 'E2gy': 0, 'E2uy': 0, 'E2ux': 0}
+
+    mf.kernel()
+    weights = np.ones(3) / 3
+    solver1 = fci.direct_spin1_symm.FCI(mol)
+    solver1.spin = 2
+    solver1 = fci.addons.fix_spin(solver1, shift=.2, ss=2)
+    solver1.nroots = 1
+    solver2 = fci.direct_spin0_symm.FCI(mol)
+    solver2.spin = 0
+    solver2.nroots = 2
+
+    mc = mcpdft.CASSCF(mf, functional, 8, 8, grids_level=1)
+    mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
+    mc.run()
+    return mc
+
+
 def setUpModule():
-    global lih, lih_4, lih_tpbe, lih_tpbe0, water
+    global lih, lih_4, lih_tpbe, lih_tpbe0, water, cc
     lih = get_lih(1.5)
     lih_4 = get_lih(1.5, n_states=4, basis="6-31G")
     lih_tpbe = get_lih(1.5, functional="tPBE")
     lih_tpbe0 = get_lih(1.5, functional="tPBE0")
     water = get_water()
+    cc = get_cc(1.8)
 
 def tearDownModule():
-    global lih, lih_4, lih_tpbe0, lih_tpbe, water
+    global lih, lih_4, lih_tpbe0, lih_tpbe, water, cc
     lih.mol.stdout.close()
     lih_4.mol.stdout.close()
     lih_tpbe0.mol.stdout.close()
     lih_tpbe.mol.stdout.close()
     water.mol.stdout.close()
-    del lih, lih_4, lih_tpbe0, lih_tpbe, water
+    cc.mol.stdout.close()
+    del lih, lih_4, lih_tpbe0, lih_tpbe, water, cc
 
 class KnownValues(unittest.TestCase):
 
@@ -147,8 +174,27 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(lih_tpbe0.e_states, e_hlpdft, 9)
         self.assertListAlmostEqual(hlpdft_ham.flatten(), lih_tpbe0.lpdft_ham.flatten(), 9)
 
-    def test_water_samix(self):
-        print(water.e_states)
+    def test_water_spatial_samix(self):
+        e_mcscf_avg = np.dot(water.e_mcscf, water.weights)
+        hdiag = water.get_lpdft_diag()
+        hcoup = water.lpdft_ham[0,1]
+        e_states = water.e_states
+
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit 5338d3060033d60b47e0c89cfcfe9427c34ff24a
+        E_MCSCF_AVG_EXPECTED = -75.81489195169507
+        HDIAG_EXPECTED = [-76.29913074162732, -75.93502437481517]
+        HCOUP_EXPECTED = 0.0
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
+        # The off-diagonal should be identical to zero because of symmetry
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 10)
+        self.assertListAlmostEqual(e_states, hdiag, 10)
+
+    def test_C2_spin_samix(self):
+        print(cc.e_states)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")

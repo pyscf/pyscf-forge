@@ -21,6 +21,8 @@ from pyscf.lib import logger
 from pyscf.fci import direct_spin1
 from pyscf import mcpdft
 from pyscf.mcpdft import _dms
+from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
+    StateAverageMixFCISolver
 
 
 def weighted_average_densities(mc, ci=None, weights=None):
@@ -268,9 +270,33 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
     h2 = mc.get_h2lpdft(veff2_0)
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
-    hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
 
-    lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
+    if isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        # This is one hell of a monkey-patch solution
+        # Idea: states in different irreps (spatial or spin) will have zero off-diagonal elements
+        # so, we just construct each block of the matrix and then patch it all together
+        # I exploit the solvers being the same for each irrep...so this is not super safe
+        nstates = len(ci)
+        hc_all = [_dms.contract_2e(mc, h2eff, ci, state) for state in range(nstates)]
+        solvers = [_dms._get_fcisolver(mc, ci, state)[0] for state in range(nstates)]
+
+        lpdft_ham = np.zeros((nstates, nstates))
+        last_idx = 0
+        for idx, s in enumerate(solvers):
+            if s is not solvers[last_idx]:
+                ci_irrep = ci[last_idx:idx]
+                hc_all_irrep = hc_all[last_idx:idx]
+                lpdft_ham[last_idx:idx, last_idx:idx] = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+                last_idx = idx
+
+        ci_irrep = ci[last_idx:]
+        hc_all_irrep = hc_all[last_idx:]
+        lpdft_ham[last_idx:, last_idx:] = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+
+    else:
+        hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
+        lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
+
     idx = np.diag_indices_from(lpdft_ham)
     lpdft_ham[idx] += h0 + cas_hyb * mc.e_mcscf
 
@@ -468,8 +494,6 @@ def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
     Returns:
         si : instance of class _LPDFT
     '''
-    from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
-        StateAverageMixFCISolver
 
     if isinstance(mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError('already a multi-state PDFT solver')
