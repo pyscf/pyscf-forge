@@ -620,6 +620,14 @@ class _PDFT ():
          state_average_mix_(self, fcisolvers, weights)
          return self
 
+    def multi_state_mix(self, fcisolvers=None, weights=(0.5,0.5), method='CMS'):
+        if method.upper() == "LIN":
+            from pyscf.mcpdft.lpdft import linear_multi_state_mix
+            return linear_multi_state_mix(self, fcisolvers=fcisolvers, weights=weights)
+
+        else:
+            raise NotImplementedError(f"StateAverageMix not available for {method}")
+
     def multi_state (self, weights=(0.5,0.5), method='CMS'):
         if method.upper() == "LIN":
             from pyscf.mcpdft.lpdft import linear_multi_state
