@@ -58,16 +58,14 @@ def get_water(functional='tpbe', basis='6-31g'):
     mc.run()
     return mc
 
-def get_cc(r, functional='tPBE', basis='cc-pvdz'):
+def get_cc(r, functional='tPBE', basis='6-31G'):
     mol = gto.Mole(atom=[
         ['C', (0., 0., -r / 2)],
-        ['C', (0., 0., r / 2)], ], basis=basis, unit='B', symmetry=True, output='tmp.log', verbose=5)
+        ['C', (0., 0., r / 2)], ], basis=basis, unit='B', symmetry=True, output='/dev/null', verbose=0)
+    mol.build()
 
-    mf = scf.RHF(mol)
-    mf.irrep_nelec = {'A1g': 4, 'E1gx': 0, 'E1gy': 0, 'A1u': 4,
-                      'E1uy': 2, 'E1ux': 2, 'E2gx': 0, 'E2gy': 0, 'E2uy': 0, 'E2ux': 0}
+    mf = scf.RHF(mol).run()
 
-    mf.kernel()
     weights = np.ones(3) / 3
     solver1 = fci.direct_spin1_symm.FCI(mol)
     solver1.spin = 2
@@ -77,7 +75,7 @@ def get_cc(r, functional='tPBE', basis='cc-pvdz'):
     solver2.spin = 0
     solver2.nroots = 2
 
-    mc = mcpdft.CASSCF(mf, functional, 8, 8, grids_level=1)
+    mc = mcpdft.CASSCF(mf, functional, 6, 6, grids_level=1)
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc

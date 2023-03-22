@@ -274,9 +274,14 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
     hc_all = [_dms.contract_2e(mc, h2eff, ci, state) for state in range(len(ci))]
 
-    # def construct_ham_slice(slice):
-    #     ci_irrep = ci[slice]
-    #     hc_all_irrep = hc_all
+    def construct_ham_slice(slice):
+        ci_irrep = ci[slice]
+        hc_all_irrep = hc_all[slice]
+        lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+        diag_idx = np.diag_indices_from(lpdft_irrep)
+        lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[slice]
+
+        return lpdft_irrep
 
     if isinstance(mc.fcisolver, StateAverageMixFCISolver):
         nstates = len(ci)
@@ -287,34 +292,17 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         # I exploit the solvers being the same for each irrep...so this is not super safe
 
         solvers = [_dms._get_fcisolver(mc, ci, state)[0] for state in range(nstates)]
-
         last_idx = 0
         for idx, s in enumerate(solvers):
             if s is not solvers[last_idx]:
-                ci_irrep = ci[last_idx:idx]
-                hc_all_irrep = hc_all[last_idx:idx]
-                lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
-                diag_idx = np.diag_indices_from(lpdft_irrep)
-                lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[last_idx:idx]
-
-                lpdft_ham.append(lpdft_irrep)
-
+                lpdft_ham.append(construct_ham_slice(slice(last_idx, idx)))
                 last_idx = idx
 
         # Always deal with the left over slice...
-        ci_irrep = ci[last_idx:]
-        hc_all_irrep = hc_all[last_idx:]
-        lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
-        diag_idx = np.diag_indices_from(lpdft_irrep)
-        lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[last_idx:]
-
-        lpdft_ham.append(lpdft_irrep)
+        lpdft_ham.append(construct_ham_slice(slice(last_idx, len(solvers))))
 
     else:
-        #hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
-        lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
-        idx = np.diag_indices_from(lpdft_ham)
-        lpdft_ham[idx] += h0 + cas_hyb * mc.e_mcscf
+        lpdft_ham = construct_ham_slice(slice(0,len(ci)))
 
     return lpdft_ham
 
