@@ -337,7 +337,7 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
 
             e_states[solved_states:upper] = e
             si_pdft[solved_states:upper, solved_states:upper] = si
-            solved_states = nstates_irrep
+            solved_states = upper
 
         mc.si_pdft = si_pdft
         mc.e_states = e_states
@@ -428,6 +428,31 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
 
             return np.asarray(diag_elements)
 
+    def get_lpdft_ham(self):
+        '''The L-PDFT effective Hamiltonian matrix
+
+                Returns:
+                    lpdft_ham : ndarray of shape (nroots, nroots)
+                        Contains molecular Hamiltonian elements on the off-diagonals
+                        and PDFT energies on the diagonals
+                '''
+        if isinstance(self.lpdft_ham, np.ndarray) and self.lpdft_ham.ndim == 2:
+            return self.lpdft_ham
+
+        else:
+            nroots = len(self.ci)
+            lpdft_ham = np.zeros((nroots, nroots))
+            states_added = 0
+            for irrep_ham in self.lpdft_ham:
+                nstates_irrep = irrep_ham.shape[0]
+                upper = nstates_irrep + states_added
+
+                lpdft_ham[states_added:upper,states_added:upper] = irrep_ham
+
+                states_added = upper
+
+            return np.asarray(lpdft_ham)
+
     def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
         '''
         Returns:
@@ -467,11 +492,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
                                                   None):
-            if isinstance(self.fcisolver, StateAverageMixFCISolver):
-                print(self.si_pdft)
-                return
-
-            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
+            ci = self.get_ci_adiabats()
             ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
@@ -482,6 +503,34 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
             for i in range(nroots):
                 log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
+
+    def get_ci_adiabats(self, ci=None):
+        '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
+
+            Kwargs:
+                ci : list of length nroots
+                    MC-SCF ci vectors; defaults to self.ci
+
+            Returns:
+                ci : list of length nroots
+                    CI vectors in basis of L-PDFT Hamiltonian eigenvectors
+        '''
+        if ci is None: ci = self.ci
+        if isinstance(self.fcisolver, StateAverageMixFCISolver):
+            adiabat_ci = []
+            states_added = 0
+            for irrep_ham in self.lpdft_ham:
+                nroots_irrep = irrep_ham.shape[0]
+                upper = nroots_irrep + states_added
+
+                adiabat_ci.extend(np.tensordot(self.si_pdft[states_added:upper, states_added:upper], np.asarray(ci[states_added:upper]), axes=1))
+
+                states_added = upper
+
+            return adiabat_ci
+
+        else:
+            return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
 
     def _eig_si(self, ham):
         return linalg.eigh(ham)
