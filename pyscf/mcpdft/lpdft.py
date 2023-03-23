@@ -325,14 +325,10 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
 
     if hasattr(mc, "_irrep_slices"):
-        nroots = len(mc.ci)
-        e_states = np.zeros(nroots)
-        si_pdft = np.zeros((nroots, nroots))
-        for irrep_slice, irrep_ham in zip(mc._irrep_slices, mc.lpdft_ham):
-            e_states[irrep_slice], si_pdft[irrep_slice,irrep_slice] = mc._eig_si(irrep_ham)
+        e_states, si_pdft = zip(*map(mc._eig_si, mc.lpdft_ham))
+        mc.e_states = np.concatenate(e_states)
+        mc.si_pdft = linalg.block_diag(*si_pdft)
 
-        mc.si_pdft = si_pdft
-        mc.e_states = e_states
 
     else:
         mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
@@ -409,9 +405,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 are also the diagonal elements of the L-PDFT Hamiltonian
                 matrix.
         '''
-        idx = np.diag_indices_from(self.lpdft_ham)
-        lpdft_ham = self.lpdft_ham.copy()
-        return lpdft_ham[idx]
+        return np.diagonal(self.lpdft_ham).copy()
 
     def get_lpdft_ham(self):
         '''The L-PDFT effective Hamiltonian matrix
@@ -488,7 +482,6 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci is None: ci = self.ci
         return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
 
-
     def _eig_si(self, ham):
         return linalg.eigh(ham)
 
@@ -529,13 +522,7 @@ class _LPDFTMix(_LPDFT):
                 are also the diagonal elements of the L-PDFT Hamiltonian
                 matrix.
         '''
-        diag_elements = []
-        for irrep_ham in self.lpdft_ham:
-            idx = np.diag_indices_from(irrep_ham)
-            irrep_copy = irrep_ham.copy()
-            diag_elements.extend(irrep_copy[idx])
-
-        return np.asarray(diag_elements)
+        return np.concatenate([np.diagonal(irrep_ham).copy() for irrep_ham in self.lpdft_ham])
 
     def get_lpdft_ham(self):
         '''The L-PDFT effective Hamiltonian matrix
@@ -545,13 +532,7 @@ class _LPDFTMix(_LPDFT):
                     Contains L-PDFT Hamiltonian elements on the off-diagonals
                     and PDFT approx energies on the diagonals
         '''
-        nroots = len(self.ci)
-        lpdft_ham = np.zeros((nroots, nroots))
-
-        for irrep_slice, irrep_ham in zip(self._irrep_slices, self.lpdft_ham):
-            lpdft_ham[irrep_slice,irrep_slice] = irrep_ham
-
-        return lpdft_ham
+        return linalg.block_diag(*self.lpdft_ham)
 
     def get_ci_adiabats(self, ci=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
@@ -566,11 +547,10 @@ class _LPDFTMix(_LPDFT):
         '''
         if ci is None: ci = self.ci
 
-        adiabat_ci = []
-        for irrep_slice in self._irrep_slices:
-            adiabat_ci.extend(np.tensordot(self.si_pdft[irrep_slice,irrep_slice], np.asarray(ci[irrep_slice]), axes=1))
-
-        return adiabat_ci
+        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci[irrep_slice]), axes=1) for
+                      irrep_slice in self._irrep_slices]
+        # Flattens it
+        return np.concatenate(adiabat_ci)
 
 
 def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
