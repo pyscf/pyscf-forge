@@ -215,7 +215,7 @@ class KnownValues(unittest.TestCase):
         e_mcscf_avg = np.dot(t_water.e_mcscf, t_water.weights)
         hdiag = t_water.get_lpdft_diag()
         e_states = t_water.e_states
-        hcoup = t_water.get_lpdft_ham()[1,2]
+        hcoup = abs(t_water.get_lpdft_ham()[1,2])
 
         # References values from
         #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd

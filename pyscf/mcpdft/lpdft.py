@@ -293,13 +293,22 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
 
         solvers = [_dms._get_fcisolver(mc, ci, state)[0] for state in range(nstates)]
         last_idx = 0
+        irrep_slices = []
         for idx, s in enumerate(solvers):
             if s is not solvers[last_idx]:
-                lpdft_ham.append(construct_ham_slice(slice(last_idx, idx)))
+                irrep_slice = slice(last_idx, idx)
+                lpdft_ham.append(construct_ham_slice(irrep_slice))
+                irrep_slices.append(irrep_slice)
                 last_idx = idx
 
         # Always deal with the left over slice...
-        lpdft_ham.append(construct_ham_slice(slice(last_idx, len(solvers))))
+        irrep_slice = slice(last_idx, len(solvers))
+        lpdft_ham.append(construct_ham_slice(irrep_slice))
+        irrep_slices.append(irrep_slice)
+
+        # So we know later...
+        # Todo, should maybe initialize this in a more obvious way?
+        mc._irrep_slices = np.asarray(irrep_slices)
 
     else:
         lpdft_ham = construct_ham_slice(slice(0,len(ci)))
@@ -314,26 +323,19 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
     #log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
-    if isinstance(mc.lpdft_ham, np.ndarray) and mc.lpdft_ham.ndim == 2:
-        mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
-    else:
-        nstates = len(mc.ci)
-        si_pdft = np.zeros((nstates, nstates))
-        e_states = np.zeros(nstates)
-        solved_states = 0
-        for irrep_ham in mc.lpdft_ham:
-            nstates_irrep = irrep_ham.shape[0]
-            e, si = mc._eig_si(irrep_ham)
-
-            upper = nstates_irrep + solved_states
-
-            e_states[solved_states:upper] = e
-            si_pdft[solved_states:upper, solved_states:upper] = si
-            solved_states = upper
+    if hasattr(mc, "_irrep_slices"):
+        nroots = len(mc.ci)
+        e_states = np.zeros(nroots)
+        si_pdft = np.zeros((nroots, nroots))
+        for irrep_slice, irrep_ham in zip(mc._irrep_slices, mc.lpdft_ham):
+            e_states[irrep_slice], si_pdft[irrep_slice,irrep_slice] = mc._eig_si(irrep_ham)
 
         mc.si_pdft = si_pdft
         mc.e_states = e_states
+
+    else:
+        mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
 
@@ -407,44 +409,19 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 are also the diagonal elements of the L-PDFT Hamiltonian
                 matrix.
         '''
-        if isinstance(self.lpdft_ham, np.ndarray) and self.lpdft_ham.ndim == 2:
-            idx = np.diag_indices_from(self.lpdft_ham)
-            lpdft_ham = self.lpdft_ham.copy()
-            return lpdft_ham[idx]
-
-        else:
-            diag_elements = []
-            for irrep_ham in self.lpdft_ham:
-                idx = np.diag_indices_from(irrep_ham)
-                irrep_copy = irrep_ham.copy()
-                diag_elements.extend(irrep_copy[idx])
-
-            return np.asarray(diag_elements)
+        idx = np.diag_indices_from(self.lpdft_ham)
+        lpdft_ham = self.lpdft_ham.copy()
+        return lpdft_ham[idx]
 
     def get_lpdft_ham(self):
         '''The L-PDFT effective Hamiltonian matrix
 
-                Returns:
-                    lpdft_ham : ndarray of shape (nroots, nroots)
-                        Contains molecular Hamiltonian elements on the off-diagonals
-                        and PDFT energies on the diagonals
+            Returns:
+                lpdft_ham : ndarray of shape (nroots, nroots)
+                    Contains L-PDFT Hamiltonian elements on the off-diagonals
+                    and PDFT approx energies on the diagonals
                 '''
-        if isinstance(self.lpdft_ham, np.ndarray) and self.lpdft_ham.ndim == 2:
-            return self.lpdft_ham
-
-        else:
-            nroots = len(self.ci)
-            lpdft_ham = np.zeros((nroots, nroots))
-            states_added = 0
-            for irrep_ham in self.lpdft_ham:
-                nstates_irrep = irrep_ham.shape[0]
-                upper = nstates_irrep + states_added
-
-                lpdft_ham[states_added:upper,states_added:upper] = irrep_ham
-
-                states_added = upper
-
-            return np.asarray(lpdft_ham)
+        return self.lpdft_ham
 
     def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
         '''
@@ -509,24 +486,91 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
         if ci is None: ci = self.ci
-        if isinstance(self.fcisolver, StateAverageMixFCISolver):
-            adiabat_ci = []
-            states_added = 0
-            for irrep_ham in self.lpdft_ham:
-                nroots_irrep = irrep_ham.shape[0]
-                upper = nroots_irrep + states_added
+        return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
 
-                adiabat_ci.extend(np.tensordot(self.si_pdft[states_added:upper, states_added:upper], np.asarray(ci[states_added:upper]), axes=1))
-
-                states_added = upper
-
-            return adiabat_ci
-
-        else:
-            return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
 
     def _eig_si(self, ham):
         return linalg.eigh(ham)
+
+
+class _LPDFTMix(_LPDFT):
+    '''State Averaged Mixed Linerized PDFT
+
+    Saved Results
+
+        e_tot : float
+            Weighted-average L-PDFT final energy
+        e_states : ndarray of shape (nroots)
+            L-PDFT final energies of the adiabatic states
+        ci : list of length (nroots) of ndarrays
+            CI vectors in the optimized adiabatic basis of MC-SCF. Related to the
+            L-PDFT adiabat CI vectors by the expansion coefficients ``si_pdft''.
+        si_pdft : ndarray of shape (nroots, nroots)
+            Expansion coefficients of the L-PDFT adiabats in terms of the optimized
+            MC-SCF adiabats
+        e_mcscf : ndarray of shape (nroots)
+            Energies of the MC-SCF adiabatic states
+        lpdft_ham : list of ndarray of shape (nirreps, nroots, nroots)
+            L-PDFT Hamiltonian in the MC-SCF adiabatic basis within each irrep
+    '''
+
+    def __init__(self, mc):
+        super().__init__(mc)
+        # Holds the irrep slices for when we need to index into various quantities
+        self._irrep_slices = None
+
+    def get_lpdft_diag(self):
+        '''Diagonal elements of the L-PDFT Hamiltonian matrix
+            (H_00^L-PDFT, H_11^L-PDFT, H_22^L-PDFT, ...)
+
+        Returns:
+            lpdft_diag : ndarray of shape (nroots)
+                Contains the linear approximation to the MC-PDFT energy. These
+                are also the diagonal elements of the L-PDFT Hamiltonian
+                matrix.
+        '''
+        diag_elements = []
+        for irrep_ham in self.lpdft_ham:
+            idx = np.diag_indices_from(irrep_ham)
+            irrep_copy = irrep_ham.copy()
+            diag_elements.extend(irrep_copy[idx])
+
+        return np.asarray(diag_elements)
+
+    def get_lpdft_ham(self):
+        '''The L-PDFT effective Hamiltonian matrix
+
+            Returns:
+                lpdft_ham : ndarray of shape (nroots, nroots)
+                    Contains L-PDFT Hamiltonian elements on the off-diagonals
+                    and PDFT approx energies on the diagonals
+        '''
+        nroots = len(self.ci)
+        lpdft_ham = np.zeros((nroots, nroots))
+
+        for irrep_slice, irrep_ham in zip(self._irrep_slices, self.lpdft_ham):
+            lpdft_ham[irrep_slice,irrep_slice] = irrep_ham
+
+        return lpdft_ham
+
+    def get_ci_adiabats(self, ci=None):
+        '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
+
+            Kwargs:
+                ci : list of length nroots
+                    MC-SCF ci vectors; defaults to self.ci
+
+            Returns:
+                ci : list of length nroots
+                    CI vectors in basis of L-PDFT Hamiltonian eigenvectors
+        '''
+        if ci is None: ci = self.ci
+
+        adiabat_ci = []
+        for irrep_slice in self._irrep_slices:
+            adiabat_ci.extend(np.tensordot(self.si_pdft[irrep_slice,irrep_slice], np.asarray(ci[irrep_slice]), axes=1))
+
+        return adiabat_ci
 
 
 def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
@@ -595,7 +639,7 @@ def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
 
     mcbase_class = mc.__class__
 
-    class LPDFT(_LPDFT, mcbase_class):
+    class LPDFT(_LPDFTMix, mcbase_class):
         pass
 
     LPDFT.__name__ = "LIN" + base_name
