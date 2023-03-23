@@ -258,11 +258,3 @@ def make_weighted_casdm2(mc, ci=None, weights=None):
     # more cost-effective than what is currently in the _dms file.
     casdm2_all = [make_one_casdm2(mc, ci, state) for state in range(len(ci))]
     return np.tensordot(weights, casdm2_all, axes=1)
-
-def contract_2e(mc, h2eff, ci, state=0):
-    ncas = mc.ncas
-    fcisolver, ci, nelecas = _get_fcisolver(mc, ci, state=state)
-    if hasattr(fcisolver, "orbsym"):
-        fcisolver.orbsym = mc.fcisolver.orbsym
-    return fcisolver.contract_2e(h2eff, ci, ncas, nelecas)
-

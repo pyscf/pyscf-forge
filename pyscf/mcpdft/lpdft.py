@@ -272,43 +272,31 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
     h2 = mc.get_h2lpdft(veff2_0)
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
-    hc_all = [_dms.contract_2e(mc, h2eff, ci, state) for state in range(len(ci))]
 
-    def construct_ham_slice(slice):
+    def construct_ham_slice(solver, slice, nelecas):
         ci_irrep = ci[slice]
-        hc_all_irrep = hc_all[slice]
+        if hasattr(solver, "orbsym"):
+            solver.orbsym = mc.fcisolver.orbsym
+
+        hc_all_irrep = [solver.contract_2e(h2eff, c, ncas, nelecas) for c in ci_irrep]
         lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
         diag_idx = np.diag_indices_from(lpdft_irrep)
         lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[slice]
-
         return lpdft_irrep
 
-    if isinstance(mc.fcisolver, StateAverageMixFCISolver):
-        nstates = len(ci)
-        lpdft_ham = []
-        irrep_slices = []
+    if not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
 
-        # This is one hell of a monkey-patch solution
-        # Idea: states in different irreps (spatial or spin) will have zero off-diagonal elements
-        # so, we just construct each block of the matrix and then patch it all together
-        # I exploit the solvers being the same for each irrep...so this is not super safe
-        solvers = [_dms._get_fcisolver(mc, ci, state)[0] for state in range(nstates)]
-        unique_solvers = list(dict.fromkeys(solvers))
+    # We have a StateAverageMix Solver
+    # Todo, should maybe initialize this in a more obvious way?
+    mc._irrep_slices = []
+    start = 0
+    for solver in mc.fcisolver.fcisolvers:
+        end = start + solver.nroots
+        mc._irrep_slices.append(slice(start, end))
+        start = end
 
-        for solver in unique_solvers:
-            indices = [idx for idx, s in enumerate(solvers) if s is solver]
-            irrep_slice = slice(indices[0], indices[-1] + 1)
-            lpdft_ham.append(construct_ham_slice(irrep_slice))
-            irrep_slices.append(irrep_slice)
-
-        # So we know later...
-        # Todo, should maybe initialize this in a more obvious way?
-        mc._irrep_slices = np.asarray(irrep_slices)
-
-    else:
-        lpdft_ham = construct_ham_slice(slice(0,len(ci)))
-
-    return lpdft_ham
+    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec (s, mc.nelecas)) for s, irrep in zip(mc.fcisolver.fcisolvers, mc._irrep_slices)]
 
 
 def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
@@ -323,7 +311,6 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
         e_states, si_pdft = zip(*map(mc._eig_si, mc.lpdft_ham))
         mc.e_states = np.concatenate(e_states)
         mc.si_pdft = linalg.block_diag(*si_pdft)
-
 
     else:
         mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
@@ -541,7 +528,6 @@ class _LPDFTMix(_LPDFT):
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
         if ci is None: ci = self.ci
-
         adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci[irrep_slice]), axes=1) for
                       irrep_slice in self._irrep_slices]
         # Flattens it
