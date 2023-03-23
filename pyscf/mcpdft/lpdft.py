@@ -533,7 +533,7 @@ class _LPDFTMix(_LPDFT):
         adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci[irrep_slice]), axes=1) for
                       irrep_slice in self._irrep_slices]
         # Flattens it
-        return np.concatenate(adiabat_ci)
+        return [c for ci_irrep in adiabat_ci for c in ci_irrep]
 
 
 def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
