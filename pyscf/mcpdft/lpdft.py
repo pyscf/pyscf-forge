@@ -286,25 +286,20 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     if isinstance(mc.fcisolver, StateAverageMixFCISolver):
         nstates = len(ci)
         lpdft_ham = []
+        irrep_slices = []
+
         # This is one hell of a monkey-patch solution
         # Idea: states in different irreps (spatial or spin) will have zero off-diagonal elements
         # so, we just construct each block of the matrix and then patch it all together
         # I exploit the solvers being the same for each irrep...so this is not super safe
-
         solvers = [_dms._get_fcisolver(mc, ci, state)[0] for state in range(nstates)]
-        last_idx = 0
-        irrep_slices = []
-        for idx, s in enumerate(solvers):
-            if s is not solvers[last_idx]:
-                irrep_slice = slice(last_idx, idx)
-                lpdft_ham.append(construct_ham_slice(irrep_slice))
-                irrep_slices.append(irrep_slice)
-                last_idx = idx
+        unique_solvers = list(dict.fromkeys(solvers))
 
-        # Always deal with the left over slice...
-        irrep_slice = slice(last_idx, len(solvers))
-        lpdft_ham.append(construct_ham_slice(irrep_slice))
-        irrep_slices.append(irrep_slice)
+        for solver in unique_solvers:
+            indices = [idx for idx, s in enumerate(solvers) if s is solver]
+            irrep_slice = slice(indices[0], indices[-1] + 1)
+            lpdft_ham.append(construct_ham_slice(irrep_slice))
+            irrep_slices.append(irrep_slice)
 
         # So we know later...
         # Todo, should maybe initialize this in a more obvious way?
