@@ -600,6 +600,17 @@ def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
     else:
         base_name = mc.__class__.bases__[0].__name__
 
+    # Have to check if we are trying to do use 2 fci solvers for a singlet
+    # This is not really well-defined for L-PDFT in general, so catch
+    # it now.. Likely they are trying to do 2 solvers with the same spin
+    # but different spatial symmetry. So should we allow the final states
+    # to be no longer pure states? I am not sure..
+    used_spins = []
+    for solver in mc.fcisolver.fcisolvers:
+        if solver.spin in used_spins:
+            raise NotImplementedError("Cannot do L-PDFT with fcisolvers with duplicate spin states")
+        used_spins.append(solver.spin)
+
     mcbase_class = mc.__class__
 
     class LPDFT(_LPDFTMix, mcbase_class):
