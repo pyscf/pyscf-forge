@@ -38,27 +38,27 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
     mc = mc.run()
     return mc
 
-# def get_water(functional='tpbe', basis='6-31g'):
-#     mol = gto.M(atom='''
-#  O     0.    0.000    0.1174
-#  H     0.    0.757   -0.4696
-#  H     0.   -0.757   -0.4696
-#     ''',symmetry=True, basis=basis, output='/dev/null', verbose=0)
-#
-#     mf = scf.RHF(mol).run()
-#
-#     weights = [0.5, 0.5]
-#     solver1 = fci.direct_spin1_symm.FCI(mol)
-#     solver1.wfnsym = 'A1'
-#     solver1.spin = 0
-#     solver2 = fci.direct_spin1_symm.FCI(mol)
-#     solver2.wfnsym = 'A2'
-#     solver2.spin = 0
-#
-#     mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
-#     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
-#     mc.run()
-#     return mc
+def get_water(functional='tpbe', basis='6-31g'):
+    mol = gto.M(atom='''
+ O     0.    0.000    0.1174
+ H     0.    0.757   -0.4696
+ H     0.   -0.757   -0.4696
+    ''',symmetry=True, basis=basis, output='/dev/null', verbose=0)
+
+    mf = scf.RHF(mol).run()
+
+    weights = [0.5, 0.5]
+    solver1 = fci.direct_spin1_symm.FCI(mol)
+    solver1.wfnsym = 'A1'
+    solver1.spin = 0
+    solver2 = fci.direct_spin1_symm.FCI(mol)
+    solver2.wfnsym = 'A2'
+    solver2.spin = 0
+
+    mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
+    mc.run()
+    return mc
 
 def get_water_triplet(functional='tPBE', basis="6-31G"):
     mol = gto.M(atom='''
@@ -85,21 +85,23 @@ def get_water_triplet(functional='tPBE', basis="6-31G"):
 
 
 def setUpModule():
-    global lih, lih_4, lih_tpbe, lih_tpbe0, t_water
+    global lih, lih_4, lih_tpbe, lih_tpbe0, water, t_water
     lih = get_lih(1.5)
     lih_4 = get_lih(1.5, n_states=4, basis="6-31G")
     lih_tpbe = get_lih(1.5, functional="tPBE")
     lih_tpbe0 = get_lih(1.5, functional="tPBE0")
+    water = get_water()
     t_water = get_water_triplet()
 
 def tearDownModule():
-    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water
+    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water
     lih.mol.stdout.close()
     lih_4.mol.stdout.close()
     lih_tpbe0.mol.stdout.close()
     lih_tpbe.mol.stdout.close()
+    water.mol.stdout.close()
     t_water.mol.stdout.close()
-    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water
+    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water
 
 class KnownValues(unittest.TestCase):
 
@@ -173,21 +175,21 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(lih_tpbe0.e_states, e_hlpdft, 9)
         self.assertListAlmostEqual(hlpdft_ham.flatten(), lih_tpbe0.lpdft_ham.flatten(), 9)
 
-    # def test_water_spatial_samix(self):
-    #     e_mcscf_avg = np.dot(water.e_mcscf, water.weights)
-    #     hdiag = water.get_lpdft_diag()
-    #     e_states = water.e_states
-    #
-    #     # References values from
-    #     #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
-    #     #     - PySCF-forge commit 2c75a59604c458069ebda550e84a866ec1be45dc
-    #     E_MCSCF_AVG_EXPECTED = -75.81489195169507
-    #     HDIAG_EXPECTED = [-76.29913074162732, -75.93502437481517]
-    #
-    #     self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
-    #     self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
-    #     # The off-diagonal should be identical to zero because of symmetry
-    #     self.assertListAlmostEqual(e_states, hdiag, 10)
+    def test_water_spatial_samix(self):
+        e_mcscf_avg = np.dot(water.e_mcscf, water.weights)
+        hdiag = water.get_lpdft_diag()
+        e_states = water.e_states
+
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit 2c75a59604c458069ebda550e84a866ec1be45dc
+        E_MCSCF_AVG_EXPECTED = -75.81489195169507
+        HDIAG_EXPECTED = [-76.29913074162732, -75.93502437481517]
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
+        # The off-diagonal should be identical to zero because of symmetry
+        self.assertListAlmostEqual(e_states, hdiag, 10)
 
     def test_water_spin_samix(self):
         e_mcscf_avg = np.dot(t_water.e_mcscf, t_water.weights)
