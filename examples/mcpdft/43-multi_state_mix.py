@@ -2,7 +2,8 @@
 
 
 '''
-Perform multi-state PDFT averaging over states of different spins and/or spatial symmetry
+Perform multi-state PDFT averaging over states of different spins
+and/or spatial symmetry
 
 The mcpdft.multi_state function maybe not generate the right spin or spatial
 symmetry as one needs.  This example shows how to put states with different
@@ -55,6 +56,8 @@ mol.build(atom='''
 
 mf = scf.RHF(mol).run()
 
+# Also possible to construct 2 solvers of different wfnsym, but
+# of the same spin symmetry
 weights = [.5, .5]
 solver1 = fci.direct_spin1_symm.FCI(mol)
 solver1.wfnsym= 'A1'
