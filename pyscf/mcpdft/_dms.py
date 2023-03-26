@@ -230,8 +230,7 @@ def make_weighted_casdm1s(mc, ci=None, weights=None):
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.
-    fcisolver, _, nelecas = _get_fcisolver(mc, ci)
-    casdm1s_all = [fcisolver.make_rdm1s(c, ncas, nelecas) for c in ci]
+    casdm1s_all = [make_one_casdm1s(mc, ci, state) for state in range(len(ci))]
     casdm1s_0 = np.tensordot(weights, casdm1s_all, axes=1)
     return tuple(casdm1s_0)
 
@@ -257,6 +256,5 @@ def make_weighted_casdm2(mc, ci=None, weights=None):
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.
-    fcisolver, _, nelecas = _get_fcisolver(mc, ci)
-    casdm2_all = [fcisolver.make_rdm2(c, ncas, nelecas) for c in ci]
+    casdm2_all = [make_one_casdm2(mc, ci, state) for state in range(len(ci))]
     return np.tensordot(weights, casdm2_all, axes=1)

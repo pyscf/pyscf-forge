@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2022 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2023 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Author: Matthew Hennefarth <mhennefarth@uchicago.com>
+
 from functools import reduce
 import numpy as np
 from scipy import linalg
@@ -21,6 +23,8 @@ from pyscf.lib import logger
 from pyscf.fci import direct_spin1
 from pyscf import mcpdft
 from pyscf.mcpdft import _dms
+from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
+    StateAverageMixFCISolver
 
 
 def weighted_average_densities(mc, ci=None, weights=None):
@@ -237,9 +241,11 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         ot : an instance of on-top functional class - see otfnal.py
 
     Returns:
-        lpdft_ham : ndarray of shape (nroots, nroots)
+        lpdft_ham : ndarray of shape (nroots, nroots) or (nirreps, nroots, nroots)
             Linear approximation to the MC-PDFT energy expressed as a
-            hamiltonian in the basis provided by the CI vectors.
+            hamiltonian in the basis provided by the CI vectors. If
+            StateAverageMix, then returns the block diagonal of the lpdft
+            hamiltonian for each irrep.
     '''
 
     if mo_coeff is None: mo_coeff = mc.mo_coeff
@@ -268,13 +274,31 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
     h2 = mc.get_h2lpdft(veff2_0)
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
-    hc_all = [direct_spin1.contract_2e(h2eff, c, ncas, mc.nelecas) for c in ci]
 
-    lpdft_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
-    idx = np.diag_indices_from(lpdft_ham)
-    lpdft_ham[idx] += h0 + cas_hyb * mc.e_mcscf
+    def construct_ham_slice(solver, slice, nelecas):
+        ci_irrep = ci[slice]
+        if hasattr(solver, "orbsym"):
+            solver.orbsym = mc.fcisolver.orbsym
 
-    return lpdft_ham
+        hc_all_irrep = [solver.contract_2e(h2eff, c, ncas, nelecas) for c in ci_irrep]
+        lpdft_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+        diag_idx = np.diag_indices_from(lpdft_irrep)
+        lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[slice]
+        return lpdft_irrep
+
+    if not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
+
+    # We have a StateAverageMix Solver
+    # Todo, should maybe initialize this in a more obvious way?
+    mc._irrep_slices = []
+    start = 0
+    for solver in mc.fcisolver.fcisolvers:
+        end = start + solver.nroots
+        mc._irrep_slices.append(slice(start, end))
+        start = end
+
+    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec (s, mc.nelecas)) for s, irrep in zip(mc.fcisolver.fcisolvers, mc._irrep_slices)]
 
 
 def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
@@ -284,7 +308,14 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
     #log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
-    mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
+
+    if hasattr(mc, "_irrep_slices"):
+        e_states, si_pdft = zip(*map(mc._eig_si, mc.lpdft_ham))
+        mc.e_states = np.concatenate(e_states)
+        mc.si_pdft = linalg.block_diag(*si_pdft)
+
+    else:
+        mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
 
@@ -358,9 +389,17 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 are also the diagonal elements of the L-PDFT Hamiltonian
                 matrix.
         '''
-        idx = np.diag_indices_from(self.lpdft_ham)
-        lpdft_ham = self.lpdft_ham.copy()
-        return lpdft_ham[idx]
+        return np.diagonal(self.lpdft_ham).copy()
+
+    def get_lpdft_ham(self):
+        '''The L-PDFT effective Hamiltonian matrix
+
+            Returns:
+                lpdft_ham : ndarray of shape (nroots, nroots)
+                    Contains L-PDFT Hamiltonian elements on the off-diagonals
+                    and PDFT approx energies on the diagonals
+                '''
+        return self.lpdft_ham
 
     def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
         '''
@@ -390,20 +429,19 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
             ci0 = [c.copy() for c in self.ci]
 
         kernel(self, mo_coeff, ci0, ot=ot, verbose=log)
-        self._finalize_ql()
+        self._finalize_lin()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
             self.mo_coeff, self.mo_energy)
 
-    def _finalize_ql(self):
+    def _finalize_lin(self):
         log = logger.Logger(self.stdout, self.verbose)
         nroots = len(self.e_states)
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
                                                   None):
-            ci = np.tensordot(self.si_pdft, np.asarray(self.ci), axes=1)
-            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[
-                0]
+            ci = self.get_ci_adiabats()
+            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
                 log.note('  State %d weight %g  ELPDFT = %.15g  S^2 = %.7f',
@@ -414,8 +452,88 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
 
+    def get_ci_adiabats(self, ci=None):
+        '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
+
+            Kwargs:
+                ci : list of length nroots
+                    MC-SCF ci vectors; defaults to self.ci
+
+            Returns:
+                ci : list of length nroots
+                    CI vectors in basis of L-PDFT Hamiltonian eigenvectors
+        '''
+        if ci is None: ci = self.ci
+        return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
+
     def _eig_si(self, ham):
         return linalg.eigh(ham)
+
+
+class _LPDFTMix(_LPDFT):
+    '''State Averaged Mixed Linerized PDFT
+
+    Saved Results
+
+        e_tot : float
+            Weighted-average L-PDFT final energy
+        e_states : ndarray of shape (nroots)
+            L-PDFT final energies of the adiabatic states
+        ci : list of length (nroots) of ndarrays
+            CI vectors in the optimized adiabatic basis of MC-SCF. Related to the
+            L-PDFT adiabat CI vectors by the expansion coefficients ``si_pdft''.
+        si_pdft : ndarray of shape (nroots, nroots)
+            Expansion coefficients of the L-PDFT adiabats in terms of the optimized
+            MC-SCF adiabats
+        e_mcscf : ndarray of shape (nroots)
+            Energies of the MC-SCF adiabatic states
+        lpdft_ham : list of ndarray of shape (nirreps, nroots, nroots)
+            L-PDFT Hamiltonian in the MC-SCF adiabatic basis within each irrep
+    '''
+
+    def __init__(self, mc):
+        super().__init__(mc)
+        # Holds the irrep slices for when we need to index into various quantities
+        self._irrep_slices = None
+
+    def get_lpdft_diag(self):
+        '''Diagonal elements of the L-PDFT Hamiltonian matrix
+            (H_00^L-PDFT, H_11^L-PDFT, H_22^L-PDFT, ...)
+
+        Returns:
+            lpdft_diag : ndarray of shape (nroots)
+                Contains the linear approximation to the MC-PDFT energy. These
+                are also the diagonal elements of the L-PDFT Hamiltonian
+                matrix.
+        '''
+        return np.concatenate([np.diagonal(irrep_ham).copy() for irrep_ham in self.lpdft_ham])
+
+    def get_lpdft_ham(self):
+        '''The L-PDFT effective Hamiltonian matrix
+
+            Returns:
+                lpdft_ham : ndarray of shape (nroots, nroots)
+                    Contains L-PDFT Hamiltonian elements on the off-diagonals
+                    and PDFT approx energies on the diagonals
+        '''
+        return linalg.block_diag(*self.lpdft_ham)
+
+    def get_ci_adiabats(self, ci=None):
+        '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
+
+            Kwargs:
+                ci : list of length nroots
+                    MC-SCF ci vectors; defaults to self.ci
+
+            Returns:
+                ci : list of length nroots
+                    CI vectors in basis of L-PDFT Hamiltonian eigenvectors
+        '''
+        if ci is None: ci = self.ci
+        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci[irrep_slice]), axes=1) for
+                      irrep_slice in self._irrep_slices]
+        # Flattens it
+        return [c for ci_irrep in adiabat_ci for c in ci_irrep]
 
 
 def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
@@ -449,6 +567,42 @@ def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
     mcbase_class = mc.__class__
 
     class LPDFT(_LPDFT, mcbase_class):
+        pass
+
+    LPDFT.__name__ = "LIN" + base_name
+    return LPDFT(mc)
+
+def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
+    ''' Build SA Mix linearized multi-state MC-PDFT method object
+
+    Args:
+        mc : instance of class _PDFT
+
+        fcisolvers : fcisolvers to construct StateAverageMixSolver with
+
+    Kwargs:
+        weights : sequence of floats
+
+    Returns:
+        si : instance of class _LPDFT
+    '''
+
+    if isinstance(mc, mcpdft.MultiStateMCPDFTSolver):
+        raise RuntimeError('already a multi-state PDFT solver')
+
+    if not isinstance(mc, StateAverageMCSCFSolver):
+        base_name = mc.__class__.__name__
+        mc = mc.state_average_mix(fcisolvers, weights=weights, **kwargs)
+
+    elif not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        raise RuntimeError("already a StateAverageMCSCF solver")
+
+    else:
+        base_name = mc.__class__.bases__[0].__name__
+
+    mcbase_class = mc.__class__
+
+    class LPDFT(_LPDFTMix, mcbase_class):
         pass
 
     LPDFT.__name__ = "LIN" + base_name
