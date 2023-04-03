@@ -16,11 +16,13 @@
 import numpy as np
 from scipy import linalg
 from pyscf import gto, scf, lib, mcscf
-from pyscf.dft.libxc import XC_KEYS, XC_ALIAS, is_meta_gga, hybrid_coeff, rsh_coeff
+from pyscf.dft.libxc import XC_KEYS, XC_ALIAS, hybrid_coeff, rsh_coeff
+from pyscf.dft.libxc import parse_xc, is_nlc, _itrf
 from pyscf import mcpdft
 from pyscf.mcpdft.otfnal import make_hybrid_fnal
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 import unittest
+import ctypes
 from itertools import product
 
 h2 = scf.RHF (gto.M (atom = 'H 0 0 0; H 1.2 0 0', basis = 'sto-3g', 
@@ -39,13 +41,31 @@ def test_hybrid_and_decomp (kv, xc):
     e_hyb = mc.energy_tot (otxc=htxc)[0]
     kv.assertAlmostEqual (e_hyb, 0.75*e_pdft+0.25*mc.e_mcscf, 10)
 
+# _itrf.LIBXC_is_meta_gga returns an error code (-1) if the functional isn't found
+# Abuse this to screen broken or unavailable KS-DFT functionals
+# Cf. PySCF issue #1692
+# TODO: revisit after _itrf or libxc.py is improved to handle error codes
+def is_meta_gga_or_broken(xc_code):
+    if xc_code is None:
+        return None
+    elif isinstance(xc_code, str):
+        if is_nlc(xc_code):
+            return 'NLC'
+        hyb, fn_facs = parse_xc(xc_code)
+    else:
+        fn_facs = [(xc_code, 1)]  # mimic fn_facs
+    if not fn_facs:
+        return False
+    else:
+        return any(_itrf.LIBXC_is_meta_gga(ctypes.c_int(xid)) for xid, fac in fn_facs)
+
 def _skip_key (key):
     xc = str (key)
     return (xc in LIBXC_KILLS
             or '_XC_' in xc
             or '_K_' in xc
             or xc.startswith ('HYB_')
-            or is_meta_gga (xc)
+            or is_meta_gga_or_broken (xc)
             or hybrid_coeff (xc)
             or rsh_coeff (xc)[0])
 
