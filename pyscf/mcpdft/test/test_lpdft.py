@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2022 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2023 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Author: Matthew Hennefarth <mhennefarth@uchicago.com>
+
 import numpy as np
-from pyscf import gto, scf 
+from pyscf import gto, scf, fci
 from pyscf import mcpdft
 import unittest
 
@@ -36,20 +38,70 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
     mc = mc.run()
     return mc
 
+def get_water(functional='tpbe', basis='6-31g'):
+    mol = gto.M(atom='''
+ O     0.    0.000    0.1174
+ H     0.    0.757   -0.4696
+ H     0.   -0.757   -0.4696
+    ''',symmetry=True, basis=basis, output='/dev/null', verbose=0)
+
+    mf = scf.RHF(mol).run()
+
+    weights = [0.5, 0.5]
+    solver1 = fci.direct_spin1_symm.FCI(mol)
+    solver1.wfnsym = 'A1'
+    solver1.spin = 0
+    solver2 = fci.direct_spin1_symm.FCI(mol)
+    solver2.wfnsym = 'A2'
+    solver2.spin = 2
+
+    mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
+    mc.run()
+    return mc
+
+def get_water_triplet(functional='tPBE', basis="6-31G"):
+    mol = gto.M(atom='''
+    O     0.    0.000    0.1174
+    H     0.    0.757   -0.4696
+    H     0.   -0.757   -0.4696
+       ''', symmetry=True, basis=basis, output='/dev/null', verbose=0)
+
+    mf = scf.RHF(mol).run()
+
+    weights = np.ones(3) / 3
+    solver1 = fci.direct_spin1_symm.FCI(mol)
+    solver1.spin = 2
+    solver1 = fci.addons.fix_spin(solver1, shift=.2, ss=2)
+    solver1.nroots = 1
+    solver2 = fci.direct_spin0_symm.FCI(mol)
+    solver2.spin = 0
+    solver2.nroots = 2
+
+    mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
+    mc.run()
+    return mc
+
+
 def setUpModule():
-    global mc, mc_4, mc_tpbe, mc_tpbe0
-    mc = get_lih(1.5)
-    mc_4 = get_lih(1.5, n_states=4, basis="6-31G")
-    mc_tpbe = get_lih(1.5, functional="tPBE")
-    mc_tpbe0 = get_lih(1.5, functional="tPBE0")
+    global lih, lih_4, lih_tpbe, lih_tpbe0, water, t_water
+    lih = get_lih(1.5)
+    lih_4 = get_lih(1.5, n_states=4, basis="6-31G")
+    lih_tpbe = get_lih(1.5, functional="tPBE")
+    lih_tpbe0 = get_lih(1.5, functional="tPBE0")
+    water = get_water()
+    t_water = get_water_triplet()
 
 def tearDownModule():
-    global  mc, mc_4, mc_tpbe0, mc_tpbe
-    mc.mol.stdout.close()
-    mc_4.mol.stdout.close()
-    mc_tpbe0.mol.stdout.close()
-    mc_tpbe.mol.stdout.close()
-    del mc, mc_4, mc_tpbe0, mc_tpbe
+    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water
+    lih.mol.stdout.close()
+    lih_4.mol.stdout.close()
+    lih_tpbe0.mol.stdout.close()
+    lih_tpbe.mol.stdout.close()
+    water.mol.stdout.close()
+    t_water.mol.stdout.close()
+    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water
 
 class KnownValues(unittest.TestCase):
 
@@ -59,11 +111,11 @@ class KnownValues(unittest.TestCase):
             self.assertAlmostEqual(first, second, expected)
 
     def test_lih_2_states_adiabat(self):
-        e_mcscf_avg = np.dot (mc.e_mcscf, mc.weights)
-        hcoup = abs(mc.lpdft_ham[1,0])
-        hdiag = mc.get_lpdft_diag()
+        e_mcscf_avg = np.dot (lih.e_mcscf, lih.weights)
+        hcoup = abs(lih.lpdft_ham[1,0])
+        hdiag = lih.get_lpdft_diag()
 
-        e_states = mc.e_states
+        e_states = lih.e_states
 
         # Reference values from OpenMolcas v22.02, tag 177-gc48a1862b
         E_MCSCF_AVG_EXPECTED = -7.78902185
@@ -82,10 +134,10 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
 
     def test_lih_4_states_adiabat(self):
-        e_mcscf_avg = np.dot(mc_4.e_mcscf, mc_4.weights)
-        hdiag = mc_4.get_lpdft_diag()
-        hcoup = mc_4.lpdft_ham[np.triu_indices(4, k=1)]
-        e_states = mc_4.e_states
+        e_mcscf_avg = np.dot(lih_4.e_mcscf, lih_4.weights)
+        hdiag = lih_4.get_lpdft_diag()
+        hcoup = lih_4.lpdft_ham[np.triu_indices(4, k=1)]
+        e_states = lih_4.e_states
 
         # References values from
         #     - PySCF       commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
@@ -102,13 +154,13 @@ class KnownValues(unittest.TestCase):
 
 
     def test_lih_hybrid_tPBE_adiabat(self):
-        e_mcscf_tpbe_avg = np.dot(mc_tpbe.e_mcscf, mc_tpbe.weights)
-        e_mcscf_tpbe0_avg = np.dot(mc_tpbe0.e_mcscf, mc_tpbe0.weights)
+        e_mcscf_tpbe_avg = np.dot(lih_tpbe.e_mcscf, lih_tpbe.weights)
+        e_mcscf_tpbe0_avg = np.dot(lih_tpbe0.e_mcscf, lih_tpbe0.weights)
 
-        hlpdft_ham = 0.75 * mc_tpbe.lpdft_ham
+        hlpdft_ham = 0.75 * lih_tpbe.lpdft_ham
         idx = np.diag_indices_from(hlpdft_ham)
-        hlpdft_ham[idx] += 0.25 * mc_tpbe.e_mcscf
-        e_hlpdft, si_hlpdft = mc_tpbe._eig_si(hlpdft_ham)
+        hlpdft_ham[idx] += 0.25 * lih_tpbe.e_mcscf
+        e_hlpdft, si_hlpdft = lih_tpbe._eig_si(hlpdft_ham)
 
         # References values from
         #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
@@ -119,9 +171,44 @@ class KnownValues(unittest.TestCase):
 
         self.assertAlmostEqual(e_mcscf_tpbe_avg, E_MCSCF_AVG_EXPECTED, 7)
         self.assertAlmostEqual(e_mcscf_tpbe_avg, e_mcscf_tpbe0_avg, 9)
-        self.assertListAlmostEqual(mc_tpbe.e_states, E_TPBE_STATES_EXPECTED, 7)
-        self.assertListAlmostEqual(mc_tpbe0.e_states, e_hlpdft, 9)
-        self.assertListAlmostEqual(hlpdft_ham.flatten(), mc_tpbe0.lpdft_ham.flatten(), 9)
+        self.assertListAlmostEqual(lih_tpbe.e_states, E_TPBE_STATES_EXPECTED, 7)
+        self.assertListAlmostEqual(lih_tpbe0.e_states, e_hlpdft, 9)
+        self.assertListAlmostEqual(hlpdft_ham.flatten(), lih_tpbe0.lpdft_ham.flatten(), 9)
+
+    def test_water_spatial_samix(self):
+        e_mcscf_avg = np.dot(water.e_mcscf, water.weights)
+        hdiag = water.get_lpdft_diag()
+        e_states = water.e_states
+
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit 2c75a59604c458069ebda550e84a866ec1be45dc
+        E_MCSCF_AVG_EXPECTED = -75.81489195169507
+        HDIAG_EXPECTED = [-76.29913074162732, -75.93502437481517]
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
+        # The off-diagonal should be identical to zero because of symmetry
+        self.assertListAlmostEqual(e_states, hdiag, 10)
+
+    def test_water_spin_samix(self):
+        e_mcscf_avg = np.dot(t_water.e_mcscf, t_water.weights)
+        hdiag = t_water.get_lpdft_diag()
+        e_states = t_water.e_states
+        hcoup = abs(t_water.get_lpdft_ham()[1,2])
+
+        # References values from
+        #     - PySCF       commit 8ae2bb2eefcd342c52639097517b1eda7ca5d1cd
+        #     - PySCF-forge commit 2c75a59604c458069ebda550e84a866ec1be45dc
+        E_MCSCF_AVG_EXPECTED = -75.75552048294597
+        HDIAG_EXPECTED = [-76.01218048502902, -76.31379141689696, -75.92134410312458]
+        E_STATES_EXPECTED = [-76.01218048502898, -76.3168078608912, -75.91832765913041]
+        HCOUP_EXPECTED = 0.03453830159471619
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
+        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 7)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
