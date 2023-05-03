@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 import numpy as np
 from scipy import linalg
 from pyscf import gto, scf, df
@@ -20,6 +21,7 @@ from pyscf import mcpdft
 #from pyscf.fci import csf_solver
 #from pyscf.df.grad import dfmcpdft as mcpdft_grad
 import unittest
+topdir = os.path.abspath (os.path.join (__file__, '..'))
 
 h2co_casscf66_631g_xyz = \
 '''
@@ -40,12 +42,13 @@ def get_mc_ref (mol, ri=False, sa2=False):
 #            fcisolvers[0].wfnsym = 'A1'
 #            fcisolvers[1].wfnsym = 'A2'
 #        mc = mc.state_average_mix_(fcisolvers, [0.5,0.5])
-#        ref = np.load ('h2co_sa2_tpbe66_631g_grad_num.npy').reshape (2,2,4,3)[int(ri)]
+#        ref = np.load (os.path.join (topdir, 'h2co_sa2_tpbe66_631g_grad_num.npy'))
+#        ref = ref.reshape (2,2,4,3)[int(ri)]
 #    else:
-#        ref = np.load ('h2co_tpbe66_631g_grad_num.npy')[int(ri)]
+#        ref = np.load (os.path.join (topdir, 'h2co_tpbe66_631g_grad_num.npy'))[int(ri)]
  #this refernce is obtained by mcpdft numerical differentiation in pyscf 
  #using central differences with a second order accuracy and step size of 1e-4 
-    ref = np.load ('h2co_tpbe66_631g_edipole_num.npy')[int(ri)]
+    ref = np.load (os.path.join (topdir, 'h2co_tpbe66_631g_edipole_num.npy'))[int(ri)]
     return mc.run (), ref
 
 def tearDownModule():
