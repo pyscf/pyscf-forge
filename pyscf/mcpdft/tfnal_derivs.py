@@ -290,7 +290,7 @@ def _jT_f_j (frr, jT_op, *args, **kwargs):
 
     # build square-matrix index array to address packed matrix frr w/o copying
     ltri_ix = np.tril_indices (nr)
-    idx_arr = np.zeros ((nr, nr), dtype=np.int)
+    idx_arr = np.zeros ((nr, nr), dtype=np.int32)
     idx_arr[ltri_ix] = range (nel)
     idx_arr += idx_arr.T
     diag_ix = np.diag_indices (nr)
