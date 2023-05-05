@@ -150,17 +150,19 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
 
-#    def test_grad_lih_cms2ftlda22_sto3g_df (self):
-#        # z_orb:    yes
-#        # z_ci:     yes
-#        # z_is:     yes
-#        mc_grad = diatomic ('Li', 'H', 2.5, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2, density_fit=True)
-#        de_ref = [0.1074553399, 0.03956955205] 
-#        # Numerical from this software
-#        for i in range (2):
-#         with self.subTest (state=i):
-#            de = mc_grad.kernel (state=i) [1,0] / BOHR
-#            self.assertAlmostEqual (de, de_ref[i], 5)
+    # MRH 05/05/2023: currently, the only other test which uses DF-MC-PDFT features is
+    # test_grad_h2co, which is slower than this. Therefore I am restoring it.
+    def test_grad_lih_cms2ftlda22_sto3g_df (self):
+        # z_orb:    yes
+        # z_ci:     yes
+        # z_is:     yes
+        mc_grad = diatomic ('Li', 'H', 2.5, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2, density_fit=True)
+        de_ref = [0.1074553399, 0.03956955205] 
+        # Numerical from this software
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_ref[i], 5)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradients of diatomic molecules")
