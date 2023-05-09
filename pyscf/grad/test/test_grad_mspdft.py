@@ -82,6 +82,10 @@ class KnownValues(unittest.TestCase):
     def test_offdiag_response_sanity (self):
         for mcs, stype in zip (get_mc_list (), ('nosymm','symm')):
          for mca, atype in zip (mcs, ('nomix','mix')):
+          if 'no' not in atype:
+            continue
+            # TODO: redesign this test case. MS-PDFT "_mix" is undefined except
+            # for L-PDFT and XMS-PDFT, whose gradients aren't implemented yet
           for mc, itype in zip (mca, ('conv', 'DF')):
             ci_arr = np.asarray (mc.ci)
             if itype == 'conv': mc_grad = mc.nuc_grad_method ()
@@ -119,6 +123,10 @@ class KnownValues(unittest.TestCase):
     def test_offdiag_grad_sanity (self):
         for mcs, stype in zip (get_mc_list (), ('nosymm','symm')):
          for mca, atype in zip (mcs, ('nomix','mix')):
+          if 'no' not in atype:
+            continue
+            # TODO: redesign this test case. MS-PDFT "_mix" is undefined except
+            # for L-PDFT and XMS-PDFT, whose gradients aren't implemented yet
           for mc, itype in zip (mca, ('conv', 'DF')):
             ci_arr = np.asarray (mc.ci)
             if itype == 'conv': mc_grad = mc.nuc_grad_method ()
