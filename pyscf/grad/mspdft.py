@@ -562,8 +562,7 @@ class Gradients (mcpdft_grad.Gradients):
                 xci_ss = self.base.fcisolver.states_spin_square (xci,
                     self.base.ncas, self.base.nelecas)[0]
             except AttributeError:
-                # _unpack_nelec is not important anywhere...this code will break
-                # or fail pretty badly
+                from pyscf.fci.direct_spin1 import _unpack_nelec
                 nelec = sum (_unpack_nelec(self.base.nelecas))
                 # There is no function spin_square anywhere... @Matthew R. Hermes
                 xci_ss = [spin_square (x, self.base.ncas,
