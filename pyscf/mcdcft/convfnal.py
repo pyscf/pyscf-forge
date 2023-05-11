@@ -38,8 +38,8 @@ class convfnal(otfnal):
         self.occ = occ
 
     def get_E_ot (self, rho, D, weight):
-        r''' E_ot[rho, Pi] = V_xc[rho_translated] 
-    
+        r''' E_ot[rho, Pi] = V_xc[rho_translated]
+
             Args:
                 rho : ndarray of shape (2,*,ngrids)
                     containing spin-density [and derivatives]
@@ -47,7 +47,7 @@ class convfnal(otfnal):
                     containing unpaired density and derivatives
                 weight : ndarray of shape (ngrids)
                     containing numerical integration weights
-    
+
             Returns : float
                 The on-top exchange-correlation energy, for an on-top xc functional
                 which uses a translated density with an otherwise standard xc functional
@@ -55,11 +55,12 @@ class convfnal(otfnal):
         assert (rho.shape[-1] == D.shape[-1]), f"rho.shape={rho.shape}, D.shape={D.shape}"
         if rho.ndim == 2:
             rho = np.expand_dims (rho, 1)
-            
+
         rho_t = self.get_rho_converted(rho, D)
         rho = np.squeeze(rho)
 
-        dexc_ddens = self._numint.eval_xc(self.otxc, (rho_t[0,:,:], rho_t[1,:,:]), spin=1, relativity=0, deriv=0, verbose=self.verbose)[0]
+        dexc_ddens = self._numint.eval_xc(
+            self.otxc, (rho_t[0,:,:], rho_t[1,:,:]), spin=1, relativity=0, deriv=0, verbose=self.verbose)[0]
         rho = rho_t[:,0,:].sum(0)
         rho *= weight
         dexc_ddens *= rho
@@ -69,21 +70,23 @@ class convfnal(otfnal):
         if self.verbose >= logger.DEBUG:
             nelec = rho.sum()
             logger.debug(self, 'MC-DCFT: Total number of electrons in (this chunk of) the total density = %s', nelec)
-            logger.debug(self, 'MC-DCFT: Total ms = (neleca - nelecb) / 2 in (this chunk of) the translated density = %s', ms)
+            logger.debug(self,
+                         'MC-DCFT: Total ms = (neleca - nelecb) / 2 in (this chunk of) the translated density = %s',
+                         ms)
 
         return dexc_ddens.sum()
 
     def get_rho_converted(self, rho, D):
         r''' converted rho
         rho_c[0] = {(rho[0] + rho[1]) / 2} + D / 2
-        rho_c[1] = {(rho[0] + rho[1]) / 2} - D / 2 
-    
+        rho_c[1] = {(rho[0] + rho[1]) / 2} - D / 2
+
             Args:
                 rho : ndarray of shape (2, *, ngrids)
                     containing spin density [and derivatives]
                 D : ndarray of shape (*, ngrids)
                     containing on-top pair density [and derivatives]
-    
+
             Returns: ndarray of shape (2, *, ngrids)
                 containing converted unpaired density (and derivatives)
         '''

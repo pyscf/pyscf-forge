@@ -30,7 +30,7 @@ from pyscf.mcscf.df import _DFCASSCF
 from pyscf.mcpdft import pdft_veff
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf.mcpdft.otfnal import otfnal, transfnal, get_transfnal
-from pyscf.mcpdft import _dms 
+from pyscf.mcpdft import _dms
 
 def energy_tot (mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     '''Calculate MC-PDFT total energy
@@ -138,7 +138,7 @@ def energy_mcwfn (mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if casdm1s is None: casdm1s = mc.make_one_casdm1s (ci=ci, state=state)
     if casdm2 is None: casdm2 = mc.make_one_casdm2 (ci=ci, state=state)
     log = logger.new_logger (mc, verbose=verbose)
-    ncas, nelecas = mc.ncas, mc.nelecas
+    nelecas = mc.nelecas
     dm1s = _dms.casdm1s_to_dm1s (mc, casdm1s, mo_coeff=mo_coeff)
     cascm2 = _dms.dm2_cumulant (casdm2, casdm1s)
 
@@ -158,7 +158,7 @@ def energy_mcwfn (mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
         vj = mc._scf.get_j (dm=dm1)
     Te_Vne = np.tensordot (h, dm1)
     # (vj_a + vj_b) * (dm_a + dm_b)
-    E_j = np.tensordot (vj, dm1) / 2  
+    E_j = np.tensordot (vj, dm1) / 2
     # (vk_a * dm_a) + (vk_b * dm_b) Mind the difference!
     if log.verbose >= logger.DEBUG or abs (hyb_x) > 1e-10:
         E_x = -(np.tensordot (vk[0], dm1s[0]) + np.tensordot (vk[1], dm1s[1]))
@@ -180,7 +180,7 @@ def energy_mcwfn (mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if abs (hyb_x) > 1e-10 or abs (hyb_c) > 1e-10:
         log.debug (('Adding %s * %s CAS exchange, %s * %s CAS correlation to '
                     'E_ot'), hyb_x, E_x, hyb_c, E_c)
-    e_mcwfn = Vnn + Te_Vne + E_j + (hyb_x * E_x) + (hyb_c * E_c) 
+    e_mcwfn = Vnn + Te_Vne + E_j + (hyb_x * E_x) + (hyb_c * E_c)
     return e_mcwfn
 
 def energy_dft (mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
@@ -228,7 +228,7 @@ def get_energy_decomposition (mc, mo_coeff=None, ci=None, ot=None, otxc=None,
         split_x_c : logical
             whether to split the exchange and correlation parts of the
             ot functional into two separate contributions
-        
+
 
     Returns:
         e_nuc : float
@@ -246,7 +246,7 @@ def get_energy_decomposition (mc, mo_coeff=None, ci=None, ot=None, otxc=None,
             EOTc = correlation part of translated functional
         e_ncwfn : float or list of length nroots
             E2ncc = <H> - E0 - E1 - E2c
-    '''            
+    '''
     if verbose is None: verbose = mc.verbose
     log = logger.new_logger(mc, verbose)
     if mo_coeff is None: mo_coeff=mc.mo_coeff
@@ -328,7 +328,6 @@ def _get_e_decomp (mc, ot, mo_coeff, ci, e_nuc, h, nelecas):
                 np.dot (h2.ravel (), adm2.ravel ())*0.5)
     adm1s = np.stack (_casdms.make_rdm1s (ci, ncas, nelecas), axis=0)
     adm2 = _casdms.make_rdm12 (_rdms.ci, ncas, nelecas)[1]
-    mo_cas = mo_coeff[:,ncore:][:,:ncas]
     e_otxc = [fnal.energy_ot (adm1s, adm2, mo_coeff, ncore,
                               max_memory=mc.max_memory)
               for fnal in ot]
@@ -355,7 +354,7 @@ class _mcscf_env (object):
                 self.mc.fcisolver.e_states = self.e_states
                 assert (self.mc.e_states is self.e_states), str (e)
             # TODO: redesign this. MC-SCF e_states is stapled to
-            # fcisolver.e_states, but I don't want MS-PDFT to be 
+            # fcisolver.e_states, but I don't want MS-PDFT to be
             # because that makes no sense
         self.mc._in_mcscf_env = False
 
@@ -391,7 +390,7 @@ class _PDFT ():
         if grids_attr is None: grids_attr = {}
         try:
             super().__init__(scf, ncas, nelecas)
-        except TypeError as e:
+        except TypeError:
             # I think this is the same DFCASSCF problem as with the DF-SACASSCF
             # gradients earlier
             super().__init__()
@@ -423,17 +422,18 @@ class _PDFT ():
         for key in grids_attr:
             assert (getattr (self.grids, key, None) == getattr (
                 self.otfnal.grids, key, None))
-        # Make sure verbose and stdout don't accidentally change 
+        # Make sure verbose and stdout don't accidentally change
         # (i.e., in scanner mode)
         self.otfnal.verbose = self.verbose
         self.otfnal.stdout = self.stdout
 
     @property
-    def grids (self): return self.otfnal.grids
+    def grids (self):
+        return self.otfnal.grids
     @grids.setter
     def grids (self, x):
         self.otfnal.grids = x
-        return self.otfnal.grids 
+        return self.otfnal.grids
 
     def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
         '''Optimize the MC-SCF wave function underlying an MC-PDFT calculation.
@@ -468,7 +468,7 @@ class _PDFT ():
                     self.fcisolver.e_states = e_states
                     assert (self.e_states is e_states), str (e)
                 # TODO: redesign this. MC-SCF e_states is stapled to
-                # fcisolver.e_states, but I don't want MS-PDFT to be 
+                # fcisolver.e_states, but I don't want MS-PDFT to be
                 # because that makes no sense
                 self.e_tot = np.dot (e_states, self.weights)
                 e_states = self.e_states
@@ -478,7 +478,7 @@ class _PDFT ():
             return self.e_tot, self.e_ot, e_states
         else:
             self.e_tot, self.e_ot = self.energy_tot (mo_coeff=self.mo_coeff, ci=self.ci)
-            return self.e_tot, self.e_ot, [self.e_tot] 
+            return self.e_tot, self.e_ot, [self.e_tot]
 
     def kernel (self, mo_coeff=None, ci0=None, otxc=None, grids_attr=None,
                 grids_level=None, **kwargs):
@@ -531,7 +531,8 @@ class _PDFT ():
                 potential in veff2.j_pc and veff2.k_pc. Otherwise these
                 arrays are filled with zeroes.
             drop_mcwfn : logical
-                If true, drops the normal CASSCF wave function contribution (ie the ``Hartree exchange-correlation'') from the response
+                If true, drops the normal CASSCF wave function contribution
+                (ie the ``Hartree exchange-correlation'') from the response
 
         Returns:
             veff1 : ndarray of shape (nao, nao)
@@ -540,22 +541,21 @@ class _PDFT ():
                 incl_coul kwarg)
             veff2 : pyscf.mcscf.mc_ao2mo._ERIS instance
                 Relevant 2-body effective potential in the MO basis
-        ''' 
+        '''
         t0 = (logger.process_clock (), logger.perf_counter ())
         if mo is None: mo = self.mo_coeff
         if ci is None: ci = self.ci
         if casdm1s is None: casdm1s = self.make_one_casdm1s (ci, state=state)
         if casdm2 is None: casdm2 = self.make_one_casdm2 (ci, state=state)
-        ncore, ncas, nelecas = self.ncore, self.ncas, self.nelecas
-        nocc = ncore + ncas
+        ncore, ncas = self.ncore, self.ncas
         dm1s = _dms.casdm1s_to_dm1s (self, casdm1s, mo_coeff=mo,
                                      ncore=ncore, ncas=ncas)
         cascm2 = _dms.dm2_cumulant (casdm2, casdm1s)
 
-        pdft_veff1, pdft_veff2 = pdft_veff.kernel (self.otfnal, dm1s, 
-            cascm2, mo, ncore, ncas, max_memory=self.max_memory, 
+        pdft_veff1, pdft_veff2 = pdft_veff.kernel (self.otfnal, dm1s,
+            cascm2, mo, ncore, ncas, max_memory=self.max_memory,
             paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc, drop_mcwfn=drop_mcwfn)
-        
+
         if incl_coul:
             pdft_veff1 += self._scf.get_j (self.mol, dm1s[0] + dm1s[1])
         logger.timer (self, 'get_pdft_veff', *t0)
@@ -596,7 +596,7 @@ class _PDFT ():
         prop.__path__.append (myproppath)
         prop.__path__=list(set(prop.__path__))
         from pyscf.prop.dip_moment.mcpdft import ElectricDipole
-        dip_obj =  ElectricDipole(self) 
+        dip_obj =  ElectricDipole(self)
         mol_dipole = dip_obj.kernel (state=state, unit=unit, origin=origin)
         return mol_dipole
 
@@ -609,7 +609,7 @@ class _PDFT ():
         if verbose is None: verbose = self.verbose
         return get_energy_decomposition (
             self, mo_coeff=mo_coeff, ci=ci, ot=ot, otxc=otxc,
-            grids_level=grids_level, grids_attr=grids_attr, 
+            grids_level=grids_level, grids_attr=grids_attr,
             split_x_c=split_x_c, verbose=verbose
         )
 
@@ -617,8 +617,8 @@ class _PDFT ():
         return state_average_mix (self, fcisolvers, weights)
 
     def state_average_mix_(self, fcisolvers=None, weights=(0.5,0.5)):
-         state_average_mix_(self, fcisolvers, weights)
-         return self
+        state_average_mix_(self, fcisolvers, weights)
+        return self
 
     def multi_state_mix(self, fcisolvers=None, weights=(0.5,0.5), method='CMS'):
         if method.upper() == "LIN":
@@ -653,7 +653,7 @@ class _PDFT ():
         self._init_ot_grids (x)
 
     make_one_casdm1s = _dms.make_one_casdm1s
-    make_one_casdm2 = _dms.make_one_casdm2    
+    make_one_casdm2 = _dms.make_one_casdm2
     energy_mcwfn = energy_mcwfn
     energy_dft = energy_dft
     def energy_tot (self, mo_coeff=None, ci=None, ot=None, state=0,

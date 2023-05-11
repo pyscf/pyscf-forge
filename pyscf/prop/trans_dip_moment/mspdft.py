@@ -13,7 +13,7 @@ class TransitionDipole (mspdft.ElectricDipole):
         val = np.linalg.norm(mol_dip)
         i   = self.state[0]
         j   = self.state[1]
-        dif = abs(self.e_states[i]-self.e_states[j]) 
+        dif = abs(self.e_states[i]-self.e_states[j])
         osc = 2/3*dif*val**2
         if unit.upper() == 'DEBYE':
             for x in [ham_response, LdotJnuc, mol_dip]: x *= nist.AU2DEBYE

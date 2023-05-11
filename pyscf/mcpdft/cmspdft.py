@@ -51,12 +51,12 @@ def coulomb_tensor (mc, mo_coeff=None, ci=None, h2eff=None, eris=None):
     if h2eff is None:
         if eris is None: h2eff = mc.get_h2eff (mo_coeff=mo_coeff)
         else: h2eff = np.asarray (eris.ppaa[ncore:nocc,ncore:nocc,:,:])
-    h2eff = ao2mo.restore (1, h2eff, ncas)   
- 
+    h2eff = ao2mo.restore (1, h2eff, ncas)
+
     row, col = np.tril_indices (nroots)
     tdm1 = np.stack (mc.fcisolver.states_trans_rdm12(ci[col], ci[row], ncas,
         nelecas)[0], axis=0)
-    
+
     w = np.tensordot (tdm1, h2eff, axes=2)
     w = np.tensordot (w, tdm1, axes=((1,2),(1,2)))
     return ao2mo.restore (1, w, nroots)
@@ -89,10 +89,10 @@ def e_coul (mc, mo_coeff=None, ci=None, h2eff=None, eris=None):
         Qaa_update : callable
             Takes a unitary matrix of shape (nroots, nroots) and returns
             Qaa, dQaa, and d2Qaa as above using the stored Coulomb
-            tensor intermediate from this function. 
+            tensor intermediate from this function.
     '''
-    nroots = mc.fcisolver.nroots   
- 
+    nroots = mc.fcisolver.nroots
+
     w0 = coulomb_tensor (mc, mo_coeff=mo_coeff, ci=ci, h2eff=h2eff,
         eris=eris)
     Qaa0, dQaa0, d2Qaa0 = _e_coul (w0, nroots)
@@ -106,22 +106,22 @@ def _e_coul (w_IJKL, nroots):
     w_IJKK = np.diagonal (w_IJKL, axis1=2, axis2=3)
     w_IKJK = np.diagonal (w_IJKL, axis1=1, axis2=3)
     w_IJJJ = np.diagonal (w_IJKK, axis1=1, axis2=2)
-    
+
     Qaa = np.trace (w_IJJJ) / 2.0
 
     tril_mask = np.zeros ([nroots,nroots], dtype=np.bool_)
     tril_mask[np.tril_indices (nroots,k=-1)] = True
-    dQaa = 2*(w_IJJJ.T-w_IJJJ)[tril_mask] 
+    dQaa = 2*(w_IJJJ.T-w_IJJJ)[tril_mask]
     # My sign convention is row idx = source state; col idx = dest
     # state, lower-triangular positive. The Newton iteration is designed
     # with this in mind and breaks if I flip it. However, regardless of
     # sign convention, the unitary operator parameterized this way
     # always comes out with destination on the rows and source on the
-    # columns, because that's just what the word "operator" means: 
+    # columns, because that's just what the word "operator" means:
     # |f> = U|i>. So when I exponentiate later, I transpose. Don't let
     # the fact that that transpose is mathematically the same as
     # flipping this sign confuse you: the sign here is CORRECT.
-    
+
     v_IJ_K = -4*w_IKJK - 2*w_IJKK
     v_IJ_K += (w_IJJJ+w_IJJJ.T)[:,:,None]
     d2Qaa = np.zeros_like (w_IJKL)
@@ -154,12 +154,12 @@ def e_coul_o0 (mc,ci):
     trans12_tdm1_array = np.array(trans12_tdm1)
     tdm1 = np.dot(trans12_tdm1_array,mo_cas.T)
     tdm1 = np.dot(mo_cas,tdm1).transpose(1,0,2)
-    
+
     rowscol2ind = np.zeros ((nroots, nroots), dtype=np.integer)
-    rowscol2ind[(rows,col)] = list (range (pairs)) 
-    rowscol2ind += rowscol2ind.T 
-    rowscol2ind[np.diag_indices(nroots)] = -1 
-    
+    rowscol2ind[(rows,col)] = list (range (pairs))
+    rowscol2ind += rowscol2ind.T
+    rowscol2ind[np.diag_indices(nroots)] = -1
+
     def w_klmn(k,l,m,n,dm,tdm):
         d = dm[k] if k==l else tdm[rowscol2ind[k,l]]
         dm1_g = mc._scf.get_j (dm=d)
@@ -181,8 +181,8 @@ def e_coul_o0 (mc,ci):
     grad2 = (dg*dm1[col]).sum((1,2))
     e_grad = np.zeros(pairs)
     e_grad = 2*(grad1 - grad2)
-   
-    e_hess = np.zeros((pairs,pairs))  
+
+    e_hess = np.zeros((pairs,pairs))
     for (i, (k,l)), (j, (m,n)) in product (enumerate (zip (rows, col)),
             repeat=2):
         e_hess[i,j] = (v_klmn(k,l,m,n,dm1,tdm1)+v_klmn(l,k,n,m,dm1,tdm1)
