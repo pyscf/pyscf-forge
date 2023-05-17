@@ -26,8 +26,7 @@ def _reshape_vxc_sigma (vxc0, dens_deriv):
         vsigma = vxc0[1]
         vxc1 = vxc1 + list (vsigma.T)
     else:
-        # TODO: @Matthew R. Hermes vxc does not exist, undefined var
-        vxc1 = [vxc[0][None,:], vxc[1][None,:]]
+        vxc1 = [vxc1[0][None,:], vxc1[1][None,:]]
     return vxc1
 
 def _unpack_vxc_sigma (vxc0, rho, dens_deriv):
@@ -39,8 +38,7 @@ def _unpack_vxc_sigma (vxc0, rho, dens_deriv):
         vxc1 = vxc1 + list (vsigma.T)
         vxc1 = _unpack_sigma_vector (vxc1, rho[0][1:4], rho[1][1:4])
     else:
-        # TODO: @Matthew R. Hermes vxc does not exist, undefined var
-        vxc1 = [vxc[0][None,:], vxc[1][None,:]]
+        vxc1 = [vxc1[0][None,:], vxc1[1][None,:]]
     return vxc1
 
 def _pack_fxc_ltri (fxc0, dens_deriv):
