@@ -4,4 +4,3 @@ set -e
 
 cd ./pyscf
 pytest -k 'not _slow'
-~                                                 
