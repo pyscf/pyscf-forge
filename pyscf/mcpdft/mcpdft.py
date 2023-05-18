@@ -384,24 +384,26 @@ class _PDFT ():
             On-top nonclassical term in the MC-PDFT energy
     '''
 
+    _mc_class = None
+
     def __init__(self, scf, ncas, nelecas, my_ot=None, grids_level=None,
             grids_attr=None, **kwargs):
         # Keep the same initialization pattern for backwards-compatibility.
         # Use a separate intializer for the ot functional
         if grids_attr is None: grids_attr = {}
         try:
-            super().__init__(scf, ncas, nelecas)
+            self._mc_class.__init__(self, scf, ncas, nelecas)
         except TypeError as e:
             # I think this is the same DFCASSCF problem as with the DF-SACASSCF
             # gradients earlier
-            super().__init__()
+            self._mc_class.__init__(self)
         keys = set (('e_ot', 'e_mcscf', 'get_pdft_veff', 'e_states', 'otfnal',
             'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel'))
         self.max_cycle_fp = getattr (__config__, 'mcscf_mcpdft_max_cycle_fp',
             50)
         self.conv_tol_ci_fp = getattr (__config__,
             'mcscf_mcpdft_conv_tol_ci_fp', 1e-8)
-        self.mcscf_kernel = super().kernel
+        self.mcscf_kernel = self._mc_class.kernel
         self._in_mcscf_env = False
         self._keys = set ((self.__dict__.keys ())).union (keys)
         if grids_level is not None:
@@ -440,7 +442,7 @@ class _PDFT ():
         Has the same calling signature as the parent kernel method. '''
         with _mcscf_env (self):
             self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy = \
-                super().kernel (mo_coeff, ci0=ci0, **kwargs)
+                self._mc_class.kernel (self, mo_coeff, ci0=ci0, **kwargs)
         return self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
@@ -492,7 +494,7 @@ class _PDFT ():
             self.mo_coeff, self.mo_energy)
 
     def dump_flags (self, verbose=None):
-        super().dump_flags (verbose=verbose)
+        self._mc_class.dump_flags (self, verbose=verbose)
         log = logger.new_logger(self, verbose)
         log.info ('on-top pair density exchange-correlation functional: %s',
             self.otfnal.otxc)
@@ -687,6 +689,7 @@ def get_mcpdft_child_class (mc, ot, **kwargs):
               'No docstring for MC-SCF parent method')
     class PDFT (_PDFT, mc.__class__):
         __doc__= mc_doc + '\n\n' +_PDFT.__doc__
+        _mc_class = mc.__class__
 
     pdft = PDFT (mc._scf, mc.ncas, mc.nelecas, my_ot=ot, **kwargs)
     _keys = pdft._keys.copy ()
