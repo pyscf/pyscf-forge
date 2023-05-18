@@ -50,6 +50,7 @@ def _get_fcisolver (mc, ci, state=0):
                 if p0 <= state and state < p1:
                     fcisolver = s
                     nelecas = mc.fcisolver._get_nelec (s, nelecas)
+                    solver_state_index = state - p0
                     break
                 p0 = p1
             if fcisolver is None:
@@ -57,8 +58,9 @@ def _get_fcisolver (mc, ci, state=0):
         elif isinstance (mc.fcisolver, StateAverageFCISolver):
             fcisolver = fcisolver._base_class (mc._scf.mol)
             fcisolver.__dict__.update(mc.fcisolver.__dict__)
+            solver_state_index = state
     if isinstance (fcisolver, DMRGCI):
-        ci = state # DMRGCI takes state index in place of ci vector
+        ci = solver_state_index # DMRGCI takes state index in place of ci vector
     return fcisolver, ci, nelecas
 
 def make_one_casdm1s (mc, ci, state=0):
