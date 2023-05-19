@@ -40,6 +40,7 @@ def _get_fcisolver (mc, ci, state=0):
     nelecas = mc.nelecas
     nroots = getattr (mc.fcisolver, 'nroots', 1)
     fcisolver = mc.fcisolver
+    solver_state_index = state
     if nroots>1:
         ci = ci[state]
         if isinstance (mc.fcisolver, StateAverageMixFCISolver):
@@ -58,7 +59,6 @@ def _get_fcisolver (mc, ci, state=0):
         elif isinstance (mc.fcisolver, StateAverageFCISolver):
             fcisolver = fcisolver._base_class (mc._scf.mol)
             fcisolver.__dict__.update(mc.fcisolver.__dict__)
-            solver_state_index = state
     if isinstance (fcisolver, DMRGCI):
         ci = solver_state_index # DMRGCI takes state index in place of ci vector
     return fcisolver, ci, nelecas
