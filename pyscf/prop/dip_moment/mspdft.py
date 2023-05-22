@@ -60,7 +60,7 @@ def sipdft_HellmanFeynman_dipole (mc, si_bra=None, si_ket=None,
     center = get_guage_origin(mol,origin)
     with mol.with_common_orig(center):
         ao_dip = mol.intor_symmetric('int1e_r', comp=3)
-    elec_term = -lib.einsum('xij,ij->x', ao_dip, dm).real
+    elec_term = -np.tensordot(ao_dip, dm).real
     return elec_term
 
 class ElectricDipole (mspdft.Gradients):
@@ -181,6 +181,6 @@ class ElectricDipole (mspdft.Gradients):
         center = get_guage_origin(mol,origin)
         with mol.with_common_orig(center):
             ao_dip = mol.intor_symmetric('int1e_r', comp=3)
-        mol_dip_L = -lib.einsum('xij,ji->x', ao_dip, dm).real
+        mol_dip_L = -np.tensordot(ao_dip, dm).real
 
         return mol_dip_L
