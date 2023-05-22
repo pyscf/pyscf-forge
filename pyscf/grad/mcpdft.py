@@ -267,9 +267,9 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     for k, ia in enumerate(atmlst):
         shl0, shl1, p0, p1 = aoslices[ia]
         h1ao = hcore_deriv(ia) # MRH: this should be the TRUE hcore
-        de_hcore[k] += einsum('xij,ij->x', h1ao, dm1)
-        de_renorm[k] -= einsum('xij,ij->x', s1[:,p0:p1], dme0[p0:p1]) * 2
-        de_coul[k] += einsum('xij,ij->x', vj[:,p0:p1], dm1[p0:p1]) * 2
+        de_hcore[k] += np.tensordot(h1ao, dm1)
+        de_renorm[k] -= np.tensordot(s1[:,p0:p1], dme0[p0:p1]) * 2
+        de_coul[k] += np.tensordot(vj[:,p0:p1], dm1[p0:p1])*2
         de_xc[k] += dvxc[:,p0:p1].sum (1) * 2 # All grids; only some orbitals
 
     de_nuc = mf_grad.grad_nuc(mol, atmlst)

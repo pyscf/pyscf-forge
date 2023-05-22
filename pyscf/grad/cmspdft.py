@@ -206,7 +206,7 @@ def diab_response_o0 (mc_grad, Lis, mo=None, ci=None, eris=None, **kwargs):
     hx_orb, hx_ci = mc_grad.unpack_uniq_var (hx)
     hx_ci = np.asarray (hx_ci)
     hx_is = lib.einsum ('pab,qab->pq', hx_ci, ci_arr.conj ())
-    hx_ci -= lib.einsum ('pq,qab->pab', hx_is, ci_arr)
+    hx_ci -= np.tensordot(hx_is, ci_arr, axes=1)
 
     return mc_grad.pack_uniq_var (hx_orb, hx_ci)
 
