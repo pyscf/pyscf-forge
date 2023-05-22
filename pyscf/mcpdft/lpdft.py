@@ -21,7 +21,7 @@ from scipy import linalg
 
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
-from pyscf import mcpdft
+from pyscf import mcpdft, lib
 from pyscf.mcpdft import _dms
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
     StateAverageMixFCISolver
@@ -195,7 +195,7 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
         # This is precomputed in MRH's ERIS object
         energy_core += veff2_0.energy_core
-        energy_core += np.einsum('ij,ji', core_dm, hcore_eff).real
+        energy_core += np.tensordot(core_dm, hcore_eff).real 
 
     h1eff = reduce(np.dot, (mo_cas.conj().T, hcore_eff, mo_cas))
     # Add in the 2-electron portion that acts as a 1-electron operator
