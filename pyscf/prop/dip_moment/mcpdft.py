@@ -29,9 +29,9 @@ def get_guage_origin(mol,origin):
         if origin.upper() == 'COORD_CENTER':
             center = (0,0,0)
         elif origin.upper() == 'MASS_CENTER':
-            center = np.einsum('i,ij->j', mass, coords) / mass.sum()
+            center = lib.einsum('i,ij->j', mass, coords) / mass.sum()
         elif origin.upper() == 'CHARGE_CENTER':
-            center = np.einsum('z,zx->x', charges, coords) / charges.sum()
+            center = lib.einsum('z,zx->x', charges, coords) / charges.sum()
         else:
             raise RuntimeError ("Gauge origin is not recognized")
     elif isinstance(center,str):
@@ -65,7 +65,7 @@ def mcpdft_HellmanFeynman_dipole (mc, mo_coeff=None, ci=None, origin='Coord_Cent
     center = get_guage_origin(mol,origin)
     with mol.with_common_orig(center):
         ao_dip = mol.intor_symmetric('int1e_r', comp=3)
-    elec_term = -np.einsum('xij,ij->x', ao_dip, dm).real
+    elec_term = -lib.einsum('xij,ij->x', ao_dip, dm).real
     return elec_term
 
 def nuclear_dipole(mc,origin='Coord_Center'):
@@ -75,7 +75,7 @@ def nuclear_dipole(mc,origin='Coord_Center'):
     charges = mol.atom_charges()                           
     coords  = mol.atom_coords()
     coords -= center
-    nucl_term = np.einsum('i,ix->x', charges, coords)
+    nucl_term = lib.einsum('i,ix->x', charges, coords)
     return nucl_term
 
 # TODO: docstring?
@@ -180,7 +180,7 @@ class ElectricDipole (mcpdft_grad.Gradients):
         center = get_guage_origin(mol, origin)
         with mol.with_common_orig(center):
             ao_dip = mol.intor_symmetric('int1e_r', comp=3)
-        mol_dip_L = -np.einsum('xij,ji->x', ao_dip, dm).real
+        mol_dip_L = -lib.einsum('xij,ji->x', ao_dip, dm).real
 
         return mol_dip_L 
 
