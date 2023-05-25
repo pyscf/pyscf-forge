@@ -37,7 +37,7 @@ Features
       and/or point groups)
     - Extended multi-state MC-PDFT (XMS-PDFT): [*Faraday Discuss* **2020**, 224, 348-372]
     - Compressed multi-state MC-PDFT (CMS-PDFT): [*JCTC* **2020**, *16*, 7444]
-    - Linearized PDFT (L-PDFT): [**Submitted**, Available on ChemRxiv]
+    - Linearized PDFT (L-PDFT): [*JCTC* **2023**]
 * On-the-fly generation of on-top density functionals from underlying KS-DFT
   'LDA' or 'GGA' exchange-correlation functionals as defined in Libxc.
     - Translated functionals: [*JCTC* **2014**, *10*, 3669]
@@ -80,7 +80,7 @@ Features
 [*JCTC* **2021**, *17*, 2775]: http://dx.doi.org/10.1021/acs.jctc.0c01346
 [*Mol Phys* **2022**, 120]: http://dx.doi.org/10.1080/00268976.2022.2110534
 [*Faraday Discuss* **2020**, 224, 348-372]: http://dx.doi.org/10.1039/D0FD00037J
-[**Submitted**, Available on ChemRxiv]: http://dx.doi.org/10.26434/chemrxiv-2023-7d0gv
+[*JCTC* **2023**]: https://dx.doi.org/10.1021/acs.jctc.3c00207
 
 [comment]: <> (Code hyperlinks)
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
