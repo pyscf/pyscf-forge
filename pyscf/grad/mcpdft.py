@@ -16,7 +16,7 @@
 from pyscf.mcscf import newton_casscf, casci, mc1step
 from pyscf.grad import rks as rks_grad
 from pyscf.dft import gen_grid
-from pyscf.lib import logger, pack_tril, current_memory, tag_array
+from pyscf.lib import logger, pack_tril, current_memory, einsum, tag_array
 #from pyscf.grad import sacasscf
 from pyscf.grad import sacasscf
 from pyscf.mcscf.casci import cas_natorb
@@ -83,7 +83,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     gfock = np.zeros ((nmo, nmo))
     gfock[:,:ncore] = (h1e_mo[:,:ncore] + vhf_a[:,:ncore]) * 2
     gfock[:,ncore:nocc] = h1e_mo[:,ncore:nocc] @ casdm1
-    gfock[:,ncore:nocc] += np.einsum('uviw,vuwt->it', aapa, casdm2)
+    gfock[:,ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
     dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
     aapa = vhf_a = h1e_mo = gfock = None
 
@@ -267,9 +267,9 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     for k, ia in enumerate(atmlst):
         shl0, shl1, p0, p1 = aoslices[ia]
         h1ao = hcore_deriv(ia) # MRH: this should be the TRUE hcore
-        de_hcore[k] += np.einsum('xij,ij->x', h1ao, dm1)
-        de_renorm[k] -= np.einsum('xij,ij->x', s1[:,p0:p1], dme0[p0:p1]) * 2
-        de_coul[k] += np.einsum('xij,ij->x', vj[:,p0:p1], dm1[p0:p1]) * 2
+        de_hcore[k] += np.tensordot(h1ao, dm1)
+        de_renorm[k] -= np.tensordot(s1[:,p0:p1], dme0[p0:p1]) * 2
+        de_coul[k] += np.tensordot(vj[:,p0:p1], dm1[p0:p1])*2
         de_xc[k] += dvxc[:,p0:p1].sum (1) * 2 # All grids; only some orbitals
 
     de_nuc = mf_grad.grad_nuc(mol, atmlst)

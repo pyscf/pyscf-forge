@@ -205,8 +205,8 @@ def diab_response_o0 (mc_grad, Lis, mo=None, ci=None, eris=None, **kwargs):
     hx *= nroots
     hx_orb, hx_ci = mc_grad.unpack_uniq_var (hx)
     hx_ci = np.asarray (hx_ci)
-    hx_is = np.einsum ('pab,qab->pq', hx_ci, ci_arr.conj ())
-    hx_ci -= np.einsum ('pq,qab->pab', hx_is, ci_arr)
+    hx_is = lib.einsum ('pab,qab->pq', hx_ci, ci_arr.conj ())
+    hx_ci -= np.tensordot(hx_is, ci_arr, axes=1)
 
     return mc_grad.pack_uniq_var (hx_orb, hx_ci)
 
@@ -291,10 +291,10 @@ def diab_grad (mc_grad, Lis, atmlst=None, mo=None, ci=None, eris=None,
     aoslices = mol.aoslice_by_atom()
     for k, ia in enumerate(atmlst):
         shl0, shl1, p0, p1 = aoslices[ia]
-        de_renorm[k] -= np.einsum('xpq,pq->x', s1[:,p0:p1], dme0[p0:p1]) * 2
-        de_direct[k] += np.einsum('xipq,ipq->x', dvj[:,:,p0:p1],
+        de_renorm[k] -= lib.einsum('xpq,pq->x', s1[:,p0:p1], dme0[p0:p1]) * 2
+        de_direct[k] += lib.einsum('xipq,ipq->x', dvj[:,:,p0:p1],
             edm1_ao[:,p0:p1]) * 2
-        de_direct[k] += np.einsum('xipq,ipq->x', devj[:,:,p0:p1],
+        de_direct[k] += lib.einsum('xipq,ipq->x', devj[:,:,p0:p1],
             dm1_ao[:,p0:p1]) * 2
     dvj_aux = dvj_aux[:,:,atmlst,:]
     de_aux = (np.trace (dvj_aux, offset=nroots, axis1=0, axis2=1)
@@ -363,14 +363,14 @@ if __name__ == '__main__':
         eris=eris)
     dworb_test, dwci_test = mc_grad.unpack_uniq_var (dw_test)
     dwci_test = np.asarray (dwci_test)
-    dwis_test = np.einsum ('pab,qab->pq', dwci_test, ci_arr.conj ())
-    dwci_test -= np.einsum ('pq,qab->pab', dwis_test, ci_arr)
+    dwis_test = lib.einsum ('pab,qab->pq', dwci_test, ci_arr.conj ())
+    dwci_test -= lib.einsum ('pq,qab->pab', dwis_test, ci_arr)
     dw_ref = diab_response_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci,
         eris=eris)
     dworb_ref, dwci_ref = mc_grad.unpack_uniq_var (dw_ref)
     dwci_ref = np.asarray (dwci_ref)
-    dwis_ref = np.einsum ('pab,qab->pq', dwci_ref, ci_arr.conj ())
-    dwci_ref -= np.einsum ('pq,qab->pab', dwis_ref, ci_arr)
+    dwis_ref = lib.einsum ('pab,qab->pq', dwci_ref, ci_arr.conj ())
+    dwci_ref -= lib.einsum ('pq,qab->pab', dwis_ref, ci_arr)
     dh_test = diab_grad (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
     dh_ref = diab_grad_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
 
