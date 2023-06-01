@@ -345,9 +345,11 @@ class _mcscf_env (object):
     def __enter__(self):
         self.mc._in_mcscf_env = True
     def __exit__(self, type, value, traceback):
-        self.mc.e_tot = self.e_tot
         if getattr (self.mc, 'e_states', None) is not None:
             self.mc.e_mcscf = np.array (self.mc.e_states)
+        else:
+            self.mc.e_mcscf = self.mc.e_tot
+        self.mc.e_tot = self.e_tot
         if self.e_states is not None:
             try:
                 self.mc.e_states = self.e_states
@@ -440,10 +442,7 @@ class _PDFT ():
     def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
         '''Optimize the MC-SCF wave function underlying an MC-PDFT calculation.
         Has the same calling signature as the parent kernel method. '''
-        with _mcscf_env (self):
-            self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy = \
-                self._mc_class.kernel (self, mo_coeff, ci0=ci0, **kwargs)
-        return self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
+        with _mcscf_env (self): return self._mc_class.kernel (self, mo_coeff, ci0=ci0, **kwargs)
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
                              grids_level=None, grids_attr=None, **kwargs):

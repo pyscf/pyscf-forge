@@ -29,7 +29,7 @@ except ImportError as e:
     class DMRGCI (object):
         pass
 
-def _get_fcisolver (mc, ci, state=0):
+def _get_fcisolver (mc, ci=None, state=0):
     '''Find the appropriate FCI solver, CI vector, and nelecas tuple to
     build single-state reduced density matrices. If state_average or
     state_average_mix is involved this takes a bit of work.
@@ -63,7 +63,7 @@ def _get_fcisolver (mc, ci, state=0):
         ci = solver_state_index # DMRGCI takes state index in place of ci vector
     return fcisolver, ci, nelecas
 
-def make_one_casdm1s (mc, ci, state=0):
+def make_one_casdm1s (mc, ci=None, state=0):
     '''
     Construct the spin-separated active-space one-body reduced density
     matrix for a single state. This API is not consistently available
@@ -75,7 +75,7 @@ def make_one_casdm1s (mc, ci, state=0):
     fcisolver, ci, nelecas = _get_fcisolver (mc, ci, state=state)
     return fcisolver.make_rdm1s (ci, ncas, nelecas)
 
-def make_one_casdm2 (mc, ci, state=0):
+def make_one_casdm2 (mc, ci=None, state=0):
     '''
     Construct the spin-summed active-space two-body reduced density
     matrix for a single state. This API is not consistently available
@@ -94,7 +94,7 @@ def make_one_casdm2 (mc, ci, state=0):
     return casdm2
     
 
-def dm2_cumulant (dm2, dm1s):
+def dm2_cumulant (dm2=None, dm1s=None):
     '''
     Evaluate the spin-summed two-body cumulant reduced density
     matrix:
@@ -103,7 +103,7 @@ def dm2_cumulant (dm2, dm1s):
                        + dm1s[0][p,s]*dm1s[0][r,q]
                        + dm1s[1][p,s]*dm1s[1][r,q])
 
-    Args:
+    Kwargs:
         dm2 : ndarray of shape [norb,]*4
             Contains spin-summed 2-RDMs
         dm1s : ndarray (or compatible) of overall shape [2,norb,norb]
@@ -126,7 +126,7 @@ def dm2_cumulant (dm2, dm1s):
     cm2 += np.multiply.outer (dm1s[1], dm1s[1]).transpose (0, 3, 2, 1)
     return cm2
 
-def dm2s_cumulant (dm2s, dm1s):
+def dm2s_cumulant (dm2s=None, dm1s=None):
     '''Evaluate the spin-summed two-body cumulant reduced density
     matrix:
 
@@ -136,7 +136,7 @@ def dm2s_cumulant (dm2s, dm1s):
     cm2s[2][p,q,r,s] = (dm2s[2][p,q,r,s] - dm1s[1][p,q]*dm1s[1][r,s]
                        + dm1s[1][p,s]*dm1s[1][r,q])
 
-    Args:
+    Kwargs:
         dm2s : ndarray of shape [norb,]*4
             Contains spin-separated 2-RDMs
         dm1s : ndarray (or compatible) of overall shape [2,norb,norb]
@@ -162,17 +162,19 @@ def dm2s_cumulant (dm2s, dm1s):
     cm2s[2] += np.multiply.outer (dm1s[1], dm1s[1]).transpose (0, 3, 2, 1)
     return tuple (cm2s)
 
-def casdm1s_to_dm1s (mc, casdm1s, mo_coeff=None, ncore=None, ncas=None):
+def casdm1s_to_dm1s (mc, casdm1s=None, mo_coeff=None, ncore=None, ncas=None):
     '''Generate AO-basis spin-separated 1-RDM from active space part.
     This is necessary because the StateAverageMCSCFSolver class doesn't
     have API for getting the AO-basis density matrix of a single state.
 
     Args:
         mc : object of CASCI or CASSCF class
-        casdm1s : ndarray or compatible of shape (2,ncas,ncas)
-            Active-space spin-separated 1-RDM
 
     Kwargs:
+        casdm1s : ndarray or compatible of shape (2,ncas,ncas)
+            Active-space spin-separated 1-RDM
+        mo_coeff : ndarray
+            Molecular orbital coefficients
         ncore : integer
             Number of occupied inactive orbitals
         ncas : integer
