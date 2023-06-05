@@ -457,30 +457,29 @@ class _PDFT ():
         if grids_level is not None: grids_attr['level'] = grids_level
         if len (grids_attr): self.grids.__dict__.update (**grids_attr)
         nroots = getattr (self.fcisolver, 'nroots', 1)
-        if nroots>1:
-            epdft = [self.energy_tot (mo_coeff=self.mo_coeff, ci=self.ci, state=ix,
-                     logger_tag='MC-PDFT state {}'.format (ix))
-                     for ix in range (nroots)]
-            self.e_ot = [e_ot for e_tot, e_ot in epdft]
-            if isinstance (self, StateAverageMCSCFSolver):
-                e_states = [e_tot for e_tot, e_ot in epdft]
-                try:
-                    self.e_states = e_states
-                except AttributeError as e:
-                    self.fcisolver.e_states = e_states
-                    assert (self.e_states is e_states), str (e)
-                # TODO: redesign this. MC-SCF e_states is stapled to
-                # fcisolver.e_states, but I don't want MS-PDFT to be
-                # because that makes no sense
-                self.e_tot = np.dot (e_states, self.weights)
-                e_states = self.e_states
-            else: # nroots>1 CASCI
-                self.e_tot = [e_tot for e_tot, e_ot in epdft]
-                e_states = self.e_tot
-            return self.e_tot, self.e_ot, e_states
-        else:
-            self.e_tot, self.e_ot = self.energy_tot (mo_coeff=self.mo_coeff, ci=self.ci)
-            return self.e_tot, self.e_ot, [self.e_tot]
+        epdft = [self.energy_tot (mo_coeff=self.mo_coeff, ci=self.ci, state=ix,
+                 logger_tag='MC-PDFT state {}'.format (ix))
+                 for ix in range (nroots)]
+        self.e_ot = [e_ot for e_tot, e_ot in epdft]
+        if isinstance (self, StateAverageMCSCFSolver):
+            e_states = [e_tot for e_tot, e_ot in epdft]
+            try:
+                self.e_states = e_states
+            except AttributeError as e:
+                self.fcisolver.e_states = e_states
+                assert (self.e_states is e_states), str (e)
+            # TODO: redesign this. MC-SCF e_states is stapled to
+            # fcisolver.e_states, but I don't want MS-PDFT to be 
+            # because that makes no sense
+            self.e_tot = np.dot (e_states, self.weights)
+            e_states = self.e_states
+        elif nroots>1: # nroots>1 CASCI
+            self.e_tot = [e_tot for e_tot, e_ot in epdft]
+            e_states = self.e_tot
+        else: # nroots==1 not StateAverage class
+            self.e_tot, self.e_ot = epdft[0]
+            e_states = [self.e_tot]
+        return self.e_tot, self.e_ot, e_states
 
     def kernel (self, mo_coeff=None, ci0=None, otxc=None, grids_attr=None,
                 grids_level=None, **kwargs):
