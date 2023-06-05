@@ -60,7 +60,7 @@ def fock_h1e_for_cas(mc, sa_casdm1, mo_coeff=None, ncas=None, ncore=None):
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
-        energy_core += np.tensordot(core_dm, hcore_eff).real 
+        energy_core += np.tensordot(core_dm, hcore_eff).real
 
     h1eff = reduce(np.dot, (mo_cas.conj().T, hcore_eff, mo_cas))
 

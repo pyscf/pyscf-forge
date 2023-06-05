@@ -469,7 +469,7 @@ class _PDFT ():
                 self.fcisolver.e_states = e_states
                 assert (self.e_states is e_states), str (e)
             # TODO: redesign this. MC-SCF e_states is stapled to
-            # fcisolver.e_states, but I don't want MS-PDFT to be 
+            # fcisolver.e_states, but I don't want MS-PDFT to be
             # because that makes no sense
             self.e_tot = np.dot (e_states, self.weights)
             e_states = self.e_states
