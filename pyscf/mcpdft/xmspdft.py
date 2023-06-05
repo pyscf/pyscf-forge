@@ -23,15 +23,15 @@ from pyscf.mcpdft import _dms
 from pyscf.fci import direct_spin1
 
 
-def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
+def fock_h1e_for_cas(mc, sa_casdm1, mo_coeff=None, ncas=None, ncore=None):
     '''Compute the CAS SA Fock Matrix 1-electron integrals.
 
     Args:
         mc : instance of class _PDFT
 
-        sa_casdm1s : ndarray of shape (2,ncas,ncas)
-            Spin-separated 1-RDM in the active space generated from the state-
-            average density.
+        sa_casdm1 : ndarray of shape (ncas,ncas)
+            1-RDM in the active space generated from the state-average
+            density.
 
         mo_coeff : ndarray of shape (nao,nmo)
             A full set of molecular orbital coefficients. Taken from
@@ -55,11 +55,7 @@ def fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=None, ncas=None, ncore=None):
     mo_core = mo_coeff[:, :ncore]
     mo_cas = mo_coeff[:, ncore:nocc]
 
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=sa_casdm1s)
-    dm1 = dm1s[0] + dm1s[1]
-    v_j, v_k = mc._scf.get_jk(dm=dm1)
-
-    hcore_eff = mc.get_hcore() + v_j - v_k / 2.0
+    hcore_eff = mc.get_fock(casdm1=sa_casdm1)
     energy_core = mc._scf.energy_nuc()
 
     if mo_core.size != 0:
@@ -99,8 +95,8 @@ def make_fock_mcscf(mc, mo_coeff=None, ci=None, weights=None):
 
     ncas = mc.ncas
 
-    sa_casdm1s = _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights)
-    h1, h0 = fock_h1e_for_cas(mc, sa_casdm1s, mo_coeff=mo_coeff)
+    sa_casdm1 = sum(_dms.make_weighted_casdm1s(mc, ci=ci, weights=weights))
+    h1, h0 = fock_h1e_for_cas(mc, sa_casdm1, mo_coeff=mo_coeff)
     hc_all = [direct_spin1.contract_1e(h1, c, ncas, mc.nelecas) for c in ci]
     safock_ham = np.tensordot(ci, hc_all, axes=((1, 2), (1, 2)))
     idx = np.diag_indices_from(safock_ham)
