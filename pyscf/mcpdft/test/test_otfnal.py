@@ -30,7 +30,7 @@ h2 = scf.RHF (gto.M (atom = 'H 0 0 0; H 1.2 0 0', basis = 'sto-3g',
 mc = mcpdft.CASSCF (h2, 'tPBE', 2, 2, grids_level=1).run ()
 LIBXC_KILLS = ['GGA_X_LB','GGA_X_LBM','LDA_XC_TIH']
 
-def test_hybrid_and_decomp (kv, xc):
+def _test_hybrid_and_decomp (kv, xc):
     txc = 't'+xc
     e_pdft, e_ot = mc.energy_tot (otxc=txc)
     decomp = mc.get_energy_decomposition (otxc=txc)
@@ -90,17 +90,17 @@ class KnownValues(unittest.TestCase):
             xc = x+','+c
             if xc == ',': continue
             with self.subTest (x=x, c=c):
-                test_hybrid_and_decomp (self, xc)
+                _test_hybrid_and_decomp (self, xc)
 
     def test_many_fnals (self):
         # sanity test for built-in functionals
         # many functionals are expected to fail and must be skipped
         for xc in XC_TEST_KEYS:
             with self.subTest (xc=xc):
-                test_hybrid_and_decomp (self, xc)
+                _test_hybrid_and_decomp (self, xc)
 
     def test_null_fnal (self):
-        test_hybrid_and_decomp (self, '')
+        _test_hybrid_and_decomp (self, '')
 
 if __name__ == "__main__":
     print("Full Tests for MC-PDFT on-top functional class API")
