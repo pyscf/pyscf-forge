@@ -44,7 +44,7 @@ def _unpack_state (state):
     return state, state
 
 # TODO: state-average-mix generalization ?
-def make_rdm12_heff_offdiag (mc, ci, si_bra, si_ket): 
+def make_rdm12_heff_offdiag (mc, ci, si_bra, si_ket):
     '''Compute <bra|O|ket> - sum_i <i|O|i>, where O is the 1- and 2-RDM
     operator product, and |bra> and |ket> are both states spanning the
     vector space of |i>, which are multi-determinantal many-electron
@@ -85,7 +85,7 @@ def make_rdm12_heff_offdiag (mc, ci, si_bra, si_ket):
 
 # TODO: docstring?
 def mspdft_heff_response (mc_grad, mo=None, ci=None,
-        si_bra=None, si_ket=None, state=None, 
+        si_bra=None, si_ket=None, state=None,
         heff_mcscf=None, eris=None):
     '''Compute the orbital and intermediate-state rotation response
     vector in the context of an MS-PDFT gradient calculation '''
@@ -140,12 +140,12 @@ def mspdft_heff_HellmanFeynman (mc_grad, atmlst=None, mo=None, ci=None,
     if eris is None: eris = mc.ao2mo (mo)
     if mf_grad is None: mf_grad = mc._scf.nuc_grad_method ()
     if verbose is None: verbose = mc_grad.verbose
-    ncore, nroots = mc.ncore, mc_grad.nroots
+    ncore = mc.ncore
     log = logger.new_logger (mc_grad, verbose)
     ci0 = np.zeros_like (ci[0])
 
     # CASSCF grad with effective RDMs
-    t0 = (logger.process_clock (), logger.perf_counter ())    
+    t0 = (logger.process_clock (), logger.perf_counter ())
     casdm1, casdm2 = make_rdm12_heff_offdiag (mc, ci, si_bra, si_ket)
     casdm1 = 0.5 * (casdm1 + casdm1.T)
     casdm2 = 0.5 * (casdm2 + casdm2.transpose (1,0,3,2))
@@ -167,11 +167,11 @@ def mspdft_heff_HellmanFeynman (mc_grad, atmlst=None, mo=None, ci=None,
     f0 *= mo_occ[None,:]
     dme0 = lambda * args: mo @ ((f0+f0.T)*.5) @ moH
     with lib.temporary_env (mf_grad, make_rdm1e=dme0, verbose=0):
-     with lib.temporary_env (mf_grad.base, mo_coeff=mo, mo_occ=mo_occ):
-        # Second level there should become unnecessary in future, if anyone
-        # ever gets around to cleaning up pyscf.df.grad.rhf & pyscf.grad.rhf
-        dde = mf_grad.kernel (mo_coeff=mo, mo_energy=mo_energy, mo_occ=mo_occ,
-            atmlst=atmlst)
+        with lib.temporary_env (mf_grad.base, mo_coeff=mo, mo_occ=mo_occ):
+            # Second level there should become unnecessary in future, if anyone
+            # ever gets around to cleaning up pyscf.df.grad.rhf & pyscf.grad.rhf
+            dde = mf_grad.kernel (mo_coeff=mo, mo_energy=mo_energy, mo_occ=mo_occ,
+                atmlst=atmlst)
     de -= dde
     log.debug ('MS-PDFT gradient off-diagonal H-F terms:\n{}'.format (de))
     log.timer ('MS-PDFT gradient off-diagonal H-F terms', *t0)
@@ -205,12 +205,12 @@ def get_diabfns (obj):
         raise RuntimeError ('MS-PDFT type not supported')
     return diab_response, diab_grad
 
-# TODO: docstring? especially considering the "si_bra," "si_ket" 
+# TODO: docstring? especially considering the "si_bra," "si_ket"
 # functionality??
 # TODO: figure out how to log the gradients with the right method name!
 class Gradients (mcpdft_grad.Gradients):
 
-    # Preconditioner solves the IS problem; hence, get_init_guess rewrite is 
+    # Preconditioner solves the IS problem; hence, get_init_guess rewrite is
     # unnecessary
     get_init_guess = sacasscf_grad.Gradients.get_init_guess
     project_Aop = sacasscf_grad.Gradients.project_Aop
@@ -231,14 +231,15 @@ class Gradients (mcpdft_grad.Gradients):
         self.nlag += self.nis
 
     @property
-    def nis (self): return self.nroots * (self.nroots - 1) // 2
+    def nis (self):
+        return self.nroots * (self.nroots - 1) // 2
 
     def diab_response (self, Lis, **kwargs):
         return self._diab_response (self, Lis, **kwargs)
     def diab_grad (self, Lis, **kwargs):
         return self._diab_grad (self, Lis, **kwargs)
 
-    def kernel (self, state=None, mo=None, ci=None, si=None, _freeze_is=False, 
+    def kernel (self, state=None, mo=None, ci=None, si=None, _freeze_is=False,
             **kwargs):
         '''Cache the Hamiltonian and effective Hamiltonian terms, and
         pass around the IS hessian
@@ -246,7 +247,7 @@ class Gradients (mcpdft_grad.Gradients):
         eris, veff1, veff2, and d2f should be available to all top-level
         functions: get_wfn_response, get_Aop_Adiag, get_ham_response,
         and get_LdotJnuc
- 
+
         freeze_is == True sets the is component of the response to zero
         for debugging purposes
         '''
@@ -277,7 +278,7 @@ class Gradients (mcpdft_grad.Gradients):
         return x
 
     def unpack_uniq_var (self, x):
-        ngorb, nci, nroots, nis = self.ngorb, self.nci, self.nroots, self.nis
+        ngorb, nci, nis = self.ngorb, self.nci, self.nis
         x, xis = x[:ngorb+nci], x[ngorb+nci:]
         xorb, xci = sacasscf_grad.Gradients.unpack_uniq_var (self, x)
         if len (xis)==nis: return xorb, xci, xis
@@ -330,8 +331,6 @@ class Gradients (mcpdft_grad.Gradients):
         if d2f is None: d2f = self.base.diabatizer (ci=ci)[2]
         log = lib.logger.new_logger (self, self.verbose)
         si_diag = si_bra * si_ket
-        nroots, ngorb, nci = self.nroots, self.ngorb, self.nci
-        ptr_is = ngorb + nci
 
         # Diagonal: PDFT component
         nlag = self.nlag-self.nis
@@ -413,11 +412,11 @@ class Gradients (mcpdft_grad.Gradients):
         if level_shift is None: level_shift = self.level_shift
         if ci is None: ci = self.base.ci
         if d2f is None: d2f = self.base.diabatizer (ci=ci)[2]
-        return MSPDFTLagPrec (Adiag=Adiag, level_shift=level_shift, ci=ci, 
+        return MSPDFTLagPrec (Adiag=Adiag, level_shift=level_shift, ci=ci,
             d2f=d2f, grad_method=self)
 
     def get_ham_response (self, si_bra=None, si_ket=None, state=None, mo=None,
-            ci=None, si=None, eris=None, veff1=None, veff2=None, mf_grad=None, 
+            ci=None, si=None, eris=None, veff1=None, veff2=None, mf_grad=None,
             atmlst=None, verbose=None, **kwargs):
         '''write mspdft heff Hellmann-Feynman calculator; sum over
         diagonal PDFT Hellmann-Feynman terms
@@ -458,7 +457,7 @@ class Gradients (mcpdft_grad.Gradients):
             mf_grad=mf_grad, **kwargs)
         log.debug ('MS-PDFT gradient offdiag H-F terms:\n{}'.format (de_o))
         de += de_o
-        
+
         return de
 
     def get_LdotJnuc (self, Lvec, atmlst=None, verbose=None, mo=None,
@@ -473,7 +472,7 @@ class Gradients (mcpdft_grad.Gradients):
         elif eris is None:
             eris = self.eris
 
-        ngorb, nci, nis = self.ngorb, self.nci, self.nis
+        ngorb, nci = self.ngorb, self.nci
         Lvec_v, Lvec_is = Lvec[:ngorb+nci], Lvec[ngorb+nci:]
 
         # Double-check Lvec_v sanity
@@ -491,7 +490,7 @@ class Gradients (mcpdft_grad.Gradients):
         t0 = (logger.process_clock(), logger.perf_counter())
         de_Lis = self.diab_grad (Lvec_is, atmlst=atmlst, mf_grad=mf_grad,
             eris=eris, mo=mo, ci=ci, **kwargs)
-        logger.info (self, 
+        logger.info (self,
             '--------------- %s gradient Lagrange IS response ---------------',
             self.base.__class__.__name__)
         if verbose >= logger.INFO:
@@ -504,7 +503,6 @@ class Gradients (mcpdft_grad.Gradients):
 
     def get_lagrange_callback (self, Lvec_last, itvec, geff_op):
         # TODO: state-average-mix
-        nroots = self.nroots
         log = logger.new_logger (self, self.verbose)
         if isinstance (self.base.fcisolver, CSFFCISolver):
             transf = self.base.fcisolver.transformer
@@ -515,7 +513,8 @@ class Gradients (mcpdft_grad.Gradients):
                     [x.ravel () - y.ravel () for x, y in zip (xci_p, xci)]))
                 log.debug ('Broken-spin |{}| = {}'.format (tag, xci_bs_norm))
         else:
-            def _debug_csfs (xci, tag): pass
+            def _debug_csfs (xci, tag):
+                pass
         def my_call (x):
             itvec[0] += 1
             geff = geff_op (x)
@@ -535,7 +534,7 @@ class Gradients (mcpdft_grad.Gradients):
         return my_call
 
     def debug_lagrange (self, Lvec, bvec, Aop, Adiag, state=None, mo=None,
-        ci=None, d2f=None, verbose=None, eris=None, **kwargs):
+            ci=None, d2f=None, verbose=None, eris=None, **kwargs):
         if state is None: state = self.state
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
@@ -553,8 +552,9 @@ class Gradients (mcpdft_grad.Gradients):
                     log.debug (' Root %d', iroot)
                     for s, v in zip (strs[iroot], vecs[iroot]):
                         log.debug ('  |%s>: %s', s, v)
-        else: 
-            def _debug_csfs (*args, **kwargs): pass
+        else:
+            def _debug_csfs (*args, **kwargs):
+                pass
         def _debug_cispace (xci, label):
             log.debug ('%s', label)
             xci_norm = [np.dot (c.ravel (), c.ravel ()) for c in xci]
@@ -562,10 +562,12 @@ class Gradients (mcpdft_grad.Gradients):
                 xci_ss = self.base.fcisolver.states_spin_square (xci,
                     self.base.ncas, self.base.nelecas)[0]
             except AttributeError:
-                nelec = sum (_unpack_nelec (self.base.nelecas))
+                from pyscf.fci.direct_spin1 import _unpack_nelec, spin_square
+                nelec = sum (_unpack_nelec(self.base.nelecas))
                 xci_ss = [spin_square (x, self.base.ncas,
                           ((nelec+m)//2,(nelec-m)//2))[0]
                           for x, m in zip (xci, self.spin_states)]
+
             xci_ss = [x / max (y, 1e-8) for x, y in zip (xci_ss, xci_norm)]
             xci_multip = [np.sqrt (x+.25) - .5 for x in xci_ss]
             xci_norm = np.sqrt (xci_norm)
@@ -641,10 +643,9 @@ class MSPDFTLagPrec (sacasscf_grad.SACASLagPrec):
         Mxorb = self.orb_prec (xorb)
         Mxci = self.ci_prec (xci)
         Mxis = self.is_prec (xis)
-        Mx = self.pack_uniq_var (Mxorb, Mxci, Mxis)
         return self.pack_uniq_var (Mxorb, Mxci, Mxis)
 
-    def is_prec (self, xis): 
+    def is_prec (self, xis):
         xis = np.dot (xis, self.d2f_evecs)
         Mxis = xis/self.d2f_evals
         idx_sing = (np.abs (Mxis) >= self.sing_step_tol)
@@ -676,6 +677,6 @@ if __name__ == '__main__':
     mf = scf.RHF (mol).run ()
     mc = mcpdft.CASSCF (mf, 'tPBE', 4, 4).set (fcisolver = csf_solver (mol, 1))
     mc = mc.multi_state ([1.0/3,]*3, 'cms').run ()
-    mc_grad = Gradients (mc) 
+    mc_grad = Gradients (mc)
     de = np.stack ([mc_grad.kernel (state=i) for i in range (3)], axis=0)
 

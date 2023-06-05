@@ -38,7 +38,7 @@ def _grid_ao2mo (mol, ao, mo_coeff, non0tab=None, shls_slice=None,
         ao_i = ao[ideriv,:,:]
         mo[ideriv] = _dot_ao_dm (mol, ao_i, mo_coeff, non0tab, shls_slice,
             ao_loc, out=mo[ideriv])
-    return mo 
+    return mo
 
 
 def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
@@ -103,12 +103,12 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
         assert (ao.shape[0] >= 10), ao.shape
         Pi[4] = -(rho[:,1:4].sum (0).conjugate () * rho[:,1:4].sum (0)).sum (0)
         Pi[4] /= 4.0
-        Pi[4] += rho[0,0]*(rho[1,4]/4 + rho[0,5]*2) 
+        Pi[4] += rho[0,0]*(rho[1,4]/4 + rho[0,5]*2)
         Pi[4] += rho[1,0]*(rho[0,4]/4 + rho[1,5]*2)
     t0 = logger.timer_debug1 (ot, 'otpd first cumulant', *t0)
 
     # Second cumulant and derivatives (chain rule! product rule!)
-    # dot, tensordot, and sum are hugely faster than np.einsum 
+    # dot, tensordot, and sum are hugely faster than np.einsum
     # but whether or when they actually multithread is unclear
     # Update 05/11/2020: ao is actually stored in row-major order
     # = (deriv,AOs,grids).
@@ -116,11 +116,11 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
     t0 = logger.timer (ot, 'otpd ao2mo', *t0)
     gridkern = np.zeros (grid2amo.shape + (grid2amo.shape[2],),
         dtype=grid2amo.dtype)
-    gridkern[0] = grid2amo[0,:,:,np.newaxis] * grid2amo[0,:,np.newaxis,:]  
+    gridkern[0] = grid2amo[0,:,:,np.newaxis] * grid2amo[0,:,np.newaxis,:]
     # r_0ai,  r_0aj  -> r_0aij
-    wrk0 = np.tensordot (gridkern[0], cascm2, axes=2)                  
+    wrk0 = np.tensordot (gridkern[0], cascm2, axes=2)
     # r_0aij, P_ijkl -> P_0akl
-    Pi[0] += (gridkern[0] * wrk0).sum ((1,2)) / 2                          
+    Pi[0] += (gridkern[0] * wrk0).sum ((1,2)) / 2
     # r_0aij, P_0aij -> P_0a
     t0 = logger.timer_debug1 (ot, 'otpd second cumulant 0th derivative', *t0)
     if deriv > 0:
@@ -131,16 +131,14 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
                 * grid2amo[0,:,np.newaxis,:])
             # r_1ai,  r_0aj  -> r_1aij
             Pi[ideriv] += (gridkern[ideriv] * wrk0).sum ((1,2)) * 2
-            # r_1aij, P_0aij -> P_1a  
+            # r_1aij, P_0aij -> P_1a
             t0 = logger.timer_debug1 (ot, 'otpd second cumulant 1st derivative'
                 ' ({})'.format (ideriv), *t0)
     if deriv > 1: # The fifth slot is allocated to the "off-top Laplacian,"
-        # i.e., nabla_(r1-r2)^2 Pi(r1,r2)|(r1=r2) 
+        # i.e., nabla_(r1-r2)^2 Pi(r1,r2)|(r1=r2)
         # nabla_off^2 Pi = 1/2 d^ik_jl * ([nabla_r^2 phi_i] phi_j phi_k phi_l
         # + {1 - p_jk - p_jl}[nabla_r phi_i . nabla_r phi_j] phi_k phi_l)
         # using four-fold symmetry a lot! be careful!
-        if ot.verbose > logger.DEBUG:
-            test2_Pi = Pi[4].copy ()
         XX, YY, ZZ = 4, 7, 9
         gridkern[4]  = (grid2amo[[XX,YY,ZZ],:,:,np.newaxis].sum (0)
             * grid2amo[0,:,np.newaxis,:])
@@ -252,11 +250,11 @@ def density_orbital_derivative (ot, ncore, ncas, casdm1s, cascm2, rho, mo,
     drho = np.stack ([_grid_ao2mo (ot.mol, mo, dm1, non0tab=non0tab)
         for dm1 in dm1s_mo], axis=0).transpose (0,1,3,2)
     dPi = np.zeros ((nderiv_Pi, nmo, ngrids), dtype=rho.dtype)
-    dPi[0] = ((drho[0][0] * rho[1,0,None,:]) 
+    dPi[0] = ((drho[0][0] * rho[1,0,None,:])
            + (rho[0,0,None,:] * drho[1][0]))
     if deriv > 0:
         for ideriv in range(1,4):
-            dPi[ideriv] = ((drho[0][ideriv]*rho[1,0,None,:]) 
+            dPi[ideriv] = ((drho[0][ideriv]*rho[1,0,None,:])
                          + (drho[0][0]*rho[1,ideriv,None,:])
                          + (rho[0,ideriv,None,:]*drho[1][0])
                          + (rho[0,0,None,:]*drho[1][ideriv]))
@@ -287,7 +285,7 @@ def density_orbital_derivative (ot, ncore, ncas, casdm1s, cascm2, rho, mo,
             # r_1aij, P_ijkl -> P_1akl
             dPi[ideriv,ncore:nocc] += (mo_cas[0][:,None,:] * wrk0).sum (2).T
             # r_0aj,  P_1aij -> P_1ai
-    if deriv > 1: 
+    if deriv > 1:
         raise NotImplementedError ("Colle-Salvetti type orbital+grid "
             "derivatives")
 

@@ -54,7 +54,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     nocc = ncore + ncas
     nelecas = mc.nelecas
     nao, nmo = mo_coeff.shape
-    nao_pair = nao * (nao+1) // 2
 
     mo_occ = mo_coeff[:,:nocc]
     mo_core = mo_coeff[:,:ncore]
@@ -75,7 +74,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     vhf_a = np.zeros ((nmo,nmo), dtype=h1e_mo.dtype)
     for i in range (nmo):
         jbuf = veff2.ppaa[i]
-        kbuf = veff2.papa[i]
         aapa[:,:,i,:] = jbuf[ncore:nocc,:,:]
         vhf_a[i] = np.tensordot (jbuf, casdm1, axes=2)
     vhf_a *= 0.5
@@ -128,14 +126,12 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     # I could probably save a fair amount of time by not screwing around with
     # the actual spin density! Also, the cumulant decomposition can always be
     # defined without the spin-density matrices and it's still valid!
-    mo_n = mo_occ * mo_occup[None,:nocc]
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
     twoCDM = _dms.dm2_cumulant (casdm2, casdm1)
-    dm1s = np.stack ((dm1/2.0,)*2, axis=0)
     dm1 = tag_array (dm1, mo_coeff=mo_occ, mo_occ=mo_occup[:nocc])
     make_rho = ot._numint._gen_rho_evaluator (mol, dm1, 1)[0]
     dvxc = np.zeros ((3,nao))
-    idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_) 
+    idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_)
     # For addressing particular ao derivatives
     if ot.xctype == 'LDA': idx = idx[:,0:1] # For LDAs, no second derivatives
     diag_idx = np.arange(ncas) # for puvx
@@ -173,12 +169,12 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             logger.info (mc, ('PDFT gradient atom {} slice {}-{} of {} '
                 'total').format (ia, ip0, ip1, ngrids))
             ao = ot._numint.eval_ao (mol, coords[ip0:ip1],
-                deriv=ot.dens_deriv+1, non0tab=mask) 
+                deriv=ot.dens_deriv+1, non0tab=mask)
             # Need 1st derivs for LDA, 2nd for GGA, etc.
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} ao '
                 'grids').format (ia), *t1)
             # Slice down ao so as not to confuse the rho and Pi generators
-            if ot.xctype == 'LDA': 
+            if ot.xctype == 'LDA':
                 aoval = ao[0]
             if ot.xctype == 'GGA':
                 aoval = ao[:4]
@@ -192,7 +188,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
                 'calc').format (ia), *t1)
 
             # TODO: consistent format requirements for shape of ao grid
-            if ot.xctype == 'LDA': 
+            if ot.xctype == 'LDA':
                 aoval = ao[:1]
             moval_occ = _grid_ao2mo (mol, aoval, mo_occ, mask)
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} ao2mo '
@@ -227,7 +223,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             vrho = _contract_vot_rho (vPi, rho.sum (0), add_vrho=vrho)
             tmp_dv = np.stack ([ot.get_veff_1body (rho, Pi, [ao_i, moval_occ],
                 w0[ip0:ip1], kern=vrho) for ao_i in aoval], axis=0)
-            tmp_dv = (tmp_dv * mo_occ[None,:,:] 
+            tmp_dv = (tmp_dv * mo_occ[None,:,:]
                 * mo_occup[None,None,:nocc]).sum (2)
             if k >= 0: de_grid[k] += 2 * tmp_dv.sum (1) # Grid response
             dvxc -= tmp_dv # XC response
@@ -240,20 +236,20 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             moval_cas = moval_occ = np.ascontiguousarray (
                 moval_occ[...,ncore:].transpose (0,2,1)).transpose (0,2,1)
             tmp_dv = ot.get_veff_2body_kl (rho, Pi, moval_cas, moval_cas,
-                w0[ip0:ip1], symm=True, kern=vPi) 
+                w0[ip0:ip1], symm=True, kern=vPi)
             # tmp_dv.shape = ndpi,ngrids,ncas*(ncas+1)//2
             tmp_dv = np.tensordot (tmp_dv, casdm2_pack, axes=(-1,-1))
             # tmp_dv.shape = ndpi, ngrids, ncas, ncas
-            tmp_dv[0] = (tmp_dv[:ndpi] * moval_cas[:ndpi,:,None,:]).sum (0) 
+            tmp_dv[0] = (tmp_dv[:ndpi] * moval_cas[:ndpi,:,None,:]).sum (0)
             # Chain and product rule
-            tmp_dv[1:ndpi] *= moval_cas[0,:,None,:] 
+            tmp_dv[1:ndpi] *= moval_cas[0,:,None,:]
             # Chain and product rule
-            tmp_dv = tmp_dv.sum (-1) 
+            tmp_dv = tmp_dv.sum (-1)
             # tmp_dv.shape = ndpi, ngrids, ncas
-            tmp_dv = np.tensordot (aoval[:,:ndpi], tmp_dv, axes=((1,2),(0,1))) 
+            tmp_dv = np.tensordot (aoval[:,:ndpi], tmp_dv, axes=((1,2),(0,1)))
             # tmp_dv.shape = comp, nao (orb), ncas (dm2)
-            tmp_dv = np.einsum ('cpu,pu->cp', tmp_dv, mo_cas) 
-            # tmp_dv.shape = comp, ncas 
+            tmp_dv = np.einsum ('cpu,pu->cp', tmp_dv, mo_cas)
+            # tmp_dv.shape = comp, ncas
             # it's ok to not vectorize this b/c the quadrature grid is gone
             if k >= 0: de_grid[k] += 2 * tmp_dv.sum (1) # Grid response
             dvxc -= tmp_dv # XC response
@@ -306,7 +302,7 @@ class Gradients (sacasscf.Gradients):
 
     def __init__(self, pdft, state=None):
         super().__init__(pdft, state=state)
-        # TODO: gradient of PDFT state-average energy 
+        # TODO: gradient of PDFT state-average energy
         # i.e., state = 0 & nroots > 1 case
         if self.state is None and self.nroots == 1:
             self.state = 0
@@ -319,7 +315,7 @@ class Gradients (sacasscf.Gradients):
             isinstance (self.base, mc1step.CASSCF)):
             raise NotImplementedError (
                 "{} for CASCI-based MC-PDFT".format (name)
-                )
+            )
         ot, otxc, nelecas = self.base.otfnal, self.base.otxc, self.base.nelecas
         spin = abs (nelecas[0]-nelecas[1])
         omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff (
@@ -328,11 +324,11 @@ class Gradients (sacasscf.Gradients):
         if hyb_x or hyb_c:
             raise NotImplementedError (
                 "{} for hybrid MC-PDFT functionals".format (name)
-                )
+            )
         if omega or alpha:
             raise NotImplementedError (
                 "{} for range-separated MC-PDFT functionals".format (name)
-                )
+            )
 
     def get_wfn_response (self, atmlst=None, state=None, verbose=None, mo=None,
             ci=None, veff1=None, veff2=None, nlag=None, **kwargs):
@@ -375,9 +371,9 @@ class Gradients (sacasscf.Gradients):
         offs = 0
         if state>0:
             offs = sum ([na * nb for na, nb in zip(
-                        self.na_states[:state], self.nb_states[:state])]) 
+                        self.na_states[:state], self.nb_states[:state])])
         ndet = self.na_states[state]*self.nb_states[state]
-        gci[offs:][:ndet] += gci_state 
+        gci[offs:][:ndet] += gci_state
         return g_all
 
     def get_ham_response (self, state=None, atmlst=None, verbose=None, mo=None,
@@ -407,15 +403,13 @@ class Gradients (sacasscf.Gradients):
         if self.nroots == 1: ci = [ci,]
         idx_spin = [i for i in range (self.nroots)
                     if self.spin_states[i]==self.spin_states[state]]
-        nroots_blk = len (idx_spin)
         ci_blk = np.asarray ([ci[i].ravel () for i in idx_spin])
-        ndet = ci_blk.shape[-1]
         b_orb, b_ci = self.unpack_uniq_var (bvec)
         b_ci_blk = np.asarray ([b_ci[i].ravel () for i in idx_spin])
         x0 = np.zeros_like (bvec)
         if self.nroots > 1:
             b_sa = np.dot (ci_blk.conjugate (), b_ci[state].ravel ())
-            A_sa = 2 * self.weights[state] * (self.e_mcscf 
+            A_sa = 2 * self.weights[state] * (self.e_mcscf
                 - self.e_mcscf[state])
             idx_null = np.abs (A_sa)<sing_tol
             assert (idx_null[state])
@@ -450,9 +444,8 @@ class Gradients (sacasscf.Gradients):
             axis=1)))
         if self.ngorb: logger.debug (self, 'Lagrange residual orbital norms '
             'after solving SA-SA part:\n{}'.format (linalg.norm (
-            r0_orb)))
+                r0_orb)))
         x0 += precond (-r0)
-        r1 = bvec + Aop (x0)
         r1_orb, r1_ci = self.unpack_uniq_var (r0)
         r1_ci_blk = np.asarray ([r1_ci[i].ravel () for i in idx_spin])
         ovlp = ci_blk.conjugate () @ r1_ci_blk.T
@@ -463,7 +456,7 @@ class Gradients (sacasscf.Gradients):
             axis=1)))
         if self.ngorb: logger.debug (self, 'Lagrange residual orbital norms '
             'after first precondition:\n{}'.format (linalg.norm (
-            r1_orb)))
+                r1_orb)))
         return x0
 
     def kernel (self, **kwargs):

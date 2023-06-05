@@ -25,7 +25,7 @@ from scipy import linalg
 try:
     from pyscf import dmrgscf
     DMRGCI = dmrgscf.DMRGCI
-except ImportError as e:
+except ImportError:
     class DMRGCI (object):
         pass
 
@@ -87,12 +87,12 @@ def make_one_casdm2 (mc, ci, state=0):
     fcisolver, ci, nelecas = _get_fcisolver (mc, ci, state=state)
     try:
         casdm2 = fcisolver.make_rdm2 (ci, ncas, nelecas)
-    except AttributeError as e:
+    except AttributeError:
         # Hail Mary: maybe the fcisolver class only has make_rdm12
         # but not make_rdm2 implemented?
         _, casdm2 = fcisolver.make_rdm12 (ci, ncas, nelecas)
     return casdm2
-    
+
 
 def dm2_cumulant (dm2, dm1s):
     '''
@@ -156,7 +156,7 @@ def dm2s_cumulant (dm2s, dm1s):
     #cm2 +=    0.5 * np.einsum ('ps,rq->pqrs', dm1, dm1)
     cm2s = [i.copy () for i in dm2s]
     cm2s[0] -= np.multiply.outer (dm1s[0], dm1s[0])
-    cm2s[1] -= np.multiply.outer (dm1s[0], dm1s[1]) 
+    cm2s[1] -= np.multiply.outer (dm1s[0], dm1s[1])
     cm2s[2] -= np.multiply.outer (dm1s[1], dm1s[1])
     cm2s[0] += np.multiply.outer (dm1s[0], dm1s[0]).transpose (0, 3, 2, 1)
     cm2s[2] += np.multiply.outer (dm1s[1], dm1s[1]).transpose (0, 3, 2, 1)
@@ -228,7 +228,6 @@ def make_weighted_casdm1s(mc, ci=None, weights=None):
     '''
     if ci is None: ci = mc.ci
     if weights is None: weights = mc.weights
-    ncas = mc.ncas
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.
@@ -254,7 +253,6 @@ def make_weighted_casdm2(mc, ci=None, weights=None):
     '''
     if ci is None: ci = mc.ci
     if weights is None: weights = mc.weights
-    ncas = mc.ncas
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.

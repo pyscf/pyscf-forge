@@ -26,7 +26,7 @@ def _reshape_vxc_sigma (vxc0, dens_deriv):
         vsigma = vxc0[1]
         vxc1 = vxc1 + list (vsigma.T)
     else:
-        vxc1 = [vxc[0][None,:], vxc[1][None,:]]
+        vxc1 = [vxc1[0][None,:], vxc1[1][None,:]]
     return vxc1
 
 def _unpack_vxc_sigma (vxc0, rho, dens_deriv):
@@ -38,7 +38,7 @@ def _unpack_vxc_sigma (vxc0, rho, dens_deriv):
         vxc1 = vxc1 + list (vsigma.T)
         vxc1 = _unpack_sigma_vector (vxc1, rho[0][1:4], rho[1][1:4])
     else:
-        vxc1 = [vxc[0][None,:], vxc[1][None,:]]
+        vxc1 = [vxc1[0][None,:], vxc1[1][None,:]]
     return vxc1
 
 def _pack_fxc_ltri (fxc0, dens_deriv):
@@ -46,7 +46,7 @@ def _pack_fxc_ltri (fxc0, dens_deriv):
     # -> lower-triangular Hessian matrix
     frho = fxc0[0].T
     fxc1  = [frho[0],]
-    fxc1 += [frho[1],      frho[2],]
+    fxc1 += [frho[1], frho[2],]
     if dens_deriv:
         frhosigma, fsigma = fxc0[1].T, fxc0[2].T
         fxc1 += [frhosigma[0], frhosigma[3], fsigma[0],]
@@ -76,7 +76,7 @@ def eval_ot (otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
             reported as de/drho' and de/dPi'; otherwise, they are
             reported as de/d|rho'|^2, de/d(rho'.Pi'), and de/d|Pi'|^2
 
-    Returns: 
+    Returns:
         eot : ndarray of shape (ngrids)
             integrand of the on-top exchange-correlation energy
         vot : ndarrays of shape (*,ngrids) or None
@@ -109,7 +109,7 @@ def eval_ot (otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     # LDA in libxc has a special numerical problem with zero-valued densities
     # in one spin
     if nderiv == 1:
-        idx = (rho_t[0,0] > 1e-15) & (rho_t[1,0] < 1e-15) 
+        idx = (rho_t[0,0] > 1e-15) & (rho_t[1,0] < 1e-15)
         rho_t[1,0,idx] = 1e-15
         idx = (rho_t[0,0] < 1e-15) & (rho_t[1,0] > 1e-15)
         rho_t[0,0,idx] = 1e-15
@@ -217,12 +217,12 @@ def contract_fot (otfnal, fot, rho0, Pi0, rho1, Pi1, unpack=True,
             Required if unpack == True for *tGGA functionals
             (because vot_|drho|^2 contributes to fot_rho',rho', etc.)
 
-    Returns: 
+    Returns:
         vot1 : (ndarray of shape (*,ngrids),
                 ndarray of shape (*,ngrids))
             product of fot wrt (density, pair density)
             and their derivatives
-    ''' 
+    '''
     if rho0.shape[0] == 2: rho0 = rho0.sum (0) # Never has exactly 1 derivative
     if rho0.ndim == 1: rho0 = rho0[None,:]
     if Pi0.ndim == 1: Pi0 = Pi0[None,:]
@@ -230,8 +230,6 @@ def contract_fot (otfnal, fot, rho0, Pi0, rho1, Pi1, unpack=True,
     if rho1.ndim == 1: rho1 = rho1[None,:]
     if Pi1.ndim == 1: Pi1 = Pi1[None,:]
 
-    nel = len (fot)
-    nr = int (round (np.sqrt (1 + 8*nel) - 1)) // 2
     ngrids = fot[0].shape[-1]
     vrho1 = np.zeros (ngrids, fot[0].dtype)
     vPi1 = np.zeros (ngrids, fot[2].dtype)
@@ -295,12 +293,12 @@ def _jT_f_j (frr, jT_op, *args, **kwargs):
     idx_arr += idx_arr.T
     diag_ix = np.diag_indices (nr)
     idx_arr[diag_ix] = idx_arr[diag_ix] // 2
-    
+
     # first pass: jT . frr -> fcr
     fcr = np.stack ([jT_op ([frr[i] for i in ix_row], *args)
            for ix_row in idx_arr], axis=1)
 
-    # second pass. fcr is a rectangular matrix (unavoidably) 
+    # second pass. fcr is a rectangular matrix (unavoidably)
     nc = fcr.shape[0]
     if getattr (rec, 'verbose', 0) < logger.DEBUG:
         fcc = np.empty ((nc*(nc+1)//2, ngrids), dtype=fcr.dtype)
@@ -324,7 +322,7 @@ def _jT_f_j (frr, jT_op, *args, **kwargs):
         fcc = fcc[ltri_ix]
 
     return fcc
-    
+
 
 
 def _gentLDA_jT_op (x, rho, Pi, R, zeta):
@@ -347,7 +345,7 @@ def _gentLDA_jT_op (x, rho, Pi, R, zeta):
     jTx[0] = xc + xm*(zeta[0]-(2*R*zeta[1]))
 
     # Spin sector has a rho denominator
-    idx = (rho[0] > 1e-15) 
+    idx = (rho[0] > 1e-15)
     zeta = zeta[1,idx]
     rho = rho[0,idx]
     xm = xm[idx]
@@ -364,8 +362,8 @@ def _tGGA_jT_op (x, rho, Pi, R, zeta):
     ngrid = rho.shape[-1]
     jTx = np.zeros ((3, ngrid), dtype=x[0].dtype)
     if R.ndim > 1: R = R[0]
-   
-    # ab -> cs coordinate transformation 
+
+    # ab -> cs coordinate transformation
     xcc = (x[2] + x[4] + x[3]) / 4.0
     xcm = (x[2] - x[4]) / 2.0
     xmm = (x[2] + x[4] - x[3]) / 4.0
@@ -374,7 +372,7 @@ def _tGGA_jT_op (x, rho, Pi, R, zeta):
     jTx[2] = xcc + xcm*zeta[0] + xmm*zeta[0]*zeta[0]
 
     # Density-gradient sector
-    idx = (rho[0] > 1e-15) 
+    idx = (rho[0] > 1e-15)
     sigma_fac = ((rho[1:4].conj ()*rho[1:4]).sum (0)*zeta[1])
     sigma_fac = ((xcm + 2*zeta[0]*xmm)*sigma_fac)[idx]
     rho = rho[0,idx]
@@ -431,7 +429,7 @@ def _ftGGA_jT_op_R2Pi (x, rho, R, srr, srP, sPP):
 
     jTx[0] = (x[0] - 2*R*x[1]*ri[0]
                + x[3]*(6*R*ri[1]*srr - 8*srP*ri[2])
-               + x[4]*(-24*R*R*ri[2]*srr + 80*R*ri[3]*srP 
+               + x[4]*(-24*R*R*ri[2]*srr + 80*R*ri[3]*srP
                         - 64*ri[4]*sPP))
     jTx[1] = (4*x[1]*ri[1] - 8*x[3]*ri[2]*srr
               + x[4]*(32*R*ri[3]*srr - 64*ri[4]*srP))
@@ -552,7 +550,7 @@ def _tGGA_d_jT_op (x, rho, Pi, R, zeta):
     xcm += 2*zeta[0]*xmm
     f[3,idx] = -2*xcm*R*zeta[1]/rho
     f[4,idx] = 4*xcm*zeta[1]/rho2
-    
+
     # coefficient of d^2 z
     xcm *= sigma
     f[0,idx] = 2*xcm*R*(3*zeta[1] + 2*R*zeta[2])/rho2
@@ -564,7 +562,7 @@ def _tGGA_d_jT_op (x, rho, Pi, R, zeta):
     f[0,idx] += xmm*R*R
     f[1,idx] -= 2*xmm*R/rho
     f[2,idx] += 4*xmm/rho2
-    
+
     return f
 
 #   r,r

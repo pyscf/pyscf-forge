@@ -61,7 +61,6 @@ def make_heff_mcscf (mc, mo_coeff=None, ci=None):
     if ci is None: ci = mc.ci
 
     ci = np.asarray(ci)
-    nroots = ci.shape[0]
 
     h1, h0 = mc.get_h1eff (mo_coeff)
     h2 = mc.get_h2eff (mo_coeff)
@@ -116,11 +115,9 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
     if sing_tol is None: sing_tol = getattr (mc, 'sing_tol_diabatize', SING_TOL_DIABATIZE)
     if nudge_tol is None: nudge_tol = getattr (mc, 'nudge_tol_diabatize', NUDGE_TOL_DIABATIZE)
     ci = np.array (ci) # copy
-    ci_old = ci.copy ()
     log = lib.logger.new_logger (mc, mc.verbose)
-    nroots = mc.fcisolver.nroots 
+    nroots = mc.fcisolver.nroots
     rows,col = np.tril_indices(nroots,k=-1)
-    npairs = nroots * (nroots - 1) // 2
     u = np.eye (nroots)
     t = np.zeros((nroots,nroots))
     conv = False
@@ -160,9 +157,9 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
         t[np.tril_indices(t.shape[0], k = -1)] = np.dot (Dt, evecs.T)
         t = t - t.T
 
-        if grad_norm < conv_tol and step_norm < conv_tol and neg_def == True:
-                conv = True
-                break
+        if grad_norm < conv_tol and step_norm < conv_tol and neg_def:
+            conv = True
+            break
 
         # I want the states we come from on the rows and the states we
         # are going to on the columns: |f> = |i>.Umat. However, the
@@ -172,7 +169,6 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
         # Flipping the sign of t does the same thing, but don't get
         # confused: this isn't related to the choice of variables!
         u = np.dot (u, linalg.expm (t).T)
-        f_last = f
         f, df, d2f = f_update (u)
 
     try:
@@ -194,7 +190,7 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
 
 
 class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
-    '''MS-PDFT 
+    '''MS-PDFT
 
     Extra attributes for MS-PDFT:
 
@@ -207,7 +203,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
             Convergence threshold of the diabatization algorithm. Default
             is 1e-8.
         sing_tol_diabatize : float
-            Numerical tolerance for null state-rotation modes and 
+            Numerical tolerance for null state-rotation modes and
             singularities within the diabatization algorithm. Null modes
             (e.g., rotation between E1x and E1y states in a linear
             molecule) are ignored. Singularities (zero Hessian and
@@ -252,7 +248,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         self.__dict__.update (mc.__dict__)
         keys = set (('diabatizer', 'diabatize', 'diabatization',
                      'heff_mcscf', 'hdiag_pdft',
-                     'get_heff_offdiag', 'get_heff_pdft', 
+                     'get_heff_offdiag', 'get_heff_pdft',
                      'si', 'si_mcscf', 'si_pdft',
                      'max_cyc_diabatize', 'conv_tol_diabatize',
                      'sing_tol_diabatize', 'nudge_tol_diabatize'))
@@ -292,7 +288,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
 
         = heff_mcscf - np.diag (heff_mcscf.diagonal ())
         = ( 0     H_10^* ... )
-          ( H_10  0      ... ) 
+          ( H_10  0      ... )
           ( ...   ...    ... )
 
         Returns:
@@ -310,7 +306,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
 
         = get_heff_offdiag () + np.diag (hdiag_pdft)
         = ( EPDFT_0  H_10^*   ... )
-          ( H_10     EPDFT_1  ... ) 
+          ( H_10     EPDFT_1  ... )
           ( ...      ...      ... )
 
         Returns:
@@ -351,7 +347,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
 
     def kernel (self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
                 grids_attr=None, **kwargs):
-        self.otfnal.reset (mol=self.mol) # scanner mode safety 
+        self.otfnal.reset (mol=self.mol) # scanner mode safety
         if ci0 is None and isinstance (getattr (self, 'ci', None), list):
             ci0 = [c.copy () for c in self.ci]
         self.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
@@ -369,12 +365,12 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         self.e_tot = np.dot (self.e_states, self.weights)
         self._log_diabats ()
         self._log_adiabats ()
-        return (self.e_tot, self.e_ot, self.e_mcscf, self.e_cas, self.ci, 
+        return (self.e_tot, self.e_ot, self.e_mcscf, self.e_cas, self.ci,
             self.mo_coeff, self.mo_energy)
 
     def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
         # Initialize in an adiabatic basis
-        if ci0 is not None: 
+        if ci0 is not None:
             if mo_coeff is None: mo_coeff = self.mo_coeff
             heff_mcscf = self.make_heff_mcscf (mo_coeff, ci0)
             e, self.si_mcscf = self._eig_si (heff_mcscf)
@@ -409,11 +405,11 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
                 CI vectors of the optimized diabatic states
         '''
         if ci is None: ci = self.ci
-        if ci0 is not None: 
+        if ci0 is not None:
             ovlp = np.tensordot (np.asarray (ci).conj (), np.asarray (ci0),
                                  axes=((1,2),(1,2)))
             u, svals, vh = linalg.svd (ovlp)
-            ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh)) 
+            ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh))
         return self._diabatize (self, ci=ci, **kwargs)
 
     def diabatizer (self, mo_coeff=None, ci=None):
@@ -496,7 +492,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         # Information about the final states
         log = lib.logger.new_logger (self, self.verbose)
         nroots = len (self.e_states)
-        log.note ('%s adiabatic (final) states:', self.__class__.__name__) 
+        log.note ('%s adiabatic (final) states:', self.__class__.__name__)
         if getattr (self.fcisolver, 'spin_square', None):
             ci = np.tensordot (self.si.T, np.asarray (self.ci), axes=1)
             ss = self.fcisolver.states_spin_square (ci, self.ncas,
@@ -612,7 +608,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
 
     Args:
         mc : instance of class _PDFT
-    
+
     Kwargs:
         weights : sequence of floats
         diabatization : objective-function type
@@ -638,7 +634,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
         pass
     MSPDFT.__name__ = diabatization.upper () + base_name
     return MSPDFT (mc, diabatizer, diabatize, diabatization)
-    
+
 
 if __name__ == '__main__':
     # This ^ is a convenient way to debug code that you are working on. The
