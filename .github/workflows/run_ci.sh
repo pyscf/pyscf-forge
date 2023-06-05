@@ -9,7 +9,8 @@ sudo apt-get -qq install \
     curl
 
 python -m pip install --upgrade pip
+pip install pytest
 pip install .
 
 # TODO: check if pyscf code is changed using dist-info file
-pip uninstall -y pyscf-forge
+#pip uninstall -y pyscf-forge

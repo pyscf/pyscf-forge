@@ -47,23 +47,26 @@ def restart(xc, ot_name, chkfile):
 class KnownValues(unittest.TestCase):
 
     def test_cPBE(self):
-        chkfile1 = os.path.join(tmpdir, 'h2_pbe_1.chk')
-        chkfile2 = os.path.join(tmpdir, 'h2_pbe_2.chk')
-        self.assertAlmostEqual(run(8.00, 'PBE', 'cPBE', chkfile1) -
-                               run(0.78, 'PBE', 'cPBE', chkfile2), 0.14898997201251052, 5)
-        self.assertAlmostEqual(restart('BLYP', 'cBLYP', chkfile1) -
-                               restart('BLYP', 'cBLYP', chkfile2), 0.15624825293702616, 5)
+        with tempfile.NamedTemporaryFile() as chkfile1:
+            chkname1 = chkfile1.name
+            with tempfile.NamedTemporaryFile() as chkfile2:
+                chkname2 = chkfile2.name
+                self.assertAlmostEqual(run(8.00, 'PBE', 'cPBE', chkname1) -
+                                       run(0.78, 'PBE', 'cPBE', chkname2), 0.14898997201251052, 5)
+                self.assertAlmostEqual(restart('BLYP', 'cBLYP', chkname1) -
+                                       restart('BLYP', 'cBLYP', chkname2), 0.15624825293702616, 5)
 
     def test_cBLYP(self):
-        chkfile1 = os.path.join(tmpdir, 'h2_blyp_1.chk')
-        chkfile2 = os.path.join(tmpdir, 'h2_blyp_2.chk')
-        self.assertAlmostEqual(run(8.00, 'BLYP', 'cBLYP', chkfile1) -
-                               run(0.78, 'BLYP', 'cBLYP', chkfile2), 0.15624825293702616, 5)
-        self.assertAlmostEqual(restart('PBE', 'cPBE', chkfile1) -
-                               restart('PBE', 'cPBE', chkfile2), 0.14898997201251052, 5)
-        
+        with tempfile.NamedTemporaryFile() as chkfile1:
+            chkname1 = chkfile1.name
+            with tempfile.NamedTemporaryFile() as chkfile2:
+                chkname2 = chkfile2.name
+                self.assertAlmostEqual(run(8.00, 'BLYP', 'cBLYP', chkname1) -
+                                       run(0.78, 'BLYP', 'cBLYP', chkname2), 0.15624825293702616, 5)
+                self.assertAlmostEqual(restart('PBE', 'cPBE', chkname1) -
+                                       restart('PBE', 'cPBE', chkname2), 0.14898997201251052, 5)
+
 if __name__ == "__main__":
     print("Full Tests for MC-DCFT energies of H2 molecule")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        unittest.main()
+    unittest.main()
 

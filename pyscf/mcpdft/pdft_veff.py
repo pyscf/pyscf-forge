@@ -25,7 +25,7 @@ from os import path
 import numpy as np
 import time, gc, ctypes
 
-# MRH 05/18/2020: An annoying convention in pyscf.dft.numint that I have to 
+# MRH 05/18/2020: An annoying convention in pyscf.dft.numint that I have to
 # comply with is that the AO grid-value arrays and all their derivatives are in
 # NEITHER column-major NOR row-major order; they all have ndim = 3 and strides
 # of (8*ngrids*nao, 8, 8*ngrids). Here, for my ndim > 3 objects, I choose to
@@ -93,7 +93,7 @@ class _ERIS(object):
         mo_coeff = self.mo_coeff
         ncore, ncas = self.ncore, self.ncas
         nocc = ncore + ncas
-        nderiv = vPi.shape[0]
+
         vrho_c = _contract_vot_rho (vPi, rho_c)
         self.vhf_c += mo_coeff.conjugate ().T @ ot.get_veff_1body (rho, Pi, ao,
             weight, non0tab=non0tab, shls_slice=shls_slice, ao_loc=ao_loc,
@@ -108,13 +108,14 @@ class _ERIS(object):
             # below.
             vrho_a = _contract_vot_rho (vPi, rho_a)
             vhf_a = ot.get_veff_1body (rho, Pi, ao, weight, non0tab=non0tab,
-                shls_slice=shls_slice, ao_loc=ao_loc, hermi=1, kern=vrho_a) 
+                shls_slice=shls_slice, ao_loc=ao_loc, hermi=1, kern=vrho_a)
             vhf_a = mo_coeff.conjugate ().T @ vhf_a @ mo_coeff
             vhf_a[ncore:nocc,:] = vhf_a[:,ncore:nocc] = 0.0
             vrho_a = None
             self.vhf_c += vhf_a
 
-    def _ftpt_vhf_c (self): return self.nao+1
+    def _ftpt_vhf_c (self):
+        return self.nao+1
 
     def _accumulate_ppaa_incore (self, ot, rho, Pi, ao, weight, rho_c, rho_a,
             vPi, non0tab, shls_slice, ao_loc):
@@ -155,8 +156,7 @@ class _ERIS(object):
     def _accumulate_j_pc (self, ot, rho, Pi, ao, weight, rho_c, rho_a, vPi,
             non0tab, shls_slice, ao_loc):
         mo_coeff = self.mo_coeff
-        ncore, ncas = self.ncore, self.ncas
-        nocc = ncore + ncas
+        ncore = self.ncore
         nderiv = vPi.shape[0]
         if self.jk_pc:
             mo = _square_ao (_grid_ao2mo (self.mol, ao[:nderiv], mo_coeff,
@@ -165,7 +165,8 @@ class _ERIS(object):
             self.j_pc += ot.get_veff_1body (rho, Pi, [mo, mo_core], weight,
                 kern=vPi)
 
-    def _ftpt_j_pc (self): return self.nao + self.ncore + self.ncas + 1
+    def _ftpt_j_pc (self):
+        return self.nao + self.ncore + self.ncas + 1
 
     def _accumulate_ftpt (self):
         ''' memory footprint of _accumulate, divided by nderiv_Pi*ngrids '''
@@ -184,8 +185,6 @@ class _ERIS(object):
 
     def _finalize (self):
         if self.method == 'incore':
-            nmo, ncore, ncas = self.nmo, self.ncore, self.ncas
-            nocc = ncore + ncas
             self.ppaa = np.ascontiguousarray (self.papa.transpose (0,2,1,3))
             self.k_pc = self.j_pc.copy ()
         else:
@@ -228,7 +227,8 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
             If true, compute the ppii=pipi elements of veff2
             (otherwise, these are set to zero)
         drop_mcwfn : logical
-                If true, drops the normal CASSCF wave function contribution (ie the ``Hartree exchange-correlation'') from the response
+                If true, drops the normal CASSCF wave function
+                contribution (ie the ``Hartree exchange-correlation'') from the response
 
     Returns:
         veff1 : ndarray of shape (nao, nao)
@@ -241,7 +241,6 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     nao = mo_coeff.shape[0]
     mo_core = mo_coeff[:,:ncore]
     mo_cas = mo_coeff[:,ncore:nocc]
-    npair = nao * (nao + 1) // 2
     shls_slice = (0, ot.mol.nbas)
     ao_loc = ot.mol.ao_loc_nr()
 
@@ -252,26 +251,27 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
 
     if drop_mcwfn:
         if abs(hyb_x - hyb_c) > 1e-11:
-            raise NotImplementedError("effective potential for hybrid functionals with different exchange, correlations components")
+            raise NotImplementedError(
+                "effective potential for hybrid functionals with different exchange, correlations components")
 
     elif abs (hyb_x) > 1e-11 or abs (hyb_c) > 1e-11:
         raise NotImplementedError ("effective potential for hybrid functionals")
 
     veff1 = np.zeros ((nao, nao), dtype=dm1s.dtype)
-    veff2 = _ERIS (ot.mol, mo_coeff, ncore, ncas, paaa_only=paaa_only, 
+    veff2 = _ERIS (ot.mol, mo_coeff, ncore, ncas, paaa_only=paaa_only,
         aaaa_only=aaaa_only, jk_pc=jk_pc, verbose=ot.verbose,
         stdout=ot.stdout)
 
     t0 = (logger.process_clock (), logger.perf_counter ())
 
     # Density matrices
-    dm_core = mo_core @ mo_core.T 
-    dm_cas = dm1s - dm_core[None,:,:] 
+    dm_core = mo_core @ mo_core.T
+    dm_cas = dm1s - dm_core[None,:,:]
     dm_core *= 2
 
     # Propagate speedup tags
     if hasattr (dm1s, 'mo_coeff') and hasattr (dm1s, 'mo_occ'):
-        dm_core = tag_array (dm_core, mo_coeff=dm1s.mo_coeff[0,:,:ncore], 
+        dm_core = tag_array (dm_core, mo_coeff=dm1s.mo_coeff[0,:,:ncore],
                              mo_occ=dm1s.mo_occ[:,:ncore].sum(0))
         dm_cas = tag_array (dm_cas, mo_coeff=dm1s.mo_coeff[:,:,ncore:nocc],
                             mo_occ=dm1s.mo_occ[:,ncore:nocc])
@@ -289,8 +289,8 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     ncols  = 4 + nderiv_rho*nao # ao, weight, coords
     ncols += nderiv_rho * 4 + nderiv_Pi # rho, rho_a, rho_c, Pi
     ncols += 1 + nderiv_rho + nderiv_Pi # eot, vot
- 
-   # Asynchronous part
+
+    # Asynchronous part
     nveff1 = nderiv_rho * (nao+1) # footprint of get_veff_1body
     nveff2 = veff2._accumulate_ftpt () * nderiv_Pi
     ncols += np.amax ([nveff1, nveff2]) # asynchronous fns
@@ -317,7 +317,7 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         eot, vot = ot.eval_ot (rho, Pi, weights=weight)[:2]
         vrho, vPi = vot
         t0 = logger.timer (ot, 'effective potential kernel calculation', *t0)
-        if ao.ndim == 2: ao = ao[None,:,:] 
+        if ao.ndim == 2: ao = ao[None,:,:]
         # TODO: consistent format req's ao LDA case
         veff1 += ot.get_veff_1body (rho, Pi, ao, weight, non0tab=mask,
             shls_slice=shls_slice, ao_loc=ao_loc, hermi=1, kern=vrho)
@@ -360,7 +360,6 @@ def lazy_kernel (ot, dm1s, cascm2, mo_cas, max_memory=2000, hermi=1,
         raise NotImplementedError ('Molecular orbital slices for 2-body part')
     ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
     nao = mo_cas.shape[0]
-    npair = nao * (nao + 1) // 2
 
     veff1 = np.zeros_like (dm1s[0])
     veff2 = np.zeros ((nao, nao, nao, nao), dtype=veff1.dtype)
@@ -422,8 +421,8 @@ def get_veff_1body (otfnal, rho, Pi, ao, weight, kern=None, non0tab=None,
             Offset to first AO of each shell
         hermi : integer or logical
             Toggle whether veff is supposed to be a Hermitian matrix
-            You can still pass two different ao arrays for the bra and 
-            the ket indices, for instance if one of them is supposed to 
+            You can still pass two different ao arrays for the bra and
+            the ket indices, for instance if one of them is supposed to
             be a higher derivative. They just have to have the same nao
             in that case.
 
@@ -436,7 +435,6 @@ def get_veff_1body (otfnal, rho, Pi, ao, weight, kern=None, non0tab=None,
         rho = np.expand_dims (rho, 1)
         Pi = np.expand_dims (Pi, 0)
 
-    w = weight[None,:]
     if isinstance (ao, np.ndarray) and ao.ndim == 3:
         ao = [ao, ao]
     elif len (ao) != 2:
@@ -445,11 +443,10 @@ def get_veff_1body (otfnal, rho, Pi, ao, weight, kern=None, non0tab=None,
         # Life pro-tip: do more operations with smaller arrays and fewer
         # operations with bigger arrays
         ao = [ao[1], ao[0]]
-    if kern is None: 
+    if kern is None:
         kern = otfnal.eval_ot (rho, Pi, dderiv=1, **kwargs)[1][1]
     else:
-        kern = kern.copy () 
-    nderiv = kern.shape[0]
+        kern = kern.copy ()
     kern *= weight[None,:]
 
     # Zeroth and first derivatives
@@ -473,7 +470,7 @@ def get_veff_2body (otfnal, rho, Pi, ao, weight, aosym='s4', kern=None,
             containing spin-density [and derivatives]
         Pi : ndarray with shape (*,ngrids)
             containing on-top pair density [and derivatives]
-        ao : ndarray of shape (*,ngrids,nao) 
+        ao : ndarray of shape (*,ngrids,nao)
             OR list of ndarrays of shape (*,ngrids,*)
             values and derivatives of atomic or molecular orbitals in
             which space to calculate the 2-body veff
@@ -494,7 +491,7 @@ def get_veff_2body (otfnal, rho, Pi, ao, weight, aosym='s4', kern=None,
         kern : ndarray of shape (*,ngrids)
             the derivative of the on-top potential with respect to pair
             density (vot). If not provided, it is calculated.
-        vao : ndarray of shape (*,ngrids,nao,nao) or 
+        vao : ndarray of shape (*,ngrids,nao,nao) or
             (*,ngrids,nao*(nao+1)//2). An intermediate in which the
             kernel and the k,l orbital indices have been contracted.
             Overrides kl_symm
@@ -530,9 +527,9 @@ def get_veff_2body (otfnal, rho, Pi, ao, weight, aosym='s4', kern=None,
     ao2 = ao2.reshape (ao2.shape[0], -1, ao2.shape[-1]).transpose (0,2,1)
     vao = vao.reshape (vao.shape[0], -1, vao.shape[-1]).transpose (0,2,1)
     veff = sum ([_dot_ao_mo (otfnal.mol, a, v) for a, v in zip (ao2, vao)])
-    veff = veff.reshape (*ijkl_shape) 
+    veff = veff.reshape (*ijkl_shape)
 
-    return veff 
+    return veff
 
 def get_veff_2body_kl (otfnal, rho, Pi, ao_k, ao_l, weight, symm=False,
         kern=None, **kwargs):
@@ -587,7 +584,7 @@ def get_veff_2body_kl (otfnal, rho, Pi, ao_k, ao_l, weight, symm=False,
 def _square_ao (ao):
     # On a grid, square each element of an AO or MO array, but preserve the
     # chain rule so that columns 1 to 4 are still the first derivative of
-    # the squared AO value, etc. 
+    # the squared AO value, etc.
     nderiv = ao.shape[0]
     ao_sq = ao * ao[0]
     if nderiv > 1:
@@ -621,7 +618,7 @@ def _contract_ao1_ao2 (ao1, ao2, nderiv, symm=False):
         prod = prod.transpose (0,2,1)
     else:
         prod = prod.transpose (0,3,2,1)
-    return prod 
+    return prod
 
 # TODO: unittest?
 def _contract_vot_ao (vot, ao, out=None):
@@ -636,7 +633,7 @@ def _contract_vot_ao (vot, ao, out=None):
         buffer=out).transpose (0,2,1)
     ao = ao.transpose (0,2,1)
     vao[0] = numint._scale_ao (ao[:nderiv], vot, out=vao[0])
-    if nderiv > 1: 
+    if nderiv > 1:
         for i in range (1,4):
             vao[i] = numint._scale_ao (ao[0:1,:,:], vot[i:i+1,:], out=vao[i])
     return vao
@@ -736,4 +733,4 @@ def _dot_ao_mo (mol, ao, mo, non0tab=None, shls_slice=None, ao_loc=None,
        pnon0tab, pshls_slice, pao_loc)
     return vv
 
-    
+

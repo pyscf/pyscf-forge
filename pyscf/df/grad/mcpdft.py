@@ -19,9 +19,9 @@ from pyscf.df.grad import sacasscf as dfsacasscf_grad
 from pyscf.df.grad import rhf as dfrhf_grad
 from functools import partial
 
-# I need to resolve the __init__ and get_ham_response members. Otherwise everything should be fine! 
+# I need to resolve the __init__ and get_ham_response members. Otherwise everything should be fine!
 class Gradients (dfsacasscf_grad.Gradients, mcpdft_grad.Gradients):
-    
+
     def __init__(self, pdft, state=None):
         self.auxbasis_response = True
         mcpdft_grad.Gradients.__init__(self, pdft, state=state)

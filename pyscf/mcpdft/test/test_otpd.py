@@ -32,9 +32,9 @@ def vector_error (test, ref):
     return err
 
 h2 = scf.RHF (gto.M (atom = 'H 0 0 0; H 1.2 0 0', basis = '6-31g', 
-    output='/dev/null')).run ()
+    output='/dev/null', verbose=0)).run ()
 lih = scf.RHF (gto.M (atom = 'Li 0 0 0; H 1.2 0 0', basis = 'sto-3g',
-    output='/dev/null')).run ()
+    output='/dev/null', verbose=0)).run ()
 
 def get_dm2_ao (mc, mo_coeff, casdm1, casdm2):
     i, ncas = mc.ncore, mc.ncas

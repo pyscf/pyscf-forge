@@ -78,7 +78,7 @@ def split_x_c_comma (xc):
         else:
             raise myerr (xc)
         myerr.extend (xc)
-    if not ',' in xc:
+    if ',' not in xc:
         raise myerr ('Maximum XC alias recursion depth')
     return xc.split (',')
 

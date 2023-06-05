@@ -23,3 +23,5 @@ jobs:
           python-version: "3.7"
       - name: Install
         run: ./.github/workflows/run_ci.sh
+      - name: Test with pytest
+        run: ./.github/workflows/test.sh

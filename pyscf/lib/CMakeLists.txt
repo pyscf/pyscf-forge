@@ -2,7 +2,9 @@ project (clib_pyscf_mcpdft)
 
 cmake_minimum_required (VERSION 2.8.11)
 set(CMAKE_VERBOSE_MAKEFILE OFF)
-set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
+if (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
+endif()
 if (CMAKE_COMPILER_IS_GNUCC) # Does it skip the link flag on old OsX?
   # TODO: If updating to minimum requirement cmake>=3.7, use
   # CMAKE_SHARED_LINKER_FLAGS_INIT to combine LDFLAGS options.
