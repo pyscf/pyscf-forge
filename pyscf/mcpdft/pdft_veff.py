@@ -257,6 +257,7 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     elif abs (hyb_x) > 1e-11 or abs (hyb_c) > 1e-11:
         raise NotImplementedError ("effective potential for hybrid functionals")
 
+    E_ot = 0.0
     veff1 = np.zeros ((nao, nao), dtype=dm1s.dtype)
     veff2 = _ERIS (ot.mol, mo_coeff, ncore, ncas, paaa_only=paaa_only,
         aaaa_only=aaaa_only, jk_pc=jk_pc, verbose=ot.verbose,
@@ -315,6 +316,7 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
             dens_deriv, mask)
         t0 = logger.timer (ot, 'on-top pair density calculation', *t0)
         eot, vot = ot.eval_ot (rho, Pi, weights=weight)[:2]
+        E_ot += eot.dot(weight)
         vrho, vPi = vot
         t0 = logger.timer (ot, 'effective potential kernel calculation', *t0)
         if ao.ndim == 2: ao = ao[None,:,:]
@@ -328,7 +330,7 @@ def kernel (ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     veff2._finalize ()
     t0 = logger.timer (ot, 'Finalizing 2-body effective potential calculation',
         *t0)
-    return veff1, veff2
+    return E_ot, veff1, veff2
 
 def lazy_kernel (ot, dm1s, cascm2, mo_cas, max_memory=2000, hermi=1,
         veff2_mo=None):
