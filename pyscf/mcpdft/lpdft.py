@@ -49,12 +49,14 @@ def weighted_average_densities(mc, ci=None, weights=None):
     return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
-def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
-                    ot=None, ncas=None, ncore=None):
+def get_lpdfthconst(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None):
     ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
         mc : instance of class _PDFT
+
+        E_ot : float
+            On-top energy
 
         veff1_0 : ndarray with shape (nao, nao)
             1-body effective potential in the AO basis.
@@ -73,11 +75,8 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
             Spin-summed 2-RDM in the active space generated
             from expansion density.
 
-        mo_coeff : ndarray of shape (nao, nmo)
-            A full set of molecular orbital coefficients. Taken from
-            self if not provided.
-
-        ot : an instance of on-top functional class - see otfnal.py
+        hyb : float
+            Hybridization constant (lambda term)
 
         ncas : float
             Number of active space MOs
@@ -88,28 +87,15 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
     Returns:
         Constant term h_const for the expansion term.
     '''
-    if mo_coeff is None: mo_coeff = mc.mo_coeff
-    if ot is None: ot = mc.otfnal
     if ncas is None: ncas = mc.ncas
     if ncore is None: ncore = mc.ncore
 
     nocc = ncore + ncas
 
-    hyb = ot._numint.hybrid_coeff(ot.otxc)
-    if abs(hyb[0] - hyb[1]) > 1e-11:
-        raise NotImplementedError(
-            "hybrid functionals with different exchange, correlations components")
-
-    hyb = 1.0 - hyb[0]
-
     # Get the 1-RDM matrices
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
     dm1 = dm1s[0] + dm1s[1]
-
-    # Eot for zeroth order state
-    e_ot_0 = mc.energy_dft(ot=ot, mo_coeff=mo_coeff, casdm1s=casdm1s_0,
-                           casdm2=casdm2_0)
 
     # Coulomb energy for zeroth order state
     vj = mc._scf.get_j(dm=dm1)
@@ -123,17 +109,20 @@ def get_lpdfthconst(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0, mo_coeff=None,
     e_veff2 += np.tensordot(veff2_0.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
     e_veff2 += 0.5 * np.tensordot(mc.get_h2lpdft(veff2_0), casdm2_0, axes=4)
 
-    # h_nuc + Eot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
-    energy_core = hyb * mc.energy_nuc() + e_ot_0 - hyb * e_j - e_veff1 - e_veff2
+    # h_nuc + E_ot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
+    energy_core = hyb * mc.energy_nuc() + E_ot - hyb * e_j - e_veff1 - e_veff2
     return energy_core
 
 
-def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
-                            mo_coeff=None, ncas=None, ncore=None, ot=None):
+def transformed_h1e_for_cas(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0,
+                            mo_coeff=None, ncas=None, ncore=None):
     '''Compute the CAS one-particle L-PDFT Hamiltonian
 
     Args:
         mc : instance of a _PDFT object
+
+        E_ot : float
+            On-top energy
 
         veff1_0 : ndarray with shape (nao, nao)
             1-body effective potential in the AO basis.
@@ -152,6 +141,9 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
             Spin-summed 2-RDM in the active space generated
             from expansion density
 
+        hyb : float
+            Hybridization constant (lambda term)
+
         mo_coeff : ndarray of shape (nao,nmo)
             A full set of molecular orbital coefficients. Taken from
             self if not provided.
@@ -169,18 +161,10 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ncas is None: ncas = mc.ncas
     if ncore is None: ncore = mc.ncore
-    if ot is None: ot = mc.otfnal
 
     nocc = ncore + ncas
     mo_core = mo_coeff[:, :ncore]
     mo_cas = mo_coeff[:, ncore:nocc]
-
-    hyb = ot._numint.hybrid_coeff(ot.otxc)
-    if abs(hyb[0] - hyb[1]) > 1e-11:
-        raise NotImplementedError(
-            "hybrid functionals with different exchange, correlations components")
-
-    hyb = 1.0 - hyb[0]
 
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
     dm1 = dm1s[0] + dm1s[1]
@@ -188,8 +172,8 @@ def transformed_h1e_for_cas(mc, veff1_0, veff2_0, casdm1s_0, casdm2_0,
 
     # h_pq + V_pq + J_pq all in AO integrals
     hcore_eff = hyb * mc.get_hcore() + veff1_0 + hyb * v_j
-    energy_core = mc.get_lpdfthconst(veff1_0, veff2_0, casdm1s_0,
-                                     casdm2_0, ot=ot)
+    energy_core = mc.get_lpdfthconst(E_ot, veff1_0, veff2_0, casdm1s_0,
+                                     casdm2_0, hyb)
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
@@ -267,11 +251,11 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     ncas = mc.ncas
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
-    veff1_0, veff2_0 = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
-                                        casdm2=casdm2_0, drop_mcwfn=True)
+    veff1_0, veff2_0, E_ot = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
+                                        casdm2=casdm2_0, drop_mcwfn=True, incl_energy=True)
 
     # This is all standard procedure for generating the hamiltonian in PySCF
-    h1, h0 = mc.get_h1lpdft(veff1_0, veff2_0, casdm1s_0, casdm2_0, ot=ot)
+    h1, h0 = mc.get_h1lpdft(E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0-cas_hyb)
     h2 = mc.get_h2lpdft(veff2_0)
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
 

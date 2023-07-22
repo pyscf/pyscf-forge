@@ -500,7 +500,7 @@ class _PDFT ():
 
     def get_pdft_veff (self, mo=None, ci=None, state=0, casdm1s=None,
             casdm2=None, incl_coul=False, paaa_only=False, aaaa_only=False,
-            jk_pc=False, drop_mcwfn=False):
+            jk_pc=False, drop_mcwfn=False, incl_energy=False):
         '''Get the 1- and 2-body MC-PDFT effective potentials for a set
         of mos and ci vectors
 
@@ -534,6 +534,8 @@ class _PDFT ():
             drop_mcwfn : logical
                 If true, drops the normal CASSCF wave function contribution
                 (ie the ``Hartree exchange-correlation'') from the response
+            incl_energy : logical
+                If true, includes the on-top potential energy as a 3rd return argument
 
         Returns:
             veff1 : ndarray of shape (nao, nao)
@@ -542,6 +544,8 @@ class _PDFT ():
                 incl_coul kwarg)
             veff2 : pyscf.mcscf.mc_ao2mo._ERIS instance
                 Relevant 2-body effective potential in the MO basis
+            E_ot : float
+                On-top energy. Only included if incl_energy is true.
         '''
         t0 = (logger.process_clock (), logger.perf_counter ())
         if mo is None: mo = self.mo_coeff
@@ -553,14 +557,19 @@ class _PDFT ():
                                      ncore=ncore, ncas=ncas)
         cascm2 = _dms.dm2_cumulant (casdm2, casdm1s)
 
-        pdft_veff1, pdft_veff2 = pdft_veff.kernel (self.otfnal, dm1s,
+        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel (self.otfnal, dm1s,
             cascm2, mo, ncore, ncas, max_memory=self.max_memory,
             paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc, drop_mcwfn=drop_mcwfn)
 
         if incl_coul:
             pdft_veff1 += self._scf.get_j (self.mol, dm1s[0] + dm1s[1])
         logger.timer (self, 'get_pdft_veff', *t0)
-        return pdft_veff1, pdft_veff2
+
+        if incl_energy:
+            return pdft_veff1, pdft_veff2, E_ot
+
+        else:
+            return pdft_veff1, pdft_veff2
 
     def _state_average_nuc_grad_method (self, state=None):
         if not isinstance (self, mc1step.CASSCF):
