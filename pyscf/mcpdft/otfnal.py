@@ -15,7 +15,6 @@
 #
 import numpy as np
 import copy
-import re
 from scipy import linalg
 from pyscf import lib, dft
 from pyscf.lib import logger

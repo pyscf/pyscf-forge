@@ -21,7 +21,7 @@ from scipy import linalg
 
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
-from pyscf import mcpdft, lib
+from pyscf import mcpdft
 from pyscf.mcpdft import _dms
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
     StateAverageMixFCISolver

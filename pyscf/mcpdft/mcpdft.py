@@ -565,6 +565,39 @@ class _PDFT ():
         else:
             return pdft_veff1, pdft_veff2
 
+    def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None, casdm2=None, contract_casdm1s=None, contract_casdm2=None, paaa_only=False, aaaa_only=False,
+            jk_pc=False):
+        t0 = (logger.process_clock(), logger.perf_counter())
+        if mo is None: mo = self.mo_coeff
+        if ci is None: ci = self.ci
+        if casdm1s is None: casdm1s = self.make_one_casdm1s(ci, state=state)
+        if casdm2 is None: casdm2 = self.make_one_casdm2(ci, state=state)
+        ncore, ncas = self.ncore, self.ncas
+
+        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
+        cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
+
+        if contract_casdm1s is None:
+            contract_dm1s = dm1s
+
+        else:
+            contract_casdm1s = _dms.casdm1s_to_dm1s(self, contract_casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
+            contract_dm1s = _dms.casdm1s_to_dm1s(self, contract_casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
+
+        if contract_casdm2 is None:
+            contract_cascm2 = cascm2
+
+        else:
+            # Possible for contract_casdm1s to be unbound????
+            contract_casdm2 = _dms.dm2_cumulant(contract_casdm2, contract_casdm1s)
+
+        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, contract_dm1s, contract_cascm2, mo, ncore, ncas, max_memory=max_memory,
+            paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc)
+
+        return pdft_feff1, pdft_feff2
+
+
+
     def _state_average_nuc_grad_method (self, state=None):
         if not isinstance (self, mc1step.CASSCF):
             raise NotImplementedError ("CASCI-based PDFT nuclear gradients")
