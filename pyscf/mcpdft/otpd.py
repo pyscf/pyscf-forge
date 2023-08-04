@@ -14,14 +14,8 @@
 # limitations under the License.
 #
 import numpy as np
-import time
-from scipy import linalg
 from pyscf.lib import logger
-from pyscf.lib import einsum as einsum_threads
 from pyscf.dft.numint import _dot_ao_dm
-from pyscf.mcpdft._dms import dm2_cumulant
-from itertools import product
-from os import path
 
 def _grid_ao2mo (mol, ao, mo_coeff, non0tab=None, shls_slice=None,
         ao_loc=None):

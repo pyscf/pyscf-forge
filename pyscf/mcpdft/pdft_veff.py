@@ -13,17 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyscf import ao2mo, __config__, lib
-from pyscf.lib import logger, pack_tril, unpack_tril, current_memory, tag_array
-from pyscf.lib import einsum as einsum_threads
+from pyscf import __config__, lib
+from pyscf.lib import logger, current_memory, tag_array
 from pyscf.dft import numint
 from pyscf.dft.gen_grid import BLKSIZE
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
 from pyscf.lib import load_library
-from scipy import linalg
-from os import path
 import numpy as np
-import time, gc, ctypes
+import gc, ctypes
 
 # MRH 05/18/2020: An annoying convention in pyscf.dft.numint that I have to
 # comply with is that the AO grid-value arrays and all their derivatives are in

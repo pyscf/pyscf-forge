@@ -15,7 +15,6 @@
 #
 import numpy as np
 from scipy import linalg
-from pyscf import lib
 from pyscf.lib import logger
 
 def _reshape_vxc_sigma (vxc0, dens_deriv):

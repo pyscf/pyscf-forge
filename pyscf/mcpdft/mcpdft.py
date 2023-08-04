@@ -14,22 +14,16 @@
 # limitations under the License.
 #
 import numpy as np
-import time
 from copy import deepcopy
-from scipy import linalg
-from pyscf import gto, dft, ao2mo, fci, mcscf, lib, __config__
-from pyscf.lib import logger, temporary_env
-from pyscf.fci import cistring
+from pyscf import ao2mo, fci, mcscf, __config__
+from pyscf.lib import logger
 from pyscf.dft import gen_grid
-from pyscf.mcscf import mc_ao2mo, mc1step, casci
-from pyscf.fci.direct_spin1 import _unpack_nelec
+from pyscf.mcscf import mc1step
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, state_average_mix
 from pyscf.mcscf.addons import state_average_mix_, StateAverageMixFCISolver
-from pyscf.mcscf.addons import StateAverageFCISolver
 from pyscf.mcscf.df import _DFCASSCF
 from pyscf.mcpdft import pdft_veff
-from pyscf.mcpdft.otpd import get_ontop_pair_density
-from pyscf.mcpdft.otfnal import otfnal, transfnal, get_transfnal
+from pyscf.mcpdft.otfnal import transfnal, get_transfnal
 from pyscf.mcpdft import _dms
 
 def energy_tot (mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
