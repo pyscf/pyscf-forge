@@ -15,12 +15,13 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
+import numpy as np
 from pyscf.mcpdft._pdft_eris import _ERIS
 
 def kernel(ot, dm1s, cascm2, contract_dm1s, contract_cascm2, mo_coeff, ncore, ncas, max_memory=2000, hermi=1, paaa_only=False, aaaa_only=False, jk_pc=False):
     nocc = ncore + ncas
     ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
-    nao = mo.coeff.shape[0]
+    nao = mo_coeff.shape[0]
     mo_core = mo_coeff[:,:ncore]
     mo_cas = mo_coeff[:,ncore:nocc]
     shls_slice = (0, ot.mol.nbas)

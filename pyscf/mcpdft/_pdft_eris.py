@@ -177,7 +177,7 @@ def _contract_vot_rho (vot, rho, add_vrho=None):
     if nderiv > 1:
         vrho[0] += (vot[1:4] * rho[1:4]).sum (0)
     vrho /= 2
-    # vot involves lower derivatives than vhro in original translation
+    # vot involves lower derivatives than vrho in original translation
     # make sure vot * rho gets added to only the proper component(s)
     if add_vrho is not None:
         add_vrho[:nderiv] += vrho
