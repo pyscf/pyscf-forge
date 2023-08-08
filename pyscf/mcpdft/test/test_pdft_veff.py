@@ -47,8 +47,7 @@ def case(kv, mc):
     ngorb = ncore * ncas + nocc * nvir
     fcasscf = mcscf.CASSCF(mc._scf, ncas, nelecas)
     fcasscf.__dict__.update(mc.__dict__)
-    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=True,
-                                    paaa_only=True)
+    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=True, paaa_only=True)
     with lib.temporary_env(fcasscf, get_hcore=lambda: mc.get_hcore() + veff1):
         g_all, _, _, hdiag_all = newton_casscf.gen_g_hop(
             fcasscf, mc.mo_coeff, mc.ci, veff2)

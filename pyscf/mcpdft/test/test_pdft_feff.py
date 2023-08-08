@@ -16,9 +16,9 @@
 # Author: Matthew Hennefarth <mhennefarth@uchicago.edu>
 
 import numpy as np
-from pyscf import gto, scf, fci, ao2mo, lib
+from pyscf import gto, scf, fci, ao2mo, lib, mcscf
 from pyscf.lib import temporary_env
-from pyscf.mcscf import mc_ao2mo
+from pyscf.mcscf import mc_ao2mo, newton_casscf
 from pyscf.mcpdft import pdft_feff, _dms
 from pyscf import mcpdft
 import unittest
@@ -62,10 +62,66 @@ def get_feff_ref(mc, state=0, c_casdm1s=None, c_casdm2=None):
     with temporary_env(mc._scf, _eri=ao2mo.restore(4, v2_ao, nao)):
         with temporary_env(mc.mol, incore_anyway=True):
             v2 = mc_ao2mo._ERIS(mc, mc.mo_coeff, method='incore')
+
     return v1, v2
 
 
+def case(kv, mc):
+    ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
+    nao, nmo = mc.mo_coeff.shape
+    nocc, nvir = ncore + ncas, nmo - ncore - ncas
+    ngorb = ncore * ncas + nocc * nvir
+    fcasscf = mcscf.CASSCF(mc._scf, ncas, nelecas)
+    fcasscf.__dict__.update(mc.__dict__)
+
+    feff1, feff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
+    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
+
+    with lib.temporary_env(fcasscf, get_hcore=lambda: feff1):
+        g_all, _, _, hdiag_all = newton_casscf.gen_g_hop(fcasscf, mc.mo_coeff, mc.ci, feff2)
+
+    g_numzero = np.abs(g_all) < 1e-8
+    hdiag_all[g_numzero] = 1
+    x0 = -g_all / hdiag_all
+    xorb_norm = np.linalg.norm(x0[:ngorb])
+    xci_norm = np.linalg.norm(x0[ngorb:])
+    x0 = g_all * np.random.rand(*x0.shape) - 0.5
+    x0[g_numzero] = 0
+    x0[:ngorb] *= xorb_norm / np.linalg.norm(x0[:ngorb])
+    x0[ngorb:] *= xci_norm / (np.linalg.norm(x0[ngorb:]) or 1)
+    err_tab = np.zeros((0, 2))
+
+    def seminum(x):
+        uorb, ci1 = newton_casscf.extract_rotation(fcasscf, x, 1, mc.ci)
+        mo1 = mc.rotate_mo(mc.mo_coeff, uorb)
+        veff1_1, veff2_1 = mc.get_pdft_veff(mo=mo1, ci=ci1, incl_coul=False, paaa_only=True)
+        return veff1 - veff1_1, veff2.papa - veff2_1.papa
+
+    for ix, p in enumerate(range(20,25)):
+        x1 = x0/(2**p)
+        print(x1.shape)
+        x1_norm = np.linalg.norm(x1)
+        dg_test = np.dot(g_all, x1)
+        dveff1, dveff2 = seminum(x1)
+        dg_ref = np.concatenate(dveff1).sum() + np.concatenate(dveff2).sum()
+        dg_err = abs((dg_test - dg_ref)/dg_ref)
+        print("________")
+        print(dg_test)
+        print(dg_ref)
+        print(dg_err)
+
+
 class KnownValues(unittest.TestCase):
+
+    def test_dvot(self):
+        np.random.seed(1)
+        for mol, mf in zip(("H2", "LiH"), (h2, lih)):
+            for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                    mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
+                    with self.subTest(mol=mol, state=state, fnal=fnal):
+                        case(self, mc)
+
     def test_feff_ao2mo(self):
         for mol, mf in zip(("H2", "LiH"), (h2, lih)):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
@@ -107,6 +163,7 @@ class KnownValues(unittest.TestCase):
                                           term=term):
                             self.assertAlmostEqual(lib.fp(test),
                                                    lib.fp(ref), delta=1e-4)
+
 
 if __name__ == "__main__":
     print("Full Tests for pdft_feff")
