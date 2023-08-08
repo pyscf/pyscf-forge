@@ -20,8 +20,9 @@ from pyscf.lib import logger, pack_tril, current_memory, einsum, tag_array
 #from pyscf.grad import sacasscf
 from pyscf.grad import sacasscf
 from pyscf.mcscf.casci import cas_natorb
+
+from pyscf.mcpdft._pdft_eris import _contract_vot_rho
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
-from pyscf.mcpdft.pdft_veff import _contract_vot_rho, _contract_ao_vao
 from pyscf.mcpdft import _dms
 from functools import reduce
 from itertools import product
