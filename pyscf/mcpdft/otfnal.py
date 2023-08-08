@@ -20,7 +20,7 @@ from pyscf import lib, dft
 from pyscf.lib import logger
 from pyscf.dft.gen_grid import Grids
 from pyscf.dft.numint import _NumInt, NumInt
-from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms
+from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf import __config__
 
@@ -174,6 +174,9 @@ class otfnal:
     get_veff_1body = pdft_veff.get_veff_1body
     get_veff_2body = pdft_veff.get_veff_2body
     get_veff_2body_kl = pdft_veff.get_veff_2body_kl
+
+    get_feff_1body = pdft_feff.get_feff_1body
+    get_feff_2body = pdft_feff.get_feff_2body
 
     def reset (self, mol=None):
         ''' Discard cached grid data and optionally update the mol '''

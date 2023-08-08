@@ -22,7 +22,7 @@ from pyscf.mcscf import mc1step
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, state_average_mix
 from pyscf.mcscf.addons import state_average_mix_, StateAverageMixFCISolver
 from pyscf.mcscf.df import _DFCASSCF
-from pyscf.mcpdft import pdft_veff
+from pyscf.mcpdft import pdft_veff, pdft_feff
 from pyscf.mcpdft.otfnal import transfnal, get_transfnal
 from pyscf.mcpdft import _dms
 
@@ -591,7 +591,7 @@ class _PDFT ():
             # Possible for contract_casdm1s to be unbound????
             contract_casdm2 = _dms.dm2_cumulant(contract_casdm2, contract_casdm1s)
 
-        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, contract_dm1s, contract_cascm2, mo, ncore, ncas, max_memory=max_memory,
+        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, contract_dm1s, contract_cascm2, mo, ncore, ncas, max_memory=self.max_memory,
             paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc)
 
         return pdft_feff1, pdft_feff2
