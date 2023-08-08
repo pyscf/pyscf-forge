@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import numpy as np
 import copy
 from scipy import linalg
@@ -20,7 +21,7 @@ from pyscf import lib, dft
 from pyscf.lib import logger
 from pyscf.dft.gen_grid import Grids
 from pyscf.dft.numint import _NumInt, NumInt
-from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff
+from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff, pdft_eff
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf import __config__
 
@@ -78,7 +79,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     t0 = (logger.process_clock (), logger.perf_counter ())
     make_rho = tuple (ni._gen_rho_evaluator (ot.mol, dm1s[i,:,:], hermi) for
         i in range(2))
-    for ao, mask, weight, coords in ni.block_loop (ot.mol, ot.grids, nao,
+    for ao, mask, weight, _ in ni.block_loop (ot.mol, ot.grids, nao,
             dens_deriv, max_memory):
         rho = np.asarray ([m[0] (0, ao, mask, xctype) for m in make_rho])
         t0 = logger.timer (ot, 'untransformed density', *t0)
@@ -116,7 +117,7 @@ class otfnal:
             name of on-top pair-density exchange-correlation functional
     '''
 
-    def __init__ (self, mol, **kwargs):
+    def __init__ (self, mol):
         self.mol = mol
         self.verbose = mol.verbose
         self.stdout = mol.stdout
@@ -125,8 +126,7 @@ class otfnal:
 
     def _init_info (self):
         logger.info (self, 'Building %s functional', self.otxc)
-        omega, alpha, hyb = self._numint.rsh_and_hybrid_coeff(self.otxc,
-            spin=self.mol.spin)
+        hyb = self._numint.rsh_and_hybrid_coeff(self.otxc, spin=self.mol.spin)[2]
         if hyb[0] > 0:
             logger.info (self, 'Hybrid functional with %s CASSCF exchange',
                 hyb)
@@ -166,11 +166,13 @@ class otfnal:
                 (rho, Pi, |drho|^2, drho'.dPi, |dPi|) stopping at Pi (3
                 elements) for t-LDA and |drho|^2 (6 elements) for t-GGA.
         '''
-
-        raise RuntimeError("on-top xc functional not defined")
-        return 0
+        raise NotImplementedError("on-top xc functional not defined")
 
     energy_ot = energy_ot
+    get_eff_1body = pdft_eff.get_eff_1body
+    get_eff_2body = pdft_eff.get_eff_2body
+    get_eff_2body_kl = pdft_eff.get_eff_2body_kl
+
     get_veff_1body = pdft_veff.get_veff_1body
     get_veff_2body = pdft_veff.get_veff_2body
     get_veff_2body_kl = pdft_veff.get_veff_2body_kl
@@ -249,7 +251,7 @@ class transfnal (otfnal):
                 / rho_avg[0,idx])
         return R
 
-    def get_rho_translated (self, Pi, rho, _fn_deriv=0, **kwargs):
+    def get_rho_translated (self, Pi, rho, _fn_deriv=0):
         r''' Compute the "translated" alpha and beta densities:
 
         rho_t^a = (rho/2) * (1 + zeta)
@@ -367,7 +369,7 @@ class transfnal (otfnal):
         cfnal.otxc = c_code
         return xfnal, cfnal
 
-    def jT_op (self, x, rho, Pi, **kwargs):
+    def jT_op (self, x, rho, Pi):
         r''' Evaluate jTx = (x.j)T where j is the Jacobian of the
         translated densities in terms of the untranslated density and
         pair density
@@ -399,7 +401,7 @@ class transfnal (otfnal):
             jTx[:] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
         return jTx
 
-    def d_jT_op (self, x, rho, Pi, **kwargs):
+    def d_jT_op (self, x, rho, Pi):
         r''' Evaluate the x.(nabla j) contribution to the second density
         derivatives of the on-top energy in terms of the untranslated
         density and pair density
@@ -455,7 +457,7 @@ class transfnal (otfnal):
 
         for p in range (20):
             # ~~~ eval_xc reference ~~~
-            rho_t0 = self.get_rho_translated (Pi, rho, weights=weights)
+            rho_t0 = self.get_rho_translated (Pi, rho)
             exc, vxc_p, fxc = self._numint.eval_xc (self.otxc, (rho_t0[0,:,:],
                 rho_t0[1,:,:]), spin=1, relativity=0, deriv=dderiv,
                 verbose=self.verbose)[:3]
@@ -576,7 +578,7 @@ class ftransfnal (transfnal):
 
     Pi_deriv = transfnal.dens_deriv
 
-    def get_rho_translated (self, Pi, rho, **kwargs):
+    def get_rho_translated (self, Pi, rho):
         r''' Compute the "fully-translated" alpha and beta densities
         and their derivatives. This is the same as "translated" except
 
@@ -610,7 +612,7 @@ class ftransfnal (transfnal):
 
         return rho_ft
 
-    def get_zeta (self, R, fn_deriv=1, **kwargs):
+    def get_zeta (self, R, fn_deriv=1):
         r''' Compute the intermediate zeta used to compute the translated spin
         densities and its functional derivatives
 

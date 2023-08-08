@@ -17,8 +17,7 @@
 from pyscf.lib import logger, current_memory, tag_array
 from pyscf.dft.gen_grid import BLKSIZE
 from pyscf.mcpdft.otpd import get_ontop_pair_density
-from pyscf.mcpdft._pdft_eris import _ERIS
-from pyscf.mcpdft.pdft_eff import get_eff_1body, get_eff_2body_kl, get_eff_2body
+from pyscf.mcpdft.pdft_eff import _ERIS
 import numpy as np
 import gc
 
@@ -170,10 +169,10 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         t0 = logger.timer(ot, 'effective potential kernel calculation', *t0)
         if ao.ndim == 2: ao = ao[None, :, :]
         # TODO: consistent format req's ao LDA case
-        veff1 += ot.get_veff_1body(rho, Pi, ao, weight, non0tab=mask,
-                                   shls_slice=shls_slice, ao_loc=ao_loc, hermi=1, kern=vrho)
+        veff1 += ot.get_eff_1body(ao, weight, kern=vrho, non0tab=mask,
+                                   shls_slice=shls_slice, ao_loc=ao_loc, hermi=1)
         t0 = logger.timer(ot, '1-body effective potential calculation', *t0)
-        veff2._accumulate(ot, rho, Pi, ao, weight, rho_c, rho_a, vPi, mask,
+        veff2._accumulate(ot, ao, weight, rho_c, rho_a, vPi, mask,
                           shls_slice, ao_loc)
         t0 = logger.timer(ot, '2-body effective potential calculation', *t0)
     veff2._finalize()
@@ -231,9 +230,9 @@ def lazy_kernel(ot, dm1s, cascm2, mo_cas, max_memory=2000, hermi=1,
         t0 = logger.timer(ot, 'effective potential kernel calculation', *t0)
         if ao.ndim == 2: ao = ao[None, :, :]
         # TODO: consistent format req's ao LDA case
-        veff1 += ot.get_veff_1body(rho, Pi, ao, weight, kern=vrho)
+        veff1 += ot.get_eff_1body(ao, weight, vrho)
         t0 = logger.timer(ot, '1-body effective potential calculation', *t0)
-        veff2 += ot.get_veff_2body(rho, Pi, ao, weight, aosym=1, kern=vPi)
+        veff2 += ot.get_eff_2body(ao, weight, kern=vPi, aosym=1)
         t0 = logger.timer(ot, '2-body effective potential calculation', *t0)
     return veff1, veff2
 
@@ -294,7 +293,7 @@ def get_veff_1body(otfnal, rho, Pi, ao, weight, kern=None, non0tab=None,
         rho = np.squeeze(rho)
         Pi = np.squeeze(Pi)
 
-    return get_eff_1body(otfnal, ao, weight, kern=kern, non0tab=non0tab, shls_slice=shls_slice, ao_loc=ao_loc, hermi=hermi)
+    return otfnal.get_eff_1body(ao, weight, kern=kern, non0tab=non0tab, shls_slice=shls_slice, ao_loc=ao_loc, hermi=hermi)
 
 
 def get_veff_2body(otfnal, rho, Pi, ao, weight, aosym='s4', kern=None,
@@ -345,7 +344,7 @@ def get_veff_2body(otfnal, rho, Pi, ao, weight, aosym='s4', kern=None,
 
         kern = otfnal.eval_ot(rho, Pi, dderiv=1, **kwargs)[1][2]
 
-    return get_eff_2body(otfnal, ao, weight, kern, aosym=aosym, eff_ao=vao)
+    return otfnal.get_eff_2body(ao, weight, kern, aosym=aosym, eff_ao=vao)
 
 
 def get_veff_2body_kl(otfnal, rho, Pi, ao_k, ao_l, weight, symm=False,
@@ -388,4 +387,4 @@ def get_veff_2body_kl(otfnal, rho, Pi, ao_k, ao_l, weight, symm=False,
             Pi = np.expand_dims(Pi, 0)
 
         kern = otfnal.eval_ot(rho, Pi, dderiv=1, **kwargs)[1][2]
-    return get_eff_2body_kl(ao_k, ao_l, weight, kern=kern, symm=symm)
+    return otfnal.get_eff_2body_kl(ao_k, ao_l, weight, kern=kern, symm=symm)

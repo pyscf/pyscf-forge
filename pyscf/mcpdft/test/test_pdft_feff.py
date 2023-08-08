@@ -1,6 +1,8 @@
 
-import numpy as np
-from pyscf import gto, scf, fci
+
+from pyscf import gto, scf, fci, ao2mo
+from pyscf.lib import temporary_env
+from pyscf.mcscf import mc_ao2mo
 from pyscf import mcpdft
 import unittest
 
@@ -39,7 +41,14 @@ class KnownValues(unittest.TestCase):
 
 
     def test_h2(self):
-        print(h2.get_pdft_feff())
+        nao, nmo = h2.mo_coeff.shape
+        f1, f2_ao = h2.get_pdft_feff()
+        with temporary_env(h2._scf, _eri=ao2mo.restore(4, f2_ao, nao)):
+            with temporary_env(h2.mol, incore_anyway=True):
+                f2 = mc_ao2mo._ERIS(h2, h2.mo_coeff, method='incore')
+        print(f1)
+        print(f2.ppaa)
+
 
 if __name__ == "__main__":
     print("Full Tests for pdft_feff")

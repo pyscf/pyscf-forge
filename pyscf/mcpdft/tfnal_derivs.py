@@ -104,7 +104,7 @@ def eval_ot (otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     nderiv_Pi = Pi.shape[0]
     if nderiv > 4:
         raise NotImplementedError ("Translation of meta-GGA functionals")
-    rho_t = otfnal.get_rho_translated (Pi, rho, weights=weights)
+    rho_t = otfnal.get_rho_translated (Pi, rho)
     # LDA in libxc has a special numerical problem with zero-valued densities
     # in one spin
     if nderiv == 1:
