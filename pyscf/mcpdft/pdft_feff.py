@@ -103,8 +103,8 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
         cPi = get_ontop_pair_density(ot, crho, ao, c_cascm2, mo_cas, dens_deriv, mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
 
-        fot = ot.eval_ot(rho, Pi, weights=weight, dderiv=2)[2]
-        frho, fPi = contract_fot(ot, fot, rho, Pi, crho, cPi)
+        vot, fot = ot.eval_ot(rho, Pi, weights=weight, dderiv=2, _unpack_vot=False)[1:]
+        frho, fPi = contract_fot(ot, fot, rho, Pi, crho, cPi, unpack=True, vot_packed=vot)
         t0 = logger.timer(ot, 'effective gradient response kernel calculation', *t0)
 
         if ao.ndim == 2:
@@ -119,11 +119,7 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
     feff2._finalize()
     t0 = logger.timer(ot, 'Finalizing 2-body gradient response calculation', *t0)
 
-    # return feff1, feff2
-    print(feff1)
-    print(feff2.ppaa)
-    return lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff[:, ncore:ncore + ncas], hermi=hermi,
-                     max_memory=max_memory)
+    return feff1, feff2
 
 
 def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=2000):
@@ -146,8 +142,8 @@ def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=
         cPi = get_ontop_pair_density(ot, crho, ao, c_cascm2, mo_cas, dens_deriv, mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
 
-        fot = ot.eval_ot(rho, Pi, weights=weight, dderiv=2)[2]
-        frho, fPi = contract_fot(ot, fot, rho, Pi, crho, cPi)
+        vot, fot = ot.eval_ot(rho, Pi, weights=weight, dderiv=2, _unpack_vot=False)[1:]
+        frho, fPi = contract_fot(ot, fot, rho, Pi, crho, cPi, unpack=True, vot_packed=vot)
 
         t0 = logger.timer(ot, 'effective gradient response kernel calculation', *t0)
         if ao.ndim == 2:

@@ -286,11 +286,10 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
             for s, irrep in zip(mc.fcisolver.fcisolvers, mc._irrep_slices)]
 
 
-def kernel(mc, mo_coeff=None, ci0=None, ot=None, verbose=logger.NOTE):
+def kernel(mc, mo_coeff=None, ci0=None, ot=None):
     if ot is None: ot = mc.otfnal
     if mo_coeff is None: mo_coeff = mc.mo_coeff
 
-    #log = logger.new_logger(mc, verbose)
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
 
