@@ -404,7 +404,7 @@ class _PDFT():
             # I think this is the same DFCASSCF problem as with the DF-SACASSCF
             # gradients earlier
             self._mc_class.__init__(self)
-        keys = set(('e_ot', 'e_mcscf', 'get_pdft_veff', 'e_states', 'otfnal',
+        keys = set(('e_ot', 'e_mcscf', 'get_pdft_veff', 'get_pdft_feff', 'e_states', 'otfnal',
                     'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel'))
         self.max_cycle_fp = getattr(__config__, 'mcscf_mcpdft_max_cycle_fp',
                                     50)
@@ -581,10 +581,9 @@ class _PDFT():
         else:
             return pdft_veff1, pdft_veff2
 
-    def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None, casdm2=None, contract_casdm1s=None,
-                      contract_casdm2=None, paaa_only=False, aaaa_only=False,
+    def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None, casdm2=None, c_casdm1s=None,
+                      c_casdm2=None, paaa_only=False, aaaa_only=False,
                       jk_pc=False):
-        t0 = (logger.process_clock(), logger.perf_counter())
         if mo is None: mo = self.mo_coeff
         if ci is None: ci = self.ci
         if casdm1s is None: casdm1s = self.make_one_casdm1s(ci, state=state)
@@ -594,21 +593,19 @@ class _PDFT():
         dm1s = _dms.casdm1s_to_dm1s(self, casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
         cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
-        if contract_casdm1s is None:
-            contract_dm1s = dm1s
+        if c_casdm1s is None:
+            c_dm1s = dm1s
 
         else:
-            contract_casdm1s = _dms.casdm1s_to_dm1s(self, contract_casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
-            contract_dm1s = _dms.casdm1s_to_dm1s(self, contract_casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
+            c_dm1s = _dms.casdm1s_to_dm1s(self, c_casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
 
-        if contract_casdm2 is None:
-            contract_cascm2 = cascm2
+        if c_casdm2 is None:
+            c_cascm2 = cascm2
 
         else:
-            # Possible for contract_casdm1s to be unbound????
-            contract_cascm2 = _dms.dm2_cumulant(contract_casdm2, contract_casdm1s)
+            c_cascm2 = _dms.dm2_cumulant(c_casdm2, c_casdm1s)
 
-        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, contract_dm1s, contract_cascm2, mo, ncore,
+        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, c_dm1s, c_cascm2, mo, ncore,
                                                   ncas, max_memory=self.max_memory,
                                                   paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc)
 
