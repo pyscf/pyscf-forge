@@ -26,6 +26,47 @@ import gc
 
 def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory=2000, hermi=1, paaa_only=False,
            aaaa_only=False, jk_pc=False):
+    '''Get the 1- and 2-body effective gradient responses from MC-PDFT. The $\rho \cdot \mathbf{F}$ terms, or Hessian vector products.
+
+    Args:
+        ot : an instance of otfnal class
+        dm1s : ndarray of shape (2, nao, nao)
+            Contains the spin-separated one-body density matrices to evaluate the kernel at
+        cascm2 : ndarray of shape (ncas, ncas, ncas, ncas)
+            Spin-summed two-body cumulant density matrix in the active space to evaluate the kernel at
+        c_dm1s : ndarray of shape (2, nao, nao)
+            Contains the spin-separated one-body density matrices to contract the kernel with.
+        c_cascm2 : ndarray of shape (ncas, ncas, ncas, ncas)
+            Spin-summed two-body cumulant density matrix in the active space to contract the kernel with.
+        mo_coeff : ndarray of shape (nao, nmo)
+            containing molecular orbital coefficients
+        ncore : integer
+            number of inactive orbitals
+        ncas : integer
+            number of active orbitals
+
+    Kwargs:
+        max_memory : int or float
+            maximum cache size in MB
+            default is 2000
+        hermi : int
+            1 if 1rdms are assumed hermitian, 0 otherwise
+        paaa_only : logical
+            If true, only compute the paaa range of papa and ppaa
+            (all other elements set to zero)
+        aaaa_only : logical
+            If true, only compute the aaaa range of papa and ppaa
+            (all other elements set to zero; overrides paaa_only)
+        jk_pc : logical
+            If true, compute the ppii=pipi elements of veff2
+            (otherwise, these are set to zero)
+
+    Returns:
+        feff1 : ndarray of shape (nao, nao)
+            1-body effective gradient response
+        feff2 : object of class pdft_eff._ERIS
+            2-body effective gradient response
+    '''
     nocc = ncore + ncas
     ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
     nao = mo_coeff.shape[0]
@@ -123,6 +164,7 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
 
 
 def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=2000):
+    '''1- and 2-body gradient response (hessian-vector products) from MC-PDFT. This is the lazy way and doesn't care about memory.'''
     ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
     nao = mo_cas.shape[0]
 
@@ -158,8 +200,53 @@ def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=
     return feff1, feff2
 
 
-def get_feff_1body(otfnal, ao, rho, Pi, crho, cPi, weight, kern=None, non0tab=None,
+def get_feff_1body(otfnal, rho, Pi, crho, cPi, ao, weight, kern=None, non0tab=None,
                    shls_slice=None, ao_loc=None, hermi=0, **kwargs):
+    """Get the terms [\Delta F]_{pq}
+
+    Args:
+        rho : ndarray of shape (2,*,ngrids)
+            Spin-density [and derivatives]
+        Pi : ndarray with shape (*,ngrids)
+            On-top pair density [and derivatives]
+        crho : ndarray of shape (2,*,ngrids)
+            Spin-density [and derivatives] to contract the hessian with
+        cPi : ndarray with shape (*,ngrids)
+            On-top pair density [and derivatives] to contract Hessian with
+        ao : ndarray or 2 ndarrays of shape (*,ngrids,nao)
+            contains values and derivatives of nao.
+            2 different ndarrays can have different nao but not
+            different ngrids
+        weight : ndarray of shape (ngrids)
+            containing numerical integration weights
+
+    Kwargs:
+        kern : ndarray of shape (*,ngrids)
+            the hessian-vector product. If not provided, it is calculated.
+        non0tab : ndarray of shape (nblk, nbas)
+            Identifies blocks of grid points which are nonzero on
+            each AO shell so as to exploit sparsity.
+            If you want the "ao" array to be in the MO basis, just
+            leave this as None. If hermi == 0, it only applies
+            to the bra index ao array, even if the ket index ao
+            array is the same (so probably always pass hermi = 1
+            in that case)
+        shls_slice : sequence of integers of len 2
+            Identifies starting and stopping indices of AO shells
+        ao_loc : ndarray of length nbas
+            Offset to first AO of each shell
+        hermi : integer or logical
+            Toggle whether feff is supposed to be a Hermitian matrix
+            You can still pass two different ao arrays for the bra and
+            the ket indices, for instance if one of them is supposed to
+            be a higher derivative. They just have to have the same nao
+            in that case.
+
+    Returns : ndarray of shape (nao[0],nao[1])
+        The 1-body effective gradient response corresponding to this on-top pair
+        density exchange-correlation functional, in the atomic-orbital
+        basis. In PDFT this functional is always spin-symmetric.
+    """
     if kern is None:
         if rho.ndim == 2:
             rho = np.expand_dims(rho, 1)

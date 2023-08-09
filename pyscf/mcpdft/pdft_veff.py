@@ -81,7 +81,7 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     Returns:
         veff1 : ndarray of shape (nao, nao)
             1-body effective potential
-        veff2 : object of class pdft_veff._ERIS
+        veff2 : object of class pdft_eff._ERIS
             2-body effective potential and related quantities
     '''
     nocc = ncore + ncas
