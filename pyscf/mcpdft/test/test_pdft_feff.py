@@ -16,7 +16,7 @@
 # Author: Matthew Hennefarth <mhennefarth@uchicago.edu>
 
 import numpy as np
-from pyscf import gto, scf, fci, ao2mo, lib, mcscf
+from pyscf import gto, scf, ao2mo, lib, mcscf
 from pyscf.lib import temporary_env
 from pyscf.mcscf import mc_ao2mo, newton_casscf
 from pyscf.mcpdft import pdft_feff, _dms
@@ -65,6 +65,27 @@ def get_feff_ref(mc, state=0, c_casdm1s=None, c_casdm2=None):
 
     return v1, v2
 
+def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
+    if ncore is None:
+        ncore = mc.ncore
+    if ncas is None:
+        ncas = mc.ncas
+    
+    nocc = ncore + ncas
+
+    casdm1s = _dms.make_one_casdm1s(mc, ci)
+    casdm2 = _dms.make_one_casdm2(mc, ci)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff)
+    dm1 = dm1s[0] + dm1s[1]
+    casdm1 = casdm1s[0] + casdm1s[1]
+
+    ref_e = np.tensordot(veff1, dm1)
+    ref_e += veff2.energy_core
+    ref_e += np.tensordot(veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1)
+    #ref_e += 0.5 * np.tensordot(veff2.papa[ncore:nocc, : , ncore:nocc, :], casdm2, axes=4)
+
+    return ref_e
+
 
 def case(kv, mc):
     ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
@@ -74,8 +95,10 @@ def case(kv, mc):
     fcasscf = mcscf.CASSCF(mc._scf, ncas, nelecas)
     fcasscf.__dict__.update(mc.__dict__)
 
-    feff1, feff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
+    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, paaa_only=True)
     veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
+
+    ref_c_veff = contract_veff(mc, mc.mo_coeff, mc.ci, veff1, veff2)
 
     with lib.temporary_env(fcasscf, get_hcore=lambda: feff1):
         g_all, _, _, hdiag_all = newton_casscf.gen_g_hop(fcasscf, mc.mo_coeff, mc.ci, feff2)
@@ -95,21 +118,24 @@ def case(kv, mc):
         uorb, ci1 = newton_casscf.extract_rotation(fcasscf, x, 1, mc.ci)
         mo1 = mc.rotate_mo(mc.mo_coeff, uorb)
         veff1_1, veff2_1 = mc.get_pdft_veff(mo=mo1, ci=ci1, incl_coul=False, paaa_only=True)
-        return veff1 - veff1_1, veff2.papa - veff2_1.papa
+        semi_num_c_veff = contract_veff(mc, mo1, ci1, veff1_1, veff2_1)
+        return semi_num_c_veff - ref_c_veff 
 
-    for ix, p in enumerate(range(20,25)):
+    for ix, p in enumerate(range(20)):
         x1 = x0/(2**p)
-        print(x1.shape)
         x1_norm = np.linalg.norm(x1)
         dg_test = np.dot(g_all, x1)
-        dveff1, dveff2 = seminum(x1)
-        dg_ref = np.concatenate(dveff1).sum() + np.concatenate(dveff2).sum()
+        dg_ref = seminum(x1)
+        print(f"{dg_test}, {dg_ref}, ratio: {dg_test/dg_ref}")
         dg_err = abs((dg_test - dg_ref)/dg_ref)
-        print("________")
-        print(dg_test)
-        print(dg_ref)
-        print(dg_err)
+        err_tab = np.append(err_tab, [[x1_norm, dg_err]], axis=0)
+        if ix > 0:
+            conv_tab = err_tab[1:ix+1, :] / err_tab[:ix, :]
+        if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.01) and abs(err_tab[-1, 1]) < 1e-3:
+            break
 
+    #print(err_tab)
+    #print(conv_tab[-3:,-1]-0.5)
 
 class KnownValues(unittest.TestCase):
 
