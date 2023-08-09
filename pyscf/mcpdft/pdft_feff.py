@@ -268,6 +268,47 @@ def get_feff_1body(otfnal, rho, Pi, crho, cPi, ao, weight, kern=None, non0tab=No
 
 
 def get_feff_2body(otfnal, rho, Pi, crho, cPi, ao, weight, aosym='s4', kern=None, fao=None, **kwargs):
+    '''Get the terms [\Delta F]_{pqrs}
+
+        Args:
+            rho : ndarray of shape (2,*,ngrids)
+                containing spin-density [and derivatives]
+            Pi : ndarray with shape (*,ngrids)
+                containing on-top pair density [and derivatives]
+            crho : ndarray of shape (2,*,ngrids)
+                Spin-density [and derivatives] to contract the hessian with
+            cPi : ndarray with shape (*,ngrids)
+                On-top pair density [and derivatives] to contract Hessian with
+            ao : ndarray of shape (*,ngrids,nao)
+                OR list of ndarrays of shape (*,ngrids,*)
+                values and derivatives of atomic or molecular orbitals in
+                which space to calculate the 2-body veff
+                If a list of length 4, the corresponding set of eri-like
+                elements are returned
+            weight : ndarray of shape (ngrids)
+                containing numerical integration weights
+
+        Kwargs:
+            aosym : int or str
+                Index permutation symmetry of the desired integrals. Valid
+                options are 1 (or '1' or 's1'), 4 (or '4' or 's4'), '2ij'
+                (or 's2ij'), and '2kl' (or 's2kl'). These have the same
+                meaning as in PySCF's ao2mo module. Currently all symmetry
+                exploitation is extremely slow and unparallelizable for some
+                reason so trying to use this is not recommended until I come
+                up with a C routine.
+            kern : ndarray of shape (*,ngrids)
+                the hessian-vector product. If not provided, it is calculated.
+            fao : ndarray of shape (*,ngrids,nao,nao) or
+                (*,ngrids,nao*(nao+1)//2). An intermediate in which the
+                kernel and the k,l orbital indices have been contracted.
+                Overrides kl_symm
+
+        Returns : eri-like ndarray
+            The two-body effective gradient responsecorresponding to this on-top
+            pair density exchange-correlation functional or elements
+            thereof, in the provided basis.
+        '''
     if kern is None:
         if rho.ndim == 2:
             rho = np.expand_dims(rho, 1)
@@ -288,6 +329,40 @@ def get_feff_2body(otfnal, rho, Pi, crho, cPi, ao, weight, aosym='s4', kern=None
 
 
 def get_feff_2body_kl(otfnal, rho, Pi, crho, cPi, ao_k, ao_l, weight, symm=False, kern=None, **kwargs):
+    ''' get the two-index intermediate Mkl of [\Delta \cdot F]_{pqrs}
+
+        Args:
+            rho : ndarray of shape (2,*,ngrids)
+                containing spin-density [and derivatives]
+            Pi : ndarray with shape (*,ngrids)
+                containing on-top pair density [and derivatives]
+            crho : ndarray of shape (2,*,ngrids)
+                Spin-density [and derivatives] to contract the hessian with
+            cPi : ndarray with shape (*,ngrids)
+                On-top pair density [and derivatives] to contract Hessian with
+            ao_k : ndarray of shape (*,ngrids,nao)
+                OR list of ndarrays of shape (*,ngrids,*)
+                values and derivatives of atomic or molecular orbitals
+                corresponding to index k
+            ao_l : ndarray of shape (*,ngrids,nao)
+                OR list of ndarrays of shape (*,ngrids,*)
+                values and derivatives of atomic or molecular orbitals
+                corresponding to index l
+            weight : ndarray of shape (ngrids)
+                containing numerical integration weights
+
+        Kwargs:
+            symm : logical
+                Index permutation symmetry of the desired integral wrt k,l
+            kern : ndarray of shape (*,ngrids)
+                the hessian-vector product. If not provided, it is calculated.
+
+        Returns : ndarray of shape (*,ngrids,nao,nao)
+            or (*,ngrids,nao*(nao+1)//2). An intermediate for calculating
+            the two-body effective gradient response corresponding to this on-top
+            pair density exchange-correlation functional in the provided
+            basis.
+        '''
     if kern is None:
         if rho.ndim == 2:
             rho = np.expand_dims(rho, 1)
