@@ -101,7 +101,6 @@ def get_lpdfthconst(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0, nc
     vj = mc._scf.get_j(dm=dm1)
     e_j = np.tensordot(vj, dm1) / 2
 
-    # One-electron on-top potential energy
     e_veff1 = np.tensordot(veff1_0, dm1)
 
     # Deal with 2-electron on-top potential energy

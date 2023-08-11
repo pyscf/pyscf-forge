@@ -584,6 +584,7 @@ class _PDFT():
     def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None, casdm2=None, c_casdm1s=None,
                       c_casdm2=None, paaa_only=False, aaaa_only=False,
                       jk_pc=False):
+        t0 = (logger.process_clock(), logger.perf_counter())
         if mo is None: mo = self.mo_coeff
         if ci is None: ci = self.ci
         if casdm1s is None: casdm1s = self.make_one_casdm1s(ci, state=state)
@@ -608,7 +609,7 @@ class _PDFT():
         pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, c_dm1s, c_cascm2, mo, ncore,
                                                   ncas, max_memory=self.max_memory,
                                                   paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc)
-
+        logger.timer(self, 'get_pdft_feff', *t0)
         return pdft_feff1, pdft_feff2
 
     def _state_average_nuc_grad_method(self, state=None):

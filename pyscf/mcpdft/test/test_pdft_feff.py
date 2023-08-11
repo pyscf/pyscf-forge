@@ -72,24 +72,21 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
         ncas = mc.ncas
     
     nocc = ncore + ncas
+    nelecas = mc.nelecas
 
-    casdm1s = _dms.make_one_casdm1s(mc, ci)
-    casdm2 = _dms.make_one_casdm2(mc, ci)
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff)
-    dm1 = dm1s[0] + dm1s[1]
+    casdm1s = mc.make_one_casdm1s(ci)
     casdm1 = casdm1s[0] + casdm1s[1]
+    casdm2 = mc.make_one_casdm2(ci)
 
-    veff1 = mo_coeff.conj().T @ veff1 @ mo_coeff + veff2.vhf_c
+    veff1 = mo_coeff.conj().T @ veff1 @ mo_coeff
 
-    ref_e = 2*np.trace(veff1[:ncore, :ncore])
-    ref_e += np.tensordot(veff1[ncore:nocc, ncore:nocc], casdm1)
+    ref_e = np.trace(veff1[:ncore, :ncore]) + veff2.energy_core
+    ref_e += np.tensordot((veff1 + veff2.vhf_c)[ncore:nocc, ncore:nocc], casdm1)
     ref_e += 0.5 * np.tensordot(veff2.papa[ncore:nocc, : , ncore:nocc, :], casdm2, axes=4)
     return ref_e
 
-print_me = True
 
 def case(kv, mc):
-    global print_me
     ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
     nao, nmo = mc.mo_coeff.shape
     nocc, nvir = ncore + ncas, nmo - ncore - ncas
@@ -101,7 +98,7 @@ def case(kv, mc):
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
 
     feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, paaa_only=True)
-    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
+    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True, drop_mcwfn=True)
 
     ref_c_veff = contract_veff(mc, mc.mo_coeff, mc.ci, veff1, veff2)
 
@@ -129,10 +126,9 @@ def case(kv, mc):
     def seminum(x):
         uorb, ci1 = newton_casscf.extract_rotation(fcasscf, x, 1, mc.ci)
         mo1 = mc.rotate_mo(mc.mo_coeff, uorb)
-        veff1_1, veff2_1 = mc.get_pdft_veff(mo=mo1, ci=ci1, incl_coul=False, paaa_only=True)
+        veff1_1, veff2_1 = mc.get_pdft_veff(mo=mo1, ci=ci1, incl_coul=False, paaa_only=True, drop_mcwfn=True)
         semi_num_c_veff = contract_veff(mc, mo1, ci1, veff1_1, veff2_1)
         return semi_num_c_veff - ref_c_veff
-
 
     for ix, p in enumerate(range(20)):
         x1 = x0/(2**p)
@@ -145,7 +141,7 @@ def case(kv, mc):
         if ix > 0:
             conv_tab = err_tab[1:ix+1, :] / err_tab[:ix, :]
 
-        if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.05) and abs(err_tab[-1, 1]) < 1e-3:
+        if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.01) and abs(err_tab[-1, 1]) < 1e-3:
             break
 
     with kv.subTest(q='x'):
@@ -159,8 +155,8 @@ class KnownValues(unittest.TestCase):
 
     def test_dvot(self):
         np.random.seed(1)
-        #for mol, mf in zip(("H2", "LiH"), (h2, lih)):
-        for mol, mf in zip(["LiH"], [lih]):
+        for mol, mf in zip(("H2", "LiH"), (h2, lih)):
+        #for mol, mf in zip(["LiH"], [lih]):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
                 for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
@@ -168,7 +164,7 @@ class KnownValues(unittest.TestCase):
                         print("----------------------------------------------------------------------")
                         print(f"mol = {mol} state = {state} fnal = {fnal}")
                         case(self, mc)
-                    return
+
 
     # def test_feff_ao2mo(self):
     #     for mol, mf in zip(("H2", "LiH"), (h2, lih)):
@@ -210,7 +206,7 @@ class KnownValues(unittest.TestCase):
     #                     with self.subTest(mol=mol, state=state, fnal=fnal,
     #                                       term=term):
     #                         self.assertAlmostEqual(lib.fp(test),
-    #                                                lib.fp(ref), delta=1e-4)
+    #                                                lib.fp(ref), delta=1e-8)
 
 
 if __name__ == "__main__":
