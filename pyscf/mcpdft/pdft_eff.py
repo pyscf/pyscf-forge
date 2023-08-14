@@ -81,7 +81,7 @@ class _ERIS(object):
                                                              weight, vrho_c, non0tab=non0tab, shls_slice=shls_slice,
                                                              ao_loc=ao_loc,
                                                              hermi=1) @ mo_coeff
-        self.energy_core = np.trace(self.vhf_c[:ncore, :ncore]) / 2
+        self.energy_core = np.trace(self.vhf_c[:ncore, :ncore]) #/ 2
         if self.paaa_only:
             # 1/2 v_aiuv D_ii D_uv = v^ai_uv D_uv -> F_ai, F_ia
             # needs to be in here since it would otherwise be calculated using

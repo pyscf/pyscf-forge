@@ -412,7 +412,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci0 is None and isinstance(getattr(self, 'ci', None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, ot=ot, verbose=log)
+        kernel(self, mo_coeff, ci0, ot=ot)
         self._finalize_lin()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
