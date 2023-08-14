@@ -73,11 +73,12 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
     
     nocc = ncore + ncas
 
-    casdm1s = _dms.make_one_casdm1s(mc, ci)
-    casdm2 = _dms.make_one_casdm2(mc, ci)
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff)
-    dm1 = dm1s[0] + dm1s[1]
+    casdm1s = mc.make_one_casdm1s(ci)
     casdm1 = casdm1s[0] + casdm1s[1]
+    casdm2 = mc.make_one_casdm2(ci)
+
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s)
+    dm1 = dm1s[0] + dm1s[1]
 
     ref_e = np.tensordot(veff1, dm1)
     ref_e += veff2.energy_core
@@ -86,7 +87,6 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
     return ref_e
 
 def case(kv, mc):
-    global print_me
     ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
     nao, nmo = mc.mo_coeff.shape
     nocc, nvir = ncore + ncas, nmo - ncore - ncas
@@ -128,19 +128,17 @@ def case(kv, mc):
         semi_num_c_veff = contract_veff(mc, mo1, ci1, veff1_1, veff2_1)
         return semi_num_c_veff - ref_c_veff
 
-
     for ix, p in enumerate(range(20)):
         x1 = x0/(2**p)
         x1_norm = np.linalg.norm(x1)
         dg_test = np.dot(g_all, x1)
         dg_ref = seminum(x1)
         dg_err = abs((dg_test - dg_ref)/dg_ref)
-        #print(f"ratio: {dg_test/dg_ref: .4f}, dg_err: {dg_err: .3f} \t{dg_test} {dg_ref} ")
         err_tab = np.append(err_tab, [[x1_norm, dg_err]], axis=0)
         if ix > 0:
             conv_tab = err_tab[1:ix+1, :] / err_tab[:ix, :]
 
-        if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.05) and abs(err_tab[-1, 1]) < 1e-3:
+        if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.01) and abs(err_tab[-1, 1]) < 1e-3:
             break
 
     with kv.subTest(q='x'):
@@ -163,6 +161,7 @@ class KnownValues(unittest.TestCase):
                         print("----------------------------------------------------------------------")
                         print(f"mol = {mol} state = {state} fnal = {fnal}")
                         case(self, mc)
+
 
     # def test_feff_ao2mo(self):
     #     for mol, mf in zip(("H2", "LiH"), (h2, lih)):
@@ -204,7 +203,7 @@ class KnownValues(unittest.TestCase):
     #                     with self.subTest(mol=mol, state=state, fnal=fnal,
     #                                       term=term):
     #                         self.assertAlmostEqual(lib.fp(test),
-    #                                                lib.fp(ref), delta=1e-4)
+    #                                                lib.fp(ref), delta=1e-8)
 
 
 if __name__ == "__main__":
