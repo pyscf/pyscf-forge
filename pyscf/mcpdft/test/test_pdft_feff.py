@@ -77,7 +77,7 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
     casdm1 = casdm1s[0] + casdm1s[1]
     casdm2 = mc.make_one_casdm2(ci)
 
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff)
     dm1 = dm1s[0] + dm1s[1]
 
     ref_e = np.tensordot(veff1, dm1)
@@ -85,6 +85,8 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
     ref_e += np.tensordot(veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1)
     ref_e += 0.5 * np.tensordot(veff2.papa[ncore:nocc, : , ncore:nocc, :], casdm2, axes=4)
     return ref_e
+
+print_me = True
 
 def case(kv, mc):
     ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
@@ -94,10 +96,14 @@ def case(kv, mc):
     fcasscf = mcscf.CASSCF(mc._scf, ncas, nelecas)
     fcasscf.__dict__.update(mc.__dict__)
 
-    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, paaa_only=True)
-    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=False)
+    casdm1, casdm2 = mc.fcisolver.make_rdm12(mc.ci, ncas, nelecas)
 
+    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, paaa_only=True)
+
+    # This is so we compute the contraction with paaa_only=False and then compare to it later!!!!!
+    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=False)
     ref_c_veff = contract_veff(mc, mc.mo_coeff, mc.ci, veff1, veff2)
+    
     veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
 
     with lib.temporary_env(fcasscf, get_hcore=lambda:  feff1):
@@ -153,7 +159,6 @@ class KnownValues(unittest.TestCase):
     def test_dvot(self):
         np.random.seed(1)
         for mol, mf in zip(("H2", "LiH"), (h2, lih)):
-        #for mol, mf in zip(["LiH"], [lih]):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
                 for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
