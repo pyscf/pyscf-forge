@@ -40,7 +40,7 @@ def tearDownModule():
 
 
 def get_feff_ref(mc, state=0, c_casdm1s=None, c_casdm2=None):
-    nao, nmo = mc.mo_coeff.shape
+    nao = mc.mo_coeff.shape[0]
     casdm1s = mc.make_one_casdm1s(mc.ci, state=state)
     casdm2 = mc.make_one_casdm2(mc.ci, state=state)
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s)
@@ -86,33 +86,24 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
     ref_e += 0.5 * np.tensordot(veff2.papa[ncore:nocc, : , ncore:nocc, :], casdm2, axes=4)
     return ref_e
 
-print_me = True
-
 def case(kv, mc):
     ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
-    nao, nmo = mc.mo_coeff.shape
+    nmo = mc.mo_coeff.shape[1]
     nocc, nvir = ncore + ncas, nmo - ncore - ncas
     ngorb = ncore * ncas + nocc * nvir
     fcasscf = mcscf.CASSCF(mc._scf, ncas, nelecas)
     fcasscf.__dict__.update(mc.__dict__)
 
-    casdm1, casdm2 = mc.fcisolver.make_rdm12(mc.ci, ncas, nelecas)
-
-    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, paaa_only=True)
-
-    # This is so we compute the contraction with paaa_only=False and then compare to it later!!!!!
+    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci)
     veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=False)
     ref_c_veff = contract_veff(mc, mc.mo_coeff, mc.ci, veff1, veff2)
     
-    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
 
     with lib.temporary_env(fcasscf, get_hcore=lambda:  feff1):
         g_feff, _, _, hdiag_feff = newton_casscf.gen_g_hop(fcasscf, mc.mo_coeff, mc.ci, feff2)
 
     with lib.temporary_env(fcasscf, get_hcore=lambda: veff1):
         g_veff, _, _, hdiag_veff = newton_casscf.gen_g_hop(fcasscf, mc.mo_coeff, mc.ci, veff2)
-
-    print(f"MOs: {nmo}, ncore: {ncore}, ncas: {ncas}, nelecas: {nelecas}")
 
     g_all = g_feff + g_veff
     hdiag_all = hdiag_feff + hdiag_veff
@@ -130,7 +121,7 @@ def case(kv, mc):
     def seminum(x):
         uorb, ci1 = newton_casscf.extract_rotation(fcasscf, x, 1, mc.ci)
         mo1 = mc.rotate_mo(mc.mo_coeff, uorb)
-        veff1_1, veff2_1 = mc.get_pdft_veff(mo=mo1, ci=ci1, incl_coul=False, paaa_only=False)
+        veff1_1, veff2_1 = mc.get_pdft_veff(mo=mo1, ci=ci1, incl_coul=False)
         semi_num_c_veff = contract_veff(mc, mo1, ci1, veff1_1, veff2_1)
         return semi_num_c_veff - ref_c_veff
 
@@ -163,52 +154,50 @@ class KnownValues(unittest.TestCase):
                 for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
                     with self.subTest(mol=mol, state=state, fnal=fnal):
-                        print("----------------------------------------------------------------------")
-                        print(f"mol = {mol} state = {state} fnal = {fnal}")
                         case(self, mc)
 
 
-    # def test_feff_ao2mo(self):
-    #     for mol, mf in zip(("H2", "LiH"), (h2, lih)):
-    #         for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-    #             for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
-    #                 mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
-    #                 f1_test, f2_test = mc.get_pdft_feff(jk_pc=True)
-    #                 f1_ref, f2_ref = get_feff_ref(mc)
-    #                 f_test = [f1_test, f2_test.vhf_c, f2_test.papa,
-    #                           f2_test.ppaa, f2_test.j_pc, f2_test.k_pc]
-    #                 f_ref = [f1_ref, f2_ref.vhf_c, f2_ref.papa, f2_ref.ppaa,
-    #                          f2_ref.j_pc, f2_ref.k_pc]
-    #                 terms = ['f1', 'f2.vhf_c', 'f2.papa', 'f2.ppaa', 'f2.j_pc',
-    #                          'f2.k_pc']
-    #                 for test, ref, term in zip(f_test, f_ref, terms):
-    #                     with self.subTest(mol=mol, state=state, fnal=fnal,
-    #                                       term=term):
-    #                         self.assertAlmostEqual(lib.fp(test),
-    #                                                lib.fp(ref), delta=1e-4)
-    #
-    # def test_sa_contract_feff_ao2mo(self):
-    #     for mol, mf in zip(("H2", "LiH"), (h2, lih)):
-    #         for state, nel in zip(['Singlet'], [2]):
-    #             for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
-    #                 mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).state_average_([0.5, 0.5]).run()
-    #
-    #                 sa_casdm1s = _dms.make_weighted_casdm1s(mc)
-    #                 sa_casdm2 = _dms.make_weighted_casdm2(mc)
-    #
-    #                 f1_test, f2_test = mc.get_pdft_feff(jk_pc=True, c_casdm1s=sa_casdm1s, c_casdm2=sa_casdm2)
-    #                 f1_ref, f2_ref = get_feff_ref(mc, c_casdm1s=sa_casdm1s, c_casdm2=sa_casdm2)
-    #                 f_test = [f1_test, f2_test.vhf_c, f2_test.papa,
-    #                           f2_test.ppaa, f2_test.j_pc, f2_test.k_pc]
-    #                 f_ref = [f1_ref, f2_ref.vhf_c, f2_ref.papa, f2_ref.ppaa,
-    #                          f2_ref.j_pc, f2_ref.k_pc]
-    #                 terms = ['f1', 'f2.vhf_c', 'f2.papa', 'f2.ppaa', 'f2.j_pc',
-    #                          'f2.k_pc']
-    #                 for test, ref, term in zip(f_test, f_ref, terms):
-    #                     with self.subTest(mol=mol, state=state, fnal=fnal,
-    #                                       term=term):
-    #                         self.assertAlmostEqual(lib.fp(test),
-    #                                                lib.fp(ref), delta=1e-8)
+    def test_feff_ao2mo(self):
+        for mol, mf in zip(("H2", "LiH"), (h2, lih)):
+            for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                    mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
+                    f1_test, f2_test = mc.get_pdft_feff(jk_pc=True)
+                    f1_ref, f2_ref = get_feff_ref(mc)
+                    f_test = [f1_test, f2_test.vhf_c, f2_test.papa,
+                              f2_test.ppaa, f2_test.j_pc, f2_test.k_pc]
+                    f_ref = [f1_ref, f2_ref.vhf_c, f2_ref.papa, f2_ref.ppaa,
+                             f2_ref.j_pc, f2_ref.k_pc]
+                    terms = ['f1', 'f2.vhf_c', 'f2.papa', 'f2.ppaa', 'f2.j_pc',
+                             'f2.k_pc']
+                    for test, ref, term in zip(f_test, f_ref, terms):
+                        with self.subTest(mol=mol, state=state, fnal=fnal,
+                                          term=term):
+                            self.assertAlmostEqual(lib.fp(test),
+                                                   lib.fp(ref), delta=1e-4)
+    
+    def test_sa_contract_feff_ao2mo(self):
+        for mol, mf in zip(("H2", "LiH"), (h2, lih)):
+            for state, nel in zip(['Singlet'], [2]):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                    mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).state_average_([0.5, 0.5]).run()
+    
+                    sa_casdm1s = _dms.make_weighted_casdm1s(mc)
+                    sa_casdm2 = _dms.make_weighted_casdm2(mc)
+    
+                    f1_test, f2_test = mc.get_pdft_feff(jk_pc=True, c_casdm1s=sa_casdm1s, c_casdm2=sa_casdm2)
+                    f1_ref, f2_ref = get_feff_ref(mc, c_casdm1s=sa_casdm1s, c_casdm2=sa_casdm2)
+                    f_test = [f1_test, f2_test.vhf_c, f2_test.papa,
+                              f2_test.ppaa, f2_test.j_pc, f2_test.k_pc]
+                    f_ref = [f1_ref, f2_ref.vhf_c, f2_ref.papa, f2_ref.ppaa,
+                             f2_ref.j_pc, f2_ref.k_pc]
+                    terms = ['f1', 'f2.vhf_c', 'f2.papa', 'f2.ppaa', 'f2.j_pc',
+                             'f2.k_pc']
+                    for test, ref, term in zip(f_test, f_ref, terms):
+                        with self.subTest(mol=mol, state=state, fnal=fnal,
+                                          term=term):
+                            self.assertAlmostEqual(lib.fp(test),
+                                                   lib.fp(ref), delta=1e-6)
 
 
 if __name__ == "__main__":
