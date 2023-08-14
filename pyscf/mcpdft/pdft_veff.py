@@ -293,7 +293,9 @@ def get_veff_1body(otfnal, rho, Pi, ao, weight, kern=None, non0tab=None,
         rho = np.squeeze(rho)
         Pi = np.squeeze(Pi)
 
-    return otfnal.get_eff_1body(ao, weight, kern=kern, non0tab=non0tab, shls_slice=shls_slice, ao_loc=ao_loc, hermi=hermi)
+    return otfnal.get_eff_1body(ao, weight, kern=kern, non0tab=non0tab,
+                                shls_slice=shls_slice, ao_loc=ao_loc,
+                                hermi=hermi)
 
 
 def get_veff_2body(otfnal, rho, Pi, ao, weight, aosym='s4', kern=None,

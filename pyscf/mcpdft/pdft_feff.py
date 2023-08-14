@@ -26,7 +26,8 @@ import gc
 
 def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory=2000, hermi=1, paaa_only=False,
            aaaa_only=False, jk_pc=False):
-    '''Get the 1- and 2-body effective gradient responses from MC-PDFT. The $\rho \cdot \mathbf{F}$ terms, or Hessian vector products.
+    r'''Get the 1- and 2-body effective gradient responses from MC-PDFT. The
+    $\rho \cdot \mathbf{F}$ terms, or Hessian vector products.
 
     Args:
         ot : an instance of otfnal class
@@ -164,7 +165,8 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
 
 
 def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=2000):
-    '''1- and 2-body gradient response (hessian-vector products) from MC-PDFT. This is the lazy way and doesn't care about memory.'''
+    '''1- and 2-body gradient response (hessian-vector products) from MC-PDFT.
+    This is the lazy way and doesn't care about memory.'''
     ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
     nao = mo_cas.shape[0]
 
@@ -202,7 +204,7 @@ def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=
 
 def get_feff_1body(otfnal, rho, Pi, crho, cPi, ao, weight, kern=None, non0tab=None,
                    shls_slice=None, ao_loc=None, hermi=0, **kwargs):
-    """Get the terms [\Delta F]_{pq}
+    r"""Get the terms [\Delta F]_{pq}
 
     Args:
         rho : ndarray of shape (2,*,ngrids)
@@ -268,7 +270,7 @@ def get_feff_1body(otfnal, rho, Pi, crho, cPi, ao, weight, kern=None, non0tab=No
 
 
 def get_feff_2body(otfnal, rho, Pi, crho, cPi, ao, weight, aosym='s4', kern=None, fao=None, **kwargs):
-    '''Get the terms [\Delta F]_{pqrs}
+    r'''Get the terms [\Delta F]_{pqrs}
 
         Args:
             rho : ndarray of shape (2,*,ngrids)
@@ -329,7 +331,7 @@ def get_feff_2body(otfnal, rho, Pi, crho, cPi, ao, weight, aosym='s4', kern=None
 
 
 def get_feff_2body_kl(otfnal, rho, Pi, crho, cPi, ao_k, ao_l, weight, symm=False, kern=None, **kwargs):
-    ''' get the two-index intermediate Mkl of [\Delta \cdot F]_{pqrs}
+    r''' get the two-index intermediate Mkl of [\Delta \cdot F]_{pqrs}
 
         Args:
             rho : ndarray of shape (2,*,ngrids)

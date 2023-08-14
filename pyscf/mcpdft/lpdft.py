@@ -285,7 +285,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
             for s, irrep in zip(mc.fcisolver.fcisolvers, mc._irrep_slices)]
 
 
-def kernel(mc, mo_coeff=None, ci0=None, ot=None):
+def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
     if ot is None: ot = mc.otfnal
     if mo_coeff is None: mo_coeff = mc.mo_coeff
 
@@ -411,7 +411,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci0 is None and isinstance(getattr(self, 'ci', None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, ot=ot)
+        kernel(self, mo_coeff, ci0, ot=ot, verbose=log)
         self._finalize_lin()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
