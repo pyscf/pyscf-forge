@@ -49,7 +49,7 @@ def weighted_average_densities(mc, ci=None, weights=None):
     return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
-def get_lpdfthconst(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None):
+def get_lpdfthconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None):
     ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
@@ -58,22 +58,13 @@ def get_lpdfthconst(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0, nc
         E_ot : float
             On-top energy
 
-        veff1_0 : ndarray with shape (nao, nao)
-            1-body effective potential in the AO basis.
-            Should not include classical Coulomb potential term.
-            Generated from expansion density
-
-        veff2_0 : pyscf.mcscf.mc_ao2mo._ERIS instance
-            Relevant 2-body effective potential in the MO basis.
-            Generated from expansion density.
-
         casdm1s_0 : ndarray of shape (2, ncas, ncas)
-            Spin-separated 1-RDM in the active space generated
-            from expansion density.
+            Spin-separated 1-RDM in the active space generated from expansion
+            density.
 
         casdm2_0 : ndarray of shape (ncas, ncas, ncas, ncas)
-            Spin-summed 2-RDM in the active space generated
-            from expansion density.
+            Spin-summed 2-RDM in the active space generated from expansion
+            density.
 
         hyb : float
             Hybridization constant (lambda term)
@@ -101,19 +92,19 @@ def get_lpdfthconst(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0, nc
     vj = mc._scf.get_j(dm=dm1)
     e_j = np.tensordot(vj, dm1) / 2
 
-    e_veff1 = np.tensordot(veff1_0, dm1)
+    e_veff1 = np.tensordot(mc.veff1, dm1)
 
     # Deal with 2-electron on-top potential energy
-    e_veff2 = veff2_0.energy_core
-    e_veff2 += np.tensordot(veff2_0.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
-    e_veff2 += 0.5 * np.tensordot(mc.get_h2lpdft(veff2_0), casdm2_0, axes=4)
+    e_veff2 = mc.veff2.energy_core
+    e_veff2 += np.tensordot(mc.veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
+    e_veff2 += 0.5 * np.tensordot(mc.get_h2lpdft(), casdm2_0, axes=4)
 
     # h_nuc + E_ot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
     energy_core = hyb * mc.energy_nuc() + E_ot - hyb * e_j - e_veff1 - e_veff2
     return energy_core
 
 
-def transformed_h1e_for_cas(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0,
+def transformed_h1e_for_cas(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0,
                             mo_coeff=None, ncas=None, ncore=None):
     '''Compute the CAS one-particle L-PDFT Hamiltonian
 
@@ -123,29 +114,20 @@ def transformed_h1e_for_cas(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb
         E_ot : float
             On-top energy
 
-        veff1_0 : ndarray with shape (nao, nao)
-            1-body effective potential in the AO basis.
-            Should not include classical Coulomb potential term.
-            Generated from expansion density.
-
-        veff2_0 : pyscf.mcscf.mc_ao2mo._ERIS instance
-            Relevant 2-body effecive potential in the MO basis.
-            Generated from expansion density.
-
         casdm1s_0 : ndarray of shape (2,ncas,ncas)
-            Spin-separated 1-RDM in the active space generated
-            from expansion density
+            Spin-separated 1-RDM in the active space generated from expansion
+            density
 
         casdm2_0 : ndarray of shape (ncas,ncas,ncas,ncas)
-            Spin-summed 2-RDM in the active space generated
-            from expansion density
+            Spin-summed 2-RDM in the active space generated from expansion
+            density
 
         hyb : float
             Hybridization constant (lambda term)
 
         mo_coeff : ndarray of shape (nao,nmo)
-            A full set of molecular orbital coefficients. Taken from
-            self if not provided.
+            A full set of molecular orbital coefficients. Taken from self if
+            not provided.
 
         ncas : int
             Number of active space molecular orbitals
@@ -154,8 +136,9 @@ def transformed_h1e_for_cas(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb
             Number of core molecular orbitals
 
     Returns:
-        A tuple, the first is the effective one-electron linear PDFT Hamiltonian
-        defined in CAS space, the second is the modified core energy.
+        A tuple, the first is the effective one-electron linear PDFT
+        Hamiltonian defined in CAS space, the second is the modified core
+        energy.
     '''
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ncas is None: ncas = mc.ncas
@@ -170,24 +153,23 @@ def transformed_h1e_for_cas(mc, E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb
     v_j = mc._scf.get_j(dm=dm1)
 
     # h_pq + V_pq + J_pq all in AO integrals
-    hcore_eff = hyb * mc.get_hcore() + veff1_0 + hyb * v_j
-    energy_core = mc.get_lpdfthconst(E_ot, veff1_0, veff2_0, casdm1s_0,
-                                     casdm2_0, hyb)
+    hcore_eff = hyb * mc.get_hcore() + mc.veff1 + hyb * v_j
+    energy_core = mc.get_lpdfthconst(E_ot, casdm1s_0, casdm2_0, hyb)
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
         # This is precomputed in MRH's ERIS object
-        energy_core += veff2_0.energy_core
+        energy_core += mc.veff2.energy_core
         energy_core += np.tensordot(core_dm, hcore_eff).real
 
     h1eff = reduce(np.dot, (mo_cas.conj().T, hcore_eff, mo_cas))
     # Add in the 2-electron portion that acts as a 1-electron operator
-    h1eff += veff2_0.vhf_c[ncore:nocc, ncore:nocc]
+    h1eff += mc.veff2.vhf_c[ncore:nocc, ncore:nocc]
 
     return h1eff, energy_core
 
 
-def get_transformed_h2eff_for_cas(mc, veff2_0, ncore=None, ncas=None):
+def get_transformed_h2eff_for_cas(mc, ncore=None, ncas=None):
     '''Compute the CAS two-particle linear PDFT Hamiltonian
 
     Args:
@@ -207,7 +189,7 @@ def get_transformed_h2eff_for_cas(mc, veff2_0, ncore=None, ncas=None):
     if ncore is None: ncore = mc.ncore
     if ncas is None: ncas = mc.ncas
     nocc = ncore + ncas
-    return veff2_0.papa[ncore:nocc, :, ncore:nocc, :]
+    return mc.veff2.papa[ncore:nocc, :, ncore:nocc, :]
 
 
 def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
@@ -250,12 +232,12 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     ncas = mc.ncas
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
-    veff1_0, veff2_0, E_ot = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
+    mc.veff1, mc.veff2, E_ot = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
                                         casdm2=casdm2_0, drop_mcwfn=True, incl_energy=True)
 
     # This is all standard procedure for generating the hamiltonian in PySCF
-    h1, h0 = mc.get_h1lpdft(E_ot, veff1_0, veff2_0, casdm1s_0, casdm2_0, hyb=1.0-cas_hyb)
-    h2 = mc.get_h2lpdft(veff2_0)
+    h1, h0 = mc.get_h1lpdft(E_ot, casdm1s_0, casdm2_0, hyb=1.0-cas_hyb)
+    h2 = mc.get_h2lpdft()
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
 
     def construct_ham_slice(solver, slice, nelecas):
@@ -317,22 +299,31 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         e_states : ndarray of shape (nroots)
             L-PDFT final energies of the adiabatic states
         ci : list of length (nroots) of ndarrays
-            CI vectors in the optimized adiabatic basis of MC-SCF. Related to the
-            L-PDFT adiabat CI vectors by the expansion coefficients ``si_pdft''.
+            CI vectors in the optimized adiabatic basis of MC-SCF. Related to
+            the L-PDFT adiabat CI vectors by the expansion coefficients
+            ``si_pdft''.
         si_pdft : ndarray of shape (nroots, nroots)
-            Expansion coefficients of the L-PDFT adiabats in terms of the optimized
+            Expansion coefficients of the L-PDFT adiabats in terms of the
+            optimized
             MC-SCF adiabats
         e_mcscf : ndarray of shape (nroots)
             Energies of the MC-SCF adiabatic states
         lpdft_ham : ndarray of shape (nroots, nroots)
             L-PDFT Hamiltonian in the MC-SCF adiabatic basis
+        veff1 : ndarray of shape (nao, nao)
+            1-body effective potential in the AO basis computed using the
+            zeroth-order densities.
+        veff2 : pyscf.mcscf.mc_ao2mo._ERIS instance
+            Relevant 2-body effective potential in the MO basis.
     '''
 
     def __init__(self, mc):
         self.__dict__.update(mc.__dict__)
-        keys = set(('lpdft_ham', 'si_pdft'))
+        keys = set(('lpdft_ham', 'si_pdft', 'veff1', 'veff2'))
         self.lpdft_ham = None
         self.si_pdft = None
+        self.veff1 = None
+        self.veff2 = None
         self._keys = set((self.__dict__.keys())).union(keys)
 
     @property

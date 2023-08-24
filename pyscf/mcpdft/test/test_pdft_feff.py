@@ -39,26 +39,28 @@ def tearDownModule():
     del h2, lih
 
 
-def get_feff_ref(mc, state=0, c_casdm1s=None, c_casdm2=None):
+def get_feff_ref(mc, state=0, dm1s=None, cascm2=None, c_dm1s=None, c_cascm2=None):
     nao = mc.mo_coeff.shape[0]
-    casdm1s = mc.make_one_casdm1s(mc.ci, state=state)
-    casdm2 = mc.make_one_casdm2(mc.ci, state=state)
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s)
-    cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
+    if dm1s is None or cascm2 is None:
+        t_casdm1s = mc.make_one_casdm1s(mc.ci, state=state)
+        t_dm1s = _dms.casdm1s_to_dm1s(mc, t_casdm1s)
+        t_casdm2 = mc.make_one_casdm2(mc.ci, state=state)
+        t_cascm2 = _dms.dm2_cumulant(t_casdm2, t_casdm1s)
+        if dm1s is None:
+            dm1s = t_dm1s
+
+        if cascm2 is None:
+            cascm2 = t_cascm2
+
     mo_cas = mc.mo_coeff[:, mc.ncore:][:, :mc.ncas]
-    if c_casdm1s is None:
+    if c_dm1s is None:
         c_dm1s = dm1s
 
-    else:
-        c_dm1s = _dms.casdm1s_to_dm1s(mc, c_casdm1s)
-
-    if c_casdm2 is None:
+    if c_cascm2 is None:
         c_cascm2 = cascm2
 
-    else:
-        c_cascm2 = _dms.dm2_cumulant(c_casdm2, c_casdm1s)
-
-    v1, v2_ao = pdft_feff.lazy_kernel(mc.otfnal, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas)
+    v1, v2_ao = pdft_feff.lazy_kernel(mc.otfnal, dm1s, cascm2, c_dm1s,
+                                      c_cascm2, mo_cas)
     with temporary_env(mc._scf, _eri=ao2mo.restore(4, v2_ao, nao)):
         with temporary_env(mc.mol, incore_anyway=True):
             v2 = mc_ao2mo._ERIS(mc, mc.mo_coeff, method='incore')
@@ -83,7 +85,8 @@ def contract_veff(mc, mo_coeff, ci, veff1, veff2, ncore=None, ncas=None):
     ref_e = np.tensordot(veff1, dm1)
     ref_e += veff2.energy_core
     ref_e += np.tensordot(veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1)
-    ref_e += 0.5 * np.tensordot(veff2.papa[ncore:nocc, : , ncore:nocc, :], casdm2, axes=4)
+    ref_e += 0.5 * np.tensordot(veff2.papa[ncore:nocc, : , ncore:nocc, :],
+                                casdm2, axes=4)
     return ref_e
 
 def case(kv, mc):
@@ -94,16 +97,29 @@ def case(kv, mc):
     fcasscf = mcscf.CASSCF(mc._scf, ncas, nelecas)
     fcasscf.__dict__.update(mc.__dict__)
 
+    # What we will do is numerically check the differentiation of V_pq D_pq +
+    # 1/2 v_pqrs d_pqrs with respect to MO and CI rotations. This manifests
+    # itself as the generalized Fock matrix elements generated from V_pq and
+    # v_pqrs as well as then the generalized fock matrix elements from [rho
+    # F]_pq and [rho F]_pqrs. We are then numerically check how the contract is
+    # by evaluating V_pq D_pq + ... at the reference and the slightly modified
+    # CI/MO parameters
+
     feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci)
-    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=False)
+    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False,
+                                    paaa_only=False)
     ref_c_veff = contract_veff(mc, mc.mo_coeff, mc.ci, veff1, veff2)
     
 
     with lib.temporary_env(fcasscf, get_hcore=lambda:  feff1):
-        g_feff, _, _, hdiag_feff = newton_casscf.gen_g_hop(fcasscf, mc.mo_coeff, mc.ci, feff2)
+        g_feff, _, _, hdiag_feff = newton_casscf.gen_g_hop(fcasscf,
+                                                           mc.mo_coeff, mc.ci,
+                                                           feff2)
 
     with lib.temporary_env(fcasscf, get_hcore=lambda: veff1):
-        g_veff, _, _, hdiag_veff = newton_casscf.gen_g_hop(fcasscf, mc.mo_coeff, mc.ci, veff2)
+        g_veff, _, _, hdiag_veff = newton_casscf.gen_g_hop(fcasscf,
+                                                           mc.mo_coeff, mc.ci,
+                                                           veff2)
 
     g_all = g_feff + g_veff
     hdiag_all = hdiag_feff + hdiag_veff
@@ -180,13 +196,20 @@ class KnownValues(unittest.TestCase):
         for mol, mf in zip(("H2", "LiH"), (h2, lih)):
             for state, nel in zip(['Singlet'], [2]):
                 for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
-                    mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).state_average_([0.5, 0.5]).run()
+                    mc = mcpdft.CASSCF(mf, fnal, 2, nel,
+                                       grids_level=1).state_average_([0.5,
+                                                                      0.5]).run()
     
                     sa_casdm1s = _dms.make_weighted_casdm1s(mc)
                     sa_casdm2 = _dms.make_weighted_casdm2(mc)
+                    sa_dm1s = _dms.casdm1s_to_dm1s(mc, sa_casdm1s)
+                    sa_cascm2 = _dms.dm2_cumulant(sa_casdm2, sa_casdm1s)
     
-                    f1_test, f2_test = mc.get_pdft_feff(jk_pc=True, c_casdm1s=sa_casdm1s, c_casdm2=sa_casdm2)
-                    f1_ref, f2_ref = get_feff_ref(mc, c_casdm1s=sa_casdm1s, c_casdm2=sa_casdm2)
+                    f1_test, f2_test = mc.get_pdft_feff(jk_pc=True,
+                                                        c_dm1s=sa_dm1s,
+                                                        c_cascm2=sa_cascm2)
+                    f1_ref, f2_ref = get_feff_ref(mc, c_dm1s=sa_dm1s,
+                                                  c_cascm2=sa_cascm2)
                     f_test = [f1_test, f2_test.vhf_c, f2_test.papa,
                               f2_test.ppaa, f2_test.j_pc, f2_test.k_pc]
                     f_ref = [f1_ref, f2_ref.vhf_c, f2_ref.papa, f2_ref.ppaa,
@@ -196,8 +219,50 @@ class KnownValues(unittest.TestCase):
                     for test, ref, term in zip(f_test, f_ref, terms):
                         with self.subTest(mol=mol, state=state, fnal=fnal,
                                           term=term):
-                            self.assertAlmostEqual(lib.fp(test),
-                                                   lib.fp(ref), delta=1e-6)
+                            self.assertAlmostEqual(lib.fp(test), lib.fp(ref),
+                                                   delta=1e-6)
+
+    def test_diff_contract_feff_ao2mo(self):
+        for mol, mf in zip(("H2", "LiH"), (h2, lih)):
+            for state, nel in zip(['Singlet'], [2]):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                    mc = mcpdft.CASSCF(mf, fnal, 2, nel,
+                                       grids_level=1).state_average_([0.5,
+                                                                      0.5]).run()
+
+                    sa_casdm1s = _dms.make_weighted_casdm1s(mc)
+                    sa_casdm2 = _dms.make_weighted_casdm2(mc)
+                    sa_dm1s = _dms.casdm1s_to_dm1s(mc, sa_casdm1s)
+                    sa_cascm2 = _dms.dm2_cumulant(sa_casdm2, sa_casdm1s)
+
+                    casdm1s = mc.make_one_casdm1s(ci=mc.ci)
+                    casdm2 = mc.make_one_casdm2(ci=mc.ci)
+                    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s)
+                    cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
+
+                    delta_dm1s = dm1s - sa_dm1s
+                    delta_cascm2 = cascm2 - sa_cascm2
+
+                    f1_test, f2_test = mc.get_pdft_feff(jk_pc=True,
+                                                        casdm1s=sa_casdm1s,
+                                                        casdm2=sa_casdm2,
+                                                        c_dm1s=delta_dm1s,
+                                                        c_cascm2=delta_cascm2)
+                    f1_ref, f2_ref = get_feff_ref(mc, dm1s=sa_dm1s,
+                                                  cascm2=sa_cascm2,
+                                                  c_dm1s=delta_dm1s,
+                                                  c_cascm2=delta_cascm2)
+                    f_test = [f1_test, f2_test.vhf_c, f2_test.papa,
+                              f2_test.ppaa, f2_test.j_pc, f2_test.k_pc]
+                    f_ref = [f1_ref, f2_ref.vhf_c, f2_ref.papa, f2_ref.ppaa,
+                             f2_ref.j_pc, f2_ref.k_pc]
+                    terms = ['f1', 'f2.vhf_c', 'f2.papa', 'f2.ppaa', 'f2.j_pc',
+                             'f2.k_pc']
+                    for test, ref, term in zip(f_test, f_ref, terms):
+                        with self.subTest(mol=mol, state=state, fnal=fnal,
+                                          term=term):
+                            self.assertAlmostEqual(lib.fp(test), lib.fp(ref),
+                                                   delta=1e-6)
 
 
 if __name__ == "__main__":

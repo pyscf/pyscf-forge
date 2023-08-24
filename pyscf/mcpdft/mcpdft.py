@@ -573,6 +573,7 @@ class _PDFT():
 
         if incl_coul:
             pdft_veff1 += self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
+        
         logger.timer(self, 'get_pdft_veff', *t0)
 
         if incl_energy:
@@ -581,9 +582,13 @@ class _PDFT():
         else:
             return pdft_veff1, pdft_veff2
 
-    def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None, casdm2=None, c_casdm1s=None,
-                      c_casdm2=None, paaa_only=False, aaaa_only=False,
-                      jk_pc=False):
+    def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None,
+                      casdm2=None, c_dm1s=None, c_cascm2=None,
+                      paaa_only=False, aaaa_only=False, jk_pc=False):
+        """casdm1s and casdm2 are the values that are put into the kernel
+        whereas the c_dm1s and c_cascm2 are the densities which multiply the
+        kernel function (ie the contraction in terms of normal 1 and 2-rdm
+        quantities.)"""
         t0 = (logger.process_clock(), logger.perf_counter())
         if mo is None: mo = self.mo_coeff
         if ci is None: ci = self.ci
@@ -591,24 +596,24 @@ class _PDFT():
         if casdm2 is None: casdm2 = self.make_one_casdm2(ci, state=state)
         ncore, ncas = self.ncore, self.ncas
 
-        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
+        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s, mo_coeff=mo, ncore=ncore,
+                                    ncas=ncas)
         cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
-        if c_casdm1s is None:
+        if c_dm1s is None:
             c_dm1s = dm1s
 
-        else:
-            c_dm1s = _dms.casdm1s_to_dm1s(self, c_casdm1s, mo_coeff=mo, ncore=ncore, ncas=ncas)
-
-        if c_casdm2 is None:
+        if c_cascm2 is None:
             c_cascm2 = cascm2
 
-        else:
-            c_cascm2 = _dms.dm2_cumulant(c_casdm2, c_casdm1s)
 
-        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2, c_dm1s, c_cascm2, mo, ncore,
-                                                  ncas, max_memory=self.max_memory,
-                                                  paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc)
+        pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2,
+                                                  c_dm1s, c_cascm2, mo, ncore,
+                                                  ncas,
+                                                  max_memory=self.max_memory,
+                                                  paaa_only=paaa_only,
+                                                  aaaa_only=aaaa_only,
+                                                  jk_pc=jk_pc)
         logger.timer(self, 'get_pdft_feff', *t0)
         return pdft_feff1, pdft_feff2
 
