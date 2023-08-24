@@ -173,10 +173,6 @@ def get_transformed_h2eff_for_cas(mc, ncore=None, ncas=None):
     '''Compute the CAS two-particle linear PDFT Hamiltonian
 
     Args:
-        veff2_0 : pyscf.mcscf.mc_ao2mo._ERIS instance
-            Relevant 2-body effecive potential in the MO basis.
-            Generated from expansion density.
-
         ncore : int
             Number of core MOs
 
@@ -197,8 +193,8 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
 
     Args:
         mo_coeff : ndarray of shape (nao, nmo)
-            A full set of molecular orbital coefficients. Taken from
-            self if not provided.
+            A full set of molecular orbital coefficients. Taken from self if
+            not provided.
 
         ci : list of ndarrays of length nroots
             CI vectors should be from a converged CASSCF/CASCI calculation
@@ -255,7 +251,6 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
 
     # We have a StateAverageMix Solver
-    # Todo, should maybe initialize this in a more obvious way?
     mc._irrep_slices = []
     start = 0
     for solver in mc.fcisolver.fcisolvers:
@@ -263,7 +258,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         mc._irrep_slices.append(slice(start, end))
         start = end
 
-    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec (s, mc.nelecas))
+    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec(s, mc.nelecas))
             for s, irrep in zip(mc.fcisolver.fcisolvers, mc._irrep_slices)]
 
 
