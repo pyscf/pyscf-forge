@@ -573,7 +573,7 @@ class _PDFT():
 
         if incl_coul:
             pdft_veff1 += self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
-        
+
         logger.timer(self, 'get_pdft_veff', *t0)
 
         if incl_energy:
