@@ -13,22 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import numpy as np
-import time
-from scipy import linalg
 from pyscf.lib import logger
-from pyscf.lib import einsum as einsum_threads
 from pyscf.dft.numint import _dot_ao_dm
-from pyscf.mcpdft._dms import dm2_cumulant
-from itertools import product
-from os import path
 
 def _grid_ao2mo (mol, ao, mo_coeff, non0tab=None, shls_slice=None,
         ao_loc=None):
     '''ao[deriv,grid,AO].mo_coeff[AO,MO]->mo[deriv,grid,MO]
     ASSUMES that ao is in data layout (deriv,AO,grid) in row-major order!
     mo is returned in data layout (deriv,MO,grid) in row-major order '''
-    nderiv, ngrid, nao = ao.shape
+    nderiv, ngrid, _ = ao.shape
     nmo = mo_coeff.shape[-1]
     mo = np.empty ((nderiv,nmo,ngrid), dtype=mo_coeff.dtype, order='C')
     mo = mo.transpose (0,2,1)

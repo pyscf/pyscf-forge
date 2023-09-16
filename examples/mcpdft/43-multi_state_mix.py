@@ -2,8 +2,8 @@
 
 
 '''
-Perform multi-state PDFT averaging over states of different spins
-and/or spatial symmetry
+Perform multi-state PDFT averaging over states of different spins and/or
+spatial symmetry
 
 The mcpdft.multi_state function maybe not generate the right spin or spatial
 symmetry as one needs.  This example shows how to put states with different

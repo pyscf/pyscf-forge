@@ -3,9 +3,9 @@
 '''
 linearized pair-density functional theory
 
-A multi-states extension of MC-PDFT for states close in energy.
-Generates an effective L-PDFT Hamiltonian through a Taylor expansion of
-the MC-PDFT energy expression [ChemRxiv: 10.26434/chemrxiv-2023-7d0gv].
+A multi-states extension of MC-PDFT for states close in energy. Generates an
+effective L-PDFT Hamiltonian through a Taylor expansion of the MC-PDFT energy
+expression [J Chem Theory Comput: 10.1021/acs.jctc.3c00207].
 '''
 
 from pyscf import gto, scf, mcpdft

@@ -17,17 +17,17 @@ from pyscf.mcscf import newton_casscf, casci, mc1step
 from pyscf.grad import rks as rks_grad
 from pyscf.dft import gen_grid
 from pyscf.lib import logger, pack_tril, current_memory, einsum, tag_array
-#from pyscf.grad import sacasscf
 from pyscf.grad import sacasscf
 from pyscf.mcscf.casci import cas_natorb
+
+from pyscf.mcpdft.pdft_eff import _contract_eff_rho
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
-from pyscf.mcpdft.pdft_veff import _contract_vot_rho, _contract_ao_vao
 from pyscf.mcpdft import _dms
 from functools import reduce
 from itertools import product
 from scipy import linalg
 import numpy as np
-import time, gc
+import gc
 
 BLKSIZE = gen_grid.BLKSIZE
 
@@ -220,7 +220,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
 
             # Vpq + Vpqrs * Drs ; I'm not sure why the list comprehension down
             # there doesn't break ao's stride order but I'm not complaining
-            vrho = _contract_vot_rho (vPi, rho.sum (0), add_vrho=vrho)
+            vrho = _contract_eff_rho (vPi, rho.sum (0), add_eff_rho=vrho)
             tmp_dv = np.stack ([ot.get_veff_1body (rho, Pi, [ao_i, moval_occ],
                 w0[ip0:ip1], kern=vrho) for ao_i in aoval], axis=0)
             tmp_dv = (tmp_dv * mo_occ[None,:,:]
@@ -261,7 +261,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             gc.collect ()
 
     for k, ia in enumerate(atmlst):
-        shl0, shl1, p0, p1 = aoslices[ia]
+        p0, p1 = aoslices[ia][2:]
         h1ao = hcore_deriv(ia) # MRH: this should be the TRUE hcore
         de_hcore[k] += np.tensordot(h1ao, dm1)
         de_renorm[k] -= np.tensordot(s1[:,p0:p1], dme0[p0:p1]) * 2
@@ -386,8 +386,6 @@ class Gradients (sacasscf.Gradients):
         if ci is None: ci = self.base.ci
         if (veff1 is None) or (veff2 is None):
             assert (False), kwargs
-            veff1, veff2 = self.base.get_pdft_veff (mo, ci[state],
-                incl_coul=True, paaa_only=True)
         fcasscf = self.make_fcasscf (state)
         fcasscf.mo_coeff = mo
         fcasscf.ci = ci[state]
