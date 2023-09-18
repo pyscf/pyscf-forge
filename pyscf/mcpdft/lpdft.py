@@ -455,13 +455,13 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         (wfn) component for hybrid functionals.
         '''
         if casdm1s_0 is None:
-            casdm1s_0 = mc.get_casdm12_0()[0]
+            casdm1s_0 = self.get_casdm12_0()[0]
 
-        spin = abs(mc.nelecas[0] - mc.nelecas[1])
-        cas_hyb = mc.ot._numint.rsh_and_hybrid_coeff(mc.ot.otxc, spin=spin)[2]
+        spin = abs(self.nelecas[0] - self.nelecas[1])
+        cas_hyb = self.otfnal._numint.rsh_and_hybrid_coeff(self.otfnal.otxc, spin=spin)[2]
         hyb = 1.0 - cas_hyb[0]
 
-        return cas_hyb * mc.get_hcore() + mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
+        return cas_hyb[0] * self.get_hcore() + self.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
 
     def nuc_grad_method(self, state=None):
         if not isinstance(self, mc1step.CASSCF):

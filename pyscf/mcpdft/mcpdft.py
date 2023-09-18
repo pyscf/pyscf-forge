@@ -584,11 +584,14 @@ class _PDFT():
 
     def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None,
                       casdm2=None, c_dm1s=None, c_cascm2=None,
-                      paaa_only=False, aaaa_only=False, jk_pc=False):
+                      paaa_only=False, aaaa_only=False, jk_pc=False, incl_coul=False):
         """casdm1s and casdm2 are the values that are put into the kernel
         whereas the c_dm1s and c_cascm2 are the densities which multiply the
         kernel function (ie the contraction in terms of normal 1 and 2-rdm
-        quantities.)"""
+        quantities.)
+
+        incl_coul includes the coulomb interaction with the contracting density!
+        """
         t0 = (logger.process_clock(), logger.perf_counter())
         if mo is None: mo = self.mo_coeff
         if ci is None: ci = self.ci
@@ -614,6 +617,10 @@ class _PDFT():
                                                   paaa_only=paaa_only,
                                                   aaaa_only=aaaa_only,
                                                   jk_pc=jk_pc)
+
+        if incl_coul:
+            pdft_feff1 += self._scf.get_j(self.mol, c_dm1s[0] + c_dm1s[1])
+
         logger.timer(self, 'get_pdft_feff', *t0)
         return pdft_feff1, pdft_feff2
 

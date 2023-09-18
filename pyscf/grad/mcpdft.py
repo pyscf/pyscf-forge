@@ -348,10 +348,9 @@ class Gradients (sacasscf.Gradients):
                 "{} for range-separated MC-PDFT functionals".format (name)
             )
 
-    def get_wfn_response (self, atmlst=None, state=None, verbose=None, mo=None,
+    def get_wfn_response (self, state=None, verbose=None, mo=None,
             ci=None, veff1=None, veff2=None, nlag=None, **kwargs):
         if state is None: state = self.state
-        if atmlst is None: atmlst = self.atmlst
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
@@ -360,7 +359,6 @@ class Gradients (sacasscf.Gradients):
             veff1, veff2 = self.base.get_pdft_veff (mo, ci[state],
                 incl_coul=True, paaa_only=True)
         sing_tol = getattr (self, 'sing_tol_sasa', 1e-8)
-        ndet = ci[state].size
         fcasscf = self.make_fcasscf (state)
         fcasscf.mo_coeff = mo
         fcasscf.ci = ci[state]
