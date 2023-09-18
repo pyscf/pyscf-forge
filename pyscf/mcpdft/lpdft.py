@@ -21,6 +21,7 @@ from scipy import linalg
 
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
+from pyscf.mcscf import mc1step
 from pyscf import mcpdft
 from pyscf.mcpdft import _dms
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
@@ -438,6 +439,16 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
     def _eig_si(self, ham):
         return linalg.eigh(ham)
 
+    def nuc_grad_method(self, state=None):
+        if not isinstance(self, mc1step.CASSCF):
+            raise NotImplementedError("CASCI-based LPDFT nuclear gradients")
+        elif getattr(self, 'frozen', None) is not None:
+            raise NotImplementedError("LPDFT nuclear gradients with frozen orbitals")
+        else:
+            from pyscf.grad.lpdft import Gradients
+
+        return Gradients(self, state=state)
+
 
 class _LPDFTMix(_LPDFT):
     '''State Averaged Mixed Linerized PDFT
@@ -503,6 +514,9 @@ class _LPDFTMix(_LPDFT):
                       irrep_slice in self._irrep_slices]
         # Flattens it
         return [c for ci_irrep in adiabat_ci for c in ci_irrep]
+
+    def nuc_grad_method(self, state=None):
+        raise NotImplementedError("MultiState Mix LPDFT nuclear gradients")
 
 
 def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):

@@ -32,6 +32,40 @@ import gc
 
 BLKSIZE = gen_grid.BLKSIZE
 
+def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, h2e):
+    """Assume that h2e v_j = v_k"""
+    ncore = mc.ncore
+    ncas = mc.ncas
+    nocc = ncore + ncas
+
+    nao, nmo = mo_coeff.shape
+
+    # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
+
+    # MRH: I need to replace aapa with the equivalent array from veff2
+    # I'm not sure how the outcore file-paging system works
+    # I also need to generate vhf_c and vhf_a from veff2 rather than the
+    # molecule's actual integrals. The true Coulomb repulsion should already be
+    # in veff1, but I need to generate the "fake" vj - vk/2 from veff2
+    h1e_mo = mo_coeff.T @ h1e @ mo_coeff + h2e.vhf_c
+    aapa = np.zeros((ncas, ncas, nmo, ncas), dtype=h1e_mo.dtype)
+    vhf_a = np.zeros((nmo, nmo), dtype=h1e_mo.dtype)
+
+    for i in range(nmo):
+        jbuf = h2e.ppaa[i]
+        aapa[:,:,i,:] = jbuf[ncore:nocc,:,:]
+        vhf_a[i] = np.tensordot(jbuf, casdm1, axes=2)
+
+    vhf_a *= 0.5
+    # we have assumed that vj = vk: vj - vk/2 = vj - vj/2 = vj/2
+    gfock = np.zeros((nmo, nmo))
+    gfock[:, :ncore] = h1e_mo[:,:ncore] + vhf_a[:,:ncore] * 2
+    gfock[:,ncore:nocc] = h1e_mo[:,ncore:nocc] @ casdm1
+    gfock[:, ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
+
+    return gfock
+
+
 def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         atmlst=None, mf_grad=None, verbose=None, max_memory=None,
         auxbasis_response=False):
@@ -56,35 +90,19 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     nelecas = mc.nelecas
     nao, nmo = mo_coeff.shape
 
-    mo_occ = mo_coeff[:,:nocc]
     mo_core = mo_coeff[:,:ncore]
     mo_cas = mo_coeff[:,ncore:nocc]
 
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
 
-# gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
+    # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
+    gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
+    dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
+    del gfock
+
     dm_core = np.dot(mo_core, mo_core.T) * 2
     dm_cas = reduce(np.dot, (mo_cas, casdm1, mo_cas.T))
-    # MRH: I need to replace aapa with the equivalent array from veff2
-    # I'm not sure how the outcore file-paging system works
-    # I also need to generate vhf_c and vhf_a from veff2 rather than the
-    # molecule's actual integrals. The true Coulomb repulsion should already be
-    # in veff1, but I need to generate the "fake" vj - vk/2 from veff2
-    h1e_mo = mo_coeff.T @ (mc.get_hcore() + veff1) @ mo_coeff + veff2.vhf_c
-    aapa = np.zeros ((ncas,ncas,nmo,ncas), dtype=h1e_mo.dtype)
-    vhf_a = np.zeros ((nmo,nmo), dtype=h1e_mo.dtype)
-    for i in range (nmo):
-        jbuf = veff2.ppaa[i]
-        aapa[:,:,i,:] = jbuf[ncore:nocc,:,:]
-        vhf_a[i] = np.tensordot (jbuf, casdm1, axes=2)
-    vhf_a *= 0.5
-    # for this potential, vj = vk: vj - vk/2 = vj - vj/2 = vj/2
-    gfock = np.zeros ((nmo, nmo))
-    gfock[:,:ncore] = (h1e_mo[:,:ncore] + vhf_a[:,:ncore]) * 2
-    gfock[:,ncore:nocc] = h1e_mo[:,ncore:nocc] @ casdm1
-    gfock[:,ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
-    dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
-    aapa = vhf_a = h1e_mo = gfock = None
+
 
     if atmlst is None:
         atmlst = range(mol.natm)
