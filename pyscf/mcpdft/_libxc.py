@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import re
 from pyscf.dft.libxc import XC_ALIAS, XC_CODES, XC_KEYS
 from pyscf.dft.libxc import hybrid_coeff, rsh_coeff
 
@@ -52,7 +51,7 @@ def split_x_c_comma (xc):
     xc = xc.upper ()
     myerr = XCSplitError (xc)
     max_recurse = 5
-    for i in range (max_recurse):
+    for _ in range (max_recurse):
         if ',' in xc:
             break
         elif xc in XC_ALIAS_KEYS:
@@ -84,7 +83,7 @@ def split_x_c_comma (xc):
 
 def is_hybrid_or_rsh (xc_code):
     hyb = hybrid_coeff (xc_code)
-    omega, alpha, beta = rsh_coeff (xc_code)
+    omega = rsh_coeff (xc_code)[0]
     non0 = [abs (x)>1e-10 for x in (hyb, omega)]
     return any (non0)
 
