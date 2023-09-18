@@ -32,7 +32,7 @@ import gc
 
 BLKSIZE = gen_grid.BLKSIZE
 
-def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, h2e):
+def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, eris):
     """Assume that h2e v_j = v_k"""
     ncore = mc.ncore
     ncas = mc.ncas
@@ -47,19 +47,19 @@ def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, h2e):
     # I also need to generate vhf_c and vhf_a from veff2 rather than the
     # molecule's actual integrals. The true Coulomb repulsion should already be
     # in veff1, but I need to generate the "fake" vj - vk/2 from veff2
-    h1e_mo = mo_coeff.T @ h1e @ mo_coeff + h2e.vhf_c
+    h1e_mo = mo_coeff.T @ h1e @ mo_coeff + eris.vhf_c
     aapa = np.zeros((ncas, ncas, nmo, ncas), dtype=h1e_mo.dtype)
     vhf_a = np.zeros((nmo, nmo), dtype=h1e_mo.dtype)
 
     for i in range(nmo):
-        jbuf = h2e.ppaa[i]
+        jbuf = eris.ppaa[i]
         aapa[:,:,i,:] = jbuf[ncore:nocc,:,:]
         vhf_a[i] = np.tensordot(jbuf, casdm1, axes=2)
 
     vhf_a *= 0.5
     # we have assumed that vj = vk: vj - vk/2 = vj - vj/2 = vj/2
     gfock = np.zeros((nmo, nmo))
-    gfock[:, :ncore] = h1e_mo[:,:ncore] + vhf_a[:,:ncore] * 2
+    gfock[:, :ncore] = (h1e_mo[:,:ncore] + vhf_a[:,:ncore]) * 2
     gfock[:,ncore:nocc] = h1e_mo[:,ncore:nocc] @ casdm1
     gfock[:, ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
 
@@ -96,13 +96,12 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
 
     # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
-    gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
-    dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
-    del gfock
-
     dm_core = np.dot(mo_core, mo_core.T) * 2
     dm_cas = reduce(np.dot, (mo_cas, casdm1, mo_cas.T))
 
+    gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
+    dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
+    del gfock
 
     if atmlst is None:
         atmlst = range(mol.natm)

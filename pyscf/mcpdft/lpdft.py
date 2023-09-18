@@ -149,12 +149,8 @@ def transformed_h1e_for_cas(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0,
     mo_core = mo_coeff[:, :ncore]
     mo_cas = mo_coeff[:, ncore:nocc]
 
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
-    dm1 = dm1s[0] + dm1s[1]
-    v_j = mc._scf.get_j(dm=dm1)
-
     # h_pq + V_pq + J_pq all in AO integrals
-    hcore_eff = hyb * mc.get_hcore() + mc.veff1 + hyb * v_j
+    hcore_eff = mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
     energy_core = mc.get_lpdfthconst(E_ot, casdm1s_0, casdm2_0, hyb)
 
     if mo_core.size != 0:
@@ -268,6 +264,7 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
 
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
+    mc.ci_mcscf = mc.ci
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
 
     if hasattr(mc, "_irrep_slices"):
@@ -279,6 +276,7 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
         mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
+    mc.ci = mc.get_ci_adiabats()
 
     return (
         mc.e_tot, mc.e_mcscf, mc.e_cas, mc.ci,
@@ -422,22 +420,48 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
 
-    def get_ci_adiabats(self, ci=None):
+    def get_ci_adiabats(self, ci_mcscf=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
                 ci : list of length nroots
-                    MC-SCF ci vectors; defaults to self.ci
+                    MC-SCF ci vectors; defaults to self.ci_mcscf
 
             Returns:
                 ci : list of length nroots
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
-        if ci is None: ci = self.ci
-        return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
+        if ci_mcscf is None: ci_mcscf = self.ci_mcscf
+        return list(np.tensordot(self.si_pdft, np.asarray(ci_mcscf), axes=1))
 
     def _eig_si(self, ham):
         return linalg.eigh(ham)
+
+    def get_lpdft_hcore_only(self, casdm1s_0, hyb=1.0):
+        '''
+        Returns the lpdft hcore AO integrals weighted by the
+        hybridization factor. Excludes the MC-SCF (wfn) component.
+        '''
+
+        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s=casdm1s_0)
+        dm1 = dm1s[0] + dm1s[1]
+        v_j = self._scf.get_j(dm=dm1)
+        return hyb*self.get_hcore() + self.veff1 + hyb * v_j
+
+
+    def get_lpdft_hcore(self, casdm1s_0=None):
+        '''
+        Returns the full lpdft hcore AO integrals. Includes the MC-SCF
+        (wfn) component for hybrid functionals.
+        '''
+        if casdm1s_0 is None:
+            casdm1s_0 = mc.get_casdm12_0()[0]
+
+        spin = abs(mc.nelecas[0] - mc.nelecas[1])
+        cas_hyb = mc.ot._numint.rsh_and_hybrid_coeff(mc.ot.otxc, spin=spin)[2]
+        hyb = 1.0 - cas_hyb[0]
+
+        return cas_hyb * mc.get_hcore() + mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
 
     def nuc_grad_method(self, state=None):
         if not isinstance(self, mc1step.CASSCF):
@@ -498,19 +522,19 @@ class _LPDFTMix(_LPDFT):
         '''
         return linalg.block_diag(*self.lpdft_ham)
 
-    def get_ci_adiabats(self, ci=None):
+    def get_ci_adiabats(self, ci_mcscf=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
                 ci : list of length nroots
-                    MC-SCF ci vectors; defaults to self.ci
+                    MC-SCF ci vectors; defaults to self.ci_mcscf
 
             Returns:
                 ci : list of length nroots
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
-        if ci is None: ci = self.ci
-        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci[irrep_slice]), axes=1) for
+        if ci_mcscf is None: ci_mcscf = self.ci_mcscf
+        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci_mcscf[irrep_slice]), axes=1) for
                       irrep_slice in self._irrep_slices]
         # Flattens it
         return [c for ci_irrep in adiabat_ci for c in ci_irrep]
