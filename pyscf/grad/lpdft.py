@@ -74,12 +74,14 @@ class Gradients (sacasscf.Gradients):
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
-        if nlag is None: nlag = self.nlag
         if (feff1 is None) or (feff2 is None):
             feff1, feff2 = self.get_otp_gradient_response(mo, ci, state)
 
         ndet = self.na_states[state] * self.nb_states[state]
         fcasscf = self.make_fcasscf(state)
+
+        # Exploit (hopefully) the fact that the zero-order density is
+        # really just the State Average Density!
         fcasscf_sa = self.make_fcasscf_sa()
 
         fcasscf.mo_coeff = mo
@@ -121,7 +123,7 @@ class Gradients (sacasscf.Gradients):
         dm1s_0 = _dms.casdm1s_to_dm1s(self.base, casdm1s_0)
         cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1s_0)
 
-        # THis is the density of the state we are differentiating with respect to
+        # This is the density of the state we are differentiating with respect to
         casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
         casdm2 = mc.make_one_casdm2(ci=ci, state=state)
         dm1s = _dms.casdm1s_to_dm1s(self.base, casdm1s)
@@ -131,7 +133,13 @@ class Gradients (sacasscf.Gradients):
         delta_dm1s = dm1s - dm1s_0
         delta_cascm2 = cascm2 - cascm2_0
 
-        return self.base.get_pdft_feff(mo=mo, ci=ci, state=state, casdm1s=casdm1s_0, casdm2=casdm2_0, c_dm1s=delta_dm1s, c_cascm2=delta_cascm2, jk_pc=False, paaa_only=False, incl_coul=True)
+        return self.base.get_pdft_feff(mo=mo, ci=ci, state=state,
+                                       casdm1s=casdm1s_0,
+                                       casdm2=casdm2_0,
+                                       c_dm1s=delta_dm1s,
+                                       c_cascm2=delta_cascm2,
+                                       jk_pc=False, paaa_only=False,
+                                       incl_coul=True)
 
 
 if __name__ == '__main__':

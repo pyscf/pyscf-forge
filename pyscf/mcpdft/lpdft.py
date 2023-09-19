@@ -276,7 +276,7 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
         mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
-    mc.ci = mc.get_ci_adiabats()
+    mc.ci = mc._get_ci_adiabats()
 
     return (
         mc.e_tot, mc.e_mcscf, mc.e_cas, mc.ci,
@@ -408,8 +408,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
                                                   None):
-            ci = self.get_ci_adiabats()
-            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
+            ss = self.fcisolver.states_spin_square(self.ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
                 log.note('  State %d weight %g  ELPDFT = %.15g  S^2 = %.7f',
@@ -420,7 +419,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
 
-    def get_ci_adiabats(self, ci_mcscf=None):
+    def _get_ci_adiabats(self, ci_mcscf=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
@@ -522,7 +521,7 @@ class _LPDFTMix(_LPDFT):
         '''
         return linalg.block_diag(*self.lpdft_ham)
 
-    def get_ci_adiabats(self, ci_mcscf=None):
+    def _get_ci_adiabats(self, ci_mcscf=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
