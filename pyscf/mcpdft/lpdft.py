@@ -50,7 +50,7 @@ def weighted_average_densities(mc, ci=None, weights=None):
     return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
-def get_lpdfthconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None):
+def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None, veff1=None, veff2=None, mo_coeff=None):
     ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
@@ -81,27 +81,28 @@ def get_lpdfthconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=Non
     '''
     if ncas is None: ncas = mc.ncas
     if ncore is None: ncore = mc.ncore
+    if veff1 is None: veff1 = mc.veff1
+    if veff2 is None: veff2 = mc.veff2
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
 
     nocc = ncore + ncas
 
     # Get the 1-RDM matrices
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0, mo_coeff=mo_coeff)
     dm1 = dm1s[0] + dm1s[1]
 
-    # Coulomb energy for zeroth order state
+    # Coulomb interaction
     vj = mc._scf.get_j(dm=dm1)
-    e_j = np.tensordot(vj, dm1) / 2
-
-    e_veff1 = np.tensordot(mc.veff1, dm1)
+    e_veff1_j = np.tensordot(veff1 + hyb*0.5*vj, dm1)
 
     # Deal with 2-electron on-top potential energy
-    e_veff2 = mc.veff2.energy_core
-    e_veff2 += np.tensordot(mc.veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
-    e_veff2 += 0.5 * np.tensordot(mc.get_h2lpdft(), casdm2_0, axes=4)
+    e_veff2 = veff2.energy_core
+    e_veff2 += np.tensordot(veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
+    e_veff2 += 0.5 * np.tensordot(veff2.papa[ncore:nocc, :, ncore:nocc, :], casdm2_0, axes=4)
 
     # h_nuc + E_ot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
-    energy_core = hyb * mc.energy_nuc() + E_ot - hyb * e_j - e_veff1 - e_veff2
+    energy_core = hyb * mc.energy_nuc() + E_ot - e_veff1_j - e_veff2
     return energy_core
 
 
@@ -151,7 +152,7 @@ def transformed_h1e_for_cas(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0,
 
     # h_pq + V_pq + J_pq all in AO integrals
     hcore_eff = mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
-    energy_core = mc.get_lpdfthconst(E_ot, casdm1s_0, casdm2_0, hyb)
+    energy_core = mc.get_lpdft_hconst(E_ot, casdm1s_0, casdm2_0, hyb)
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
@@ -223,7 +224,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     cas_hyb = hyb[0]
 
     ncas = mc.ncas
-    casdm1s_0, casdm2_0 = mc.get_casdm12_0()
+    casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci)
 
     mc.veff1, mc.veff2, E_ot = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
                                         casdm2=casdm2_0, drop_mcwfn=True, incl_energy=True)
@@ -335,8 +336,8 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
     make_lpdft_ham_ = make_lpdft_ham_
     make_lpdft_ham_.__doc__ = make_lpdft_ham_.__doc__
 
-    get_lpdfthconst = get_lpdfthconst
-    get_lpdfthconst.__doc__ = get_lpdfthconst.__doc__
+    get_lpdft_hconst = get_lpdft_hconst
+    get_lpdft_hconst.__doc__ = get_lpdft_hconst.__doc__
 
     get_h1lpdft = transformed_h1e_for_cas
     get_h1lpdft.__doc__ = transformed_h1e_for_cas.__doc__

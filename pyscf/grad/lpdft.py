@@ -69,7 +69,7 @@ class Gradients (sacasscf.Gradients):
         # need to compute feff1, feff2 if not already in kwargs
         return super().kernel(**kwargs)
 
-    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, nlag=None, **kwargs):
+    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, incl_diag=False, **kwargs):
         if state is None: state = self.state
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
@@ -90,15 +90,24 @@ class Gradients (sacasscf.Gradients):
         fcasscf.get_hcore = self.base.get_lpdft_hcore
         fcasscf_sa.get_hcore = lambda: feff1
 
-        g_all_state = newton_casscf.gen_g_hop(fcasscf, mo, ci[state], self.base.veff2, verbose)[0]
-        g_all_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)[0]
+        g_all_state, _, _, hdiag_state = newton_casscf.gen_g_hop(fcasscf, mo, ci[state], self.base.veff2, verbose)
+        g_all_implicit, _, _, hdiag_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)
 
         g_all = g_all_implicit
-        g_all[:self.ngorb] = g_all_state[:self.ngorb]
+        g_all[:self.ngorb] += g_all_state[:self.ngorb]
         offs = sum([na*nb for na, nb in zip(self.na_state[:state], self.nb_states[:state])]) if state > 0 else 0
         g_all[self.ngorb:][offs:][:ndet] += g_all_state[self.ngorb:]
 
-        return g_all
+        # really just used for testing purposes
+        if incl_diag:
+            hdiag = hdiag_implicit
+            hdiag[:self.ngorb] += hdiag_state[:self.ngorb]
+            hdiag[self.ngorb:][offs:][:ndet] += hdiag_state[self.ngorb:]
+
+            return g_all, hdiag
+
+        else:
+            return g_all
 
     def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, eris=None, mf_grad=None, feff1=None, feff2=None, **kwargs):
         if state is None: state = self.state
@@ -124,8 +133,8 @@ class Gradients (sacasscf.Gradients):
         cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1s_0)
 
         # This is the density of the state we are differentiating with respect to
-        casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
-        casdm2 = mc.make_one_casdm2(ci=ci, state=state)
+        casdm1s = self.base.make_one_casdm1s(ci=ci, state=state)
+        casdm2 = self.base.make_one_casdm2(ci=ci, state=state)
         dm1s = _dms.casdm1s_to_dm1s(self.base, casdm1s)
         cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
@@ -133,7 +142,7 @@ class Gradients (sacasscf.Gradients):
         delta_dm1s = dm1s - dm1s_0
         delta_cascm2 = cascm2 - cascm2_0
 
-        return self.base.get_pdft_feff(mo=mo, ci=ci, state=state,
+        return self.base.get_pdft_feff(mo=mo, ci=ci,
                                        casdm1s=casdm1s_0,
                                        casdm2=casdm2_0,
                                        c_dm1s=delta_dm1s,
