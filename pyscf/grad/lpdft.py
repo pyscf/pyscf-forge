@@ -63,19 +63,23 @@ class Gradients (sacasscf.Gradients):
         ci = kwargs['ci'] if 'ci' in kwargs else self.base.ci
         if isinstance(ci, np.ndarray): ci = [ci] #hack hack hack????? idk
         kwargs['ci'] = ci
-        if ('feff1' not in kwargs) or ('feff2' not in kwargs):
-            #raise RuntimeError("Need to compute feff1 and 2 before!")
-            kwargs['feff1'], kwargs['feff2'] = self.get_otp_gradient_response(mo, ci, state)
         # need to compute feff1, feff2 if not already in kwargs
+        if ('feff1' not in kwargs) or ('feff2' not in kwargs):
+            kwargs['feff1'], kwargs['feff2'] = self.get_otp_gradient_response(mo, ci, state)
+
         return super().kernel(**kwargs)
 
-    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, incl_diag=False, **kwargs):
+    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, incl_diag=False, nlag=None, **kwargs):
         if state is None: state = self.state
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
+        if verbose is None: verbose = self.verbose
+        if nlag is None: nlag = self.nlag
         if (feff1 is None) or (feff2 is None):
             feff1, feff2 = self.get_otp_gradient_response(mo, ci, state)
+
+        log = lib.logger.new_logger(self, verbose)
 
         ndet = self.na_states[state] * self.nb_states[state]
         fcasscf = self.make_fcasscf(state)
@@ -90,20 +94,45 @@ class Gradients (sacasscf.Gradients):
         fcasscf.get_hcore = self.base.get_lpdft_hcore
         fcasscf_sa.get_hcore = lambda: feff1
 
-        g_all_state, _, _, hdiag_state = newton_casscf.gen_g_hop(fcasscf, mo, ci[state], self.base.veff2, verbose)
+        g_all_explicit, _, _, hdiag_state = newton_casscf.gen_g_hop(fcasscf, mo, ci[state], self.base.veff2, verbose)
         g_all_implicit, _, _, hdiag_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)
 
-        g_all = g_all_implicit
-        g_all[:self.ngorb] += g_all_state[:self.ngorb]
-        offs = sum([na*nb for na, nb in zip(self.na_state[:state], self.nb_states[:state])]) if state > 0 else 0
-        g_all[self.ngorb:][offs:][:ndet] += g_all_state[self.ngorb:]
+        #Debug
+        log.debug("g_all explicit mo:\n{}".format(g_all_explicit[:self.ngorb]))
+        log.debug("g_all explicit CI:\n{}".format(g_all_explicit[self.ngorb:]))
+        log.debug("g_all implicit mo:\n{}".format(g_all_implicit[:self.ngorb]))
+        log.debug("g_all implicit CI:\n{}".format(g_all_implicit[self.ngorb:]))
 
-        # really just used for testing purposes
+        g_all = np.zeros(nlag)
+        g_all[:self.ngorb] = g_all_explicit[:self.ngorb] + g_all_implicit[:self.ngorb]
+
+        # Need to remove the SA-SA rotations from g_all_implicit CI contributions
+        spin_states = np.asarray(self.spin_states)
+        for root in range(self.nroots):
+            idx_spin = spin_states == spin_states[root]
+            idx = np.where(idx_spin)[0]
+
+            offs = sum([na*nb for na, nb in zip(self.na_states[:root], self.nb_states[:root])]) if root > 0 else 0
+            gci_root = g_all_implicit[self.ngorb:][offs:][:ndet]
+            if root == state:
+                gci_root += g_all_explicit[self.ngorb:]
+                # really just used for testing purposes
+                if incl_diag:
+                    hdiag = hdiag_implicit
+                    hdiag[:self.ngorb] += hdiag_state[:self.ngorb]
+                    hdiag[self.ngorb:][offs:][:ndet] += hdiag_state[self.ngorb:]
+
+            assert(root in idx)
+            ci_proj = np.asarray([ci[i].ravel() for i in idx])
+            gci_sa = np.dot(ci_proj, gci_root)
+            gci_root -= np.dot(gci_sa, ci_proj)
+
+            g_all[self.ngorb:][offs:][:ndet] = gci_root
+
+        log.debug("g_mo component:\n{}".format(g_all[:self.ngorb]))
+        log.debug("g_ci component:\n{}".format(g_all[self.ngorb:]))
+
         if incl_diag:
-            hdiag = hdiag_implicit
-            hdiag[:self.ngorb] += hdiag_state[:self.ngorb]
-            hdiag[self.ngorb:][offs:][:ndet] += hdiag_state[self.ngorb:]
-
             return g_all, hdiag
 
         else:
@@ -147,7 +176,8 @@ class Gradients (sacasscf.Gradients):
                                        casdm2=casdm2_0,
                                        c_dm1s=delta_dm1s,
                                        c_cascm2=delta_cascm2,
-                                       jk_pc=False, paaa_only=False,
+                                       jk_pc=True,
+                                       paaa_only=True,
                                        incl_coul=True)
 
 

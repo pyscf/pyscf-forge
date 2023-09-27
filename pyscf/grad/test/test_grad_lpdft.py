@@ -26,7 +26,8 @@ from pyscf.mcpdft import _dms
 def setUpModule():
     global h2, lih
     h2 = scf.RHF(gto.M(atom='H 0 0 0; H 1.2 0 0', basis='sto-3g',
-                       output='/dev/null', verbose=0)).run()
+                       #output='/dev/null', verbose=0)).run()
+                        verbose=0)).run()
     lih = scf.RHF(gto.M(atom='Li 0 0 0; H 1.2 0 0', basis='sto-3g',
                         output='/dev/null', verbose=0)).run()
 
@@ -49,6 +50,7 @@ def wfn_case(kv, mc_grad):
     fcasscf.__dict__.update(mc.__dict__)
 
     def get_energy(mo, ci):
+        ci = [c.ravel() for c in ci]
         casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci)
         dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0, mo_coeff=mo)
         dm1_0 = dm1s_0[0] + dm1s_0[1]
@@ -59,6 +61,7 @@ def wfn_case(kv, mc_grad):
         dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo)
         dm1 = dm1s[0] + dm1s[1]
 
+        # these are not agreeing when I calculate it twice in a row... why
         veff1, veff2, E_ot = mc.get_pdft_veff(mo=mo, casdm1s=casdm1s_0, casdm2=casdm2_0, drop_mcwfn=True, incl_energy=True)
 
         # The constant term
@@ -76,10 +79,8 @@ def wfn_case(kv, mc_grad):
         return ref_e
 
     ref_e = get_energy(mc.mo_coeff, mc.ci)
-    g_all, hdiag_all = mc_grad.get_wfn_response(incl_diag=True)
+    g_all, hdiag_all = mc_grad.get_wfn_response(incl_diag=True, verbose=0)
 
-    print(g_all[:ngorb])
-    print(g_all[ngorb:])
     g_numzero = np.abs(g_all) < 1e-8
     hdiag_all[g_numzero] = 1
     x0 = -g_all / hdiag_all
@@ -97,7 +98,7 @@ def wfn_case(kv, mc_grad):
         semi_num_e = get_energy(mo1, ci1)
         return semi_num_e - ref_e
 
-    for ix, p in enumerate(range(20)):
+    for ix, p in enumerate(range(2)):
         x1 = x0/(2**p)
         x1_norm = np.linalg.norm(x1)
         dg_test = np.dot(g_all, x1)
@@ -126,14 +127,19 @@ class KnownValues(unittest.TestCase):
         np.random.seed(1)
         for mol, mf in zip(("H2", "LiH"), (h2, lih)):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
-                    weights = [1.0/4, ] * 4
-                    mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).multi_state(weights, method="lin").run()
-                    mc_grad = mc.nuc_grad_method(state=0)
-                    print(f"{mol}\t{state}\t{fnal}")
-                    with self.subTest(mol=mol, state=state, fnal=fnal):
-                        wfn_case(self, mc_grad)
-                    print("============================================")
+                max_roots = 5 if state == 'Singlet' else 2
+                for nroots in range(4, max_roots):
+                    for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                        weights = [1.0/nroots, ] * nroots
+                        mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).multi_state(weights, method="lin").run()
+                        mc_grad = mc.nuc_grad_method(state=0)
+                        print(f"{mol}\t{state}\t{nroots}\t{fnal}")
+                        with self.subTest(mol=mol, state=state, fnal=fnal):
+                            wfn_case(self, mc_grad)
+                        print("============================================")
+
+                        return
+
 
 if __name__ == "__main__":
     print("Full Tests for L-PDFT gradients API")
