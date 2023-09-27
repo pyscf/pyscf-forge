@@ -69,7 +69,7 @@ class Gradients (sacasscf.Gradients):
 
         return super().kernel(**kwargs)
 
-    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, incl_diag=False, nlag=None, **kwargs):
+    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, nlag=None, **kwargs):
         if state is None: state = self.state
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
@@ -94,8 +94,8 @@ class Gradients (sacasscf.Gradients):
         fcasscf.get_hcore = self.base.get_lpdft_hcore
         fcasscf_sa.get_hcore = lambda: feff1
 
-        g_all_explicit, _, _, hdiag_state = newton_casscf.gen_g_hop(fcasscf, mo, ci[state], self.base.veff2, verbose)
-        g_all_implicit, _, _, hdiag_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)
+        g_all_explicit = newton_casscf.gen_g_hop(fcasscf, mo, ci[state], self.base.veff2, verbose)[0]
+        g_all_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)[0]
 
         #Debug
         log.debug("g_all explicit mo:\n{}".format(g_all_explicit[:self.ngorb]))
@@ -116,11 +116,6 @@ class Gradients (sacasscf.Gradients):
             gci_root = g_all_implicit[self.ngorb:][offs:][:ndet]
             if root == state:
                 gci_root += g_all_explicit[self.ngorb:]
-                # really just used for testing purposes
-                if incl_diag:
-                    hdiag = hdiag_implicit
-                    hdiag[:self.ngorb] += hdiag_state[:self.ngorb]
-                    hdiag[self.ngorb:][offs:][:ndet] += hdiag_state[self.ngorb:]
 
             assert(root in idx)
             ci_proj = np.asarray([ci[i].ravel() for i in idx])
@@ -132,11 +127,7 @@ class Gradients (sacasscf.Gradients):
         log.debug("g_mo component:\n{}".format(g_all[:self.ngorb]))
         log.debug("g_ci component:\n{}".format(g_all[self.ngorb:]))
 
-        if incl_diag:
-            return g_all, hdiag
-
-        else:
-            return g_all
+        return g_all
 
     def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, eris=None, mf_grad=None, feff1=None, feff2=None, **kwargs):
         if state is None: state = self.state
@@ -194,4 +185,4 @@ if __name__ == '__main__':
     mc.fix_spin_(ss=0) # often necessary!
     mc = mc.multi_state ([1.0/3,]*3, 'lin').run ()
     mc_grad = Gradients (mc)
-    de = np.stack ([mc_grad.kernel (state=i) for i in range (3)], axis=0)
+    de = np.stack ([mc_grad.kernel (state=i) for i in range (1)], axis=0)
