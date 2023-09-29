@@ -20,14 +20,12 @@ import unittest
 
 from pyscf import scf, gto, mcscf
 from pyscf import mcpdft
-from pyscf.mcpdft import _dms
 
 
 def setUpModule():
     global h2, lih
-    h2 = scf.RHF(gto.M(atom='H 0 0 0; H 1.2 0 0', basis='6-31G',
-                       #output='/dev/null', verbose=0)).run()
-                        verbose=0)).run()
+    h2 = scf.RHF(gto.M(atom='H 0 0 0; H 1.5 0 0', basis='sto-3g',
+                       output='lpdft.log', verbose=5)).run()
     lih = scf.RHF(gto.M(atom='Li 0 0 0; H 1.2 0 0', basis='sto-3g',
                         output='/dev/null', verbose=0)).run()
 
@@ -38,9 +36,44 @@ def tearDownModule():
     lih.mol.stdout.close()
     del h2, lih
 
+def get_de(scanner, delta):
+    xyz_forward = f'H 0 0 0; H {1.5+delta} 0 0'
+    xyz_backward = f'H 0 0 0; H {1.5-delta} 0 0'
+    scanner(xyz_forward)
+    e_forward = np.asarray(scanner.e_states)
+    scanner(xyz_backward)
+    e_backward = np.asarray(scanner.e_states)
+
+    return (e_forward - e_backward)/(2*delta)
+
 
 class KnownValues(unittest.TestCase):
-    pass
+    def test_h2_sto3g(self):
+
+        mc = mcpdft.CASSCF(h2, 'tPBE', 2, 2, grids_level=1)
+        nstates = 3
+        weights = [1.0 / nstates, ] * nstates
+
+        lpdft = mc.multi_state(weights, method='lin')
+        lpdft.run()
+
+        mc = mc.state_average(weights)
+        mc.run()
+
+        mc_grad = mc.nuc_grad_method()
+        lpdft_grad = lpdft.nuc_grad_method()
+
+        mc_scanner = mc.as_scanner()
+        lpdft_scanner = lpdft.as_scanner()
+        e = []
+        for p in range(10):
+            delta = 1/2**p
+            e.append(get_de(mc_scanner, delta))
+
+        print(e)
+        print(mc_grad.kernel(state=0))
+        #print(lpdft_grad.kernel(state=0))
+
 
 if __name__ == "__main__":
     print("Full Tests for L-PDFT gradients API")
