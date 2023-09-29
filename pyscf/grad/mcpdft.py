@@ -100,7 +100,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     dm_cas = reduce(np.dot, (mo_cas, casdm1, mo_cas.T))
 
     gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
-    dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
+    dme0 = mo_coeff @ (0.5*(gfock+gfock.T)) @ mo_coeff.T
     del gfock
 
     if atmlst is None:
@@ -288,7 +288,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
 
     de_nuc = mf_grad.grad_nuc(mol, atmlst)
 
-    logger.debug (mc, "MC-PDFT Hellmann-Feynman nuclear :\n{}".format (de_nuc))
+    logger.debug (mc, "MC-PDFT Hellmann-Feynman nuclear:\n{}".format (de_nuc))
     logger.debug (mc, "MC-PDFT Hellmann-Feynman hcore component:\n{}".format (
         de_hcore))
     logger.debug (mc, "MC-PDFT Hellmann-Feynman coulomb component:\n{}".format

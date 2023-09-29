@@ -16,12 +16,111 @@
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
 from pyscf import lib
+from pyscf.lib import logger, tag_array
 from pyscf.mcscf import casci, mc1step, newton_casscf
 from pyscf.grad import sacasscf
+from pyscf.mcscf.casci import cas_natorb
 
 from pyscf.mcpdft import _dms
+import pyscf.grad.mcpdft as mcpdft_grad
 
 import numpy as np
+
+def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=None, atmlst=None, mf_grad=None, verbose=None,
+                              max_memory=None):
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
+    if ci is None: ci = mc.ci
+    if mf_grad is None: mf_grad = mc._scf.nuc_grad_method()
+    if mc.frozen is not None:
+        raise NotImplementedError
+    if max_memory is None: max_memory = mc.max_memory
+    t0 = (logger.process_clock(), logger.perf_counter())
+
+    mol = mc.mol
+    ncore = mc.ncore
+    ncas = mc.ncas
+    nocc = ncore + ncas
+    nelecas = mc.nelecas
+    nao, nmo = mo_coeff.shape
+
+    mo_core = mo_coeff[:, :ncore]
+    mo_cas = mo_coeff[:, ncore:nocc]
+
+    dm_core = np.dot(mo_core, mo_core.T) * 2
+
+    # Specific state density
+    casdm1s =  mc.make_one_casdm1s(ci=ci, state=state)
+    casdm1 = casdm1s[0] + casdm1s[1]
+    casdm2 = mc.make_one_casdm2(ci=ci, state=state)
+    dm_cas = mo_cas @ casdm1 @ mo_cas.T
+
+    # The model-space density (or state-average density)
+    casdm1s_0, casdm2_0 = mc.get_casdm12_0()
+    casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
+    dm_cas_0 = mo_cas @ casdm1_0 @ mo_cas.T
+
+
+    if atmlst is None:
+        atmlst = range(mol.natm)
+
+    aoslices = mol.aoslice_by_atom()
+    de_hcore = np.zeros((len(atmlst), 3))
+    de_renorm = np.zeros((len(atmlst), 3))
+    de_coul = np.zeros((len(atmlst), 3))
+    de_xc = np.zeros((len(atmlst), 3))
+    de_grid = np.zeros((len(atmlst), 3))
+    de_wgt = np.zeros((len(atmlst), 3))
+
+    de = np.zeros((len(atmlst), 3))
+
+
+    gfock_expl = mcpdft_grad.gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_lpdft_hcore(), mc.veff2)
+    gfock_impl = mcpdft_grad.gfock_sym(mc, mo_coeff, casdm1_0, casdm2_0, feff1, feff2)
+    gfock = gfock_expl + gfock_impl
+
+    dme0 = mo_coeff @ (0.5 * (gfock + gfock.T)) @ mo_coeff.T
+    del gfock, gfock_impl, gfock_expl
+    t0 = logger.timer(mc, 'LPDFT HlFn gfock', *t0)
+
+    mo_coeff, ci, mo_occup = cas_natorb(mc, mo_coeff=mo_coeff, ci=ci)
+    mo_occ = mo_coeff[:, :nocc]
+    mo_core = mo_coeff[:, :ncore]
+    mo_cas = mo_coeff[:, ncore:nocc]
+
+    dm1 = dm_core + dm_cas
+    dm1_0 = dm_core + dm_cas_0
+    dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup)
+    dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff, mo_occ=mo_occup)
+
+    # Coulomb potential derivatives generated from zero-order density
+    vj = mf_grad.get_jk(dm=dm1_0)[0]
+    # h_pq derivatives
+    hcore_deriv = mf_grad.hcore_generator(mol)
+    s1 = mf_grad.get_ovlp(mol)
+
+    for k, ia in enumerate(atmlst):
+        p0, p1 = aoslices[ia][2:]
+        h1ao = hcore_deriv(ia)
+        de_hcore[k] += np.tensordot(h1ao, dm1)
+        de_renorm[k] -= np.tensordot(s1[:, p0:p1], dme0[p0:p1]) * 2
+        # d/dr (J^0_{pq} D_{pq} - 1/2 J^0_{pq}D_{pq})
+        de_coul[k] += 2*(np.tensordot(vj[:, p0:p1], dm1[p0:p1])*2 - np.tensordot(vj[:, p0:p1], dm1_0[p0:p1]))
+
+    de_nuc = mf_grad.grad_nuc(mol, atmlst)
+
+    logger.debug(mc, "L-PDFT Hellmann-Feynman nuclear:\n{}".format(de_nuc))
+    logger.debug(mc, "L-PDFT Hellmann-Feynman hcore component:\n{}".format(de_hcore))
+    logger.debug(mc, "MC-PDFT Hellmann-Feynman coulomb component:\n{}".format(de_coul))
+    logger.debug (mc, "MC-PDFT Hellmann-Feynman xc component:\n{}".format(de_xc))
+    logger.debug (mc, ("MC-PDFT Hellmann-Feynman quadrature point component:\n{}").format(de_grid))
+    logger.debug (mc, ("MC-PDFT Hellmann-Feynman quadrature weight component:\n{}").format(de_wgt))
+    logger.debug (mc, "MC-PDFT Hellmann-Feynman renorm component:\n{}".format(de_renorm))
+
+    de = de_nuc + de_hcore + de_coul + de_renorm + de_xc + de_grid + de_wgt
+
+    t1 = logger.timer(mc, 'L-PDFT HlFn total', *t0)
+
+    return de
 
 class Gradients (sacasscf.Gradients):
     def __init(self, pdft, state=None):
@@ -129,7 +228,8 @@ class Gradients (sacasscf.Gradients):
 
         return g_all
 
-    def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, eris=None, mf_grad=None, feff1=None, feff2=None, **kwargs):
+    def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, eris=None, mf_grad=None,
+                         feff1=None, feff2=None, **kwargs):
         if state is None: state = self.state
         if atmlst is None: atmlst = self.atmlst
         if verbose is None: verbose = self.verbose
@@ -138,8 +238,7 @@ class Gradients (sacasscf.Gradients):
         if (feff1 is None) or (feff2 is None):
             assert(False), kwargs
 
-        fcasscf = self.make_fcasscf(state)
-        raise NotImplementedError("BRUH")
+        return lpdft_HellmanFeynman_grad(self.base, self.base.otfnal, state, feff1=feff1, feff2=feff2, mo_coeff=mo, ci=ci, atmlst=atmlst, mf_grad=mf_grad, verbose=verbose)
 
 
     def get_otp_gradient_response(self, mo=None, ci=None, state=0):
