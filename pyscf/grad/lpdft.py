@@ -209,12 +209,18 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
             # grid correction shouldn't be added if they arent there
             k = full_atmlst[ia]
 
+            tmp_df = mcpdft_grad.xc_response(ot, (frho, fPi), rho_0, Pi_0, w0[ip0:ip1], moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_0_pack, ndpi, mo_cas)
+            tmp_dv = mcpdft_grad.xc_response(ot, (vrho, vPi), delta_rho, delta_Pi, w0[ip0:ip1], moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, delta_casdm2_pack, ndpi, mo_cas)
 
+            tmp_dvxc = tmp_df + tmp_dv
+            if k >= 0: de_grid[k] += 2*tmp_dvxc.sum(1)
+            dvxc -= tmp_dvxc
+            tmp_dvxc = tmp_df = tmp_dv = None
+            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {}').format(ia), *t1)
 
-            
-
-
-
+            rho_0 = Pi_0 = delta_rho = delta_Pi = None
+            eot = vot = fot = vrho = vPi = frho = fPi = aoval = moval_occ = None
+            gc.collect()
 
 
     for k, ia in enumerate(atmlst):

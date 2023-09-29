@@ -275,7 +275,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             tmp_dv = None
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {}').format (ia), *t1)
 
-            rho = Pi = eot = vot = vPi = aoval = moval_occ = moval_cas = None
+            rho = Pi = eot = vot = vPi = aoval = moval_occ = None
             gc.collect ()
 
     for k, ia in enumerate(atmlst):
