@@ -189,22 +189,30 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
 
             eot, vot, fot = ot.eval_ot(rho_0, Pi_0, weights=w0[ip0:ip1], dderiv=2, _unpack_vot=False)
             frho, fPi = contract_fot(ot, fot, rho_0, Pi_0, delta_rho, delta_Pi, unpack=True, vot_packed=vot)
-            logger.debug(mc, f"{vot}")
             vrho, vPi = unpack_vot(vot, rho_0, Pi_0)
-            logger.debug(mc, f"unpacked vrho\n{vrho}\nunpacked vPi\n{vPi}")
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} eval_ot').format (ia), *t1)
-
+            # See the equations...
+            eot += contract_vot(vot, delta_rho, delta_Pi)
             # See eq...
             frho += vrho
             fPi += vPi
+            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} eval_ot').format (ia), *t1)
 
-            packed = contract_vot(vot, delta_rho, delta_Pi)
-            unpacked = contract_vot((vrho, vPi), delta_rho, delta_Pi, packed=False)
+            puvx_mem = 2*ndpi*(ip1-ip0)*ncas*ncas*8/1e6
+            remaining_mem = max_memory - current_memory()[0]
+            logger.info(mc, ('L-PDFT gradient memory note: working on {} grid points: estimated puvx usage = {:.1f} of {:.1f} remaining MB').format((ip1-ip0), puvx_mem, remaining_mem))
 
-            # need to debug this!!!!!!
-            print(max(packed-unpacked))
+            # Weight response
+            de_wgt += np.tensordot(eot, w1[atmlst,...,ip0:ip1], axes=(0,2))
+            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} weight response').format(ia), *t1)
 
-            eot += contract_vot(vot, delta_rho, delta_Pi)
+            # Find the atoms that are part of the atomlist
+            # grid correction shouldn't be added if they arent there
+            k = full_atmlst[ia]
+
+
+
+            
+
 
 
 
@@ -392,7 +400,8 @@ if __name__ == '__main__':
     mol = gto.M (atom=xyz, basis='6-31g', symmetry=False, output='lpdft.log',
         verbose=5)
     mf = scf.RHF (mol).run ()
-    mc = mcpdft.CASSCF (mf, 'tPBE', 4, 4)
+    #mc = mcpdft.CASSCF (mf, 'tLDA,VWN3', 4, 4)
+    mc = mcpdft.CASSCF (mf, 'ftPBE', 4, 4)
     mc.fix_spin_(ss=0) # often necessary!
     mc = mc.multi_state ([1.0/3,]*3, 'lin').run ()
     mc_grad = Gradients (mc)

@@ -256,12 +256,12 @@ def _contract_packed_vot(vot_packed, rho, Pi):
     '''
     cvot = vot_packed[0] * rho[0] + vot_packed[1] * Pi[0]
     if len(vot_packed) > 2:
-        drho2 = (rho[1:4, :] * rho[1:4, :]).sum(0)
+        drho2 = 2*(rho[1:4, :] * rho[1:4, :]).sum(0)
         cvot += vot_packed[2] * drho2
 
     if len(vot_packed) > 3:
         drhodPi = (rho[1:4] * Pi[1:4, :]).sum(0)
-        dPi2 = (Pi[1:4, :] * Pi[1:4, :]).sum(0)
+        dPi2 = 2*(Pi[1:4, :] * Pi[1:4, :]).sum(0)
         cvot += vot_packed[3] * drhodPi + vot_packed[4] * dPi2
 
     return cvot

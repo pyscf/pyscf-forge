@@ -66,6 +66,37 @@ def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, eris):
     return gfock
 
 
+def xc_response(ot, vot, rho, Pi, weights, moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_pack, ndpi, mo_cas):
+    vrho, vPi = vot
+
+    # Vpq + Vpqrs * Drs ; I'm not sure why the list comprehension down
+    # there doesn't break ao's stride order but I'm not complaining
+    vrho = _contract_eff_rho(vPi, rho.sum(0), add_eff_rho=vrho)
+    tmp_dv = np.stack([ot.get_veff_1body(rho, Pi, [ao_i, moval_occ], weights, kern=vrho) for ao_i in aoval], axis=0)
+    tmp_dv = (tmp_dv * mo_occ[None,:,:] * mo_occup[None, None,:nocc]).sum(2)
+
+    # Vpuvx * Lpuvx ; remember the stupid slowest->fastest->medium
+    # stride order of the ao grid arrays
+    moval_cas = np.ascontiguousarray(moval_occ[..., ncore:].transpose(0,2,1)).transpose(0,2,1)
+
+    tmp_dv1 = ot.get_veff_2body_kl(rho, Pi, moval_cas, moval_cas, weights, symm=True, kern=vPi)
+    # tmp_dv.shape = ndpi,ngrids,ncas*(ncas+1)//2
+    tmp_dv1 = np.tensordot(tmp_dv1, casdm2_pack, axes=(-1,-1))
+    # tmp_dv.shape = ndpi, ngrids, ncas, ncas
+    tmp_dv1[0] = (tmp_dv1[:ndpi] * moval_cas[:ndpi, :, None, :]).sum(0)
+    # Chain and product rule
+    tmp_dv1[1:ndpi] *= moval_cas[0, :, None, :]
+    # Chain and product rule
+    tmp_dv1 = tmp_dv1.sum(-1)
+    # tmp_dv.shape = ndpi, ngrids, ncas
+    tmp_dv1 = np.tensordot(aoval[:, :ndpi], tmp_dv1, axes=((1, 2), (0, 1)))
+    # tmp_dv.shape = comp, nao (orb), ncas (dm2)
+    tmp_dv1 = np.einsum('cpu,pu->cp', tmp_dv1, mo_cas)
+    # tmp_dv.shape = comp, ncas
+
+    return tmp_dv + tmp_dv1
+
+
 def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         atmlst=None, mf_grad=None, verbose=None, max_memory=None,
         auxbasis_response=False):
@@ -118,7 +149,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     t0 = logger.timer (mc, 'PDFT HlFn gfock', *t0)
     mo_coeff, ci, mo_occup = cas_natorb (mc, mo_coeff=mo_coeff, ci=ci)
     mo_occ = mo_coeff[:,:nocc]
-    mo_core = mo_coeff[:,:ncore]
     mo_cas = mo_coeff[:,ncore:nocc]
     dm1 = dm_core + dm_cas
     dm1 = tag_array (dm1, mo_coeff=mo_coeff, mo_occ=mo_occup)
@@ -158,7 +188,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         ncas)
     casdm2_pack = pack_tril (casdm2_pack).reshape (ncas, ncas, -1)
     casdm2_pack[:,:,diag_idx] *= 0.5
-    diag_idx = np.arange(ncore, dtype=np.int_) * (ncore + 1) # for pqii
     full_atmlst = -np.ones (mol.natm, dtype=np.int_)
     t1 = logger.timer (mc, 'PDFT HlFn quadrature setup', *t0)
     for k, ia in enumerate (atmlst):
@@ -167,6 +196,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     ndao = (1, 4)[ot.dens_deriv]
     ndpi = (1, 4)[ot.Pi_deriv]
     ncols = 1.05 * 3 * (ndao * (nao + nocc) + max(ndao * nao, ndpi * ncas * ncas))
+
     for ia, (coords, w0, w1) in enumerate (rks_grad.grids_response_cc (
             ot.grids)):
         # For the xc potential derivative, I need every grid point in the
@@ -219,7 +249,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} ao grid '
                 'reshape').format (ia), *t1)
             eot, vot = ot.eval_ot (rho, Pi, weights=w0[ip0:ip1])[:2]
-            vrho, vPi = vot
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} '
                 'eval_ot').format (ia), *t1)
             puvx_mem = 2 * ndpi * (ip1-ip0) * ncas * ncas * 8 / 1e6
@@ -238,44 +267,13 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             # The last stuff to vectorize is in get_veff_2body!
             k = full_atmlst[ia]
 
-            # Vpq + Vpqrs * Drs ; I'm not sure why the list comprehension down
-            # there doesn't break ao's stride order but I'm not complaining
-            vrho = _contract_eff_rho (vPi, rho.sum (0), add_eff_rho=vrho)
-            tmp_dv = np.stack ([ot.get_veff_1body (rho, Pi, [ao_i, moval_occ],
-                w0[ip0:ip1], kern=vrho) for ao_i in aoval], axis=0)
-            tmp_dv = (tmp_dv * mo_occ[None,:,:]
-                * mo_occup[None,None,:nocc]).sum (2)
-            if k >= 0: de_grid[k] += 2 * tmp_dv.sum (1) # Grid response
-            dvxc -= tmp_dv # XC response
-            vrho = tmp_dv = None
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} Vpq + Vpqrs '
-                '* Drs').format (ia), *t1)
+            tmp_dv = xc_response(ot, vot, rho, Pi, w0[ip0:ip1], moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_pack, ndpi, mo_cas)
 
-            # Vpuvx * Lpuvx ; remember the stupid slowest->fastest->medium
-            # stride order of the ao grid arrays
-            moval_cas = moval_occ = np.ascontiguousarray (
-                moval_occ[...,ncore:].transpose (0,2,1)).transpose (0,2,1)
-            tmp_dv = ot.get_veff_2body_kl (rho, Pi, moval_cas, moval_cas,
-                w0[ip0:ip1], symm=True, kern=vPi)
-            # tmp_dv.shape = ndpi,ngrids,ncas*(ncas+1)//2
-            tmp_dv = np.tensordot (tmp_dv, casdm2_pack, axes=(-1,-1))
-            # tmp_dv.shape = ndpi, ngrids, ncas, ncas
-            tmp_dv[0] = (tmp_dv[:ndpi] * moval_cas[:ndpi,:,None,:]).sum (0)
-            # Chain and product rule
-            tmp_dv[1:ndpi] *= moval_cas[0,:,None,:]
-            # Chain and product rule
-            tmp_dv = tmp_dv.sum (-1)
-            # tmp_dv.shape = ndpi, ngrids, ncas
-            tmp_dv = np.tensordot (aoval[:,:ndpi], tmp_dv, axes=((1,2),(0,1)))
-            # tmp_dv.shape = comp, nao (orb), ncas (dm2)
-            tmp_dv = np.einsum ('cpu,pu->cp', tmp_dv, mo_cas)
-            # tmp_dv.shape = comp, ncas
-            # it's ok to not vectorize this b/c the quadrature grid is gone
-            if k >= 0: de_grid[k] += 2 * tmp_dv.sum (1) # Grid response
-            dvxc -= tmp_dv # XC response
+            if k >=0: de_grid[k] += 2*tmp_dv.sum(1) # Grid response
+            dvxc -= tmp_dv #XC response
+
             tmp_dv = None
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} Vpuvx * '
-                'Lpuvx').format (ia), *t1)
+            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {}').format (ia), *t1)
 
             rho = Pi = eot = vot = vPi = aoval = moval_occ = moval_cas = None
             gc.collect ()
