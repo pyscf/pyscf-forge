@@ -24,7 +24,7 @@ from pyscf.grad import sacasscf
 from pyscf.mcscf.casci import cas_natorb
 
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
-from pyscf.mcpdft.tfnal_derivs import contract_fot, unpack_vot
+from pyscf.mcpdft.tfnal_derivs import contract_fot, unpack_vot, contract_vot
 from pyscf.mcpdft import _dms
 import pyscf.grad.mcpdft as mcpdft_grad
 
@@ -181,15 +181,32 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
 
             moval_occ = _grid_ao2mo(mol, aoval, mo_occ, mask)
             t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao2mo grids').format(ia), *t1)
+
             aoval = np.ascontiguousarray([ao[ix].transpose(0, 2, 1)
                                           for ix in idx[:, :ndao]]).transpose(0, 1, 3, 2)
             ao = None
             t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao grid reshape').format(ia), *t1)
+
             eot, vot, fot = ot.eval_ot(rho_0, Pi_0, weights=w0[ip0:ip1], dderiv=2, _unpack_vot=False)
             frho, fPi = contract_fot(ot, fot, rho_0, Pi_0, delta_rho, delta_Pi, unpack=True, vot_packed=vot)
-            vot = unpack_vot(vot, rho_0, Pi_0)
-
+            logger.debug(mc, f"{vot}")
+            vrho, vPi = unpack_vot(vot, rho_0, Pi_0)
+            logger.debug(mc, f"unpacked vrho\n{vrho}\nunpacked vPi\n{vPi}")
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} eval_ot').format (ia), *t1)
+
+            # See eq...
+            frho += vrho
+            fPi += vPi
+
+            packed = contract_vot(vot, delta_rho, delta_Pi)
+            unpacked = contract_vot((vrho, vPi), delta_rho, delta_Pi, packed=False)
+
+            # need to debug this!!!!!!
+            print(max(packed-unpacked))
+
+            eot += contract_vot(vot, delta_rho, delta_Pi)
+
+
 
 
     for k, ia in enumerate(atmlst):
