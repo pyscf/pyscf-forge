@@ -163,6 +163,10 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     t1 = logger.timer (mc, 'PDFT HlFn quadrature setup', *t0)
     for k, ia in enumerate (atmlst):
         full_atmlst[ia] = k
+
+    ndao = (1, 4)[ot.dens_deriv]
+    ndpi = (1, 4)[ot.Pi_deriv]
+    ncols = 1.05 * 3 * (ndao * (nao + nocc) + max(ndao * nao, ndpi * ncas * ncas))
     for ia, (coords, w0, w1) in enumerate (rks_grad.grids_response_cc (
             ot.grids)):
         # For the xc potential derivative, I need every grid point in the
@@ -173,10 +177,8 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         # how "mask" works yet or how else I could do this.
         gc.collect ()
         ngrids = coords.shape[0]
-        ndao = (1,4)[ot.dens_deriv]
-        ndpi = (1,4)[ot.Pi_deriv]
-        ncols = 1.05 * 3 * (ndao*(nao+nocc) + max(ndao*nao,ndpi*ncas*ncas))
-        remaining_floats = (max_memory - current_memory ()[0]) * 1e6 / 8
+
+        remaining_floats = (max_memory - current_memory()[0]) * 1e6 / 8
         blksize = int (remaining_floats / (ncols*BLKSIZE)) * BLKSIZE
         blksize = max (BLKSIZE, min (blksize, ngrids, BLKSIZE*1200))
         t1 = logger.timer (mc, 'PDFT HlFn quadrature atom {} mask and memory '

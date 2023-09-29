@@ -16,15 +16,22 @@
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
 from pyscf import lib
-from pyscf.lib import logger, tag_array
+from pyscf.grad import rks as rks_grad
+from pyscf.dft import gen_grid
+from pyscf.lib import logger, tag_array, pack_tril, current_memory
 from pyscf.mcscf import casci, mc1step, newton_casscf
 from pyscf.grad import sacasscf
 from pyscf.mcscf.casci import cas_natorb
 
+from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
+from pyscf.mcpdft.tfnal_derivs import contract_fot, unpack_vot
 from pyscf.mcpdft import _dms
 import pyscf.grad.mcpdft as mcpdft_grad
 
 import numpy as np
+import gc
+
+BLKSIZE = gen_grid.BLKSIZE
 
 def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=None, atmlst=None, mf_grad=None, verbose=None,
                               max_memory=None):
@@ -98,6 +105,93 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     hcore_deriv = mf_grad.hcore_generator(mol)
     s1 = mf_grad.get_ovlp(mol)
 
+    # Now for the gradient of on-top energy, and potentials
+    cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
+    cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
+    delta_dm1 = dm1-dm1_0
+    delta_cascm2 = cascm2-cascm2_0
+
+    dm1_0 = tag_array(dm1_0, mo_coeff=mo_occ, mo_occ=mo_occup[:nocc])
+    delta_dm1 = tag_array(delta_dm1, mo_coeff=mo_occ, mo_occ=mo_occup[:nocc])
+    make_rho_0 = ot._numint._gen_rho_evaluator(mol, dm1_0, 1)[0]
+    make_delta_rho = ot._numint._gen_rho_evaluator(mol, delta_dm1, 1)[0]
+
+    dvxc = np.zeros((3, nao))
+
+    idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_)
+    # For addressing particular ao derivatives
+    if ot.xctype == 'LDA': idx = idx[:, 0:1]  # For LDAs, no second derivatives
+    diag_idx = np.arange(ncas)  # for puvx
+    diag_idx = diag_idx * (diag_idx + 1) // 2 + diag_idx
+
+    casdm2_0_pack = (cascm2_0 + cascm2_0.transpose(0,1,3,2)).reshape(ncas**2, ncas, ncas)
+    casdm2_0_pack = pack_tril(casdm2_0_pack).reshape(ncas, ncas, -1)
+    casdm2_0_pack[:, :, diag_idx] *= 0.5
+
+    delta_casdm2_pack = (delta_cascm2 + delta_cascm2.transpose(0,1,3,2)).reshape(ncas**2, ncas, ncas)
+    delta_casdm2_pack = pack_tril(delta_casdm2_pack).reshape(ncas, ncas, -1)
+    delta_casdm2_pack[:, :, diag_idx] *= 0.5
+
+    diag_idx = np.arange(ncore, dtype=np.int_) * (ncore + 1)  # for pqii
+
+    full_atmlst = -np.ones(mol.natm, dtype=np.int_)
+    for k, ia in enumerate(atmlst):
+        full_atmlst[ia] = k
+
+    t1 = logger.timer(mc, 'L-PDFT HlFn quadrature setup', *t0)
+
+    ndao = (1, 4)[ot.dens_deriv]
+    ndpi = (1, 4)[ot.Pi_deriv]
+    ncols = 1.05 * 3 * (ndao * nao + nocc) + max(ndao * nao, ndpi * ncas * ncas)
+    # I have no idea if this is actually the correct number of columns, but I have a feeling it is not since I should be accounting for the extra rows from feff stuff...
+
+    for ia, (coords, w0, w1) in enumerate(rks_grad.grids_response_cc(ot.grids)):
+        gc.collect()
+        ngrids = coords.shape[0]
+        remaining_floats = (max_memory - current_memory()[0]) * 1e6 / 8
+        blksize = int(remaining_floats/(ncols*BLKSIZE)) * BLKSIZE
+        blksize = max(BLKSIZE, min(blksize, ngrids, BLKSIZE*1200))
+        t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} mask and memory setup'.format(ia), *t1)
+        for ip0 in range(0, ngrids, blksize):
+            ip1 = min(ngrids, ip0+blksize)
+            mask = gen_grid.make_mask(mol, coords[ip0:ip1])
+            logger.info(mc, ('L-PDFT gradient atom {} slice {}-{} of {} total').format(ia, ip0, ip1, ngrids))
+            ao = ot._numint.eval_ao(mol, coords[ip0:ip1], deriv=ot.dens_deriv+1, non0tab=mask)
+
+            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao grids').format(ia), *t1)
+
+            if ot.xctype == "LDA":
+                aoval = ao[0]
+
+            if ot.xctype == "GGA":
+                aoval = ao[:4]
+
+            rho_0 = make_rho_0(0, aoval, mask, ot.xctype)/2.0
+            rho_0 = np.stack((rho_0,)*2, axis=0)
+            delta_rho = make_delta_rho(0, aoval, mask, ot.xctype)/2.0
+            delta_rho = np.stack((delta_rho,) * 2, axis=0)
+            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} rho calc').format(ia), *t1)
+
+            Pi_0 = get_ontop_pair_density(ot, rho_0, aoval, cascm2_0, mo_cas, ot.dens_deriv, mask)
+            delta_Pi = get_ontop_pair_density(ot, delta_rho, aoval, delta_cascm2, mo_cas, ot.dens_deriv, mask)
+            t1 = logger.timer (mc, ('L-PDFT HlFn quadrature atom {} Pi calc').format (ia), *t1)
+
+            if ot.xctype == "LDA":
+                aoval = ao[:1]
+
+            moval_occ = _grid_ao2mo(mol, aoval, mo_occ, mask)
+            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao2mo grids').format(ia), *t1)
+            aoval = np.ascontiguousarray([ao[ix].transpose(0, 2, 1)
+                                          for ix in idx[:, :ndao]]).transpose(0, 1, 3, 2)
+            ao = None
+            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao grid reshape').format(ia), *t1)
+            eot, vot, fot = ot.eval_ot(rho_0, Pi_0, weights=w0[ip0:ip1], dderiv=2, _unpack_vot=False)
+            frho, fPi = contract_fot(ot, fot, rho_0, Pi_0, delta_rho, delta_Pi, unpack=True, vot_packed=vot)
+            vot = unpack_vot(vot, rho_0, Pi_0)
+
+            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} eval_ot').format (ia), *t1)
+
+
     for k, ia in enumerate(atmlst):
         p0, p1 = aoslices[ia][2:]
         h1ao = hcore_deriv(ia)
@@ -105,6 +199,7 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
         de_renorm[k] -= np.tensordot(s1[:, p0:p1], dme0[p0:p1]) * 2
         # d/dr (J^0_{pq} D_{pq} - 1/2 J^0_{pq}D_{pq})
         de_coul[k] += 2*(np.tensordot(vj[:, p0:p1], dm1[p0:p1])*2 - np.tensordot(vj[:, p0:p1], dm1_0[p0:p1]))
+        de_xc[k] += dvxc[:,p0:p1].sum(1) * 2
 
     de_nuc = mf_grad.grad_nuc(mol, atmlst)
 

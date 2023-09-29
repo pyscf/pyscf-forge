@@ -152,6 +152,20 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     return eot, vot, fot
 
 
+def unpack_vot(packed, rho, Pi):
+    if rho.ndim == 2: rho = rho[:, None, :]
+    if Pi.ndim == 1: Pi = Pi[None, :]
+    assert (rho.shape[0] == 2)
+
+    nderiv = rho.shape[1]
+    nderiv_Pi = Pi.shape[0]
+
+    rho_tot = rho.sum(0)
+    rho_deriv = rho_tot[1:4, :] if nderiv > 1 else None
+    Pi_deriv = Pi[1:4, :] if nderiv > 1 else None
+    return _unpack_sigma_vector(packed, deriv1=rho_deriv, deriv2=Pi_deriv)
+
+
 def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     # For GGAs, libxc differentiates with respect to
     #   sigma[0] = nabla^2 rhoa
