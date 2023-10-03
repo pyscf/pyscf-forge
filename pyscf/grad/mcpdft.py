@@ -97,6 +97,37 @@ def xc_response(ot, vot, rho, Pi, weights, moval_occ, aoval, mo_occ, mo_occup, n
     return tmp_dv + tmp_dv1
 
 
+def pack_casdm2(cascm2, ncas):
+    diag_idx = np.arange(ncas)  # for puvx
+    diag_idx = diag_idx * (diag_idx+1) // 2 + diag_idx
+
+    casdm2_pack = (cascm2 + cascm2.transpose(0, 1, 3, 2)).reshape(ncas**2, ncas, ncas)
+    casdm2_pack = pack_tril(casdm2_pack).reshape(ncas, ncas, -1)
+    casdm2_pack[:, :, diag_idx] *= 0.5
+    return casdm2_pack
+
+def sum_terms(mf_grad, mol, atmlst,dm1, gfock, coul_term, dvxc):
+    de_hcore = np.zeros((len(atmlst), 3))
+    de_renorm = np.zeros((len(atmlst), 3))
+    de_coul = np.zeros((len(atmlst), 3))
+    de_xc = np.zeros((len(atmlst), 3))
+
+    aoslices = mol.aoslice_by_atom()
+    hcore_deriv = mf_grad.hcore_generator(mol)
+    s1 = mf_grad.get_ovlp(mol)
+
+    for k, ia in enumerate(atmlst):
+        p0, p1 = aoslices[ia][2:]
+        h1ao = hcore_deriv(ia)
+        de_hcore[k] += np.tensordot(h1ao, dm1)
+        de_renorm[k] -= np.tensordot(s1[:, p0:p1], gfock[p0:p1])*2
+        de_coul[k] += coul_term(p0, p1)
+        de_xc[k] += dvxc[:, p0:p1].sum(1)*2
+
+    de_nuc = mf_grad.grad_nuc(mol, atmlst)
+
+    return de_hcore, de_coul, de_xc, de_nuc, de_renorm,
+
 def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         atmlst=None, mf_grad=None, verbose=None, max_memory=None,
         auxbasis_response=False):
@@ -136,11 +167,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
 
     if atmlst is None:
         atmlst = range(mol.natm)
-    aoslices = mol.aoslice_by_atom()
-    de_hcore = np.zeros ((len(atmlst),3))
-    de_renorm = np.zeros ((len(atmlst),3))
-    de_coul = np.zeros ((len(atmlst),3))
-    de_xc = np.zeros ((len(atmlst),3))
+
     de_grid = np.zeros ((len(atmlst),3))
     de_wgt = np.zeros ((len(atmlst),3))
     de_aux = np.zeros ((len(atmlst),3))
@@ -155,8 +182,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
 
     # MRH: vhf1c and vhf1a should be the TRUE vj_c and vj_a (no vk!)
     vj = mf_grad.get_jk (dm=dm1)[0]
-    hcore_deriv = mf_grad.hcore_generator(mol)
-    s1 = mf_grad.get_ovlp(mol)
     if auxbasis_response:
         de_aux += np.squeeze (vj.aux)
 
@@ -183,13 +208,11 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_)
     # For addressing particular ao derivatives
     if ot.xctype == 'LDA': idx = idx[:,0:1] # For LDAs, no second derivatives
-    diag_idx = np.arange(ncas) # for puvx
-    diag_idx = diag_idx * (diag_idx+1) // 2 + diag_idx
-    casdm2_pack = (twoCDM + twoCDM.transpose (0,1,3,2)).reshape (ncas**2, ncas,
-        ncas)
-    casdm2_pack = pack_tril (casdm2_pack).reshape (ncas, ncas, -1)
-    casdm2_pack[:,:,diag_idx] *= 0.5
+
+
+    casdm2_pack = pack_casdm2(twoCDM, ncas)
     full_atmlst = -np.ones (mol.natm, dtype=np.int_)
+
     t1 = logger.timer (mc, 'PDFT HlFn quadrature setup', *t0)
     for k, ia in enumerate (atmlst):
         full_atmlst[ia] = k
@@ -279,15 +302,11 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             rho = Pi = eot = vot = vPi = aoval = moval_occ = None
             gc.collect ()
 
-    for k, ia in enumerate(atmlst):
-        p0, p1 = aoslices[ia][2:]
-        h1ao = hcore_deriv(ia) # MRH: this should be the TRUE hcore
-        de_hcore[k] += np.tensordot(h1ao, dm1)
-        de_renorm[k] -= np.tensordot(s1[:,p0:p1], dme0[p0:p1]) * 2
-        de_coul[k] += np.tensordot(vj[:,p0:p1], dm1[p0:p1])*2
-        de_xc[k] += dvxc[:,p0:p1].sum (1) * 2 # All grids; only some orbitals
+    def coul_term(p0, p1):
+        return np.tensordot(vj[:,p0:p1], dm1[p0:p1])*2
 
-    de_nuc = mf_grad.grad_nuc(mol, atmlst)
+    de_hcore, de_coul, de_xc, de_nuc, de_renorm = sum_terms(mf_grad, mol, atmlst, dm1, dme0, coul_term,
+                                                                        dvxc)
 
     logger.debug (mc, "MC-PDFT Hellmann-Feynman nuclear:\n{}".format (de_nuc))
     logger.debug (mc, "MC-PDFT Hellmann-Feynman hcore component:\n{}".format (

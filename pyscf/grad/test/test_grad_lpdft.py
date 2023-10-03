@@ -68,7 +68,7 @@ class KnownValues(unittest.TestCase):
         mc_scanner = mc.as_scanner()
         lpdft_scanner = lpdft.as_scanner()
         e = []
-        for p in range(10, 20):
+        for p in range(19, 20):
             delta = 1.0/2**p
             e.append(get_de(mc_scanner, delta))
 
@@ -78,7 +78,7 @@ class KnownValues(unittest.TestCase):
 
         print("LPDFT STUFF NOW")
         e = []
-        for p in range(10, 20):
+        for p in range(19, 20):
             delta = 1.0/2**p
             e.append(get_de(lpdft_scanner, delta))
 
