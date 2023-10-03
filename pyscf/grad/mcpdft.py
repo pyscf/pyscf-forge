@@ -144,14 +144,15 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     de_grid = np.zeros ((len(atmlst),3))
     de_wgt = np.zeros ((len(atmlst),3))
     de_aux = np.zeros ((len(atmlst),3))
-    de = np.zeros ((len(atmlst),3))
 
     t0 = logger.timer (mc, 'PDFT HlFn gfock', *t0)
     mo_coeff, ci, mo_occup = cas_natorb (mc, mo_coeff=mo_coeff, ci=ci)
     mo_occ = mo_coeff[:,:nocc]
     mo_cas = mo_coeff[:,ncore:nocc]
+
     dm1 = dm_core + dm_cas
     dm1 = tag_array (dm1, mo_coeff=mo_coeff, mo_occ=mo_occup)
+
     # MRH: vhf1c and vhf1a should be the TRUE vj_c and vj_a (no vk!)
     vj = mf_grad.get_jk (dm=dm1)[0]
     hcore_deriv = mf_grad.hcore_generator(mol)

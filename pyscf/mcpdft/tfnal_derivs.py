@@ -194,18 +194,8 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
             unp2[1:4] = (2 * deriv2 * packed[4]) + (deriv1 * packed[3])
     return unp1, unp2
 
-def contract_vot(vot, rho, Pi, packed=True):
-    if rho.shape[0] == 2: rho = rho.sum(0)
-    if rho.ndim == 1: rho = rho[None, :]
-    if Pi.ndim == 1: Pi = Pi[None, :]
 
-    if packed:
-        return _contract_packed_vot(vot, rho, Pi)
-
-    else:
-        return _contract_unpacked_vot(vot, rho, Pi)
-
-def _contract_unpacked_vot(vot, rho, Pi):
+def contract_vot(vrho, vPi, rho, Pi):
     '''Evalute the product of unpacked vot with perturbed density, pair density, and derivatives.
 
         Args:
@@ -225,44 +215,16 @@ def _contract_unpacked_vot(vot, rho, Pi):
             cvot : ndarray of shape (ngrids)
                 product of vot wrt (density, pair density) and their derivatives
         '''
-    vrho, vPi = vot
-    cvot = vrho[0] * rho[0] + vPi[0] * Pi[0]
+    if rho.shape[0] == 2: rho = rho.sum(0)
+    if rho.ndim == 1: rho = rho[None, :]
+    if Pi.ndim == 1: Pi = Pi[None, :]
+
+    cvot = vrho[0] * rho[0] + 0.5*vPi[0] * Pi[0]
     if len(vrho) > 1:
         cvot += (vrho[1:4,:] * rho[1:4, :]).sum(0)
 
     if len(vPi) > 1:
-        cvot += (vPi[1:4, :] * Pi[1:4, :]).sum(0)
-
-    return cvot
-
-def _contract_packed_vot(vot_packed, rho, Pi):
-    '''Evalute the product of packed vot with perturbed density, pair density, and derivatives.
-
-    Args:
-        vot_packed : ndarray of shape (*,ngrids)
-            Vector elements corresponding to the basis
-            (rho, Pi, |drho|^2, drho'.dPi, |dPi|^2) stopping at Pi (2
-            elements) for *tLDA and |drho|^2 (3 elements) for tGGA.
-        rho : ndarray of shape (*,ngrids)
-            containing density [and derivatives]
-            the density contracted with vot
-        Pi : ndarray with shape (*,ngrids)
-            containing on-top pair density [and derivatives]
-            the density contracted with vot
-
-    Returns:
-        cvot : ndarray of shape (ngrids)
-            product of vot_packed wrt (density, pair density) and their derivatives
-    '''
-    cvot = vot_packed[0] * rho[0] + vot_packed[1] * Pi[0]
-    if len(vot_packed) > 2:
-        drho2 = 2*(rho[1:4, :] * rho[1:4, :]).sum(0)
-        cvot += vot_packed[2] * drho2
-
-    if len(vot_packed) > 3:
-        drhodPi = (rho[1:4] * Pi[1:4, :]).sum(0)
-        dPi2 = 2*(Pi[1:4, :] * Pi[1:4, :]).sum(0)
-        cvot += vot_packed[3] * drhodPi + vot_packed[4] * dPi2
+        cvot += 0.5*(vPi[1:4, :] * Pi[1:4, :]).sum(0)
 
     return cvot
 

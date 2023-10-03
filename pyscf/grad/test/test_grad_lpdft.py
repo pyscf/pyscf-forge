@@ -20,6 +20,7 @@ import unittest
 
 from pyscf import scf, gto, mcscf
 from pyscf import mcpdft
+from pyscf.data.nist import BOHR
 
 
 def setUpModule():
@@ -49,9 +50,10 @@ def get_de(scanner, delta):
 
 class KnownValues(unittest.TestCase):
     def test_h2_sto3g(self):
+        # There is a problem with Lagrange multiplier stuff with tPbe and 4 states for L-PDFT...
 
-        mc = mcpdft.CASSCF(h2, 'tPBE', 2, 2, grids_level=1)
-        nstates = 3
+        mc = mcpdft.CASSCF(h2, 'ftPBE', 2, 2, grids_level=1)
+        nstates = 4
         weights = [1.0 / nstates, ] * nstates
 
         lpdft = mc.multi_state(weights, method='lin')
@@ -66,13 +68,23 @@ class KnownValues(unittest.TestCase):
         mc_scanner = mc.as_scanner()
         lpdft_scanner = lpdft.as_scanner()
         e = []
-        for p in range(10):
-            delta = 1/2**p
+        for p in range(10, 20):
+            delta = 1.0/2**p
             e.append(get_de(mc_scanner, delta))
 
-        print(e)
-        print(mc_grad.kernel(state=0))
-        #print(lpdft_grad.kernel(state=0))
+        e = np.array(e)
+        print(e[-1, 0])
+        print(mc_grad.kernel(state=0)/BOHR)
+
+        print("LPDFT STUFF NOW")
+        e = []
+        for p in range(10, 20):
+            delta = 1.0/2**p
+            e.append(get_de(lpdft_scanner, delta))
+
+        e = np.array(e)
+        print(e[-1, 0])
+        print(lpdft_grad.kernel(state=0)/BOHR)
 
 
 if __name__ == "__main__":
