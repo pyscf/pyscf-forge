@@ -195,7 +195,7 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     return unp1, unp2
 
 
-def contract_vot(vrho, vPi, rho, Pi):
+def contract_vot(vot, rho, Pi):
     '''Evalute the product of unpacked vot with perturbed density, pair density, and derivatives.
 
         Args:
@@ -215,16 +215,17 @@ def contract_vot(vrho, vPi, rho, Pi):
             cvot : ndarray of shape (ngrids)
                 product of vot wrt (density, pair density) and their derivatives
         '''
+    vrho, vPi = vot
     if rho.shape[0] == 2: rho = rho.sum(0)
     if rho.ndim == 1: rho = rho[None, :]
     if Pi.ndim == 1: Pi = Pi[None, :]
 
-    cvot = vrho[0] * rho[0] + 0.5*vPi[0] * Pi[0]
+    cvot = vrho[0] * rho[0] + vPi[0] * Pi[0]
     if len(vrho) > 1:
         cvot += (vrho[1:4,:] * rho[1:4, :]).sum(0)
 
     if len(vPi) > 1:
-        cvot += 0.5*(vPi[1:4, :] * Pi[1:4, :]).sum(0)
+        cvot += (vPi[1:4, :] * Pi[1:4, :]).sum(0)
 
     return cvot
 

@@ -24,7 +24,6 @@ from pyscf.mcpdft.pdft_eff import _contract_eff_rho
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
 from pyscf.mcpdft import _dms
 
-from functools import reduce
 from itertools import product
 from scipy import linalg
 import numpy as np
@@ -53,14 +52,14 @@ def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, eris):
 
     for i in range(nmo):
         jbuf = eris.ppaa[i]
-        aapa[:,:,i,:] = jbuf[ncore:nocc,:,:]
+        aapa[:, :, i, :] = jbuf[ncore:nocc, :, :]
         vhf_a[i] = np.tensordot(jbuf, casdm1, axes=2)
 
     vhf_a *= 0.5
     # we have assumed that vj = vk: vj - vk/2 = vj - vj/2 = vj/2
     gfock = np.zeros((nmo, nmo))
-    gfock[:, :ncore] = (h1e_mo[:,:ncore] + vhf_a[:,:ncore]) * 2
-    gfock[:,ncore:nocc] = h1e_mo[:,ncore:nocc] @ casdm1
+    gfock[:, :ncore] = (h1e_mo[:, :ncore] + vhf_a[:, :ncore]) * 2
+    gfock[:, ncore:nocc] = h1e_mo[:, ncore:nocc] @ casdm1
     gfock[:, ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
 
     return gfock
@@ -158,8 +157,8 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
 
     # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
-    dm_core = np.dot(mo_core, mo_core.T) * 2
-    dm_cas = reduce(np.dot, (mo_cas, casdm1, mo_cas.T))
+    dm_core = 2 * mo_core @ mo_core.T
+    dm_cas = mo_cas @ casdm1 @ mo_cas.T
 
     gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
     dme0 = mo_coeff @ (0.5*(gfock+gfock.T)) @ mo_coeff.T
@@ -208,7 +207,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_)
     # For addressing particular ao derivatives
     if ot.xctype == 'LDA': idx = idx[:,0:1] # For LDAs, no second derivatives
-
 
     casdm2_pack = pack_casdm2(twoCDM, ncas)
     full_atmlst = -np.ones (mol.natm, dtype=np.int_)

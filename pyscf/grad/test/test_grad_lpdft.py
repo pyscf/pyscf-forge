@@ -21,14 +21,15 @@ import unittest
 from pyscf import scf, gto, mcscf
 from pyscf import mcpdft
 from pyscf.data.nist import BOHR
+from mrh.my_pyscf.fci import csf_solver
 
-
+x = 0.5
 def setUpModule():
     global h2, lih
-    h2 = scf.RHF(gto.M(atom='H 0 0 0; H 1.5 0 0', basis='sto-3g',
+    h2 = scf.RHF(gto.M(atom=f'H 0 0 0; H {x} 0 0', basis='sto-3g',
                        output='lpdft.log', verbose=5)).run()
     lih = scf.RHF(gto.M(atom='Li 0 0 0; H 1.2 0 0', basis='sto-3g',
-                        output='/dev/null', verbose=0)).run()
+                        output='/dev/null', verbose=5)).run()
 
 
 def tearDownModule():
@@ -38,12 +39,15 @@ def tearDownModule():
     del h2, lih
 
 def get_de(scanner, delta):
-    xyz_forward = f'H 0 0 0; H {1.5+delta} 0 0'
-    xyz_backward = f'H 0 0 0; H {1.5-delta} 0 0'
+    global x
+    init = f'H 0 0 0; H {x} 0 0'
+    xyz_forward = f'H 0 0 0; H {x+delta} 0 0'
+    xyz_backward = f'H 0 0 0; H {x-delta} 0 0'
     scanner(xyz_forward)
     e_forward = np.asarray(scanner.e_states)
     scanner(xyz_backward)
     e_backward = np.asarray(scanner.e_states)
+    scanner(init) # reset
 
     return (e_forward - e_backward)/(2*delta)
 
@@ -52,21 +56,18 @@ class KnownValues(unittest.TestCase):
     def test_h2_sto3g(self):
         # There is a problem with Lagrange multiplier stuff with tPbe and 4 states for L-PDFT...
 
-        mc = mcpdft.CASSCF(h2, 'ftPBE', 2, 2, grids_level=1)
-        nstates = 4
+        mc = mcpdft.CASSCF(h2, 'tLDA', 2,2, grids_level=1)
+        mc.fcisolver = csf_solver(mc.mol, smult=1)
+        nstates = 3
         weights = [1.0 / nstates, ] * nstates
 
         lpdft = mc.multi_state(weights, method='lin')
-        lpdft.run()
-
         mc = mc.state_average(weights)
+
         mc.run()
-
         mc_grad = mc.nuc_grad_method()
-        lpdft_grad = lpdft.nuc_grad_method()
-
         mc_scanner = mc.as_scanner()
-        lpdft_scanner = lpdft.as_scanner()
+
         e = []
         for p in range(19, 20):
             delta = 1.0/2**p
@@ -74,9 +75,12 @@ class KnownValues(unittest.TestCase):
 
         e = np.array(e)
         print(e[-1, 0])
-        print(mc_grad.kernel(state=0)/BOHR)
+        print(mc_grad.kernel(state=0) / BOHR)
 
         print("LPDFT STUFF NOW")
+        lpdft.run()
+        lpdft_scanner = lpdft.as_scanner()
+        lpdft_grad = lpdft.nuc_grad_method()
         e = []
         for p in range(19, 20):
             delta = 1.0/2**p

@@ -33,7 +33,8 @@ import gc
 
 BLKSIZE = gen_grid.BLKSIZE
 
-def get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=None, ci=None, max_memory=None):
+
+def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, ci=None, max_memory=None):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
     if max_memory is None: max_memory = mc.max_memory
@@ -51,11 +52,8 @@ def get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=None, ci=None
     de_grid = np.zeros((len(atmlst), 3))
     de_wgt = np.zeros((len(atmlst), 3))
 
-    casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
-    casdm1 = casdm1s[0] + casdm1s[1]
-
+    mo_coeff_0, ci_0, mo_occup_0 = cas_natorb(mc, mo_coeff=mo_coeff, ci=ci, casdm1=casdm1_0)
     mo_coeff, ci, mo_occup = cas_natorb(mc, mo_coeff=mo_coeff, ci=ci, casdm1=casdm1)
-    mo_coeff_0, ci_0, mo_occup_0 = cas_natorb(mc, mo_coeff=mo_coeff, ci=ci)
 
     mo_occ = mo_coeff[:, :nocc]
     mo_cas = mo_coeff[:, ncore:nocc]
@@ -67,9 +65,15 @@ def get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=None, ci=None
     casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas)
+    dm1 = dm1s[0] + dm1s[1]
+    dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
 
     casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci_0)
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
+    dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s_0, mo_coeff=mo_coeff_0, ncore=ncore, ncas=ncas)
+    dm1_0 = dm1s_0[0] + dm1s_0[1]
+    dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
 
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
     cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
@@ -106,10 +110,10 @@ def get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=None, ci=None
         for ip0 in range(0, ngrids, blksize):
             ip1 = min(ngrids, ip0 + blksize)
             mask = gen_grid.make_mask(mol, coords[ip0:ip1])
-            logger.info(mc, ('L-PDFT gradient atom {} slice {}-{} of {} total').format(ia, ip0, ip1, ngrids))
+            logger.info(mc, 'L-PDFT gradient atom {} slice {}-{} of {} total'.format(ia, ip0, ip1, ngrids))
             ao = ot._numint.eval_ao(mol, coords[ip0:ip1], deriv=ot.dens_deriv + 1, non0tab=mask)
 
-            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao grids').format(ia), *t1)
+            t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} ao grids'.format(ia), *t1)
 
             if ot.xctype == "LDA":
                 aoval = ao[0]
@@ -125,32 +129,31 @@ def get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=None, ci=None
 
             delta_rho = rho - rho_0
 
-            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} rho calc').format(ia), *t1)
+            t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} rho calc'.format(ia), *t1)
 
             Pi = get_ontop_pair_density(ot, rho, aoval, cascm2, mo_cas, ot.dens_deriv, mask)
             Pi_0 = get_ontop_pair_density(ot, rho_0, aoval, cascm2_0, mo_cas_0, ot.dens_deriv, mask)
             delta_Pi = Pi - Pi_0
-            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} Pi calc').format(ia), *t1)
+            t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} Pi calc'.format(ia), *t1)
 
             if ot.xctype == "LDA":
                 aoval = ao[:1]
 
             moval_occ = _grid_ao2mo(mol, aoval, mo_occ, mask)
             moval_occ_0 = _grid_ao2mo(mol, aoval, mo_occ_0, mask)
-            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao2mo grids').format(ia), *t1)
+            t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} ao2mo grids'.format(ia), *t1)
 
             aoval = np.ascontiguousarray([ao[ix].transpose(0, 2, 1)
                                           for ix in idx[:, :ndao]]).transpose(0, 1, 3, 2)
             ao = None
-            t1 = logger.timer(mc, ('L-PDFT HlFn quadrature atom {} ao grid reshape').format(ia), *t1)
+            t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} ao grid reshape'.format(ia), *t1)
 
             eot, vot, fot = ot.eval_ot(rho_0, Pi_0, weights=w0[ip0:ip1], dderiv=2, _unpack_vot=False)
             fot = contract_fot(ot, fot, rho_0, Pi_0, delta_rho, delta_Pi, unpack=True, vot_packed=vot)
             vot = unpack_vot(vot, rho_0, Pi_0)
-
             # See the equations...
-            eot += contract_vot(vot[0], vot[1], delta_rho, delta_Pi)
-            t1 = logger.timer(mc, ('PDFT HlFn quadrature atom {} eval_ot').format(ia), *t1)
+            eot += contract_vot(vot, delta_rho, delta_Pi)
+            t1 = logger.timer(mc, 'PDFT HlFn quadrature atom {} eval_ot'.format(ia), *t1)
 
             puvx_mem = 2 * ndpi * (ip1 - ip0) * ncas * ncas * 8 / 1e6
             remaining_mem = max_memory - current_memory()[0]
@@ -190,6 +193,7 @@ def get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=None, ci=None
 
     return dvxc, de_wgt, de_grid
 
+
 def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=None, atmlst=None, mf_grad=None,
                               verbose=None,
                               max_memory=None):
@@ -198,34 +202,24 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     if mf_grad is None: mf_grad = mc._scf.nuc_grad_method()
     if mc.frozen is not None:
         raise NotImplementedError
-    t0 = (logger.process_clock(), logger.perf_counter())
-
     mol = mc.mol
-    ncore = mc.ncore
-    ncas = mc.ncas
-    nocc = ncore + ncas
+    if atmlst is None:
+        atmlst = range(mol.natm)
 
-    mo_core = mo_coeff[:, :ncore]
-    mo_cas = mo_coeff[:, ncore:nocc]
-
-    dm_core = np.dot(mo_core, mo_core.T) * 2
+    t0 = (logger.process_clock(), logger.perf_counter())
 
     # Specific state density
     casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s)
+    dm1 = dm1s[0] + dm1s[1]
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
-    dm_cas = mo_cas @ casdm1 @ mo_cas.T
 
     # The model-space density (or state-average density)
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
+    dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
+    dm1_0 = dm1s_0[0] + dm1s_0[1]
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
-    dm_cas_0 = mo_cas @ casdm1_0 @ mo_cas.T
-
-    dm1 = dm_core + dm_cas
-    dm1_0 = dm_core + dm_cas_0
-
-    if atmlst is None:
-        atmlst = range(mol.natm)
 
     # Generate the Generalized Fock Component
     gfock_expl = mcpdft_grad.gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_lpdft_hcore(), mc.veff2)
@@ -240,13 +234,16 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     vj = mf_grad.get_jk(dm=dm1)[0]
     vj_0 = mf_grad.get_jk(dm=dm1_0)[0]
 
-    dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, dm1, dm1_0, mo_coeff=mo_coeff, ci=ci, max_memory=max_memory)
+    dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=mo_coeff, ci=ci,
+                                               max_memory=max_memory)
 
     delta_dm1 = dm1 - dm1_0
+
     def coul_term(p0, p1):
         return 2 * (np.tensordot(vj_0[:, p0:p1], delta_dm1[p0:p1]) + np.tensordot(vj[:, p0:p1], dm1_0[p0:p1]))
 
-    de_hcore, de_coul, de_xc, de_nuc, de_renorm = mcpdft_grad.sum_terms(mf_grad, mol, atmlst, dm1, dme0, coul_term, dvxc)
+    de_hcore, de_coul, de_xc, de_nuc, de_renorm = mcpdft_grad.sum_terms(mf_grad, mol, atmlst, dm1, dme0, coul_term,
+                                                                        dvxc)
 
     logger.debug(mc, "L-PDFT Hellmann-Feynman nuclear:\n{}".format(de_nuc))
     logger.debug(mc, "L-PDFT Hellmann-Feynman hcore component:\n{}".format(de_hcore))
@@ -275,8 +272,7 @@ class Gradients(sacasscf.Gradients):
 
     def _not_implemented_check(self):
         name = self.__class__.__name__
-        if (isinstance(self.base, casci.CASCI) and not
-        isinstance(self.base, mc1step.CASSCF)):
+        if (isinstance(self.base, casci.CASCI) and not isinstance(self.base, mc1step.CASSCF)):
             raise NotImplementedError(
                 "{} for CASCI-based MC-PDFT".format(name)
             )
@@ -390,19 +386,20 @@ class Gradients(sacasscf.Gradients):
         # This is the zero-order density
         casdm1s_0, casdm2_0 = self.base.get_casdm12_0()
         dm1s_0 = _dms.casdm1s_to_dm1s(self.base, casdm1s_0)
-        cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1s_0)
 
         # This is the density of the state we are differentiating with respect to
         casdm1s = self.base.make_one_casdm1s(ci=ci, state=state)
         casdm2 = self.base.make_one_casdm2(ci=ci, state=state)
         dm1s = _dms.casdm1s_to_dm1s(self.base, casdm1s)
-        cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
         # We contract and have the coulomb generated from the "delta" density!
         delta_dm1s = dm1s - dm1s_0
-        delta_cascm2 = cascm2 - cascm2_0
 
-        return self.base.get_pdft_feff(mo=mo, ci=ci,
+        delta_casdm1s = (casdm1s[0] - casdm1s_0[0], casdm1s[1] - casdm1s_0[1])
+        delta_casdm2 = casdm2 - casdm2_0
+        delta_cascm2 = _dms.dm2_cumulant(delta_casdm2, delta_casdm1s)
+
+        feff1, feff2= self.base.get_pdft_feff(mo=mo, ci=ci,
                                        casdm1s=casdm1s_0,
                                        casdm2=casdm2_0,
                                        c_dm1s=delta_dm1s,
@@ -410,6 +407,8 @@ class Gradients(sacasscf.Gradients):
                                        jk_pc=True,
                                        paaa_only=True,
                                        incl_coul=True)
+
+        return feff1, feff2
 
 
 if __name__ == '__main__':
