@@ -23,14 +23,12 @@ from pyscf import mcpdft
 from pyscf.data.nist import BOHR
 from mrh.my_pyscf.fci import csf_solver
 
-x = 1.1
-#x = 0.540001
-#x = 0.54
+x = 0.5
 def setUpModule():
     global h2, lih
     h2 = scf.RHF(gto.M(atom=f'H 0 0 0; H {x} 0 0', basis='sto-3g',
                        output='lpdft.log', verbose=5)).run()
-    lih = scf.RHF(gto.M(atom='Li 0 0 0; H 1.2 0 0', basis='sto-3g',
+    lih = scf.RHF(gto.M(atom=f'Li 0 0 0; H {x} 0 0', basis='sto-3g',
                         output='/dev/null', verbose=5)).run()
 
 
@@ -42,9 +40,9 @@ def tearDownModule():
 
 def get_de(scanner, delta):
     global x
-    init = f'H 0 0 0; H {x} 0 0'
-    xyz_forward = f'H 0 0 0; H {x+delta} 0 0'
-    xyz_backward = f'H 0 0 0; H {x-delta} 0 0'
+    init = f'Li 0 0 0; H {x} 0 0'
+    xyz_forward = f'Li 0 0 0; H {x+delta} 0 0'
+    xyz_backward = f'Li 0 0 0; H {x-delta} 0 0'
     scanner(xyz_forward)
     e_forward = np.asarray(scanner.e_states)
     scanner(xyz_backward)
@@ -58,10 +56,10 @@ class KnownValues(unittest.TestCase):
     def test_h2_sto3g(self):
         # There is a problem with Lagrange multiplier stuff with tPbe and 4 states for L-PDFT...
 
-        mc = mcpdft.CASSCF(h2, 'tLDA', 2,2, grids_level=1)
+        mc = mcpdft.CASSCF(lih, 'tLDA', 2,2, grids_level=1)
         mc.fcisolver = csf_solver(mc.mol, smult=1)
         mc.conv_tol=1e-8
-        nstates = 3
+        nstates = 2
         weights = [1.0 / nstates, ] * nstates
 
         lpdft = mc.multi_state(weights, method='lin')
@@ -92,7 +90,9 @@ class KnownValues(unittest.TestCase):
 
         e = np.array(e)
         print(e[-1, 0])
-        print(lpdft_grad.kernel(state=0)/BOHR)
+        de = lpdft_grad.kernel(state=0)/BOHR
+        print(de)
+        print(f"abs(diff): {abs(e[-1, 0] + de[0,0])}")
 
 
 if __name__ == "__main__":
