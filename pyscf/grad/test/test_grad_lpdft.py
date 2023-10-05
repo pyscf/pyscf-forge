@@ -18,77 +18,55 @@
 import numpy as np
 import unittest
 
-from pyscf import scf, gto, mcscf
+from pyscf import scf, gto, mcscf, lib
 from pyscf import mcpdft
-from pyscf.data.nist import BOHR
 from mrh.my_pyscf.fci import csf_solver
 
-x = 2.5
 def setUpModule():
-    global h2, lih
-    h2 = scf.RHF(gto.M(atom=f'H 0 0 0; H {x} 0 0', basis='sto-3g',
-                       output='/dev/null', verbose=5)).run()
-    lih = scf.RHF(gto.M(atom='Li 0 0 0; H {x} 0 0', basis='sto-3g',
-                        output='/dev/null', verbose=5)).run()
+    global h2_sto3g, lih
+    h2_sto3g = scf.RHF(gto.M(atom=f'H 0 0 0; H 1.2 0 0', basis='sto-3g',
+                       output='/dev/null', verbose=0)).run()
+    lih = scf.RHF(gto.M(atom=f'Li 0 0 0; H 1.2 0 0', basis='sto-3g',
+                        output='/dev/null', verbose=0)).run()
 
 
 def tearDownModule():
-    global h2, lih
-    h2.mol.stdout.close()
+    global h2_sto3g, lih
+    h2_sto3g.mol.stdout.close()
     lih.mol.stdout.close()
-    del h2, lih
-
-def get_de(scanner, delta):
-    global x
-    init = f'H 0 0 0; H {x} 0 0'
-    xyz_forward = f'H 0 0 0; H {x+delta} 0 0'
-    xyz_backward = f'H 0 0 0; H {x-delta} 0 0'
-    scanner(xyz_forward)
-    e_forward = np.asarray(scanner.e_states)
-    scanner(xyz_backward)
-    e_backward = np.asarray(scanner.e_states)
-    scanner(init) # reset
-
-    return (e_forward - e_backward)/(2*delta)
+    del h2_sto3g, lih
 
 
 class KnownValues(unittest.TestCase):
+
+    def assertListAlmostEqual(self, first_list, second_list, expected):
+        self.assertTrue(len(first_list) == len(second_list))
+        for first, second in zip(first_list, second_list):
+            self.assertAlmostEqual(first, second, expected)
+
     def test_h2_sto3g(self):
-        # There is a problem with Lagrange multiplier stuff with tPbe and 4 states for L-PDFT...
+        for nstates in range(2,4):
+            for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                with self.subTest(nstates=nstates, fnal=fnal):
+                    mc = mcpdft.CASSCF(h2_sto3g, fnal, 2, 2, grids_level=1)
+                    mc.fcisolver = csf_solver(mc.mol, smult=1)
+                    weights = [1.0 / nstates, ] * nstates
+                    lpdft = mc.multi_state(weights, method='lin').run()
+                    lpdft_grad = lpdft.nuc_grad_method()
 
-        mc = mcpdft.CASSCF(h2, 'tLDA', 2,2, grids_level=1)
-        mc.fcisolver = csf_solver(mc.mol, smult=1)
-        nstates = 3
-        weights = [1.0 / nstates, ] * nstates
+                    de = np.zeros(nstates)
+                    for state in range(nstates):
+                        de[state] = lpdft_grad.kernel(state=state)[1, 0]
 
-        lpdft = mc.multi_state(weights, method='lin')
-        mc = mc.state_average(weights)
-
-        mc.run()
-        mc_grad = mc.nuc_grad_method()
-        mc_scanner = mc.as_scanner()
-
-        e = []
-        for p in range(19, 20):
-            delta = 1.0/2**p
-            e.append(get_de(mc_scanner, delta))
-
-        e = np.array(e)
-        print(e[-1, 0])
-        print(mc_grad.kernel(state=0) / BOHR)
-
-        print("LPDFT STUFF NOW")
-        lpdft.run()
-        lpdft_scanner = lpdft.as_scanner()
-        lpdft_grad = lpdft.nuc_grad_method()
-        e = []
-        for p in range(19, 20):
-            delta = 1.0/2**p
-            e.append(get_de(lpdft_scanner, delta))
-
-        e = np.array(e)
-        print(e[-1, 0])
-        print(lpdft_grad.kernel(state=0)/BOHR)
+                    lscanner = lpdft.as_scanner()
+                    mol = lpdft.mol
+                    lscanner(mol.set_geom_('H 0 0 0; H 1.20001 0 0'))
+                    e1 = lscanner.e_states
+                    lscanner(mol.set_geom_('H 0 0 0; H 1.19999 0 0'))
+                    e2 = lscanner.e_states
+                    lscanner(mol.set_geom_('H 0 0 0; H 1.2 0 0')) # reset
+                    de_ref = (e1 - e2) / 0.00002 * lib.param.BOHR
+                    self.assertListAlmostEqual(de, de_ref, 8)
 
 
 if __name__ == "__main__":

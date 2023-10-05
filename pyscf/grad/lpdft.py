@@ -67,13 +67,13 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-    dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
+    #dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
 
     casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci_0)
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s_0, mo_coeff=mo_coeff_0, ncore=ncore, ncas=ncas)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
-    dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
+    #dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
 
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
     cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
@@ -208,17 +208,24 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
 
     t0 = (logger.process_clock(), logger.perf_counter())
 
+    logger.debug(mc, f"L-PDFT HllFyn state:{state}")
+    logger.debug(mc, f"L-PDFT HllFyn mo_coeff:\n{mo_coeff}")
+    logger.debug(mc, f"L-PDFT HllFyn ci:\n{ci}")
+
     # Specific state density
     casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s)
     dm1 = dm1s[0] + dm1s[1]
+    logger.debug(mc, f"L-PDFT HllFyn state casdm1:\n{casdm1}")
+    logger.debug(mc, f"L-PDFT HllFyn state dm1:\n{dm1}")
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
 
     # The model-space density (or state-average density)
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
     dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
+    logger.debug(mc, f"L-PDFT HllFyn dm1_0:\n{dm1_0}")
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
 
     # Generate the Generalized Fock Component
@@ -234,7 +241,7 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     vj = mf_grad.get_jk(dm=dm1)[0]
     vj_0 = mf_grad.get_jk(dm=dm1_0)[0]
 
-    dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=mo_coeff, ci=ci,
+    dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=mo_coeff.copy(), ci=ci.copy(),
                                                max_memory=max_memory)
 
     delta_dm1 = dm1 - dm1_0
