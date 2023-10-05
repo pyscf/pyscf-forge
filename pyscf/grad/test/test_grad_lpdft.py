@@ -23,7 +23,9 @@ from pyscf import mcpdft
 from pyscf.data.nist import BOHR
 from mrh.my_pyscf.fci import csf_solver
 
-x = 0.5
+x = 1.1
+#x = 0.540001
+#x = 0.54
 def setUpModule():
     global h2, lih
     h2 = scf.RHF(gto.M(atom=f'H 0 0 0; H {x} 0 0', basis='sto-3g',
@@ -58,6 +60,7 @@ class KnownValues(unittest.TestCase):
 
         mc = mcpdft.CASSCF(h2, 'tLDA', 2,2, grids_level=1)
         mc.fcisolver = csf_solver(mc.mol, smult=1)
+        mc.conv_tol=1e-8
         nstates = 3
         weights = [1.0 / nstates, ] * nstates
 
@@ -79,6 +82,7 @@ class KnownValues(unittest.TestCase):
 
         print("LPDFT STUFF NOW")
         lpdft.run()
+        print(f"L-PDFT CI:\n{lpdft.ci[0]}")
         lpdft_scanner = lpdft.as_scanner()
         lpdft_grad = lpdft.nuc_grad_method()
         e = []

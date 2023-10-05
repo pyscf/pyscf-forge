@@ -267,6 +267,7 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
     mc.ci_mcscf = mc.ci
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
+    logger.debug(mc, f"L-PDFT Hamiltonian:\n{mc.lpdft_ham}")
 
     if hasattr(mc, "_irrep_slices"):
         e_states, si_pdft = zip(*map(mc._eig_si, mc.lpdft_ham))
@@ -275,9 +276,12 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
 
     else:
         mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
+    logger.debug(mc, f"L-PDFT SI:\n{mc.si_pdft}")
 
     mc.e_tot = np.dot(mc.e_states, mc.weights)
     mc.ci = mc._get_ci_adiabats()
+    logger.debug(mc, f"L-PDFT MCSCF CI:\n{mc.ci_mcscf}")
+    logger.debug(mc, f"L-PDFT CI:\n{mc.ci}")
 
     return (
         mc.e_tot, mc.e_mcscf, mc.e_cas, mc.ci,
@@ -432,7 +436,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
         if ci_mcscf is None: ci_mcscf = self.ci_mcscf
-        return list(np.tensordot(self.si_pdft, np.asarray(ci_mcscf), axes=1))
+        return list(np.tensordot(self.si_pdft.T, np.asarray(ci_mcscf), axes=1))
 
     def _eig_si(self, ham):
         return linalg.eigh(ham)
