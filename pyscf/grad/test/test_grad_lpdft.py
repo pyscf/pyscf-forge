@@ -23,12 +23,12 @@ from pyscf import mcpdft
 from pyscf.data.nist import BOHR
 from mrh.my_pyscf.fci import csf_solver
 
-x = 0.5
+x = 2.5
 def setUpModule():
     global h2, lih
     h2 = scf.RHF(gto.M(atom=f'H 0 0 0; H {x} 0 0', basis='sto-3g',
-                       output='lpdft.log', verbose=5)).run()
-    lih = scf.RHF(gto.M(atom='Li 0 0 0; H 1.2 0 0', basis='sto-3g',
+                       output='/dev/null', verbose=5)).run()
+    lih = scf.RHF(gto.M(atom='Li 0 0 0; H {x} 0 0', basis='sto-3g',
                         output='/dev/null', verbose=5)).run()
 
 
