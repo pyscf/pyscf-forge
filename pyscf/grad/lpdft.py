@@ -67,13 +67,13 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-    # dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
+    dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
 
     casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci_0)
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s_0, mo_coeff=mo_coeff_0, ncore=ncore, ncas=ncas)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
-    # dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
+    dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
 
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
     cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
@@ -85,8 +85,8 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     # For addressing particular ao derivatives
     if ot.xctype == 'LDA': idx = idx[:, 0:1]  # For LDAs, no second derivatives
 
-    casdm2_0_pack = mcpdft_grad.pack_casdm2(cascm2_0, ncas)
     casdm2_pack = mcpdft_grad.pack_casdm2(cascm2, ncas)
+    casdm2_0_pack = mcpdft_grad.pack_casdm2(cascm2_0, ncas)
 
     full_atmlst = -np.ones(mol.natm, dtype=np.int_)
     for k, ia in enumerate(atmlst):
@@ -123,12 +123,9 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
 
             rho = make_rho(0, aoval, mask, ot.xctype) / 2.0
             rho = np.stack((rho,) * 2, axis=0)
-
             rho_0 = make_rho_0(0, aoval, mask, ot.xctype) / 2.0
             rho_0 = np.stack((rho_0,) * 2, axis=0)
-
             delta_rho = rho - rho_0
-
             t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {} rho calc'.format(ia), *t1)
 
             Pi = get_ontop_pair_density(ot, rho, aoval, cascm2, mo_cas, ot.dens_deriv, mask)
@@ -347,10 +344,10 @@ class Gradients(sacasscf.Gradients):
         g_all_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)[0]
 
         # Debug
-        log.debug("g_all explicit mo:\n{}".format(g_all_explicit[:self.ngorb]))
-        log.debug("g_all explicit CI:\n{}".format(g_all_explicit[self.ngorb:]))
-        log.debug("g_all implicit mo:\n{}".format(g_all_implicit[:self.ngorb]))
-        log.debug("g_all implicit CI:\n{}".format(g_all_implicit[self.ngorb:]))
+        log.debug("g_all explicit orb:\n{}".format(g_all_explicit[:self.ngorb]))
+        log.debug("g_all explicit ci:\n{}".format(g_all_explicit[self.ngorb:]))
+        log.debug("g_all implicit orb:\n{}".format(g_all_implicit[:self.ngorb]))
+        log.debug("g_all implicit ci:\n{}".format(g_all_implicit[self.ngorb:]))
 
         g_all = np.zeros(nlag)
         g_all[:self.ngorb] = g_all_explicit[:self.ngorb] + g_all_implicit[:self.ngorb]
@@ -374,12 +371,9 @@ class Gradients(sacasscf.Gradients):
 
             g_all[self.ngorb:][offs:][:ndet] = gci_root
 
-        log.debug("g_mo component:\n{}".format(g_all[:self.ngorb]))
-        log.debug("g_ci component:\n{}".format(g_all[self.ngorb:]))
-
         gorb, gci = self.unpack_uniq_var(g_all)
-        log.debug("gorb:\n{}".format(gorb))
-        log.debug("gci:\n{}".format(gci))
+        log.debug("g_all orb:\n{}".format(gorb))
+        log.debug("g_all ci:\n{}".format(np.array([c.ravel() for c in gci])))
 
         return g_all
 
