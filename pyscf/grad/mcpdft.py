@@ -376,16 +376,18 @@ class Gradients (sacasscf.Gradients):
         if (veff1 is None) or (veff2 is None):
             veff1, veff2 = self.base.get_pdft_veff (mo, ci[state],
                 incl_coul=True, paaa_only=True)
-        sing_tol = getattr (self, 'sing_tol_sasa', 1e-8)
-        fcasscf = self.make_fcasscf (state)
+
+        log = logger.new_logger(self, verbose)
+
+        sing_tol = getattr(self, 'sing_tol_sasa', 1e-8)
+        fcasscf = self.make_fcasscf(state)
         fcasscf.mo_coeff = mo
         fcasscf.ci = ci[state]
         def my_hcore ():
             return self.base.get_hcore () + veff1
         fcasscf.get_hcore = my_hcore
 
-        g_all_state = newton_casscf.gen_g_hop (fcasscf, mo, ci[state], veff2,
-            verbose)[0]
+        g_all_state = newton_casscf.gen_g_hop (fcasscf, mo, ci[state], veff2, verbose)[0]
 
         g_all = np.zeros (nlag)
         g_all[:self.ngorb] = g_all_state[:self.ngorb]
@@ -408,6 +410,11 @@ class Gradients (sacasscf.Gradients):
                         self.na_states[:state], self.nb_states[:state])])
         ndet = self.na_states[state]*self.nb_states[state]
         gci[offs:][:ndet] += gci_state
+
+        # Debug
+        log.debug("g_all mo:\n{}".format(g_all[:self.ngorb]))
+        log.debug("g_all CI:\n{}".format(g_all[self.ngorb:]))
+
         return g_all
 
     def get_ham_response (self, state=None, atmlst=None, verbose=None, mo=None,

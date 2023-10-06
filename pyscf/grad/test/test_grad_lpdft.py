@@ -73,7 +73,7 @@ class KnownValues(unittest.TestCase):
     #             self.assertListAlmostEqual(de, de_ref, 8)
 
     def test_h2_631g(self):
-        nstates = 3
+        nstates = 4
         for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
             with self.subTest(nstates=nstates, fnal=fnal):
                 mc = mcpdft.CASSCF(h2_631g, fnal, 4, 2, grids_level=1)
@@ -94,11 +94,8 @@ class KnownValues(unittest.TestCase):
                 e2 = np.array(lscanner.e_states)
                 lscanner(mol.set_geom_(h2_xyz))  # reset
                 de_ref = (e1 - e2) / 0.02 * lib.param.BOHR
-                #print(de)
-                #print(de_ref)
                 print(de-de_ref)
                 return
-
                 #self.assertListAlmostEqual(de, de_ref, 8)
 
 
@@ -106,8 +103,8 @@ class KnownValues(unittest.TestCase):
     #     nstates = 3
     #     for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
     #         with self.subTest(fnal=fnal):
-    #             mc = mcpdft.CASSCF(lih_sto3g, fnal, 2, 2, grids_level=1)
-    #             mc.fix_spin_(ss=0, shift=1)
+    #             mc = mcpdft.CASSCF(lih_sto3g, fnal, 5, 2, grids_level=1)
+    #             mc.fix_spin_(ss=0, shift=2)
     #             #lpdft = mc.state_average([1.0 / nstates, ] * nstates).run()
     #             lpdft = mc.multi_state([1.0 / nstates, ] * nstates, method='lin').run()
     #             lpdft_grad = lpdft.nuc_grad_method()
@@ -118,17 +115,17 @@ class KnownValues(unittest.TestCase):
     #
     #             lscanner = lpdft.as_scanner()
     #             mol = lpdft.mol
-    #             lscanner(mol.set_geom_('Li 0 0 0; H 1.50001 0 0'))
+    #             lscanner(mol.set_geom_('Li 0 0 0; H 1.51 0 0'))
     #             e1 = np.array(lscanner.e_states)
-    #             lscanner(mol.set_geom_('Li 0 0 0; H 1.49999 0 0'))
+    #             lscanner(mol.set_geom_('Li 0 0 0; H 1.49 0 0'))
     #             e2 = np.array(lscanner.e_states)
     #             lscanner(mol.set_geom_(lih_xyz))  # reset
-    #             de_ref = (e1 - e2) / 0.00002 * lib.param.BOHR
-    #             print(de)
-    #             print(de_ref)
+    #             de_ref = (e1 - e2) / 0.02 * lib.param.BOHR
+    #             # print(de)
+    #             # print(de_ref)
     #             print(de-de_ref)
     #             return
-                #self.assertListAlmostEqual(de, de_ref, 8)
+                # self.assertListAlmostEqual(de, de_ref, 8)
 
 
 if __name__ == "__main__":

@@ -105,9 +105,8 @@ def case(kv, mc):
     # by evaluating V_pq D_pq + ... at the reference and the slightly modified
     # CI/MO parameters
 
-    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True)
-    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False,
-                                    paaa_only=False)
+    feff1, feff2 = mc.get_pdft_feff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=True, jk_pc=True)
+    veff1, veff2 = mc.get_pdft_veff(mc.mo_coeff, mc.ci, incl_coul=False, paaa_only=False)
     ref_c_veff = contract_veff(mc, mc.mo_coeff, mc.ci, veff1, veff2)
     
 

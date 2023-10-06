@@ -15,7 +15,6 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
-from pyscf import lib
 from pyscf.grad import rks as rks_grad
 from pyscf.dft import gen_grid
 from pyscf.lib import logger, tag_array, pack_tril, current_memory
@@ -28,6 +27,7 @@ from pyscf.mcpdft.tfnal_derivs import contract_fot, unpack_vot, contract_vot
 from pyscf.mcpdft import _dms
 import pyscf.grad.mcpdft as mcpdft_grad
 
+from itertools import product
 import numpy as np
 import gc
 
@@ -67,13 +67,13 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-    #dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
+    # dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
 
     casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci_0)
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s_0, mo_coeff=mo_coeff_0, ncore=ncore, ncas=ncas)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
-    #dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
+    # dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
 
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
     cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
@@ -234,7 +234,8 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     vj = mf_grad.get_jk(dm=dm1)[0]
     vj_0 = mf_grad.get_jk(dm=dm1_0)[0]
 
-    dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=mo_coeff.copy(), ci=ci.copy(),
+    dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=mo_coeff.copy(),
+                                               ci=ci.copy(),
                                                max_memory=max_memory)
 
     delta_dm1 = dm1 - dm1_0
@@ -272,7 +273,7 @@ class Gradients(sacasscf.Gradients):
 
     def _not_implemented_check(self):
         name = self.__class__.__name__
-        if (isinstance(self.base, casci.CASCI) and not isinstance(self.base, mc1step.CASSCF)):
+        if isinstance(self.base, casci.CASCI) and not isinstance(self.base, mc1step.CASSCF):
             raise NotImplementedError(
                 "{} for CASCI-based MC-PDFT".format(name)
             )
@@ -306,16 +307,28 @@ class Gradients(sacasscf.Gradients):
         return super().kernel(**kwargs)
 
     def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, nlag=None, **kwargs):
-        if state is None: state = self.state
-        if verbose is None: verbose = self.verbose
-        if mo is None: mo = self.base.mo_coeff
-        if ci is None: ci = self.base.ci
-        if verbose is None: verbose = self.verbose
-        if nlag is None: nlag = self.nlag
+        if state is None:
+            state = self.state
+
+        if verbose is None:
+            verbose = self.verbose
+
+        if mo is None:
+            mo = self.base.mo_coeff
+
+        if ci is None:
+            ci = self.base.ci
+
+        if verbose is None:
+            verbose = self.verbose
+
+        if nlag is None:
+            nlag = self.nlag
+
         if (feff1 is None) or (feff2 is None):
             feff1, feff2 = self.get_otp_gradient_response(mo, ci, state)
 
-        log = lib.logger.new_logger(self, verbose)
+        log = logger.new_logger(self, verbose)
 
         ndet = self.na_states[state] * self.nb_states[state]
         fcasscf = self.make_fcasscf(state)
@@ -350,38 +363,58 @@ class Gradients(sacasscf.Gradients):
 
             offs = sum([na * nb for na, nb in zip(self.na_states[:root], self.nb_states[:root])]) if root > 0 else 0
             gci_root = g_all_implicit[self.ngorb:][offs:][:ndet]
-            if root == state:
-                gci_root += g_all_explicit[self.ngorb:]
 
             assert (root in idx)
             ci_proj = np.asarray([ci[i].ravel() for i in idx])
             gci_sa = np.dot(ci_proj, gci_root)
             gci_root -= np.dot(gci_sa, ci_proj)
 
+            if root == state:
+                gci_root += g_all_explicit[self.ngorb:]
+
             g_all[self.ngorb:][offs:][:ndet] = gci_root
 
         log.debug("g_mo component:\n{}".format(g_all[:self.ngorb]))
         log.debug("g_ci component:\n{}".format(g_all[self.ngorb:]))
 
+        gorb, gci = self.unpack_uniq_var(g_all)
+        log.debug("gorb:\n{}".format(gorb))
+        log.debug("gci:\n{}".format(gci))
+
         return g_all
 
     def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, eris=None, mf_grad=None,
                          feff1=None, feff2=None, **kwargs):
-        if state is None: state = self.state
-        if atmlst is None: atmlst = self.atmlst
-        if verbose is None: verbose = self.verbose
-        if mo is None: mo = self.base.mo_coeff
-        if ci is None: ci = self.base.ci
+        if state is None:
+            state = self.state
+
+        if atmlst is None:
+            atmlst = self.atmlst
+
+        if verbose is None:
+            verbose = self.verbose
+
+        if mo is None:
+            mo = self.base.mo_coeff
+
+        if ci is None:
+            ci = self.base.ci
+
         if (feff1 is None) or (feff2 is None):
-            assert (False), kwargs
+            assert False, kwargs
 
         return lpdft_HellmanFeynman_grad(self.base, self.base.otfnal, state, feff1=feff1, feff2=feff2, mo_coeff=mo,
                                          ci=ci, atmlst=atmlst, mf_grad=mf_grad, verbose=verbose)
 
     def get_otp_gradient_response(self, mo=None, ci=None, state=0):
-        if mo is None: mo = self.base.mo_coeff
-        if ci is None: ci = self.base.ci
-        if state is None: state = self.state
+        if mo is None:
+            mo = self.base.mo_coeff
+
+        if ci is None:
+            ci = self.base.ci
+
+        if state is None:
+            state = self.state
 
         # This is the zero-order density
         casdm1s_0, casdm2_0 = self.base.get_casdm12_0()
@@ -399,7 +432,7 @@ class Gradients(sacasscf.Gradients):
         delta_casdm2 = casdm2 - casdm2_0
         delta_cascm2 = _dms.dm2_cumulant(delta_casdm2, delta_casdm1s)
 
-        feff1, feff2= self.base.get_pdft_feff(mo=mo, ci=ci,
+        return self.base.get_pdft_feff(mo=mo, ci=ci,
                                        casdm1s=casdm1s_0,
                                        casdm2=casdm2_0,
                                        c_dm1s=delta_dm1s,
@@ -407,8 +440,6 @@ class Gradients(sacasscf.Gradients):
                                        jk_pc=True,
                                        paaa_only=True,
                                        incl_coul=True)
-
-        return feff1, feff2
 
 
 if __name__ == '__main__':

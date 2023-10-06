@@ -635,6 +635,7 @@ class MSPDFTLagPrec (sacasscf_grad.SACASLagPrec):
 
     def unpack_uniq_var (self, x):
         return self.grad_method.unpack_uniq_var (x)
+
     def pack_uniq_var (self, x0, x1, x2=None):
         return self.grad_method.pack_uniq_var (x0, x1, x2)
 
