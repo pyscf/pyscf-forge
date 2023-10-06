@@ -78,8 +78,8 @@ class KnownValues(unittest.TestCase):
             with self.subTest(nstates=nstates, fnal=fnal):
                 mc = mcpdft.CASSCF(h2_631g, fnal, 4, 2, grids_level=1)
                 mc.fix_spin_(ss=0, shift=2)
-                #lpdft = mc.state_average([1.0 / nstates, ] * nstates).run()
-                lpdft = mc.multi_state([1.0 / nstates, ] * nstates, method='lin').run()
+                lpdft = mc.state_average([1.0 / nstates, ] * nstates).run()
+                #lpdft = mc.multi_state([1.0 / nstates, ] * nstates, method='lin').run()
                 lpdft_grad = lpdft.nuc_grad_method()
 
                 de = np.zeros(nstates)
