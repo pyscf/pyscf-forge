@@ -25,6 +25,7 @@ from pyscf.mcscf.casci import cas_natorb
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
 from pyscf.mcpdft.tfnal_derivs import contract_fot, unpack_vot, contract_vot
 from pyscf.mcpdft import _dms
+from pyscf.mcpdft import mspdft
 import pyscf.grad.mcpdft as mcpdft_grad
 
 from itertools import product
@@ -434,6 +435,45 @@ class Gradients(sacasscf.Gradients):
                                        jk_pc=True,
                                        paaa_only=True,
                                        incl_coul=True)
+
+    def get_Aop_Adiag(self, verbose=None, mo=None, ci=None, eris=None, state=None, **kwargs):
+        if verbose is None:
+            verbose = self.verbose
+
+        if mo is None:
+            mo = self.base.mo_coeff
+
+        if ci is None:
+            ci = self.base.ci
+
+        if state is None:
+            state = self.state
+
+        if eris is None and self.eris is None:
+            eris = self.eris = self.base.ao2mo(mo)
+
+        elif eris is None:
+            eris = self.eris
+
+        ham_od = mspdft.make_heff_mcscf(self.base, mo_coeff=mo, ci=ci)
+        ham_od[np.diag_indices_from(ham_od)] = 0.0
+        ham_od += ham_od.T  # This corresponds to the arbitrary newton_casscf*2
+        fcasscf = self.make_fcasscf_sa()
+
+        hop, Adiag = newton_casscf.gen_g_hop (fcasscf, mo, ci, eris, verbose)[2:]
+
+        def Aop(x):
+            Ax = hop(x)
+            x_c = self.unpack_uniq_var (x)[1]
+            Ax_o, Ax_c = self.unpack_uniq_var(Ax)
+            Ax_c_od = list (np.tensordot (-ham_od, np.stack (x_c, axis=0),
+                axes=1))
+            Ax_c = [a1 + (w*a2) for a1, a2, w in zip (Ax_c, Ax_c_od,
+                self.base.weights)]
+            return self.pack_uniq_var(Ax_o, Ax_c)
+
+        return self.project_Aop(Aop, ci, state), Adiag
+
 
 
 if __name__ == '__main__':

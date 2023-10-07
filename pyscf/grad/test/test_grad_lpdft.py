@@ -73,11 +73,13 @@ class KnownValues(unittest.TestCase):
     #             self.assertListAlmostEqual(de, de_ref, 8)
 
     def test_h2_631g(self):
-        nstates = 4
+        nstates = 5
         for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
             with self.subTest(nstates=nstates, fnal=fnal):
                 mc = mcpdft.CASSCF(h2_631g, fnal, 4, 2, grids_level=1)
                 mc.fix_spin_(ss=0, shift=2)
+                mc.conv_tol=1e-10
+                mc.conv_grad_tol=1e-10
                 #lpdft = mc.state_average([1.0 / nstates, ] * nstates).run()
                 lpdft = mc.multi_state([1.0 / nstates, ] * nstates, method='lin').run()
                 lpdft_grad = lpdft.nuc_grad_method()
@@ -88,14 +90,13 @@ class KnownValues(unittest.TestCase):
 
                 lscanner = lpdft.as_scanner()
                 mol = lpdft.mol
-                lscanner(mol.set_geom_('H 0 0 0; H 1.21 0 0'))
+                lscanner(mol.set_geom_('H 0 0 0; H 1.201 0 0'))
                 e1 = np.array(lscanner.e_states)
-                lscanner(mol.set_geom_('H 0 0 0; H 1.19 0 0'))
+                lscanner(mol.set_geom_('H 0 0 0; H 1.199 0 0'))
                 e2 = np.array(lscanner.e_states)
                 lscanner(mol.set_geom_(h2_xyz))  # reset
-                de_ref = (e1 - e2) / 0.02 * lib.param.BOHR
+                de_ref = (e1 - e2) / 0.002 * lib.param.BOHR
                 print(de-de_ref)
-                return
                 #self.assertListAlmostEqual(de, de_ref, 8)
 
 
