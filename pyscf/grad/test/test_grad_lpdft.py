@@ -80,117 +80,118 @@ def gen(scanner, start=1.3):
 
 class KnownValues(unittest.TestCase):
 
-    # def test_grad_h2_lin3ftlda22_sto3g_slow(self):
-    #     # orb:    no
-    #     # ci:     no
-    #     mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', 'STO-3G', 2, 2, 3)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.2483709972, -0.235934352, -0.7202397013]
-    #     for i in range(3):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], 7)
-    #
-    # def test_grad_h2_lin2ftlda22_sto3g_slow(self):
-    #     # orb:    no
-    #     # ci:     yes
-    #     mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.3045653798, -0.2328036389]
-    #     for i in range(2):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], 7)
-    #
-    # def test_grad_h2_lin3ftlda22_631g_slow(self):
-    #     # orb:    yes
-    #     # ci:     no
-    #     mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', '6-31G', 2, 2, 3)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.1892819283, -0.1459936283, -0.4812691849]
-    #     for i in range(3):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], 7)
-    #
-    # def test_grad_h2_lin2ftlda22_631g_slow(self):
-    #     # orb:    yes
-    #     # ci:     yes
-    #     mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', '6-31G', 2, 2, 2)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.2181136615, -0.1549280412]
-    #     for i in range(2):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], delta=1e-5)
-    #
-    # def test_grad_lih_lin2ftlda44_sto3g_slow(self):
-    #     # z_orb:    no
-    #     # z_ci:     yes
-    #     mc, mc_grad = diatomic('Li', 'H', 1.8, 'ftLDA,VWN3', 'STO-3G', 4, 4, 2, symmetry=True, cas_irrep={'A1': 4})
-    #
-    #     # gen(mc.as_scanner())
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.0706137599, -0.0065958760]
-    #     for i in range(2):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], delta=1e-6)
-    #
-    # def test_grad_lih_lin3ftlda22_sto3g_slow(self):
-    #     # z_orb:    yes
-    #     # z_ci:     no
-    #     mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, 3)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.1258966287, 0.0072754131, -0.1113474634]
-    #     for i in range(3):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
-    #
-    # def test_grad_lih_lin2ftlda22_sto3g_slow(self):
-    #     # z_orb:    yes
-    #     # z_ci:     yes
-    #     mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.1072597373, 0.0235666209]
-    #     for i in range(2):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
-    #
-    # def test_grad_lih_lin2ftpbe22_sto3g(self):
-    #     # z_orb:    yes
-    #     # z_ci:     yes
-    #     mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftPBE', 'STO-3G', 2, 2, 2)
-    #
-    #     # Numerical from this software
-    #     NUM_REF = [0.1024946074, 0.0190815023]
-    #     for i in range(2):
-    #         with self.subTest(state=i):
-    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
-    #             self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
-
-    def test_grad_lih_lin2ftlda22_sto3g_df(self):
-        # z_orb:    yes
-        # z_ci:     yes
-        mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2, density_fit=True)
-
-        gen(mc.as_scanner(), start=2.4)
+    def test_grad_h2_lin3ftlda22_sto3g_slow(self):
+        # orb:    no
+        # ci:     no
+        mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', 'STO-3G', 2, 2, 3)
 
         # Numerical from this software
-        NUM_REF = [0.1074021770, 0.0234933387]
+        NUM_REF = [0.2483709972, -0.235934352, -0.7202397013]
+        for i in range(3):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], 7)
+
+    def test_grad_h2_lin2ftlda22_sto3g_slow(self):
+        # orb:    no
+        # ci:     yes
+        mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2)
+
+        # Numerical from this software
+        NUM_REF = [0.3045653798, -0.2328036389]
         for i in range(2):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0] / BOHR
-                self.assertAlmostEqual(de, NUM_REF[i], 5)
+                self.assertAlmostEqual(de, NUM_REF[i], 7)
+
+    def test_grad_h2_lin3ftlda22_631g_slow(self):
+        # orb:    yes
+        # ci:     no
+        mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', '6-31G', 2, 2, 3)
+
+        # Numerical from this software
+        NUM_REF = [0.1892819283, -0.1459936283, -0.4812691849]
+        for i in range(3):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], 7)
+
+    def test_grad_h2_lin2ftlda22_631g_slow(self):
+        # orb:    yes
+        # ci:     yes
+        mc, mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', '6-31G', 2, 2, 2)
+
+        # Numerical from this software
+        NUM_REF = [0.2181136615, -0.1549280412]
+        for i in range(2):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], delta=1e-5)
+
+    def test_grad_lih_lin2ftlda44_sto3g_slow(self):
+        # z_orb:    no
+        # z_ci:     yes
+        mc, mc_grad = diatomic('Li', 'H', 1.8, 'ftLDA,VWN3', 'STO-3G', 4, 4, 2, symmetry=True, cas_irrep={'A1': 4})
+
+        # gen(mc.as_scanner())
+
+        # Numerical from this software
+        NUM_REF = [0.0706137599, -0.0065958760]
+        for i in range(2):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], delta=1e-6)
+
+    def test_grad_lih_lin3ftlda22_sto3g_slow(self):
+        # z_orb:    yes
+        # z_ci:     no
+        mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, 3)
+
+        # Numerical from this software
+        NUM_REF = [0.1258966287, 0.0072754131, -0.1113474634]
+        for i in range(3):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
+
+    def test_grad_lih_lin2ftlda22_sto3g_slow(self):
+        # z_orb:    yes
+        # z_ci:     yes
+        mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2)
+
+        # Numerical from this software
+        NUM_REF = [0.1072597373, 0.0235666209]
+        for i in range(2):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
+
+    def test_grad_lih_lin2ftpbe22_sto3g(self):
+        # z_orb:    yes
+        # z_ci:     yes
+        mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftPBE', 'STO-3G', 2, 2, 2)
+
+        # Numerical from this software
+        NUM_REF = [0.1024946074, 0.0190815023]
+        for i in range(2):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
+
+    # def test_grad_lih_lin2ftlda22_sto3g_df(self):
+    #     # z_orb:    yes
+    #     # z_ci:     yes
+    #     mc, mc_grad = diatomic('Li', 'H', 2.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2, density_fit=True)
+    #
+    #     #gen(mc.as_scanner(), start=2.4)
+    #
+    #     # Numerical from this software
+    #     NUM_REF = [0.1074021770, 0.0234933387]
+    #     for i in range(2):
+    #         with self.subTest(state=i):
+    #             de = mc_grad.kernel(state=i)[1, 0] / BOHR
+    #             print(de)
+    #             self.assertAlmostEqual(de, NUM_REF[i], 5)
 
 
 if __name__ == "__main__":
