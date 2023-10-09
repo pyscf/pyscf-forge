@@ -50,7 +50,8 @@ def weighted_average_densities(mc, ci=None, weights=None):
     return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
-def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None, veff1=None, veff2=None, mo_coeff=None):
+def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None, veff1=None, veff2=None,
+                     mo_coeff=None):
     ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
@@ -67,6 +68,7 @@ def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=No
             Spin-summed 2-RDM in the active space generated from expansion
             density.
 
+    Kwargs:
         hyb : float
             Hybridization constant (lambda term)
 
@@ -75,6 +77,13 @@ def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=No
 
         ncore: float
             Number of core MOs
+
+        veff1 : ndarray of shape (nao, nao)
+            1-body effective potential in the AO basis computed using the
+            zeroth-order densities.
+
+        veff2 : pyscf.mcscf.mc_ao2mo._ERIS instance
+            Relevant 2-body effective potential in the MO basis.
 
     Returns:
         Constant term h_const for the expansion term.
@@ -537,8 +546,8 @@ class _LPDFTMix(_LPDFT):
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
         if ci_mcscf is None: ci_mcscf = self.ci_mcscf
-        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci_mcscf[irrep_slice]), axes=1) for
-                      irrep_slice in self._irrep_slices]
+        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice],
+                                   np.asarray(ci_mcscf[irrep_slice]), axes=1) for irrep_slice in self._irrep_slices]
         # Flattens it
         return [c for ci_irrep in adiabat_ci for c in ci_irrep]
 

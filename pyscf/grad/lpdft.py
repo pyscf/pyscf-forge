@@ -45,7 +45,6 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     ncore = mc.ncore
     ncas = mc.ncas
     nocc = ncore + ncas
-    nelecas = mc.nelecas
     nao, nmo = mo_coeff.shape
 
     dvxc = np.zeros((3, nao))
@@ -181,7 +180,7 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
 
             dvxc -= tmp_dxc  # XC response
 
-            tmp_dvxc = tmp_df = tmp_dv = None
+            tmp_dxc = tmp_df = tmp_dv = None
             t1 = logger.timer(mc, 'L-PDFT HlFn quadrature atom {}'.format(ia), *t1)
 
             rho_0 = Pi_0 = rho = Pi = delta_rho = delta_Pi = None
@@ -253,7 +252,7 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
 
     de = de_nuc + de_hcore + de_coul + de_renorm + de_xc + de_grid + de_wgt
 
-    t1 = logger.timer(mc, 'L-PDFT HlFn total', *t0)
+    logger.timer(mc, 'L-PDFT HlFn total', *t0)
 
     return de
 
@@ -303,7 +302,30 @@ class Gradients(sacasscf.Gradients):
 
         return super().kernel(**kwargs)
 
-    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, nlag=None, **kwargs):
+    def get_wfn_response(self, state=None, verbose=None, mo=None, ci=None, feff1=None, feff2=None, **kwargs):
+        """Returns the derivative of the L-PDFT energy for the given state with respect to MO parameters and CI
+        parameters. Care is take to account for the implicit and explicit response terms, and make sure the CI
+        vectors are properly projected out.
+
+        Args:
+            state : int
+                Which state energy to get response of.
+
+            mo : ndarray of shape (nao, nmo)
+                A full set of molecular orbital coefficients. Taken from self if not provided.
+
+            ci : list of ndarrays of length nroots
+                CI vectors should be from a converged L-PDFT calculation.
+
+            feff1 : ndarray of shape (nao, nao) 1-particle On-top gradient response which as been contracted with the
+                Delta density generated from state. Should include the Coulomb term as well.
+
+            feff2 : pyscf.mcscf.mc_ao2mo._ERIS instance Relevant 2-body on-top gradient response terms in the MO
+                basis. Also, partially contracted with the Delta density.
+
+        Returns: g_all : ndarray of shape nlag First sector [:self.ngorb] contains the derivatives with respect to MO
+        parameters. Second sector [self.ngorb:] contains the derivatives with respect to CI parameters.
+        """
         if state is None:
             state = self.state
 
@@ -318,9 +340,6 @@ class Gradients(sacasscf.Gradients):
 
         if verbose is None:
             verbose = self.verbose
-
-        if nlag is None:
-            nlag = self.nlag
 
         if (feff1 is None) or (feff2 is None):
             feff1, feff2 = self.get_otp_gradient_response(mo, ci, state)
@@ -377,7 +396,7 @@ class Gradients(sacasscf.Gradients):
 
         return g_all
 
-    def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, eris=None, mf_grad=None,
+    def get_ham_response(self, state=None, atmlst=None, verbose=None, mo=None, ci=None, mf_grad=None,
                          feff1=None, feff2=None, **kwargs):
         if state is None:
             state = self.state
@@ -401,6 +420,26 @@ class Gradients(sacasscf.Gradients):
                                          ci=ci, atmlst=atmlst, mf_grad=mf_grad, verbose=verbose)
 
     def get_otp_gradient_response(self, mo=None, ci=None, state=0):
+        """Generate the 1- and 2-body on-top gradient response terms which have been partially contracted with the
+        Delta density generated from state.
+
+        Args:
+            mo : ndarray of shape (nao,nmo)
+                A full set of molecular orbital coefficients. Taken from self if not provided.
+
+            ci : list of ndarrays of length nroots
+                CI vectors should be from a converged L-PDFT calculation
+
+            state : int
+                State to generate the Delta density with
+
+        Returns:
+            feff1 : ndarray of shape (nao, nao) 1-particle On-top gradient response which as been contracted with the
+                Delta density generated from state. Should include the Coulomb term as well.
+
+            feff2 : pyscf.mcscf.mc_ao2mo._ERIS instance Relevant 2-body on-top gradient response terms in the MO
+                basis. Also, partially contracted with the Delta density.
+        """
         if mo is None:
             mo = self.base.mo_coeff
 
@@ -473,7 +512,8 @@ class Gradients(sacasscf.Gradients):
 
                 for irrep_slice, ham_slice in zip(self.base._irrep_slices, ham_od):
                     Ax_c_od_slice = list(np.tensordot(-ham_slice, np.stack(x_c[irrep_slice], axis=0), axes=1))
-                    Ax_c[irrep_slice] = [a1 + (w*a2) for a1, a2, w in zip(Ax_c[irrep_slice], Ax_c_od_slice, self.base.weights[irrep_slice])]
+                    Ax_c[irrep_slice] = [a1 + (w*a2) for a1, a2, w in zip(Ax_c[irrep_slice], Ax_c_od_slice,
+                                                                          self.base.weights[irrep_slice])]
 
                 return self.pack_uniq_var(Ax_o, Ax_c)
 
@@ -493,20 +533,3 @@ class Gradients(sacasscf.Gradients):
 
         return self.project_Aop(Aop, ci, state), Adiag
 
-
-if __name__ == '__main__':
-    from pyscf import scf, gto
-    from pyscf import mcpdft
-
-    xyz = '''O  0.00000000   0.08111156   0.00000000
-             H  0.78620605   0.66349738   0.00000000
-             H -0.78620605   0.66349738   0.00000000'''
-    mol = gto.M(atom=xyz, basis='6-31g', symmetry=False, output='lpdft.log',
-                verbose=5)
-    mf = scf.RHF(mol).run()
-    # mc = mcpdft.CASSCF (mf, 'tLDA,VWN3', 4, 4)
-    mc = mcpdft.CASSCF(mf, 'ftPBE', 4, 4)
-    mc.fix_spin_(ss=0)  # often necessary!
-    mc = mc.multi_state([1.0 / 3, ] * 3, 'lin').run()
-    mc_grad = Gradients(mc)
-    de = np.stack([mc_grad.kernel(state=i) for i in range(1)], axis=0)

@@ -289,7 +289,8 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             # The last stuff to vectorize is in get_veff_2body!
             k = full_atmlst[ia]
 
-            tmp_dv = xc_response(ot, vot, rho, Pi, w0[ip0:ip1], moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_pack, ndpi, mo_cas)
+            tmp_dv = xc_response(ot, vot, rho, Pi, w0[ip0:ip1], moval_occ, aoval, mo_occ, mo_occup, ncore, nocc,
+                                 casdm2_pack, ndpi, mo_cas)
 
             if k >=0: de_grid[k] += 2*tmp_dv.sum(1) # Grid response
             dvxc -= tmp_dv #XC response
@@ -297,7 +298,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             tmp_dv = None
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {}').format (ia), *t1)
 
-            rho = Pi = eot = vot = vPi = aoval = moval_occ = None
+            rho = Pi = eot = vot = aoval = moval_occ = None
             gc.collect ()
 
     def coul_term(p0, p1):
