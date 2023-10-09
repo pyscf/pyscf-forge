@@ -28,7 +28,6 @@ from pyscf.mcpdft import _dms
 from pyscf.mcpdft import mspdft
 import pyscf.grad.mcpdft as mcpdft_grad
 
-from itertools import product
 import numpy as np
 import gc
 
@@ -68,13 +67,13 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-    #dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
+    # dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
 
     casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci_0)
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s_0, mo_coeff=mo_coeff_0, ncore=ncore, ncas=ncas)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
-    #dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
+    # dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
 
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
     cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
@@ -350,31 +349,31 @@ class Gradients(sacasscf.Gradients):
         log.debug("g_all implicit orb:\n{}".format(g_all_implicit[:self.ngorb]))
         log.debug("g_all implicit ci:\n{}".format(g_all_implicit[self.ngorb:]))
 
-        g_all = np.zeros(nlag)
-        g_all[:self.ngorb] = g_all_explicit[:self.ngorb] + g_all_implicit[:self.ngorb]
-
         # Need to remove the SA-SA rotations from g_all_implicit CI contributions
         spin_states = np.asarray(self.spin_states)
+        gmo_implicit, gci_implicit = self.unpack_uniq_var(g_all_implicit)
         for root in range(self.nroots):
             idx_spin = spin_states == spin_states[root]
             idx = np.where(idx_spin)[0]
 
-            offs = sum([na * nb for na, nb in zip(self.na_states[:root], self.nb_states[:root])]) if root > 0 else 0
-            gci_root = g_all_implicit[self.ngorb:][offs:][:ndet]
+            gci_root = gci_implicit[root].ravel()
 
             assert (root in idx)
             ci_proj = np.asarray([ci[i].ravel() for i in idx])
             gci_sa = np.dot(ci_proj, gci_root)
             gci_root -= np.dot(gci_sa, ci_proj)
 
-            if root == state:
-                gci_root += g_all_explicit[self.ngorb:]
+            gci_implicit[root] = gci_root
 
-            g_all[self.ngorb:][offs:][:ndet] = gci_root
+        g_all = self.pack_uniq_var(gmo_implicit, gci_implicit)
+
+        g_all[:self.ngorb] += g_all_explicit[:self.ngorb]
+        offs = sum([na * nb for na, nb in zip(self.na_states[:state], self.nb_states[:state])]) if root > 0 else 0
+        g_all[self.ngorb:][offs:][:ndet] += g_all_explicit[self.ngorb:]
 
         gorb, gci = self.unpack_uniq_var(g_all)
         log.debug("g_all orb:\n{}".format(gorb))
-        log.debug("g_all ci:\n{}".format(np.array([c.ravel() for c in gci])))
+        log.debug("g_all ci:\n{}".format([c.ravel() for c in gci]))
 
         return g_all
 
@@ -437,6 +436,8 @@ class Gradients(sacasscf.Gradients):
                                        incl_coul=True)
 
     def get_Aop_Adiag(self, verbose=None, mo=None, ci=None, eris=None, state=None, **kwargs):
+        """This function accounts for the fact that the CI vectors are no longer eigenstates of the CAS Hamiltonian.
+        It adds back in the necessary values to the Hessian."""
         if verbose is None:
             verbose = self.verbose
 
@@ -456,24 +457,41 @@ class Gradients(sacasscf.Gradients):
             eris = self.eris
 
         ham_od = mspdft.make_heff_mcscf(self.base, mo_coeff=mo, ci=ci)
-        ham_od[np.diag_indices_from(ham_od)] = 0.0
-        ham_od += ham_od.T  # This corresponds to the arbitrary newton_casscf*2
         fcasscf = self.make_fcasscf_sa()
 
-        hop, Adiag = newton_casscf.gen_g_hop (fcasscf, mo, ci, eris, verbose)[2:]
+        hop, Adiag = newton_casscf.gen_g_hop(fcasscf, mo, ci, eris, verbose)[2:]
 
-        def Aop(x):
-            Ax = hop(x)
-            x_c = self.unpack_uniq_var (x)[1]
-            Ax_o, Ax_c = self.unpack_uniq_var(Ax)
-            Ax_c_od = list (np.tensordot (-ham_od, np.stack (x_c, axis=0),
-                axes=1))
-            Ax_c = [a1 + (w*a2) for a1, a2, w in zip (Ax_c, Ax_c_od,
-                self.base.weights)]
-            return self.pack_uniq_var(Ax_o, Ax_c)
+        if hasattr(self.base, "_irrep_slices"):
+            for ham_slice in ham_od:
+                ham_slice[np.diag_indices_from(ham_slice)] = 0.0
+                ham_slice += ham_slice.T  # This corresponds to the arbitrary newton_casscf*2
+
+            def Aop(x):
+                Ax = hop(x)
+                x_c = self.unpack_uniq_var(x)[1]
+                Ax_o, Ax_c = self.unpack_uniq_var(Ax)
+
+                for irrep_slice, ham_slice in zip(self.base._irrep_slices, ham_od):
+                    Ax_c_od_slice = list(np.tensordot(-ham_slice, np.stack(x_c[irrep_slice], axis=0), axes=1))
+                    Ax_c[irrep_slice] = [a1 + (w*a2) for a1, a2, w in zip(Ax_c[irrep_slice], Ax_c_od_slice, self.base.weights[irrep_slice])]
+
+                return self.pack_uniq_var(Ax_o, Ax_c)
+
+
+        else:
+            ham_od[np.diag_indices_from(ham_od)] = 0.0
+            ham_od += ham_od.T  # This corresponds to the arbitrary newton_casscf*2
+            def Aop(x):
+                Ax = hop(x)
+                x_c = self.unpack_uniq_var(x)[1]
+                Ax_o, Ax_c = self.unpack_uniq_var(Ax)
+                Ax_c_od = list(np.tensordot(-ham_od, np.stack(x_c, axis=0),
+                                            axes=1))
+                Ax_c = [a1 + (w * a2) for a1, a2, w in zip(Ax_c, Ax_c_od,
+                                                           self.base.weights)]
+                return self.pack_uniq_var(Ax_o, Ax_c)
 
         return self.project_Aop(Aop, ci, state), Adiag
-
 
 
 if __name__ == '__main__':

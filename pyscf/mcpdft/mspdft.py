@@ -60,17 +60,33 @@ def make_heff_mcscf (mc, mo_coeff=None, ci=None):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
 
-    ci = np.asarray(ci)
-
     h1, h0 = mc.get_h1eff (mo_coeff)
     h2 = mc.get_h2eff (mo_coeff)
     h2eff = direct_spin1.absorb_h1e (h1, h2, mc.ncas, mc.nelecas, 0.5)
-    hc_all = [direct_spin1.contract_2e (h2eff, c, mc.ncas, mc.nelecas)
-        for c in ci]
-    heff = np.tensordot (ci, hc_all, axes=((1,2),(1,2)))
-    idx = np.diag_indices_from (heff)
-    heff[idx] += h0
-    return heff
+
+    def construct_ham_slice(solver, slice, nelecas):
+        ci_irrep = ci[slice]
+        if hasattr(solver, "orbsym"):
+            solver.orbsym = mc.fcisolver.orbsym
+
+        hc_all_irrep = [solver.contract_2e(h2eff, c, mc.ncas, nelecas) for c in ci_irrep]
+        heff_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+        diag_idx = np.diag_indices_from(heff_irrep)
+        heff_irrep[diag_idx] += h0
+        return heff_irrep
+
+    if not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
+
+    irrep_slices = []
+    start = 0
+    for solver in mc.fcisolver.fcisolvers:
+        end = start+solver.nroots
+        irrep_slices.append(slice(start, end))
+        start = end
+
+    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec(s, mc.nelecas)) for s, irrep in zip(mc.fcisolver.fcisolvers, irrep_slices)]
+
 
 def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
         sing_tol=None, nudge_tol=None):
