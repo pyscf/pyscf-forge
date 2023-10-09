@@ -140,7 +140,7 @@ def case(kv, mc):
         semi_num_c_veff = contract_veff(mc, mo1, ci1, veff1_1, veff2_1)
         return semi_num_c_veff - ref_c_veff
 
-    for ix, p in enumerate(range(20)):
+    for ix, p in enumerate(range(30)):
         x1 = x0/(2**p)
         x1_norm = np.linalg.norm(x1)
         dg_test = np.dot(g_all, x1)
