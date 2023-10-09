@@ -206,7 +206,6 @@ class KnownValues(unittest.TestCase):
         for i in range(2):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0] / BOHR
-                print(de - NUM_REF[i])
                 self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
 
     def test_grad_lih_lin2ftpbe22_sto3g(self):
@@ -223,6 +222,7 @@ class KnownValues(unittest.TestCase):
         for i in range(2):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0] / BOHR
+                print(de - NUM_REF[i])
                 self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
 
     def test_grad_scanner(self):
