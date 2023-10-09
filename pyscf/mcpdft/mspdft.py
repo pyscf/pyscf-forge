@@ -85,7 +85,8 @@ def make_heff_mcscf (mc, mo_coeff=None, ci=None):
         irrep_slices.append(slice(start, end))
         start = end
 
-    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec(s, mc.nelecas)) for s, irrep in zip(mc.fcisolver.fcisolvers, irrep_slices)]
+    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec(s, mc.nelecas))
+            for s, irrep in zip(mc.fcisolver.fcisolvers, irrep_slices)]
 
 
 def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,

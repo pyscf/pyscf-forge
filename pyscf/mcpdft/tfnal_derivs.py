@@ -162,7 +162,7 @@ def unpack_vot(packed, rho, Pi):
 
     rho_tot = rho.sum(0)
     rho_deriv = rho_tot[1:4, :] if nderiv > 1 else None
-    Pi_deriv = Pi[1:4, :] if nderiv > 1 else None
+    Pi_deriv = Pi[1:4, :] if nderiv_Pi > 1 else None
     return _unpack_sigma_vector(packed, deriv1=rho_deriv, deriv2=Pi_deriv)
 
 
