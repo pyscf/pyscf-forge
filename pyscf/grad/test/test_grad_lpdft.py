@@ -15,16 +15,16 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.edu>
 
-import numpy as np
 import unittest
 
-from pyscf import scf, gto, mcscf, df
+from pyscf import scf, gto, mcscf, df, lib
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 
+
 def diatomic(atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
              charge=None, spin=None, symmetry=False, cas_irrep=None,
-             density_fit=False):
+             density_fit=False, grids_level=9):
     global mols
     xyz = '{:s} 0.0 0.0 0.0; {:s} {:.3f} 0.0 0.0'.format(atom1, atom2, r)
     mol = gto.M(atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=0, output='/dev/null')
@@ -33,7 +33,7 @@ def diatomic(atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     if density_fit:
         mf = mf.density_fit(auxbasis=df.aug_etb(mol))
 
-    mc = mcpdft.CASSCF(mf.run(), fnal, ncas, nelecas, grids_level=9)
+    mc = mcpdft.CASSCF(mf.run(), fnal, ncas, nelecas, grids_level=grids_level)
     if spin is None:
         spin = mol.nelectron % 2
 
@@ -105,7 +105,7 @@ class KnownValues(unittest.TestCase):
                 de = mc_grad.kernel(state=i)[1, 0] / BOHR
                 self.assertAlmostEqual(de, NUM_REF[i], 7)
 
-    def test_grad_h2_lin2ftlda22_631g_slow(self):
+    def test_grad_h2_lin2ftlda22_631g(self):
         # orb:    yes
         # ci:     yes
         mc_grad = diatomic('H', 'H', 1.3, 'ftLDA,VWN3', '6-31G', 2, 2, 2)
@@ -174,6 +174,22 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0] / BOHR
                 self.assertAlmostEqual(de, NUM_REF[i], delta=1e-4)
+
+    def test_lpdft_grad_scanner(self):
+        # Tests API and Scanner capabilities
+        mc_grad1 = diatomic("Li", "H", 1.5, "ftLDA,VWN3", "STO-3G", 2, 2, 2, grids_level=1)
+        mol1 = mc_grad1.base.mol
+        mc_grad2 = diatomic("Li", "H", 1.6, "ftLDA,VWN3", "STO-3G", 2, 2, 2, grids_level=1).as_scanner()
+
+        for state in range(2):
+            with self.subTest(state=state):
+                de1 = mc_grad1.kernel(state=state)
+                e1 = mc_grad1.base.e_states[state]
+                e2, de2 = mc_grad2(mol1, state=state)
+                self.assertTrue(mc_grad1.converged)
+                self.assertTrue(mc_grad2.converged)
+                self.assertAlmostEqual(e1, e2, 6)
+                self.assertAlmostEqual(lib.fp(de1), lib.fp(de2), 6)
 
 
 if __name__ == "__main__":
