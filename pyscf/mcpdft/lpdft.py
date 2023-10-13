@@ -15,17 +15,14 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
-from functools import reduce
 import numpy as np
 from scipy import linalg
 
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
-from pyscf.mcscf import mc1step
+
 from pyscf import mcpdft
 from pyscf.mcpdft import _dms
-from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
-    StateAverageMixFCISolver
 
 
 def weighted_average_densities(mc, ci=None, weights=None):
@@ -169,7 +166,7 @@ def transformed_h1e_for_cas(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0,
         energy_core += mc.veff2.energy_core
         energy_core += np.tensordot(core_dm, hcore_eff).real
 
-    h1eff = reduce(np.dot, (mo_cas.conj().T, hcore_eff, mo_cas))
+    h1eff = mo_cas.conj().T @ hcore_eff @ mo_cas
     # Add in the 2-electron portion that acts as a 1-electron operator
     h1eff += mc.veff2.vhf_c[ncore:nocc, ncore:nocc]
 
@@ -254,7 +251,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[slice]
         return lpdft_irrep
 
-    if not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+    if not isinstance(mc, _LPDFTMix):
         return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
 
     # We have a StateAverageMix Solver
@@ -477,10 +474,14 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         return cas_hyb[0] * self.get_hcore() + self.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
 
     def nuc_grad_method(self, state=None):
+        from pyscf.mcscf import mc1step
+        from pyscf.mcscf.df import _DFCASSCF
         if not isinstance(self, mc1step.CASSCF):
             raise NotImplementedError("CASCI-based LPDFT nuclear gradients")
         elif getattr(self, 'frozen', None) is not None:
             raise NotImplementedError("LPDFT nuclear gradients with frozen orbitals")
+        elif isinstance(self, _DFCASSCF):
+            raise NotImplementedError("Density Fit LPDFT nuclear gradients")
         else:
             from pyscf.grad.lpdft import Gradients
 
@@ -606,6 +607,8 @@ def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
     Returns:
         si : instance of class _LPDFT
     '''
+    from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
+        StateAverageMixFCISolver
 
     if isinstance(mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError('already a multi-state PDFT solver')
