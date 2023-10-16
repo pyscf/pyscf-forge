@@ -25,7 +25,6 @@
 import unittest
 
 from pyscf import scf, gto, mcscf, df, lib, fci
-from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 
 
@@ -77,7 +76,7 @@ class KnownValues(unittest.TestCase):
             orb:    yes
             ci:     no
         """
-        n_states=3
+        n_states = 3
         mc_grad = diatomic('He', 'H', 1.4, 'ftLDA,VWN3', '6-31G', 2, 2, n_states, charge=1)
 
         # Numerical from this software
@@ -89,6 +88,22 @@ class KnownValues(unittest.TestCase):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 7)
 
+    def test_grad_hhe_lin2ftlda24_631g_slow(self):
+        """ System has the following Lagrange multiplier sectors:
+            orb:    no
+            ci:     yes
+        """
+        n_states = 2
+        mc_grad = diatomic('He', 'H', 1.4, 'ftLDA,VWN3', '6-31G', 4, 2, n_states, charge=1)
+
+        # Numerical from this software
+        # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
+        # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
+        NUM_REF = [0.0025153073, -0.1444551635]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 7)
 
     def test_grad_scanner(self):
         # Tests API and Scanner capabilities
