@@ -66,13 +66,13 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-    # dm1 = tag_array(dm1, mo_coeff=mo_coeff, mo_occ=mo_occup[:nocc])
+    dm1 = tag_array(dm1, mo_coeff=mo_coeff[:, :nocc], mo_occ=mo_occup[:nocc])
 
     casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci_0)
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
     dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s_0, mo_coeff=mo_coeff_0, ncore=ncore, ncas=ncas)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
-    # dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0, mo_occ=mo_occup_0[:nocc])
+    dm1_0 = tag_array(dm1_0, mo_coeff=mo_coeff_0[:, :nocc], mo_occ=mo_occup_0[:nocc])
 
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1)
     cascm2_0 = _dms.dm2_cumulant(casdm2_0, casdm1_0)
@@ -207,13 +207,13 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     # Specific state density
     casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s, mo_coeff=mo_coeff)
     dm1 = dm1s[0] + dm1s[1]
     casdm2 = mc.make_one_casdm2(ci=ci, state=state)
 
     # The model-space density (or state-average density)
     casdm1s_0, casdm2_0 = mc.get_casdm12_0()
-    dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
+    dm1s_0 = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0, mo_coeff=mo_coeff)
     dm1_0 = dm1s_0[0] + dm1s_0[1]
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
 
@@ -451,28 +451,50 @@ class Gradients(sacasscf.Gradients):
 
         # This is the zero-order density
         casdm1s_0, casdm2_0 = self.base.get_casdm12_0()
-        dm1s_0 = _dms.casdm1s_to_dm1s(self.base, casdm1s_0)
+        dm1s_0 = _dms.casdm1s_to_dm1s(self.base, casdm1s_0, mo_coeff=mo)
 
         # This is the density of the state we are differentiating with respect to
         casdm1s = self.base.make_one_casdm1s(ci=ci, state=state)
         casdm2 = self.base.make_one_casdm2(ci=ci, state=state)
-        dm1s = _dms.casdm1s_to_dm1s(self.base, casdm1s)
+        dm1s = _dms.casdm1s_to_dm1s(self.base, casdm1s, mo_coeff=mo)
 
-        # We contract and have the coulomb generated from the "delta" density!
         delta_dm1s = dm1s - dm1s_0
 
         delta_casdm1s = (casdm1s[0] - casdm1s_0[0], casdm1s[1] - casdm1s_0[1])
         delta_casdm2 = casdm2 - casdm2_0
         delta_cascm2 = _dms.dm2_cumulant(delta_casdm2, delta_casdm1s)
 
-        return self.base.get_pdft_feff(mo=mo, ci=ci,
+
+        # Debug
+        # Todo optimize this so it is done in a single quadrature loop
+        cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
+        feff1, feff2 = self.base.get_pdft_feff(mo=mo, ci=ci,
                                        casdm1s=casdm1s_0,
                                        casdm2=casdm2_0,
-                                       c_dm1s=delta_dm1s,
-                                       c_cascm2=delta_cascm2,
+                                       c_dm1s=dm1s,
+                                       c_cascm2=cascm2,
                                        jk_pc=True,
                                        paaa_only=True,
                                        incl_coul=True)
+
+        feff1_0, feff2_0 = self.base.get_pdft_feff(mo=mo, ci=ci,
+                                       casdm1s=casdm1s_0,
+                                       casdm2=casdm2_0,
+                                       jk_pc=True,
+                                       paaa_only=True,
+                                       incl_coul=True)
+
+        delta_feff1 = feff1 - feff1_0
+        delta_feff2 = feff2
+
+        delta_feff2.vhf_c -= feff2_0.vhf_c
+        delta_feff2.papa -= feff2_0.papa
+        delta_feff2.ppaa -= feff2_0.ppaa
+        delta_feff2.j_pc -= feff2_0.j_pc
+        delta_feff2.k_pc -= feff2_0.k_pc
+
+        return delta_feff1, delta_feff2
+
 
     def get_Aop_Adiag(self, verbose=None, mo=None, ci=None, eris=None, state=None, **kwargs):
         """This function accounts for the fact that the CI vectors are no longer eigenstates of the CAS Hamiltonian.

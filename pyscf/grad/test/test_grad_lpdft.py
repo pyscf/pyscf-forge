@@ -123,6 +123,23 @@ class KnownValues(unittest.TestCase):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
 
+    def test_grad_lih_lin3ftlda22_sto3g_slow(self):
+        """ System has the following Lagrange multiplier sectors:
+            orb:    yes
+            ci:     no
+        """
+        n_states = 3
+        mc_grad = diatomic('Li', 'H', 1.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, n_states)
+
+        # Numerical from this software
+        # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
+        # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
+        NUM_REF = [-0.0269959347, -0.052808735, -0.0785029927]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 6)
+
     def test_grad_lih_lin2ftlda46_sto3g_slow(self):
         """ System has the following Lagrange multiplier sectors:
             orb:    no
@@ -142,11 +159,12 @@ class KnownValues(unittest.TestCase):
 
     def test_grad_scanner(self):
         # Tests API and Scanner capabilities
-        mc_grad1 = diatomic("Li", "H", 1.5, "ftLDA,VWN3", "STO-3G", 2, 2, 2, grids_level=1)
+        n_states = 2
+        mc_grad1 = diatomic("Li", "H", 1.5, "ftLDA,VWN3", "STO-3G", 2, 2, n_states, grids_level=1)
         mol1 = mc_grad1.base.mol
-        mc_grad2 = diatomic("Li", "H", 1.6, "ftLDA,VWN3", "STO-3G", 2, 2, 2, grids_level=1).as_scanner()
+        mc_grad2 = diatomic("Li", "H", 1.6, "ftLDA,VWN3", "STO-3G", 2, 2, n_states, grids_level=1).as_scanner()
 
-        for state in range(2):
+        for state in range(n_states):
             with self.subTest(state=state):
                 de1 = mc_grad1.kernel(state=state)
                 e1 = mc_grad1.base.e_states[state]
