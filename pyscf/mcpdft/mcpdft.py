@@ -591,6 +591,7 @@ class _PDFT():
         quantities.)
 
         incl_coul includes the coulomb interaction with the contracting density!
+        delta actually sets contracted density to contracted_density - density (like delta in lpdft grads)
         """
         t0 = (logger.process_clock(), logger.perf_counter())
         if mo is None: mo = self.mo_coeff
@@ -609,7 +610,6 @@ class _PDFT():
         if c_cascm2 is None:
             c_cascm2 = cascm2
 
-
         pdft_feff1, pdft_feff2 = pdft_feff.kernel(self.otfnal, dm1s, cascm2,
                                                   c_dm1s, c_cascm2, mo, ncore,
                                                   ncas,
@@ -620,13 +620,9 @@ class _PDFT():
 
         if incl_coul:
             if delta:
-                delta_dm1s = c_dm1s - dm1s
-                coul_term = self._scf.get_j(self.mol, delta_dm1s[0] + delta_dm1s[1])
+                c_dm1s -= dm1s
 
-            else:
-                coul_term = self._scf.get_j(self.mol, c_dm1s[0] + c_dm1s[1])
-
-            pdft_feff1 += coul_term
+            pdft_feff1 += self._scf.get_j(self.mol, c_dm1s[0] + c_dm1s[1])
 
         logger.timer(self, 'get_pdft_feff', *t0)
         return pdft_feff1, pdft_feff2

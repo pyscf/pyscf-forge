@@ -65,6 +65,9 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
         jk_pc : logical
             If true, compute the ppii=pipi elements of veff2 (otherwise, these
             are set to zero)
+        delta : logical
+            If true, then contract with the delta density. The delta density is the c_dm1s-dm1s and similarly for the
+            2rdm element (though care is taken since 2rdm elements are expressed in cumulant form).
 
     Returns:
         feff1 : ndarray of shape (nao, nao)
@@ -153,14 +156,14 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
                                      dens_deriv, mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
 
+        if delta:
+            crho -= rho
+            cPi -= Pi
+
         vot, fot = ot.eval_ot(rho, Pi, weights=weight, dderiv=2,
                               _unpack_vot=False)[1:]
         frho, fPi = contract_fot(ot, fot, rho, Pi, crho, cPi, unpack=True,
                                  vot_packed=vot)
-        if delta:
-            tmp_frho, tmp_fPi = contract_fot(ot, fot, rho, Pi, rho, Pi, unpack=True, vot_packed=vot)
-            frho -= tmp_frho
-            fPi -= tmp_fPi
 
         t0 = logger.timer(ot, 'effective gradient response kernel calculation',
                           *t0)
@@ -186,7 +189,7 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
     return feff1, feff2
 
 
-def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=2000):
+def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=2000, delta=False):
     '''1- and 2-body gradient response (hessian-vector products) from MC-PDFT.
     This is the lazy way and doesn't care about memory.'''
     ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
@@ -212,6 +215,10 @@ def lazy_kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_cas, hermi=1, max_memory=
         cPi = get_ontop_pair_density(ot, crho, ao, c_cascm2, mo_cas,
                                      dens_deriv, mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
+
+        if delta:
+            crho -= rho
+            cPi -= Pi
 
         vot, fot = ot.eval_ot(rho, Pi, weights=weight, dderiv=2,
                               _unpack_vot=False)[1:]
