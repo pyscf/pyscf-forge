@@ -111,7 +111,7 @@ class KnownValues(unittest.TestCase):
             ci:     yes
         """
         n_states = 2
-        # The L-PDFT ground state is too flat at 1.4, so shift it slightly
+        # The L-PDFT ground state is flat at 1.4, so shift it slightly
         mc_grad = diatomic('He', 'H', 1.2, 'ftLDA,VWN3', '6-31G', 2, 2, n_states, charge=1)
 
         # Numerical from this software
@@ -129,7 +129,6 @@ class KnownValues(unittest.TestCase):
             ci:     yes
         """
         n_states = 2
-        # The L-PDFT ground state is too flat at 1.4, so shift it slightly
         mc_grad = diatomic('Li', 'H', 1.4, 'ftLDA,VWN3', 'STO-3G', 6, 4, n_states)
 
         # Numerical from this software
