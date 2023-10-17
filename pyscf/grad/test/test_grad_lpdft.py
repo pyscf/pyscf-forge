@@ -157,6 +157,23 @@ class KnownValues(unittest.TestCase):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 7)
 
+    def test_grad_lih_lin2ftlda22_sto3g_slow(self):
+        """ System has the following Lagrange multiplier sectors:
+            orb:    yes
+            ci:     yes
+        """
+        n_states = 2
+        mc_grad = diatomic('Li', 'H', 1.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, n_states)
+
+        # Numerical from this software
+        # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
+        # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
+        NUM_REF = [-0.0302731558, -0.0528615182]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 5)
+
     def test_grad_scanner(self):
         # Tests API and Scanner capabilities
         n_states = 2
