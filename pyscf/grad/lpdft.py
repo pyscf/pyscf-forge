@@ -451,50 +451,16 @@ class Gradients(sacasscf.Gradients):
 
         # This is the zero-order density
         casdm1s_0, casdm2_0 = self.base.get_casdm12_0()
-        dm1s_0 = _dms.casdm1s_to_dm1s(self.base, casdm1s_0, mo_coeff=mo)
 
         # This is the density of the state we are differentiating with respect to
         casdm1s = self.base.make_one_casdm1s(ci=ci, state=state)
         casdm2 = self.base.make_one_casdm2(ci=ci, state=state)
         dm1s = _dms.casdm1s_to_dm1s(self.base, casdm1s, mo_coeff=mo)
 
-        delta_dm1s = dm1s - dm1s_0
-
-        delta_casdm1s = (casdm1s[0] - casdm1s_0[0], casdm1s[1] - casdm1s_0[1])
-        delta_casdm2 = casdm2 - casdm2_0
-        delta_cascm2 = _dms.dm2_cumulant(delta_casdm2, delta_casdm1s)
-
-
-        # Debug
-        # Todo optimize this so it is done in a single quadrature loop
         cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
-        feff1, feff2 = self.base.get_pdft_feff(mo=mo, ci=ci,
-                                       casdm1s=casdm1s_0,
-                                       casdm2=casdm2_0,
-                                       c_dm1s=dm1s,
-                                       c_cascm2=cascm2,
-                                       jk_pc=True,
-                                       paaa_only=True,
-                                       incl_coul=True)
 
-        feff1_0, feff2_0 = self.base.get_pdft_feff(mo=mo, ci=ci,
-                                       casdm1s=casdm1s_0,
-                                       casdm2=casdm2_0,
-                                       jk_pc=True,
-                                       paaa_only=True,
-                                       incl_coul=True)
-
-        delta_feff1 = feff1 - feff1_0
-        delta_feff2 = feff2
-
-        delta_feff2.vhf_c -= feff2_0.vhf_c
-        delta_feff2.papa -= feff2_0.papa
-        delta_feff2.ppaa -= feff2_0.ppaa
-        delta_feff2.j_pc -= feff2_0.j_pc
-        delta_feff2.k_pc -= feff2_0.k_pc
-
-        return delta_feff1, delta_feff2
-
+        return self.base.get_pdft_feff(mo=mo, ci=ci, casdm1s=casdm1s_0, casdm2=casdm2_0, c_dm1s=dm1s,
+                                       c_cascm2=cascm2, jk_pc=True, paaa_only=True, incl_coul=True, delta=True)
 
     def get_Aop_Adiag(self, verbose=None, mo=None, ci=None, eris=None, state=None, **kwargs):
         """This function accounts for the fact that the CI vectors are no longer eigenstates of the CAS Hamiltonian.

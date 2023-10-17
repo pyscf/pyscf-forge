@@ -25,7 +25,7 @@ import gc
 
 
 def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory=2000, hermi=1, paaa_only=False,
-           aaaa_only=False, jk_pc=False):
+           aaaa_only=False, jk_pc=False, delta=False):
     r'''Get the 1- and 2-body effective gradient responses from MC-PDFT. The
     $\rho \cdot \mathbf{F}$ terms, or Hessian vector products.
 
@@ -98,6 +98,7 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
     # Density matrices
     dm_core = mo_core @ mo_core.T
     dm_cas = dm1s - dm_core[None, :, :]
+    cdm_cas = c_dm1s - dm_core[None, :, :]
     dm_core *= 2
 
     # Propagate speedup tags
@@ -156,6 +157,11 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
                               _unpack_vot=False)[1:]
         frho, fPi = contract_fot(ot, fot, rho, Pi, crho, cPi, unpack=True,
                                  vot_packed=vot)
+        if delta:
+            tmp_frho, tmp_fPi = contract_fot(ot, fot, rho, Pi, rho, Pi, unpack=True, vot_packed=vot)
+            frho -= tmp_frho
+            fPi -= tmp_fPi
+
         t0 = logger.timer(ot, 'effective gradient response kernel calculation',
                           *t0)
 

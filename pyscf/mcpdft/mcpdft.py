@@ -584,7 +584,7 @@ class _PDFT():
 
     def get_pdft_feff(self, mo=None, ci=None, state=0, casdm1s=None,
                       casdm2=None, c_dm1s=None, c_cascm2=None,
-                      paaa_only=False, aaaa_only=False, jk_pc=False, incl_coul=False):
+                      paaa_only=False, aaaa_only=False, jk_pc=False, incl_coul=False, delta=False):
         """casdm1s and casdm2 are the values that are put into the kernel
         whereas the c_dm1s and c_cascm2 are the densities which multiply the
         kernel function (ie the contraction in terms of normal 1 and 2-rdm
@@ -616,10 +616,17 @@ class _PDFT():
                                                   max_memory=self.max_memory,
                                                   paaa_only=paaa_only,
                                                   aaaa_only=aaaa_only,
-                                                  jk_pc=jk_pc)
+                                                  jk_pc=jk_pc, delta=delta)
 
         if incl_coul:
-            pdft_feff1 += self._scf.get_j(self.mol, c_dm1s[0] + c_dm1s[1])
+            if delta:
+                delta_dm1s = c_dm1s - dm1s
+                coul_term = self._scf.get_j(self.mol, delta_dm1s[0] + delta_dm1s[1])
+
+            else:
+                coul_term = self._scf.get_j(self.mol, c_dm1s[0] + c_dm1s[1])
+
+            pdft_feff1 += coul_term
 
         logger.timer(self, 'get_pdft_feff', *t0)
         return pdft_feff1, pdft_feff2
