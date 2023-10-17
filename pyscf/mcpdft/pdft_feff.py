@@ -101,7 +101,6 @@ def kernel(ot, dm1s, cascm2, c_dm1s, c_cascm2, mo_coeff, ncore, ncas, max_memory
     # Density matrices
     dm_core = mo_core @ mo_core.T
     dm_cas = dm1s - dm_core[None, :, :]
-    cdm_cas = c_dm1s - dm_core[None, :, :]
     dm_core *= 2
 
     # Propagate speedup tags
