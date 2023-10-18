@@ -39,7 +39,7 @@ def get_furan(iroots=3):
     mf = scf.RHF(mol).run()
     mc = mcpdft.CASSCF(mf,'tPBE', 5, 6, grids_level=1)
     #mc.fcisolver = csf_solver(mol, smult=1, symm='A1')
-    fix_spin_(mc.fcisolver, ss=0)
+    fix_spin_(mc.fcisolver, ss=0, shift=.2)
     mc.fcisolver.wfnsym = 'A1'
     mc = mc.multi_state(weights, 'cms')
     mc.max_cycle_macro = 200

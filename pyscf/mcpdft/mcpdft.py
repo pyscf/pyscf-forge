@@ -15,17 +15,16 @@
 #
 import numpy as np
 from copy import deepcopy
-from pyscf import ao2mo, fci, mcscf, __config__
+from pyscf import ao2mo, fci, mcscf, lib, __config__
 from pyscf.lib import logger
 from pyscf.dft import gen_grid
 from pyscf.mcscf import mc1step
 from pyscf.mcscf.addons import StateAverageMCSCFSolver, state_average_mix
 from pyscf.mcscf.addons import state_average_mix_, StateAverageMixFCISolver
-from pyscf.mcscf.df import _DFCASSCF
+from pyscf.mcscf.df import _DFCASSCF, _DFCAS
 from pyscf.mcpdft import pdft_veff, pdft_feff
 from pyscf.mcpdft.otfnal import transfnal, get_transfnal
 from pyscf.mcpdft import _dms
-
 
 def energy_tot(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     '''Calculate MC-PDFT total energy
@@ -320,7 +319,7 @@ def _get_e_decomp(mc, ot, mo_coeff, ci, e_nuc, h, nelecas):
     _rdms.ci = ci
     _casdms = _rdms.fcisolver
     h1, h0 = _rdms.h1e_for_cas()
-    h2 = ao2mo.restore(1, _rdms.ao2mo(), ncas)
+    h2 = ao2mo.restore(1, _rdms.get_h2eff(), ncas)
     dm1s = np.stack(_rdms.make_rdm1s(), axis=0)
     dm1 = dm1s[0] + dm1s[1]
     j = _rdms._scf.get_j(dm=dm1)
@@ -398,12 +397,12 @@ class _PDFT():
         # Keep the same initialization pattern for backwards-compatibility.
         # Use a separate intializer for the ot functional
         if grids_attr is None: grids_attr = {}
-        try:
-            self._mc_class.__init__(self, scf, ncas, nelecas)
-        except TypeError:
-            # I think this is the same DFCASSCF problem as with the DF-SACASSCF
-            # gradients earlier
-            self._mc_class.__init__(self)
+        _mc_class_no_df = self._mc_class
+        if issubclass (_mc_class_no_df, _DFCAS):
+            _mc_class_no_df = lib.drop_class (_mc_class_no_df, _DFCAS)
+        _mc_class_no_df.__init__(self, scf, ncas, nelecas)
+        if issubclass (self._mc_class, _DFCAS):
+            self._mc_class.__init__(self, self, scf.with_df)
         keys = set(('e_ot', 'e_mcscf', 'get_pdft_veff', 'get_pdft_feff', 'e_states', 'otfnal',
                     'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel'))
         self.max_cycle_fp = getattr(__config__, 'mcscf_mcpdft_max_cycle_fp',
