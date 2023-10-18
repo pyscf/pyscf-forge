@@ -337,7 +337,7 @@ def _get_e_decomp(mc, ot, mo_coeff, ci, e_nuc, h, nelecas):
     return e_1e, e_coul, e_otxc, e_ncwfn
 
 
-class _mcscf_env(object):
+class _mcscf_env:
     '''Prevent MC-SCF step of MC-PDFT from overwriting redefined
     quantities e_states and e_tot '''
 
@@ -365,7 +365,7 @@ class _mcscf_env(object):
         self.mc._in_mcscf_env = False
 
 
-class _PDFT():
+class _PDFT:
     # Metaclass parent; unusable on its own
     '''MC-PDFT child class. All total energy quantities (e_tot,
     e_states) are MC-PDFT total energies:
@@ -411,7 +411,7 @@ class _PDFT():
                                       'mcscf_mcpdft_conv_tol_ci_fp', 1e-8)
         self.mcscf_kernel = self._mc_class.kernel
         self._in_mcscf_env = False
-        self._keys = set((self.__dict__.keys())).union(keys)
+        self._keys = set(self.__dict__.keys()).union(keys)
         if grids_level is not None:
             grids_attr['level'] = grids_level
         if my_ot is not None:

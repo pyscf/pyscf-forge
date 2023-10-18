@@ -28,7 +28,7 @@ libpdft = lib.load_library('libpdft')
 
 
 # TODO: outcore implementation; can I use properties instead of copying?
-class _ERIS(object):
+class _ERIS:
     '''Stores two-body PDFT on-top effective integral arrays in a form
     compatible with existing MC-SCF kernel and derivative functions.
     Unlike actual eris, PDFT 2-electron effective integrals have 24-fold

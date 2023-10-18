@@ -31,7 +31,7 @@ H  1.102430  0.000000  0.920125
 H  1.102430  0.000000 -0.920125'''
 mol_nosymm = gto.M (atom = h2co_casscf66_631g_xyz, basis = '6-31g', symmetry = False, output='/dev/null', verbose = 0)
 mol_symm = gto.M (atom = h2co_casscf66_631g_xyz, basis = '6-31g', symmetry = True, output='/dev/null', verbose = 0)
-Lis = math.pi * (np.random.rand ((1)) - 0.5)
+Lis = math.pi * (np.random.rand (1) - 0.5)
 def get_mc_ref (mol, ri=False, sam=False):
     mf = scf.RHF (mol)
     if ri: mf = mf.density_fit (auxbasis = df.aug_etb (mol))
