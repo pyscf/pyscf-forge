@@ -183,8 +183,8 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
     if conv:
         log.note ("{} optimization CONVERGED".format (hdr))
     else:
-        log.note (("{} optimization did not converge after {} "
-                   "cycles".format (hdr, it)))
+        log.note ("{} optimization did not converge after {} "
+                   "cycles".format (hdr, it))
 
     return conv, list (ci)
 
@@ -262,7 +262,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         self.diabatization = diabatization
         self.si_mcscf = None
         self.si_pdft = None
-        self._keys = set ((self.__dict__.keys ())).union (keys)
+        self._keys = set (self.__dict__.keys ()).union (keys)
 
     @property
     def e_states (self):

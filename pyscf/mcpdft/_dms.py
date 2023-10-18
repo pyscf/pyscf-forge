@@ -26,7 +26,7 @@ try:
     from pyscf import dmrgscf
     DMRGCI = dmrgscf.DMRGCI
 except ImportError:
-    class DMRGCI (object):
+    class DMRGCI :
         pass
 
 def _get_fcisolver (mc, ci, state=0):

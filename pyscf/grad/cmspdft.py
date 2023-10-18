@@ -359,7 +359,7 @@ if __name__ == '__main__':
     ci_arr = np.asarray (mc.ci)
 
     mc_grad = mc.nuc_grad_method ()
-    Lis = math.pi * (np.random.rand ((3)) - 0.5)
+    Lis = math.pi * (np.random.rand (3) - 0.5)
     eris = mc.ao2mo (mc.mo_coeff)
 
     dw_test = diab_response (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci,

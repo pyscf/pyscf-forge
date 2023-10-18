@@ -36,7 +36,7 @@ try:
     from mrh.my_pyscf.fci.csf import CSFFCISolver
 except ModuleNotFoundError:
     # dummy
-    class CSFFCISolver (object):
+    class CSFFCISolver :
         pass
 
 def _unpack_state (state):
@@ -656,9 +656,9 @@ class MSPDFTLagPrec (sacasscf_grad.SACASLagPrec):
 
     def do_sing_warn (self):
         if self.sing_warned: return
-        self.log.warn (('Model-space frame-rotation Hessian is singular! '
+        self.log.warn ('Model-space frame-rotation Hessian is singular! '
                         'Response equations may not be solvable to arbitrary '
-                        'precision!'))
+                        'precision!')
         self.sing_warned = True
 
 
