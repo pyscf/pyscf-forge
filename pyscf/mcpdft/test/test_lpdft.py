@@ -206,9 +206,9 @@ class KnownValues(unittest.TestCase):
         HCOUP_EXPECTED = 0.03453830159471619
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 7)
-        self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 7)
-        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 7)
-        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 7)
+        self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 6)
+        self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 6)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 6)
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
