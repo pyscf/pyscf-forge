@@ -231,7 +231,7 @@ class LRDensityFitting(df.DF):
 
 LRDF = LRDensityFitting
 
-class _VHFOpt(_vhf.VHFOpt):
+class _VHFOpt(_vhf._VHFOpt):
     def __init__(self, mol, intor=None, prescreen='CVHFnoscreen',
                  qcondname=None, dmcondname=None, direct_scf_tol=1e-14,
                  omega=None):
@@ -317,28 +317,12 @@ def _get_coulG(Gv, omega):
 def _non_uniform_Gv(n_rad, n_ang, omega, thresh=1e-4):
     assert omega > 0
     rs, ws = _quadrature_roots(n_rad, omega)
-    ang_r, ang_w = _angular_grids_legendre2d(n_ang)
-    if 1:
-        Gv = np.einsum('i,jk->jik', rs, ang_r).reshape(-1,3)
-        weights = np.einsum('i,j->ji', ws, ang_w).ravel()
+    if 0:
+        ang_r, ang_w = _angular_grids_legendre2d(n_ang)
     else:
-        ang_r1, ang_w1 = _angular_grids_Lebedev(n_ang/16)
-        ang_r2, ang_w2 = _angular_grids_Lebedev(n_ang/256)
-        seg0 = rs < 2./3
-        seg1 = (rs < 0.8) & ~seg0
-        seg2 = ~(seg0 | seg1)
-        #print(seg0.sum(), seg1.sum(), seg2.sum())
-        Gv = np.vstack((
-            np.einsum('i,jk->jik', rs[seg0], ang_r).reshape(-1,3),
-            np.einsum('i,jk->jik', rs[seg1], ang_r1).reshape(-1,3),
-            np.einsum('i,jk->jik', rs[seg2], ang_r2).reshape(-1,3),
-        ))
-
-        weights = np.hstack((
-            np.einsum('i,j->ji', ws[seg0], ang_w).ravel(),
-            np.einsum('i,j->ji', ws[seg1], ang_w1).ravel(),
-            np.einsum('i,j->ji', ws[seg2], ang_w2).ravel(),
-        ))
+        ang_r, ang_w = _angular_grids_Lebedev(n_ang)
+    Gv = np.einsum('i,jk->jik', rs, ang_r).reshape(-1,3)
+    weights = np.einsum('i,j->ji', ws, ang_w).ravel()
     pw_ints_norm = 1/(2*np.pi)**3
     factor_sph_coords_dV = np.einsum('gx,gx->g', Gv, Gv)
     weights *= pw_ints_norm * factor_sph_coords_dV
