@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 
 '''
-Range separation JK builder
+Long range density fitting
+Reference:
+    JCP 159, 224101; DOI:10.1063/5.0178266
 '''
 
 import ctypes
