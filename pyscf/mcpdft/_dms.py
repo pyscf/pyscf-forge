@@ -26,7 +26,7 @@ try:
     from pyscf import dmrgscf
     DMRGCI = dmrgscf.DMRGCI
 except ImportError:
-    class DMRGCI (object):
+    class DMRGCI :
         pass
 
 def _get_fcisolver (mc, ci, state=0):
@@ -56,8 +56,7 @@ def _get_fcisolver (mc, ci, state=0):
         if fcisolver is None:
             raise RuntimeError ("Can't find FCI solver for state", state)
     elif isinstance (mc.fcisolver, StateAverageFCISolver):
-        fcisolver = fcisolver._base_class (mc._scf.mol)
-        fcisolver.__dict__.update(mc.fcisolver.__dict__)
+        fcisolver = fcisolver.undo_state_average ()
     if isinstance (fcisolver, DMRGCI):
         ci = solver_state_index # DMRGCI takes state index in place of ci vector
     return fcisolver, ci, nelecas

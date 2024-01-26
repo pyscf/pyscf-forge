@@ -329,7 +329,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         self.veff1 = None
         self.veff2 = None
         self._e_states = None
-        self._keys = set((self.__dict__.keys())).union(keys)
+        self._keys = set(self.__dict__.keys()).union(keys)
 
     @property
     def e_states(self):

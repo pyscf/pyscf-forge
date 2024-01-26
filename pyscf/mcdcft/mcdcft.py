@@ -216,7 +216,7 @@ def get_mcdcft_child_class (mc, ot, **kwargs):
                 # I think this is the same DFCASSCF problem as with the DF-SACASSCF gradients earlier
                 super().__init__()
             keys = set(('e_ot', 'e_mcscf', 'e_states'))
-            self._keys = set ((self.__dict__.keys())).union(keys)
+            self._keys = set (self.__dict__.keys()).union(keys)
             self.grids_level = grids_level
             if my_ot is not None:
                 self._init_ot_grids(my_ot, ot_name, grids_level=grids_level)

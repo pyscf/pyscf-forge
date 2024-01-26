@@ -139,7 +139,7 @@ def safock_energy(mc, **kwargs):
     '''
     dsa_fock = np.zeros(
         int(mc.fcisolver.nroots * (mc.fcisolver.nroots - 1) / 2))
-    # TODO fix, this redundacy...no need to compute fock matrix twice..
+    # TODO fix, this redundancy...no need to compute fock matrix twice..
     e_states, _ = diagonalize_safock(mc)
 
     return np.dot(e_states, mc.weights), dsa_fock, None

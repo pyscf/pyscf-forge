@@ -46,7 +46,7 @@ def get_mc_ref (mol, ri=False, sa2=False):
 #        ref = ref.reshape (2,2,4,3)[int(ri)]
 #    else:
 #        ref = np.load (os.path.join (topdir, 'h2co_tpbe66_631g_grad_num.npy'))[int(ri)]
- #this refernce is obtained by mcpdft numerical differentiation in pyscf 
+ #this reference is obtained by mcpdft numerical differentiation in pyscf 
  #using central differences with a second order accuracy and step size of 1e-4 
     ref = np.load (os.path.join (topdir, 'h2co_tpbe66_631g_edipole_num.npy'))[int(ri)]
     return mc.run (), ref

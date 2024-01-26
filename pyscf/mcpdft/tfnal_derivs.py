@@ -323,8 +323,8 @@ def contract_fot(otfnal, fot, rho0, Pi0, rho1, Pi1, unpack=True,
         vrho1, vPi1 = _unpack_sigma_vector(v1, rho0p, Pi0p)
         if ggrad:
             if vot_packed is None:
-                raise RuntimeError(("Cannot evaluate fot.x in terms of "
-                                    "unpacked density gradients without vot_packed"))
+                raise RuntimeError("Cannot evaluate fot.x in terms of "
+                                    "unpacked density gradients without vot_packed")
             vrho2, vPi2 = _unpack_sigma_vector(vot_packed, rho1p, Pi1p)
             if vrho1.shape[0] > 1: vrho1[1:4, :] += vrho2[1:4, :]
             if vPi1.shape[0] > 1:  vPi1[1:4, :] += vPi2[1:4, :]

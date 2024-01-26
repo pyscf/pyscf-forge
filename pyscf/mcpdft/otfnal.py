@@ -739,11 +739,11 @@ def get_transfnal (mol, otxc):
     xc_base = OT_HYB_ALIAS.get (xc_base.upper (), xc_base)
     if ',' not in xc_base and _libxc.is_hybrid_or_rsh (xc_base):
         raise NotImplementedError (
-            ('Aliased or built-in translated hybrid or range-separated '
-             'functionals\nother than those listed in otfnal.OT_HYB_ALIAS. '
-             'Build a compound functional\nstring with a comma separating the '
-             'exchange and correlation parts, or use\notfnal.make_hybrid_fnal '
-             'instead.')
+            'Aliased or built-in translated hybrid or range-separated '
+            'functionals\nother than those listed in otfnal.OT_HYB_ALIAS. '
+            'Build a compound functional\nstring with a comma separating the '
+            'exchange and correlation parts, or use\notfnal.make_hybrid_fnal '
+            'instead.'
         )
     ks = dft.RKS (mol)
     ks.xc = xc_base
