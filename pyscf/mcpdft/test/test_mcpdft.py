@@ -407,7 +407,7 @@ class KnownValues(unittest.TestCase):
                 # _scf fns but don't default to CASCI self.mol
             e_tot = mc_scan (mol0, mo_coeff=mc0.mo_coeff, ci0=mc0.ci)
             with self.subTest (case='SS CASCI', symm=mol0.symmetry):
-                self.assertAlmostEqual (e_tot, mc0.e_tot, delta=1e-6)
+                 self.assertAlmostEqual (e_tot, mc0.e_tot, delta=1e-6)
         for ix, (mc0, mc1) in enumerate (zip (mcp[1], mcp1[1])):
             tms = (0,1,'mixed')[ix]
             sym = bool (ix//2)
