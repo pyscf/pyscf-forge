@@ -516,6 +516,18 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
             from pyscf.grad.mspdft import Gradients
         return Gradients (self)
 
+    def nac_method(self):
+        if not isinstance(self, mc1step.CASSCF):
+            raise NotImplementedError("CASCI-based PDFT NACs")
+        elif getattr(self, 'frozen', None) is not None:
+            raise NotImplementedError("PDFT NACs with frozen orbitals")
+        elif isinstance(self, _DFCASSCF):
+            raise NotImplementedError("PDFT NACs with density fitting")
+        else:
+            from pyscf.nac.mspdft import NonAdiabaticCouplings
+        
+        return NonAdiabaticCouplings(self)
+
     def dip_moment (self, unit='Debye', origin='Coord_Center', state=None):
         if not isinstance (self, mc1step.CASSCF):
             raise NotImplementedError ("CASCI-based PDFT dipole moments")
