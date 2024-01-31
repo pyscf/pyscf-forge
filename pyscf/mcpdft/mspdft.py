@@ -525,7 +525,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
             raise NotImplementedError("PDFT NACs with density fitting")
         else:
             from pyscf.nac.mspdft import NonAdiabaticCouplings
-        
+
         return NonAdiabaticCouplings(self)
 
     def dip_moment (self, unit='Debye', origin='Coord_Center', state=None):

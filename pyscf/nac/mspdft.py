@@ -39,7 +39,7 @@ def nac_model (mc_grad, mo_coeff=None, ci=None, si_bra=None, si_ket=None,
     castm1 = castm1.conj ().T - castm1
     mo_cas = mo_coeff[:,ncore:][:,:ncas]
     tm1 = reduce (np.dot, (mo_cas, castm1, mo_cas.conj ().T))
-    return _nac_csf (mol, mf_grad, tm1, atmlst)    
+    return _nac_csf (mol, mf_grad, tm1, atmlst)
 
 class NonAdiabaticCouplings (mspdft_grad.Gradients):
     '''MS-PDFT non-adiabatic couplings (NACs) between states
