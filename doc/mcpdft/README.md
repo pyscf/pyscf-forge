@@ -65,8 +65,8 @@ Features
         3. CMS-PDFT
     - Transition electric dipole moment (non-hybrid functionals only) for:
         1. CMS-PDFT
-    - Nonadiabatic coupling vector for:
-        1. CMS-PDFT
+    - Derivative couplings for:
+        1. CMS-PDFT (accepted...)
 * Multi-configuration density-coherence functional theory (MC-DCFT)
   total energy: [*JCTC* **2021**, *17*, 2775]
 
