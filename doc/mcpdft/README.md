@@ -67,6 +67,8 @@ make
     1. CMS-PDFT
   - Transition electric dipole moment (non-hybrid functionals only) for:
     1. CMS-PDFT
+  - Derivative couplings for:
+    1. CMS-PDFT [*JPC A* **2024**]
 - Multi-configuration density-coherence functional theory (MC-DCFT)
   total energy: [*JCTC* **2021**, *17*, 2775]
 
@@ -84,5 +86,9 @@ make
 [*jpcl* **2020**, *11*, 10158]: http://dx.doi.org/10.1021/acs.jpclett.0c02956
 [*mol phys* **2022**, 120]: http://dx.doi.org/10.1080/00268976.2022.2110534
 [*JCTC* **2024**]: https://dx.doi.org/10.1021/acs.jctc.4c00095
+[*JPC A* **2024**]: https://dx.doi.org/10.1021/acs.jpca.3c07048
+
+[comment]: <> (Code hyperlinks)
+[examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
 [custom functional parser]: https://github.com/pyscf/pyscf/blob/master/examples/dft/24-custom_xc_functional.py
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py

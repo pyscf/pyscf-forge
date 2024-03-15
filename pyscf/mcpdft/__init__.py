@@ -73,4 +73,7 @@ mydfgradpath = os.path.join (os.path.join (mypath, 'df'), 'grad')
 from pyscf.df import grad as df_grad
 df_grad.__path__.append (mydfgradpath)
 df_grad.__path__=list(set(df_grad.__path__))
-
+mynacpath = os.path.join(mypath, "nac")
+from pyscf import nac
+nac.__path__.append(mynacpath)
+nac.__path__ = list(set(nac.__path__))
