@@ -60,7 +60,7 @@ make
     1. Single-state CASSCF wave function: [*JCTC* **2018**, *14*, 126]
     1. State-averaged CASSCF wave functions: [*JCP* **2020**, *153*, 014106]
     1. CMS-PDFT: [*Mol Phys* **2022**, 120]
-    1. L-PDFT: [*arXiv* 2401.12933]
+    1. L-PDFT: [*JCTC* **2024**]
   - Permanent electric dipole moment (non-hybrid functionals only) for:
     1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
     1. State-averaged CASSCF wave functions
@@ -83,5 +83,6 @@ make
 [*jctc* **2023**, *19*, 3172]: https://dx.doi.org/10.1021/acs.jctc.3c00207
 [*jpcl* **2020**, *11*, 10158]: http://dx.doi.org/10.1021/acs.jpclett.0c02956
 [*mol phys* **2022**, 120]: http://dx.doi.org/10.1080/00268976.2022.2110534
+[*JCTC* **2024**]: https://dx.doi.org/10.1021/acs.jctc.4c00095
 [custom functional parser]: https://github.com/pyscf/pyscf/blob/master/examples/dft/24-custom_xc_functional.py
 [examples/mcpdft/02-hybrid_functionals.py]: examples/mcpdft/02-hybrid_functionals.py
