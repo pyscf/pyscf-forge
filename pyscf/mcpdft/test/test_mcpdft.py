@@ -397,7 +397,7 @@ class KnownValues(unittest.TestCase):
         for mol0, mc0, mc1 in zip ([mol_nosym, mol_sym], mcp[0], mcp1[0]):
             mc_scan = mc1.as_scanner ()
             with self.subTest (case='SS CASSCF', symm=mol0.symmetry):
-                self.assertAlmostEqual (mc_scan (mol0), mc0.e_tot, delta=1e-6)
+               self.assertAlmostEqual (mc_scan (mol0), mc0.e_tot, delta=1e-6)
             mc2 = mcpdft.CASCI (mc1, 'tPBE', 5, 2).run (mo_coeff=mc1.mo_coeff)
             mc_scan = mc2.as_scanner ()
             mc_scan._scf (mol0) # TODO: fix this in CASCI as_scanner
@@ -407,7 +407,7 @@ class KnownValues(unittest.TestCase):
                 # _scf fns but don't default to CASCI self.mol
             e_tot = mc_scan (mol0, mo_coeff=mc0.mo_coeff, ci0=mc0.ci)
             with self.subTest (case='SS CASCI', symm=mol0.symmetry):
-                self.assertAlmostEqual (e_tot, mc0.e_tot, delta=1e-6)
+                 self.assertAlmostEqual (e_tot, mc0.e_tot, delta=1e-6)
         for ix, (mc0, mc1) in enumerate (zip (mcp[1], mcp1[1])):
             tms = (0,1,'mixed')[ix]
             sym = bool (ix//2)

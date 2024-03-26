@@ -154,7 +154,6 @@ def e_coul_o0 (mc,ci):
     trans12_tdm1_array = np.array(trans12_tdm1)
     tdm1 = np.dot(trans12_tdm1_array,mo_cas.T)
     tdm1 = np.dot(mo_cas,tdm1).transpose(1,0,2)
-
     rowscol2ind = np.zeros ((nroots, nroots), dtype=int)
     rowscol2ind[(rows,col)] = list (range (pairs))
     rowscol2ind += rowscol2ind.T

@@ -23,13 +23,109 @@ from pyscf.mcscf.casci import cas_natorb
 from pyscf.mcpdft.pdft_eff import _contract_eff_rho
 from pyscf.mcpdft.otpd import get_ontop_pair_density, _grid_ao2mo
 from pyscf.mcpdft import _dms
-from functools import reduce
+
 from itertools import product
 from scipy import linalg
 import numpy as np
 import gc
 
 BLKSIZE = gen_grid.BLKSIZE
+
+def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, eris):
+    """Assume that h2e v_j = v_k"""
+    ncore = mc.ncore
+    ncas = mc.ncas
+    nocc = ncore + ncas
+
+    nao, nmo = mo_coeff.shape
+
+    # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
+
+    # MRH: I need to replace aapa with the equivalent array from veff2
+    # I'm not sure how the outcore file-paging system works
+    # I also need to generate vhf_c and vhf_a from veff2 rather than the
+    # molecule's actual integrals. The true Coulomb repulsion should already be
+    # in veff1, but I need to generate the "fake" vj - vk/2 from veff2
+    h1e_mo = mo_coeff.T @ h1e @ mo_coeff + eris.vhf_c
+    aapa = np.zeros((ncas, ncas, nmo, ncas), dtype=h1e_mo.dtype)
+    vhf_a = np.zeros((nmo, nmo), dtype=h1e_mo.dtype)
+
+    for i in range(nmo):
+        jbuf = eris.ppaa[i]
+        aapa[:, :, i, :] = jbuf[ncore:nocc, :, :]
+        vhf_a[i] = np.tensordot(jbuf, casdm1, axes=2)
+
+    vhf_a *= 0.5
+    # we have assumed that vj = vk: vj - vk/2 = vj - vj/2 = vj/2
+    gfock = np.zeros((nmo, nmo))
+    gfock[:, :ncore] = (h1e_mo[:, :ncore] + vhf_a[:, :ncore]) * 2
+    gfock[:, ncore:nocc] = h1e_mo[:, ncore:nocc] @ casdm1
+    gfock[:, ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
+
+    return gfock
+
+
+def xc_response(ot, vot, rho, Pi, weights, moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_pack, ndpi, mo_cas):
+    vrho, vPi = vot
+
+    # Vpq + Vpqrs * Drs ; I'm not sure why the list comprehension down
+    # there doesn't break ao's stride order but I'm not complaining
+    vrho = _contract_eff_rho(vPi, rho.sum(0), add_eff_rho=vrho)
+    tmp_dv = np.stack([ot.get_veff_1body(rho, Pi, [ao_i, moval_occ], weights, kern=vrho) for ao_i in aoval], axis=0)
+    tmp_dv = (tmp_dv * mo_occ[None,:,:] * mo_occup[None, None,:nocc]).sum(2)
+
+    # Vpuvx * Lpuvx ; remember the stupid slowest->fastest->medium
+    # stride order of the ao grid arrays
+    moval_cas = np.ascontiguousarray(moval_occ[..., ncore:].transpose(0,2,1)).transpose(0,2,1)
+
+    tmp_dv1 = ot.get_veff_2body_kl(rho, Pi, moval_cas, moval_cas, weights, symm=True, kern=vPi)
+    # tmp_dv.shape = ndpi,ngrids,ncas*(ncas+1)//2
+    tmp_dv1 = np.tensordot(tmp_dv1, casdm2_pack, axes=(-1,-1))
+    # tmp_dv.shape = ndpi, ngrids, ncas, ncas
+    tmp_dv1[0] = (tmp_dv1[:ndpi] * moval_cas[:ndpi, :, None, :]).sum(0)
+    # Chain and product rule
+    tmp_dv1[1:ndpi] *= moval_cas[0, :, None, :]
+    # Chain and product rule
+    tmp_dv1 = tmp_dv1.sum(-1)
+    # tmp_dv.shape = ndpi, ngrids, ncas
+    tmp_dv1 = np.tensordot(aoval[:, :ndpi], tmp_dv1, axes=((1, 2), (0, 1)))
+    # tmp_dv.shape = comp, nao (orb), ncas (dm2)
+    tmp_dv1 = np.einsum('cpu,pu->cp', tmp_dv1, mo_cas)
+    # tmp_dv.shape = comp, ncas
+
+    return tmp_dv + tmp_dv1
+
+
+def pack_casdm2(cascm2, ncas):
+    diag_idx = np.arange(ncas)  # for puvx
+    diag_idx = diag_idx * (diag_idx+1) // 2 + diag_idx
+
+    casdm2_pack = (cascm2 + cascm2.transpose(0, 1, 3, 2)).reshape(ncas**2, ncas, ncas)
+    casdm2_pack = pack_tril(casdm2_pack).reshape(ncas, ncas, -1)
+    casdm2_pack[:, :, diag_idx] *= 0.5
+    return casdm2_pack
+
+def sum_terms(mf_grad, mol, atmlst,dm1, gfock, coul_term, dvxc):
+    de_hcore = np.zeros((len(atmlst), 3))
+    de_renorm = np.zeros((len(atmlst), 3))
+    de_coul = np.zeros((len(atmlst), 3))
+    de_xc = np.zeros((len(atmlst), 3))
+
+    aoslices = mol.aoslice_by_atom()
+    hcore_deriv = mf_grad.hcore_generator(mol)
+    s1 = mf_grad.get_ovlp(mol)
+
+    for k, ia in enumerate(atmlst):
+        p0, p1 = aoslices[ia][2:]
+        h1ao = hcore_deriv(ia)
+        de_hcore[k] += np.tensordot(h1ao, dm1)
+        de_renorm[k] -= np.tensordot(s1[:, p0:p1], gfock[p0:p1])*2
+        de_coul[k] += coul_term(p0, p1)
+        de_xc[k] += dvxc[:, p0:p1].sum(1)*2
+
+    de_nuc = mf_grad.grad_nuc(mol, atmlst)
+
+    return de_hcore, de_coul, de_xc, de_nuc, de_renorm,
 
 def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         atmlst=None, mf_grad=None, verbose=None, max_memory=None,
@@ -55,59 +151,36 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     nelecas = mc.nelecas
     nao, nmo = mo_coeff.shape
 
-    mo_occ = mo_coeff[:,:nocc]
     mo_core = mo_coeff[:,:ncore]
     mo_cas = mo_coeff[:,ncore:nocc]
 
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
 
-# gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
-    dm_core = np.dot(mo_core, mo_core.T) * 2
-    dm_cas = reduce(np.dot, (mo_cas, casdm1, mo_cas.T))
-    # MRH: I need to replace aapa with the equivalent array from veff2
-    # I'm not sure how the outcore file-paging system works
-    # I also need to generate vhf_c and vhf_a from veff2 rather than the
-    # molecule's actual integrals. The true Coulomb repulsion should already be
-    # in veff1, but I need to generate the "fake" vj - vk/2 from veff2
-    h1e_mo = mo_coeff.T @ (mc.get_hcore() + veff1) @ mo_coeff + veff2.vhf_c
-    aapa = np.zeros ((ncas,ncas,nmo,ncas), dtype=h1e_mo.dtype)
-    vhf_a = np.zeros ((nmo,nmo), dtype=h1e_mo.dtype)
-    for i in range (nmo):
-        jbuf = veff2.ppaa[i]
-        aapa[:,:,i,:] = jbuf[ncore:nocc,:,:]
-        vhf_a[i] = np.tensordot (jbuf, casdm1, axes=2)
-    vhf_a *= 0.5
-    # for this potential, vj = vk: vj - vk/2 = vj - vj/2 = vj/2
-    gfock = np.zeros ((nmo, nmo))
-    gfock[:,:ncore] = (h1e_mo[:,:ncore] + vhf_a[:,:ncore]) * 2
-    gfock[:,ncore:nocc] = h1e_mo[:,ncore:nocc] @ casdm1
-    gfock[:,ncore:nocc] += einsum('uviw,vuwt->it', aapa, casdm2)
-    dme0 = reduce(np.dot, (mo_coeff, (gfock+gfock.T)*.5, mo_coeff.T))
-    aapa = vhf_a = h1e_mo = gfock = None
+    # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
+    dm_core = 2 * mo_core @ mo_core.T
+    dm_cas = mo_cas @ casdm1 @ mo_cas.T
+
+    gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
+    dme0 = mo_coeff @ (0.5*(gfock+gfock.T)) @ mo_coeff.T
+    del gfock
 
     if atmlst is None:
         atmlst = range(mol.natm)
-    aoslices = mol.aoslice_by_atom()
-    de_hcore = np.zeros ((len(atmlst),3))
-    de_renorm = np.zeros ((len(atmlst),3))
-    de_coul = np.zeros ((len(atmlst),3))
-    de_xc = np.zeros ((len(atmlst),3))
+
     de_grid = np.zeros ((len(atmlst),3))
     de_wgt = np.zeros ((len(atmlst),3))
     de_aux = np.zeros ((len(atmlst),3))
-    de = np.zeros ((len(atmlst),3))
 
     t0 = logger.timer (mc, 'PDFT HlFn gfock', *t0)
     mo_coeff, ci, mo_occup = cas_natorb (mc, mo_coeff=mo_coeff, ci=ci)
     mo_occ = mo_coeff[:,:nocc]
-    mo_core = mo_coeff[:,:ncore]
     mo_cas = mo_coeff[:,ncore:nocc]
+
     dm1 = dm_core + dm_cas
     dm1 = tag_array (dm1, mo_coeff=mo_coeff, mo_occ=mo_occup)
+
     # MRH: vhf1c and vhf1a should be the TRUE vj_c and vj_a (no vk!)
     vj = mf_grad.get_jk (dm=dm1)[0]
-    hcore_deriv = mf_grad.hcore_generator(mol)
-    s1 = mf_grad.get_ovlp(mol)
     if auxbasis_response:
         de_aux += np.squeeze (vj.aux)
 
@@ -134,17 +207,18 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_)
     # For addressing particular ao derivatives
     if ot.xctype == 'LDA': idx = idx[:,0:1] # For LDAs, no second derivatives
-    diag_idx = np.arange(ncas) # for puvx
-    diag_idx = diag_idx * (diag_idx+1) // 2 + diag_idx
-    casdm2_pack = (twoCDM + twoCDM.transpose (0,1,3,2)).reshape (ncas**2, ncas,
-        ncas)
-    casdm2_pack = pack_tril (casdm2_pack).reshape (ncas, ncas, -1)
-    casdm2_pack[:,:,diag_idx] *= 0.5
-    diag_idx = np.arange(ncore, dtype=np.int_) * (ncore + 1) # for pqii
+
+    casdm2_pack = pack_casdm2(twoCDM, ncas)
     full_atmlst = -np.ones (mol.natm, dtype=np.int_)
+
     t1 = logger.timer (mc, 'PDFT HlFn quadrature setup', *t0)
     for k, ia in enumerate (atmlst):
         full_atmlst[ia] = k
+
+    ndao = (1, 4)[ot.dens_deriv]
+    ndpi = (1, 4)[ot.Pi_deriv]
+    ncols = 1.05 * 3 * (ndao * (nao + nocc) + max(ndao * nao, ndpi * ncas * ncas))
+
     for ia, (coords, w0, w1) in enumerate (rks_grad.grids_response_cc (
             ot.grids)):
         # For the xc potential derivative, I need every grid point in the
@@ -155,10 +229,8 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         # how "mask" works yet or how else I could do this.
         gc.collect ()
         ngrids = coords.shape[0]
-        ndao = (1,4)[ot.dens_deriv]
-        ndpi = (1,4)[ot.Pi_deriv]
-        ncols = 1.05 * 3 * (ndao*(nao+nocc) + max(ndao*nao,ndpi*ncas*ncas))
-        remaining_floats = (max_memory - current_memory ()[0]) * 1e6 / 8
+
+        remaining_floats = (max_memory - current_memory()[0]) * 1e6 / 8
         blksize = int (remaining_floats / (ncols*BLKSIZE)) * BLKSIZE
         blksize = max (BLKSIZE, min (blksize, ngrids, BLKSIZE*1200))
         t1 = logger.timer (mc, 'PDFT HlFn quadrature atom {} mask and memory '
@@ -199,7 +271,6 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} ao grid '
                 'reshape').format (ia), *t1)
             eot, vot = ot.eval_ot (rho, Pi, weights=w0[ip0:ip1])[:2]
-            vrho, vPi = vot
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} '
                 'eval_ot').format (ia), *t1)
             puvx_mem = 2 * ndpi * (ip1-ip0) * ncas * ncas * 8 / 1e6
@@ -218,59 +289,25 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
             # The last stuff to vectorize is in get_veff_2body!
             k = full_atmlst[ia]
 
-            # Vpq + Vpqrs * Drs ; I'm not sure why the list comprehension down
-            # there doesn't break ao's stride order but I'm not complaining
-            vrho = _contract_eff_rho (vPi, rho.sum (0), add_eff_rho=vrho)
-            tmp_dv = np.stack ([ot.get_veff_1body (rho, Pi, [ao_i, moval_occ],
-                w0[ip0:ip1], kern=vrho) for ao_i in aoval], axis=0)
-            tmp_dv = (tmp_dv * mo_occ[None,:,:]
-                * mo_occup[None,None,:nocc]).sum (2)
-            if k >= 0: de_grid[k] += 2 * tmp_dv.sum (1) # Grid response
-            dvxc -= tmp_dv # XC response
-            vrho = tmp_dv = None
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} Vpq + Vpqrs '
-                '* Drs').format (ia), *t1)
+            tmp_dv = xc_response(ot, vot, rho, Pi, w0[ip0:ip1], moval_occ, aoval, mo_occ, mo_occup, ncore, nocc,
+                                 casdm2_pack, ndpi, mo_cas)
 
-            # Vpuvx * Lpuvx ; remember the stupid slowest->fastest->medium
-            # stride order of the ao grid arrays
-            moval_cas = moval_occ = np.ascontiguousarray (
-                moval_occ[...,ncore:].transpose (0,2,1)).transpose (0,2,1)
-            tmp_dv = ot.get_veff_2body_kl (rho, Pi, moval_cas, moval_cas,
-                w0[ip0:ip1], symm=True, kern=vPi)
-            # tmp_dv.shape = ndpi,ngrids,ncas*(ncas+1)//2
-            tmp_dv = np.tensordot (tmp_dv, casdm2_pack, axes=(-1,-1))
-            # tmp_dv.shape = ndpi, ngrids, ncas, ncas
-            tmp_dv[0] = (tmp_dv[:ndpi] * moval_cas[:ndpi,:,None,:]).sum (0)
-            # Chain and product rule
-            tmp_dv[1:ndpi] *= moval_cas[0,:,None,:]
-            # Chain and product rule
-            tmp_dv = tmp_dv.sum (-1)
-            # tmp_dv.shape = ndpi, ngrids, ncas
-            tmp_dv = np.tensordot (aoval[:,:ndpi], tmp_dv, axes=((1,2),(0,1)))
-            # tmp_dv.shape = comp, nao (orb), ncas (dm2)
-            tmp_dv = np.einsum ('cpu,pu->cp', tmp_dv, mo_cas)
-            # tmp_dv.shape = comp, ncas
-            # it's ok to not vectorize this b/c the quadrature grid is gone
-            if k >= 0: de_grid[k] += 2 * tmp_dv.sum (1) # Grid response
-            dvxc -= tmp_dv # XC response
+            if k >=0: de_grid[k] += 2*tmp_dv.sum(1) # Grid response
+            dvxc -= tmp_dv #XC response
+
             tmp_dv = None
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} Vpuvx * '
-                'Lpuvx').format (ia), *t1)
+            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {}').format (ia), *t1)
 
-            rho = Pi = eot = vot = vPi = aoval = moval_occ = moval_cas = None
+            rho = Pi = eot = vot = aoval = moval_occ = None
             gc.collect ()
 
-    for k, ia in enumerate(atmlst):
-        p0, p1 = aoslices[ia][2:]
-        h1ao = hcore_deriv(ia) # MRH: this should be the TRUE hcore
-        de_hcore[k] += np.tensordot(h1ao, dm1)
-        de_renorm[k] -= np.tensordot(s1[:,p0:p1], dme0[p0:p1]) * 2
-        de_coul[k] += np.tensordot(vj[:,p0:p1], dm1[p0:p1])*2
-        de_xc[k] += dvxc[:,p0:p1].sum (1) * 2 # All grids; only some orbitals
+    def coul_term(p0, p1):
+        return np.tensordot(vj[:,p0:p1], dm1[p0:p1])*2
 
-    de_nuc = mf_grad.grad_nuc(mol, atmlst)
+    de_hcore, de_coul, de_xc, de_nuc, de_renorm = sum_terms(mf_grad, mol, atmlst, dm1, dme0, coul_term,
+                                                                        dvxc)
 
-    logger.debug (mc, "MC-PDFT Hellmann-Feynman nuclear :\n{}".format (de_nuc))
+    logger.debug (mc, "MC-PDFT Hellmann-Feynman nuclear:\n{}".format (de_nuc))
     logger.debug (mc, "MC-PDFT Hellmann-Feynman hcore component:\n{}".format (
         de_hcore))
     logger.debug (mc, "MC-PDFT Hellmann-Feynman coulomb component:\n{}".format
@@ -330,10 +367,9 @@ class Gradients (sacasscf.Gradients):
                 "{} for range-separated MC-PDFT functionals".format (name)
             )
 
-    def get_wfn_response (self, atmlst=None, state=None, verbose=None, mo=None,
+    def get_wfn_response (self, state=None, verbose=None, mo=None,
             ci=None, veff1=None, veff2=None, nlag=None, **kwargs):
         if state is None: state = self.state
-        if atmlst is None: atmlst = self.atmlst
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
@@ -341,17 +377,18 @@ class Gradients (sacasscf.Gradients):
         if (veff1 is None) or (veff2 is None):
             veff1, veff2 = self.base.get_pdft_veff (mo, ci[state],
                 incl_coul=True, paaa_only=True)
-        sing_tol = getattr (self, 'sing_tol_sasa', 1e-8)
-        ndet = ci[state].size
-        fcasscf = self.make_fcasscf (state)
+
+        log = logger.new_logger(self, verbose)
+
+        sing_tol = getattr(self, 'sing_tol_sasa', 1e-8)
+        fcasscf = self.make_fcasscf(state)
         fcasscf.mo_coeff = mo
         fcasscf.ci = ci[state]
         def my_hcore ():
             return self.base.get_hcore () + veff1
         fcasscf.get_hcore = my_hcore
 
-        g_all_state = newton_casscf.gen_g_hop (fcasscf, mo, ci[state], veff2,
-            verbose)[0]
+        g_all_state = newton_casscf.gen_g_hop (fcasscf, mo, ci[state], veff2, verbose)[0]
 
         g_all = np.zeros (nlag)
         g_all[:self.ngorb] = g_all_state[:self.ngorb]
@@ -374,6 +411,11 @@ class Gradients (sacasscf.Gradients):
                         self.na_states[:state], self.nb_states[:state])])
         ndet = self.na_states[state]*self.nb_states[state]
         gci[offs:][:ndet] += gci_state
+
+        # Debug
+        log.debug("g_all mo:\n{}".format(g_all[:self.ngorb]))
+        log.debug("g_all CI:\n{}".format(g_all[self.ngorb:]))
+
         return g_all
 
     def get_ham_response (self, state=None, atmlst=None, verbose=None, mo=None,

@@ -152,6 +152,20 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     return eot, vot, fot
 
 
+def unpack_vot(packed, rho, Pi):
+    if rho.ndim == 2: rho = rho[:, None, :]
+    if Pi.ndim == 1: Pi = Pi[None, :]
+    assert (rho.shape[0] == 2)
+
+    nderiv = rho.shape[1]
+    nderiv_Pi = Pi.shape[0]
+
+    rho_tot = rho.sum(0)
+    rho_deriv = rho_tot[1:4, :] if nderiv > 1 else None
+    Pi_deriv = Pi[1:4, :] if nderiv_Pi > 1 else None
+    return _unpack_sigma_vector(packed, deriv1=rho_deriv, deriv2=Pi_deriv)
+
+
 def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     # For GGAs, libxc differentiates with respect to
     #   sigma[0] = nabla^2 rhoa
@@ -179,6 +193,41 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
             unp1[1:4] += deriv2 * packed[3]
             unp2[1:4] = (2 * deriv2 * packed[4]) + (deriv1 * packed[3])
     return unp1, unp2
+
+
+def contract_vot(vot, rho, Pi):
+    '''Evalute the product of unpacked vot with perturbed density, pair density, and derivatives.
+
+        Args:
+            vot : (ndarray of shape (*,ngrids), ndarray of shape (*, ngrids))
+                format is ([a, ngrids], [b, ngrids]) : (vrho, vPi)
+                ftGGA: a=4, b=4
+                tGGA: a=4, b=1
+                *tLDA: a=1, b=1
+            rho : ndarray of shape (*,ngrids)
+                containing density [and derivatives]
+                the density contracted with vot
+            Pi : ndarray with shape (*,ngrids)
+                containing on-top pair density [and derivatives]
+                the density contracted with vot
+
+        Returns:
+            cvot : ndarray of shape (ngrids)
+                product of vot wrt (density, pair density) and their derivatives
+        '''
+    vrho, vPi = vot
+    if rho.shape[0] == 2: rho = rho.sum(0)
+    if rho.ndim == 1: rho = rho[None, :]
+    if Pi.ndim == 1: Pi = Pi[None, :]
+
+    cvot = vrho[0] * rho[0] + vPi[0] * Pi[0]
+    if len(vrho) > 1:
+        cvot += (vrho[1:4,:] * rho[1:4, :]).sum(0)
+
+    if len(vPi) > 1:
+        cvot += (vPi[1:4, :] * Pi[1:4, :]).sum(0)
+
+    return cvot
 
 
 def contract_fot(otfnal, fot, rho0, Pi0, rho1, Pi1, unpack=True,

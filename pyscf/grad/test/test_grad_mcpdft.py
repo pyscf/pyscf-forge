@@ -31,8 +31,7 @@
 # trying to test the API here; we need tight convergence and grids
 # to reproduce well when OMP is on.
 import numpy as np
-from pyscf import gto, scf, mcscf, lib, fci, df
-from pyscf.fci.addons import fix_spin_
+from pyscf import gto, scf, mcscf, lib, fci
 from pyscf import mcpdft
 import unittest
 

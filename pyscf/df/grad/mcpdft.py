@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyscf import lib, mcpdft
+from pyscf import lib
 from pyscf.grad import mcpdft as mcpdft_grad
 from pyscf.df.grad import sacasscf as dfsacasscf_grad
 from pyscf.df.grad import rhf as dfrhf_grad

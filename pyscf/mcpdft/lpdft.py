@@ -15,16 +15,14 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
-from functools import reduce
 import numpy as np
 from scipy import linalg
 
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
+
 from pyscf import mcpdft
 from pyscf.mcpdft import _dms
-from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
-    StateAverageMixFCISolver
 
 
 def weighted_average_densities(mc, ci=None, weights=None):
@@ -49,7 +47,8 @@ def weighted_average_densities(mc, ci=None, weights=None):
     return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
-def get_lpdfthconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None):
+def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None, veff1=None, veff2=None,
+                     mo_coeff=None):
     ''' Compute h_const for the L-PDFT Hamiltonian
 
     Args:
@@ -66,6 +65,7 @@ def get_lpdfthconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=Non
             Spin-summed 2-RDM in the active space generated from expansion
             density.
 
+    Kwargs:
         hyb : float
             Hybridization constant (lambda term)
 
@@ -75,32 +75,40 @@ def get_lpdfthconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=Non
         ncore: float
             Number of core MOs
 
+        veff1 : ndarray of shape (nao, nao)
+            1-body effective potential in the AO basis computed using the
+            zeroth-order densities.
+
+        veff2 : pyscf.mcscf.mc_ao2mo._ERIS instance
+            Relevant 2-body effective potential in the MO basis.
+
     Returns:
         Constant term h_const for the expansion term.
     '''
     if ncas is None: ncas = mc.ncas
     if ncore is None: ncore = mc.ncore
+    if veff1 is None: veff1 = mc.veff1
+    if veff2 is None: veff2 = mc.veff2
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
 
     nocc = ncore + ncas
 
     # Get the 1-RDM matrices
     casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0, mo_coeff=mo_coeff)
     dm1 = dm1s[0] + dm1s[1]
 
-    # Coulomb energy for zeroth order state
+    # Coulomb interaction
     vj = mc._scf.get_j(dm=dm1)
-    e_j = np.tensordot(vj, dm1) / 2
-
-    e_veff1 = np.tensordot(mc.veff1, dm1)
+    e_veff1_j = np.tensordot(veff1 + hyb*0.5*vj, dm1)
 
     # Deal with 2-electron on-top potential energy
-    e_veff2 = mc.veff2.energy_core
-    e_veff2 += np.tensordot(mc.veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
-    e_veff2 += 0.5 * np.tensordot(mc.get_h2lpdft(), casdm2_0, axes=4)
+    e_veff2 = veff2.energy_core
+    e_veff2 += np.tensordot(veff2.vhf_c[ncore:nocc, ncore:nocc], casdm1_0)
+    e_veff2 += 0.5 * np.tensordot(veff2.papa[ncore:nocc, :, ncore:nocc, :], casdm2_0, axes=4)
 
     # h_nuc + E_ot - 1/2 g_pqrs D_pq D_rs - V_pq D_pq - 1/2 v_pqrs d_pqrs
-    energy_core = hyb * mc.energy_nuc() + E_ot - hyb * e_j - e_veff1 - e_veff2
+    energy_core = hyb * mc.energy_nuc() + E_ot - e_veff1_j - e_veff2
     return energy_core
 
 
@@ -148,13 +156,9 @@ def transformed_h1e_for_cas(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0,
     mo_core = mo_coeff[:, :ncore]
     mo_cas = mo_coeff[:, ncore:nocc]
 
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s=casdm1s_0)
-    dm1 = dm1s[0] + dm1s[1]
-    v_j = mc._scf.get_j(dm=dm1)
-
     # h_pq + V_pq + J_pq all in AO integrals
-    hcore_eff = hyb * mc.get_hcore() + mc.veff1 + hyb * v_j
-    energy_core = mc.get_lpdfthconst(E_ot, casdm1s_0, casdm2_0, hyb)
+    hcore_eff = mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
+    energy_core = mc.get_lpdft_hconst(E_ot, casdm1s_0, casdm2_0, hyb)
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
@@ -162,7 +166,7 @@ def transformed_h1e_for_cas(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0,
         energy_core += mc.veff2.energy_core
         energy_core += np.tensordot(core_dm, hcore_eff).real
 
-    h1eff = reduce(np.dot, (mo_cas.conj().T, hcore_eff, mo_cas))
+    h1eff = mo_cas.conj().T @ hcore_eff @ mo_cas
     # Add in the 2-electron portion that acts as a 1-electron operator
     h1eff += mc.veff2.vhf_c[ncore:nocc, ncore:nocc]
 
@@ -226,7 +230,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
     cas_hyb = hyb[0]
 
     ncas = mc.ncas
-    casdm1s_0, casdm2_0 = mc.get_casdm12_0()
+    casdm1s_0, casdm2_0 = mc.get_casdm12_0(ci=ci)
 
     mc.veff1, mc.veff2, E_ot = mc.get_pdft_veff(mo=mo_coeff, casdm1s=casdm1s_0,
                                         casdm2=casdm2_0, drop_mcwfn=True, incl_energy=True)
@@ -247,7 +251,7 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
         lpdft_irrep[diag_idx] += h0 + cas_hyb * mc.e_mcscf[slice]
         return lpdft_irrep
 
-    if not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+    if not isinstance(mc, _LPDFTMix):
         return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
 
     # We have a StateAverageMix Solver
@@ -267,7 +271,9 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
 
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
+    mc.ci_mcscf = mc.ci
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
+    logger.debug(mc, f"L-PDFT Hamiltonian in MC-SCF Basis:\n{mc.get_lpdft_ham()}")
 
     if hasattr(mc, "_irrep_slices"):
         e_states, si_pdft = zip(*map(mc._eig_si, mc.lpdft_ham))
@@ -277,7 +283,10 @@ def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
     else:
         mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
 
+    logger.debug(mc, f"L-PDFT SI:\n{mc.si_pdft}")
+
     mc.e_tot = np.dot(mc.e_states, mc.weights)
+    mc.ci = mc._get_ci_adiabats()
 
     return (
         mc.e_tot, mc.e_mcscf, mc.e_cas, mc.ci,
@@ -319,6 +328,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         self.si_pdft = None
         self.veff1 = None
         self.veff2 = None
+        self._e_states = None
         self._keys = set(self.__dict__.keys()).union(keys)
 
     @property
@@ -336,8 +346,8 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
     make_lpdft_ham_ = make_lpdft_ham_
     make_lpdft_ham_.__doc__ = make_lpdft_ham_.__doc__
 
-    get_lpdfthconst = get_lpdfthconst
-    get_lpdfthconst.__doc__ = get_lpdfthconst.__doc__
+    get_lpdft_hconst = get_lpdft_hconst
+    get_lpdft_hconst.__doc__ = get_lpdft_hconst.__doc__
 
     get_h1lpdft = transformed_h1e_for_cas
     get_h1lpdft.__doc__ = transformed_h1e_for_cas.__doc__
@@ -409,8 +419,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         log.note("%s (final) states:", self.__class__.__name__)
         if log.verbose >= logger.NOTE and getattr(self.fcisolver, 'spin_square',
                                                   None):
-            ci = self.get_ci_adiabats()
-            ss = self.fcisolver.states_spin_square(ci, self.ncas, self.nelecas)[0]
+            ss = self.fcisolver.states_spin_square(self.ci, self.ncas, self.nelecas)[0]
 
             for i in range(nroots):
                 log.note('  State %d weight %g  ELPDFT = %.15g  S^2 = %.7f',
@@ -421,22 +430,62 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
 
-    def get_ci_adiabats(self, ci=None):
+    def _get_ci_adiabats(self, ci_mcscf=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
                 ci : list of length nroots
-                    MC-SCF ci vectors; defaults to self.ci
+                    MC-SCF ci vectors; defaults to self.ci_mcscf
 
             Returns:
                 ci : list of length nroots
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
-        if ci is None: ci = self.ci
-        return list(np.tensordot(self.si_pdft, np.asarray(ci), axes=1))
+        if ci_mcscf is None: ci_mcscf = self.ci_mcscf
+        return list(np.tensordot(self.si_pdft.T, np.asarray(ci_mcscf), axes=1))
 
     def _eig_si(self, ham):
         return linalg.eigh(ham)
+
+    def get_lpdft_hcore_only(self, casdm1s_0, hyb=1.0):
+        '''
+        Returns the lpdft hcore AO integrals weighted by the
+        hybridization factor. Excludes the MC-SCF (wfn) component.
+        '''
+
+        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s=casdm1s_0)
+        dm1 = dm1s[0] + dm1s[1]
+        v_j = self._scf.get_j(dm=dm1)
+        return hyb*self.get_hcore() + self.veff1 + hyb * v_j
+
+
+    def get_lpdft_hcore(self, casdm1s_0=None):
+        '''
+        Returns the full lpdft hcore AO integrals. Includes the MC-SCF
+        (wfn) component for hybrid functionals.
+        '''
+        if casdm1s_0 is None:
+            casdm1s_0 = self.get_casdm12_0()[0]
+
+        spin = abs(self.nelecas[0] - self.nelecas[1])
+        cas_hyb = self.otfnal._numint.rsh_and_hybrid_coeff(self.otfnal.otxc, spin=spin)[2]
+        hyb = 1.0 - cas_hyb[0]
+
+        return cas_hyb[0] * self.get_hcore() + self.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
+
+    def nuc_grad_method(self, state=None):
+        from pyscf.mcscf import mc1step
+        from pyscf.mcscf.df import _DFCASSCF
+        if not isinstance(self, mc1step.CASSCF):
+            raise NotImplementedError("CASCI-based LPDFT nuclear gradients")
+        elif getattr(self, 'frozen', None) is not None:
+            raise NotImplementedError("LPDFT nuclear gradients with frozen orbitals")
+        elif isinstance(self, _DFCASSCF):
+            raise NotImplementedError("Density Fit LPDFT nuclear gradients")
+        else:
+            from pyscf.grad.lpdft import Gradients
+
+        return Gradients(self, state=state)
 
 
 class _LPDFTMix(_LPDFT):
@@ -487,22 +536,25 @@ class _LPDFTMix(_LPDFT):
         '''
         return linalg.block_diag(*self.lpdft_ham)
 
-    def get_ci_adiabats(self, ci=None):
+    def _get_ci_adiabats(self, ci_mcscf=None):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
                 ci : list of length nroots
-                    MC-SCF ci vectors; defaults to self.ci
+                    MC-SCF ci vectors; defaults to self.ci_mcscf
 
             Returns:
                 ci : list of length nroots
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
-        if ci is None: ci = self.ci
-        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice], np.asarray(ci[irrep_slice]), axes=1) for
-                      irrep_slice in self._irrep_slices]
+        if ci_mcscf is None: ci_mcscf = self.ci_mcscf
+        adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice],
+                                   np.asarray(ci_mcscf[irrep_slice]), axes=1) for irrep_slice in self._irrep_slices]
         # Flattens it
         return [c for ci_irrep in adiabat_ci for c in ci_irrep]
+
+    def nuc_grad_method(self, state=None):
+        raise NotImplementedError("MultiState Mix LPDFT nuclear gradients")
 
 
 def linear_multi_state(mc, weights=(0.5, 0.5), **kwargs):
@@ -555,6 +607,8 @@ def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
     Returns:
         si : instance of class _LPDFT
     '''
+    from pyscf.mcscf.addons import StateAverageMCSCFSolver, \
+        StateAverageMixFCISolver
 
     if isinstance(mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError('already a multi-state PDFT solver')
