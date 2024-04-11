@@ -481,7 +481,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         elif getattr(self, 'frozen', None) is not None:
             raise NotImplementedError("LPDFT nuclear gradients with frozen orbitals")
         elif isinstance(self, _DFCASSCF):
-            raise NotImplementedError("Density Fit LPDFT nuclear gradients")
+            from pyscf.df.grad.lpdft import Gradients
         else:
             from pyscf.grad.lpdft import Gradients
 

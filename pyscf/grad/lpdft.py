@@ -192,7 +192,7 @@ def get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=None, c
 
 def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=None, atmlst=None, mf_grad=None,
                               verbose=None,
-                              max_memory=None):
+                              max_memory=None, auxbasis_response=False):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
     if mf_grad is None: mf_grad = mc._scf.nuc_grad_method()
