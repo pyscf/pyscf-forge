@@ -34,7 +34,7 @@ def diatomic(atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     """Used for checking diatomic systems to see if the Lagrange Multipliers are working properly."""
     global mols
     xyz = '{:s} 0.0 0.0 0.0; {:s} {:.3f} 0.0 0.0'.format(atom1, atom2, r)
-    mol = gto.M(atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=5, output='pyscf.log')
+    mol = gto.M(atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=0, output='/dev/null')
     mols.append(mol)
     mf = scf.RHF(mol)
     if density_fit:
