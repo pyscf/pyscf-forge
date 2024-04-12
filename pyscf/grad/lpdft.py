@@ -227,8 +227,9 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     t0 = logger.timer(mc, 'L-PDFT HlFn gfock', *t0)
 
     # Coulomb potential derivatives generated from zero-order density
-    vj = mf_grad.get_jk(dm=dm1)[0]
-    vj_0 = mf_grad.get_jk(dm=dm1_0)[0]
+    dvj_all = mf_grad.get_j(dm=[dm1, dm1_0])
+    dvj = dvj_all[0]
+    dvj_0 = dvj_all[1]
 
     dvxc, de_wgt, de_grid = get_ontop_response(mc, ot, state, atmlst, casdm1, casdm1_0, mo_coeff=mo_coeff.copy(),
                                                ci=ci.copy(),
@@ -237,7 +238,7 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     delta_dm1 = dm1 - dm1_0
 
     def coul_term(p0, p1):
-        return 2 * (np.tensordot(vj_0[:, p0:p1], delta_dm1[p0:p1]) + np.tensordot(vj[:, p0:p1], dm1_0[p0:p1]))
+        return 2 * (np.tensordot(dvj_0[:, p0:p1], delta_dm1[p0:p1]) + np.tensordot(dvj[:, p0:p1], dm1_0[p0:p1]))
 
     de_hcore, de_coul, de_xc, de_nuc, de_renorm = mcpdft_grad.sum_terms(mf_grad, mol, atmlst, dm1, dme0, coul_term,
                                                                         dvxc)
@@ -251,6 +252,12 @@ def lpdft_HellmanFeynman_grad(mc, ot, state, feff1, feff2, mo_coeff=None, ci=Non
     logger.debug(mc, "L-PDFT Hellmann-Feynman renorm component:\n{}".format(de_renorm))
 
     de = de_nuc + de_hcore + de_coul + de_renorm + de_xc + de_grid + de_wgt
+
+    if auxbasis_response:
+        dvj_aux = dvj_all.aux
+        de_aux = dvj_aux[1,0] + dvj_aux[0,1] - dvj_aux[1,1]
+        logger.debug(mc, "L-PDFT Hellmann-Feynman aux component:\n{}".format(de_aux))
+        de += de_aux
 
     logger.timer(mc, 'L-PDFT HlFn total', *t0)
 

@@ -34,7 +34,7 @@ def diatomic(atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     """Used for checking diatomic systems to see if the Lagrange Multipliers are working properly."""
     global mols
     xyz = '{:s} 0.0 0.0 0.0; {:s} {:.3f} 0.0 0.0'.format(atom1, atom2, r)
-    mol = gto.M(atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=0, output='/dev/null')
+    mol = gto.M(atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=5, output='pyscf.log')
     mols.append(mol)
     mf = scf.RHF(mol)
     if density_fit:
@@ -190,7 +190,6 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
-                return
 
     def test_grad_scanner(self):
         # Tests API and Scanner capabilities
@@ -219,14 +218,14 @@ class KnownValues(unittest.TestCase):
         mc_grad = diatomic('Li', 'H', 1.4, 'ftpbe', 'STO-3G', 2, 2, n_states, density_fit=True)
 
         # Numerical from this software
-        # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
-        # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
-        NUM_REF = [-0.0318512447, -0.0544779213]
+        # PySCF commit:         eafc3575234aca3832d270f4e1193bec2119d2b4
+        # PySCF-forge commit:   2e1596dc919783c751c3cf24bb776e4efcb51a34
+        NUM_REF = [-0.03209560095886714, -0.05453488593608611]
         for i in range(n_states):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
-                return
+
 
 if __name__ == "__main__":
     print("Full Tests for L-PDFT gradients API")
