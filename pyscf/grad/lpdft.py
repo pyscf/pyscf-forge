@@ -359,7 +359,7 @@ def lpdft_HellmanFeynman_grad(
     de = de_nuc + de_hcore + de_coul + de_renorm + de_xc + de_grid + de_wgt
 
     if auxbasis_response:
-        dvj_aux = dvj_all.aux
+        dvj_aux = dvj_all.aux[:,:,atmlst,:]
         de_aux = dvj_aux[1, 0] + dvj_aux[0, 1] - dvj_aux[1, 1]
         logger.debug(mc, "L-PDFT Hellmann-Feynman aux component:\n{}".format(de_aux))
         de += de_aux
