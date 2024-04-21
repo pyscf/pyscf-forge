@@ -28,13 +28,34 @@ from pyscf import scf, gto, df, lib
 from pyscf import mcpdft
 
 
-def diatomic(atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
-             charge=None, spin=None, symmetry=False, cas_irrep=None,
-             density_fit=False, grids_level=9):
+def diatomic(
+    atom1,
+    atom2,
+    r,
+    fnal,
+    basis,
+    ncas,
+    nelecas,
+    nstates,
+    charge=None,
+    spin=None,
+    symmetry=False,
+    cas_irrep=None,
+    density_fit=False,
+    grids_level=9,
+):
     """Used for checking diatomic systems to see if the Lagrange Multipliers are working properly."""
     global mols
-    xyz = '{:s} 0.0 0.0 0.0; {:s} {:.3f} 0.0 0.0'.format(atom1, atom2, r)
-    mol = gto.M(atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=0, output='/dev/null')
+    xyz = "{:s} 0.0 0.0 0.0; {:s} {:.3f} 0.0 0.0".format(atom1, atom2, r)
+    mol = gto.M(
+        atom=xyz,
+        basis=basis,
+        charge=charge,
+        spin=spin,
+        symmetry=symmetry,
+        verbose=0,
+        output="/dev/null",
+    )
     mols.append(mol)
     mf = scf.RHF(mol)
     if density_fit:
@@ -45,7 +66,13 @@ def diatomic(atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
         spin = mol.nelectron % 2
 
     ss = spin * (spin + 2) * 0.25
-    mc = mc.multi_state([1.0 / float(nstates), ] * nstates, 'lin')
+    mc = mc.multi_state(
+        [
+            1.0 / float(nstates),
+        ]
+        * nstates,
+        "lin",
+    )
     mc.fix_spin_(ss=ss, shift=2)
     mc.conv_tol = 1e-12
     mc.conv_grad_tol = 1e-6
@@ -72,13 +99,15 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
 
     def test_grad_hhe_lin3ftlda22_631g_slow(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    yes
-            ci:     no
+        """System has the following Lagrange multiplier sectors:
+        orb:    yes
+        ci:     no
         """
         n_states = 3
-        mc_grad = diatomic('He', 'H', 1.4, 'ftLDA,VWN3', '6-31G', 2, 2, n_states, charge=1)
-    
+        mc_grad = diatomic(
+            "He", "H", 1.4, "ftLDA,VWN3", "6-31G", 2, 2, n_states, charge=1
+        )
+
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
         # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
@@ -87,15 +116,17 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 7)
-    
+
     def test_grad_hhe_lin2ftlda24_631g_slow(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    no
-            ci:     yes
+        """System has the following Lagrange multiplier sectors:
+        orb:    no
+        ci:     yes
         """
         n_states = 2
-        mc_grad = diatomic('He', 'H', 1.4, 'ftLDA,VWN3', '6-31G', 4, 2, n_states, charge=1)
-    
+        mc_grad = diatomic(
+            "He", "H", 1.4, "ftLDA,VWN3", "6-31G", 4, 2, n_states, charge=1
+        )
+
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
         # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
@@ -104,16 +135,18 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 7)
-    
+
     def test_grad_hhe_lin2ftlda22_631g_slow(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    yes
-            ci:     yes
+        """System has the following Lagrange multiplier sectors:
+        orb:    yes
+        ci:     yes
         """
         n_states = 2
         # The L-PDFT ground state is flat at 1.4, so shift it slightly
-        mc_grad = diatomic('He', 'H', 1.2, 'ftLDA,VWN3', '6-31G', 2, 2, n_states, charge=1)
-    
+        mc_grad = diatomic(
+            "He", "H", 1.2, "ftLDA,VWN3", "6-31G", 2, 2, n_states, charge=1
+        )
+
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
         # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
@@ -122,15 +155,15 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
-    
+
     def test_grad_lih_lin3ftlda22_sto3g_slow(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    yes
-            ci:     no
+        """System has the following Lagrange multiplier sectors:
+        orb:    yes
+        ci:     no
         """
         n_states = 3
-        mc_grad = diatomic('Li', 'H', 1.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, n_states)
-    
+        mc_grad = diatomic("Li", "H", 1.4, "ftLDA,VWN3", "STO-3G", 2, 2, n_states)
+
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
         # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
@@ -139,15 +172,15 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 6)
-    
+
     def test_grad_lih_lin2ftlda46_sto3g_slow(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    no
-            ci:     yes
+        """System has the following Lagrange multiplier sectors:
+        orb:    no
+        ci:     yes
         """
         n_states = 2
-        mc_grad = diatomic('Li', 'H', 1.4, 'ftLDA,VWN3', 'STO-3G', 6, 4, n_states)
-    
+        mc_grad = diatomic("Li", "H", 1.4, "ftLDA,VWN3", "STO-3G", 6, 4, n_states)
+
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
         # PySCF-forge commit:   ea0a4c164de21e84eeb30007afcb45344cfc04ff
@@ -158,12 +191,12 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual(de, NUM_REF[i], 7)
 
     def test_grad_lih_lin2ftlda22_sto3g_slow(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    yes
-            ci:     yes
+        """System has the following Lagrange multiplier sectors:
+        orb:    yes
+        ci:     yes
         """
         n_states = 2
-        mc_grad = diatomic('Li', 'H', 1.4, 'ftLDA,VWN3', 'STO-3G', 2, 2, n_states)
+        mc_grad = diatomic("Li", "H", 1.4, "ftLDA,VWN3", "STO-3G", 2, 2, n_states)
 
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
@@ -175,12 +208,12 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
 
     def test_grad_lih_lin2ftpbe22_sto3g(self):
-        """ System has the following Lagrange multiplier sectors:
-            orb:    yes
-            ci:     yes
+        """System has the following Lagrange multiplier sectors:
+        orb:    yes
+        ci:     yes
         """
         n_states = 2
-        mc_grad = diatomic('Li', 'H', 1.4, 'ftpbe', 'STO-3G', 2, 2, n_states)
+        mc_grad = diatomic("Li", "H", 1.4, "ftpbe", "STO-3G", 2, 2, n_states)
 
         # Numerical from this software
         # PySCF commit:         6c1ea86eb60b9527d6731efa65ef99a66b8f84d2
@@ -190,15 +223,18 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
-                return
 
     def test_grad_scanner(self):
         # Tests API and Scanner capabilities
         n_states = 2
-        mc_grad1 = diatomic("Li", "H", 1.5, "ftLDA,VWN3", "STO-3G", 2, 2, n_states, grids_level=1)
+        mc_grad1 = diatomic(
+            "Li", "H", 1.5, "ftLDA,VWN3", "STO-3G", 2, 2, n_states, grids_level=1
+        )
         mol1 = mc_grad1.base.mol
-        mc_grad2 = diatomic("Li", "H", 1.6, "ftLDA,VWN3", "STO-3G", 2, 2, n_states, grids_level=1).as_scanner()
-    
+        mc_grad2 = diatomic(
+            "Li", "H", 1.6, "ftLDA,VWN3", "STO-3G", 2, 2, n_states, grids_level=1
+        ).as_scanner()
+
         for state in range(n_states):
             with self.subTest(state=state):
                 de1 = mc_grad1.kernel(state=state)
@@ -208,6 +244,25 @@ class KnownValues(unittest.TestCase):
                 self.assertTrue(mc_grad2.converged)
                 self.assertAlmostEqual(e1, e2, 6)
                 self.assertAlmostEqual(lib.fp(de1), lib.fp(de2), 6)
+
+    def test_grad_lih_lin2ftpbe22_sto3g_df(self):
+        """System has the following Lagrange multiplier sectors:
+        orb:    yes
+        ci:     yes
+        """
+        n_states = 2
+        mc_grad = diatomic(
+            "Li", "H", 1.4, "ftpbe", "STO-3G", 2, 2, n_states, density_fit=True
+        )
+
+        # Numerical from this software
+        # PySCF commit:         eafc3575234aca3832d270f4e1193bec2119d2b4
+        # PySCF-forge commit:   2e1596dc919783c751c3cf24bb776e4efcb51a34
+        NUM_REF = [-0.03209560095886714, -0.05453488593608611]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 5)
 
 
 if __name__ == "__main__":
