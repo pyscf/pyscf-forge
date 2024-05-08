@@ -14,6 +14,7 @@ import pyscf.soscf.sigma_utils as sigutils
 
 from pyscf.lib import logger
 
+# JCP 159, 134104 (2023); DOI:10.1063/5.0159737
 
 class M3SOSCF:
     '''
