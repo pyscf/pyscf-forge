@@ -23,6 +23,7 @@ import tempfile
 from pyscf import gto
 from pyscf import scf
 from pyscf import dft
+from pyscf.soscf import m3soscf
 
 class KnownValues(unittest.TestCase):
 
@@ -49,27 +50,27 @@ class KnownValues(unittest.TestCase):
 
     def test_nr_rhf(self):
         mf = scf.RHF(self.mol1)
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], -7.871355587185268, 9)
 
     def test_nr_rohf(self):
         mf = scf.RHF(self.mol3)
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], -7.775069668379746, 9)
 
 
     def test_nr_uhf(self):
         mf = scf.UHF(self.mol3)
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], -7.775142720974782, 9)
 
     def test_nr_rks_lda(self):
         mf = dft.RKS(self.mol1)
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
@@ -78,7 +79,7 @@ class KnownValues(unittest.TestCase):
         mf = dft.RKS(self.mol1)
         mf.xc = 'wb97x'
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
@@ -86,7 +87,7 @@ class KnownValues(unittest.TestCase):
         mf = dft.RKS(self.mol1)
         mf.xc = 'b3lyp'
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
@@ -94,7 +95,7 @@ class KnownValues(unittest.TestCase):
         mf = dft.RKS(self.mol1)
         mf.xc = 'b3lyp'
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
@@ -102,7 +103,7 @@ class KnownValues(unittest.TestCase):
     def test_nr_uks_lda(self):
         mf = dft.UKS(self.mol3)
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
@@ -111,7 +112,7 @@ class KnownValues(unittest.TestCase):
         mf = dft.UKS(self.mol3)
         mf.xc = 'wb97x'
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
@@ -119,10 +120,10 @@ class KnownValues(unittest.TestCase):
         mf = dft.UKS(self.mol3)
         mf.xc = 'b3lyp'
         eref = mf.kernel()
-        m3 = scf.M3SOSCF(mf, 2)
+        m3 = m3soscf.M3SOSCF(mf, 2)
         d = m3.converge()
         self.assertAlmostEqual(d[1], eref, 9)
 
 if __name__ == "__main__":
-    print("Relevant tests for M3SOSCF")
+    print("Relevant tests for m3soscf.M3SOSCF")
     unittest.main()
