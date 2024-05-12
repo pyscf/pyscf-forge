@@ -1,4 +1,15 @@
 #/usr/bin/env python
+'''
+Author: Li Hao
+Date: 2024-05-12 09:21:30
+LastEditTime: 2024-05-12 09:21:30
+LastEditors: Li Hao
+Description: 
+
+FilePath: \pyscf-forge\pyscf\sftda\numint2c_sftd.py
+Motto: A + B = C!
+'''
+#/usr/bin/env python
 # Copyright 2014-2024 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,9 +31,17 @@ MGGA_DENSITY_LAPL = False # just copy from pyscf.dft.numint2c.py
 import functools
 import numpy as np
 from pyscf import lib
-from pyscf.dft import numint
+from pyscf.dft import numint, xc_deriv
 
 from pyscf.dft.numint2c import __mcfun_fn_eval_xc
+
+# This function is copied from pyscf.dft.numint2c.py
+def __mcfun_fn_eval_xc(ni, xc_code, xctype, rho, deriv):
+    evfk = ni.eval_xc_eff(xc_code, rho, deriv=deriv, xctype=xctype)
+    for order in range(1, deriv+1):
+        if evfk[order] is not None:
+            evfk[order] = xc_deriv.ud2ts(evfk[order])
+    return evfk
 
 # This function can be merged with pyscf.dft.numint2c.mcfun_eval_xc_adapter()
 # This function should be a class function in the Numint2c class.
