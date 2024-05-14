@@ -464,4 +464,9 @@ class TDA_SF(TDBase):
         self._finalize()
         return self.e, self.xy
 
+    # this function should be moved into uhf.py
+    def get_ab_sf(self, mf=None):
+        if mf is None: mf = self._scf
+        return get_ab_sf(mf)
+    
 scf.uhf.UHF.TDA_SF = lib.class_as_method(TDA_SF)
