@@ -32,7 +32,7 @@ class CasidaTDDFT(TDA_SF):
        [ A  B][X]
        [-B -A][Y]
     '''
-    
+
     init_guess = TDA_SF.init_guess
 
     def gen_vind(self, mf=None,extype=0,collinear_samples=200):
@@ -62,7 +62,7 @@ class CasidaTDDFT(TDA_SF):
         if wfnsym is not None and mol.symmetry:
             raise NotImplementedError("UKS Spin Flip TDA/ TDDFT haven't taken symmetry\
                                       into account.")
-            
+
         e_ia_b2a = (mo_energy[0][viridxa,None] - mo_energy[1][occidxb]).T
         e_ia_a2b = (mo_energy[1][viridxb,None] - mo_energy[0][occidxa]).T
 
@@ -71,9 +71,8 @@ class CasidaTDDFT(TDA_SF):
         elif self.extype==1:
             hdiag = numpy.hstack((e_ia_a2b.ravel(), -e_ia_b2a.ravel()))
 
-        vresp = _gen_uhf_response_sf(mf, mo_coeff, mo_occ, hermi=0,extype=extype,\
-                                     collinear_samples=collinear_samples)
-            
+        vresp = _gen_uhf_response_sf(mf, mo_coeff, mo_occ, hermi=0, extype=extype, collinear_samples=collinear_samples)
+
         def vind(zs):
 
             nz = len(zs)
@@ -84,7 +83,7 @@ class CasidaTDDFT(TDA_SF):
             elif self.extype==1:
                 zsb2a = (zs[:,nocca*nvirb:]).reshape(nz,noccb,nvira)
                 zsa2b = (zs[:,:nocca*nvirb]).reshape(nz,nocca,nvirb)
-                
+
             dmsb2a = lib.einsum('xov,po,qv->xpq', zsb2a, orbob, orbva.conj())
             dmsa2b = lib.einsum('xov,po,qv->xpq', zsa2b, orboa, orbvb.conj())
 
@@ -97,38 +96,38 @@ class CasidaTDDFT(TDA_SF):
             # add the orbital energy difference in A matrix.
             v1A_b2a += lib.einsum('ov,xov->xov', e_ia_b2a, zsb2a)
             v1A_a2b += lib.einsum('ov,xov->xov', e_ia_a2b, zsa2b)
-            
+
             if self.extype==0:
                 v1_top = v1A_b2a + v1B_b2a
                 v1_bom = - v1B_a2b - v1A_a2b
             elif self.extype==1:
                 v1_top = v1A_a2b + v1B_a2b
                 v1_bom =-v1B_b2a - v1A_b2a
-                
+
             hx = numpy.hstack((v1_top.reshape(nz,-1), v1_bom.reshape(nz,-1)))
             return hx
-            
+
         return vind, hdiag
-    
+
     def kernel(self, x0=None, nstates=None,extype=None,collinear_samples=None):
         '''SF-TDDFT diagonalization solver
         '''
         cpu0 = (logger.process_clock(), logger.perf_counter())
-        mf = self._scf
+        # mf = self._scf
 
         self.check_sanity()
         self.dump_flags()
-        
+
         if extype is None:
             extype = self.extype
         else:
             self.extype = extype
-        
+
         if nstates is None:
             nstates = self.nstates
         else:
             self.nstates = nstates
-            
+
         if collinear_samples is None:
             collinear_samples = self.collinear_samples
         else:
@@ -141,11 +140,11 @@ class CasidaTDDFT(TDA_SF):
 
         if x0 is None:
             x0 = self.init_guess(self._scf, self.nstates)
-            
+
         def pickeig(w, v, nroots, envs):
             idx = numpy.where(w > 1e-3)[0]
             return w[idx], v[:,idx], idx
-        
+
         # Because the degeneracy has been dealt with by init_guess_sf function.
         nstates_new = x0.shape[0]
         converged, w, x1 = \
@@ -155,7 +154,7 @@ class CasidaTDDFT(TDA_SF):
                               max_cycle=self.max_cycle,
                               max_space=self.max_space, pick=pickeig,
                               verbose=log)
-        
+
         mo_occ = self._scf.mo_occ
         occidxa = numpy.where(mo_occ[0]>0)[0]
         occidxb = numpy.where(mo_occ[1]>0)[0]
@@ -165,11 +164,11 @@ class CasidaTDDFT(TDA_SF):
         noccb = len(occidxb)
         nvira = len(viridxa)
         nvirb = len(viridxb)
-        
+
         self.e = w[:nstates]
         x1 = x1[:nstates]
         self.converged = converged[:nstates]
-        
+
         if self.extype==0:
             def norm_xy(z):
                 x = z[:noccb*nvira].reshape(noccb,nvira)

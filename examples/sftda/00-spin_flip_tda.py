@@ -30,7 +30,7 @@ mftd1.nstates = 5 # the number of excited states
 mftd1.extype = 0 # 0 for spin flip up excited energies
 # the spin sample points in multicollinear approach, which
 # can be increased by users.
-mftd1.collinear_samples=200 
+mftd1.collinear_samples=200
 mftd1.kernel()
 
 mftd1.e # to get the excited energies
@@ -42,7 +42,7 @@ mftd1.xy # to get the transition vectors
 mftd2 = sftda.uks_sf.TDA_SF(mf)
 mftd2.nstates = 5 # the number of excited states
 mftd2.extype = 1 # 1 for spin flip down excited energies
-mftd2.collinear_samples=200 
+mftd2.collinear_samples=200
 mftd2.kernel()
 
 mftd2.e # to get the excited energies
@@ -50,7 +50,7 @@ mftd2.xy # to get the transition vectors
 
 #
 # 3. get_ab_sf()
-# 
+#
 # a, b = sftda.TDA_SF(mf).get_ab_sf()
 a, b = sftda.TDDFT_SF(mf).get_ab_sf()
 # List a has two items: (A_abab, A_baba) with A[i,a,j,b].
@@ -64,7 +64,7 @@ a, b = sftda.TDDFT_SF(mf).get_ab_sf()
 # mftd3 = sftda.TDDFT_SF(mf) # equal to mftd3 = mf.TDDFT_SF()
 # mftd3.nstates = 4
 # mftd3.extype = 0
-# mftd3.collinear_samples=200 
+# mftd3.collinear_samples=200
 # mftd3.kernel()
 
 # mftd3.e
@@ -76,7 +76,7 @@ a, b = sftda.TDDFT_SF(mf).get_ab_sf()
 # mftd4 = sftda.uks_sf.CasidaTDDFT(mf)
 # mftd4.nstates = 4
 # mftd4.extype = 1
-# mftd4.collinear_samples=200 
+# mftd4.collinear_samples=200
 # mftd4.kernel()
 
 # mftd4.e

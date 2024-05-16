@@ -1,15 +1,4 @@
 #/usr/bin/env python
-'''
-Author: Li Hao
-Date: 2024-05-12 09:21:30
-LastEditTime: 2024-05-12 09:21:30
-LastEditors: Li Hao
-Description: 
-
-FilePath: \pyscf-forge\pyscf\sftda\numint2c_sftd.py
-Motto: A + B = C!
-'''
-#/usr/bin/env python
 # Copyright 2014-2024 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,8 +22,6 @@ import numpy as np
 from pyscf import lib
 from pyscf.dft import numint, xc_deriv
 
-from pyscf.dft.numint2c import __mcfun_fn_eval_xc
-
 # This function is copied from pyscf.dft.numint2c.py
 def __mcfun_fn_eval_xc(ni, xc_code, xctype, rho, deriv):
     evfk = ni.eval_xc_eff(xc_code, rho, deriv=deriv, xctype=xctype)
@@ -47,12 +34,12 @@ def __mcfun_fn_eval_xc(ni, xc_code, xctype, rho, deriv):
 # This function should be a class function in the Numint2c class.
 def mcfun_eval_xc_adapter_sf(ni, xc_code):
     '''Wrapper to generate the eval_xc function required by mcfun
-    
+
     Kwargs:
         dim: int
             eval_xc_eff_sf is for mc collinear sf tddft/ tda case.add().
     '''
-    
+
     try:
         import mcfun
     except ImportError:
@@ -66,7 +53,7 @@ def mcfun_eval_xc_adapter_sf(ni, xc_code):
     def eval_xc_eff(xc_code, rho, deriv=1, omega=None, xctype=None,
                 verbose=None):
         return mcfun.eval_xc_eff_sf(
-            fn_eval_xc, rho, deriv, 
+            fn_eval_xc, rho, deriv,
             collinear_samples=ni.collinear_samples, workers=nproc)
     return eval_xc_eff
 
@@ -82,14 +69,14 @@ def cache_xc_kernel_sf(self, mol, grids, xc_code, mo_coeff, mo_occ, spin=1,max_m
     else:
         ao_deriv = 0
     with_lapl = MGGA_DENSITY_LAPL
-        
+
     assert mo_coeff[0].ndim == 2
     assert spin == 1
-    
+
     nao = mo_coeff[0].shape[0]
     rhoa = []
     rhob = []
-    
+
     ni = numint.NumInt()
     for ao, mask, weight, coords \
             in self.block_loop(mol, grids, nao, ao_deriv, max_memory=max_memory):
