@@ -190,7 +190,7 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
                     in ni0.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
                 rho0a = make_rho(0, ao, mask, xctype)
                 rho0b = make_rho(1, ao, mask, xctype)
-                rho = (rho0a, rho0b)
+                # rho = (rho0a, rho0b)
 
                 fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
                 wfxc = fxc[0,0] * weight
@@ -220,7 +220,7 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
                     in ni.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
                 rho0a = make_rho(0, ao, mask, xctype)
                 rho0b = make_rho(1, ao, mask, xctype)
-                rho = (rho0a, rho0b)
+                # rho = (rho0a, rho0b)
                 fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
                 wfxc = fxc * weight
 
