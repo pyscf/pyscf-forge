@@ -61,5 +61,6 @@ template can be accessed at (TBD). The proposal will be reviewed during the
 PySCF board meetings, held approximately every 3 months.
 
 
---
+---
+
 Thank you for considering contributing your works to PySCF community!
