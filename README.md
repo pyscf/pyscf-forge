@@ -1,6 +1,5 @@
 # pyscf-forge
-pyscf-forge is a collection of extensions for pyscf
-
+pyscf-forge is a staging ground for code that may be suitable for pyscf-core. Please see CONTRIBUTING.md for further guidelines.
 
 ## Install
 pyscf-forge can be installed using the command
