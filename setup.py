@@ -16,7 +16,7 @@
 NAME = 'pyscf-forge'
 AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
-DESCRIPTION  = 'PySCF extension modules'
+DESCRIPTION  = 'Staging ground for PySCF core features'
 SO_EXTENSIONS = {
 }
 DEPENDENCIES = ['pyscf', 'numpy']
@@ -115,6 +115,8 @@ settings = {
     'name': metadata.get('NAME', None),
     'version': VERSION,
     'description': metadata.get('DESCRIPTION', None),
+    'long_description': metadata.get('DESCRIPTION', None),
+    'long_description_content_type': 'text/markdown',
     'author': metadata.get('AUTHOR', None),
     'author_email': metadata.get('AUTHOR_EMAIL', None),
     'install_requires': metadata.get('DEPENDENCIES', []),
