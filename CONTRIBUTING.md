@@ -32,14 +32,15 @@ maintainers at https://github.com/orgs/pyscf/people .
   there is a quick static code check for the code that should all pass.
 
 * Avoiding filename and module conflicts.
-  PySCF-forge manages sub-packages through the mechanism "named packages".
-  When installing PySCF-forge, the sub-packages will be installed in the same directory as PySCF.
-  This ensures that these features can be accessed within the same namespace as PySCF.
-  If any packages or files have the same name as those in PySCF, they will overwrite the existing ones.
-  For example, if you create a `pyscf-forge/pyscf/__init__.py` file, it will
-  replace the existing `__init__.py` file in PySCF and may lead to PySCF runtime
-  errors. It is important to avoid creating files or directories that already
-  exist in the PySCF core branch.
+  PySCF-forge manages sub-packages through the mechanism "namespace packages".
+  When installing PySCF-forge, the sub-packages will be installed in the same
+  directory as PySCF. This ensures that these features can be accessed within
+  the same namespace as PySCF. If any packages or files have the same name as
+  those in PySCF, they will overwrite the existing ones. For example, if you
+  create a `pyscf-forge/pyscf/__init__.py` file, it will replace the existing
+  `__init__.py` file in PySCF and may lead to PySCF runtime errors. It is
+  important to avoid creating files or directories that already exist in the
+  PySCF core branch.
 
 * Dependencies.
   There is no restriction on adding dependencies. However, dependencies can
