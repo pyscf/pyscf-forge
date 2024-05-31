@@ -41,25 +41,30 @@ maintainers at https://github.com/orgs/pyscf/people .
   errors. It is important to avoid creating files or directories that already
   exist in the PySCF core branch.
 
+* Dependencies.
+  There is no restriction on adding dependencies. However, dependencies can
+  sometimes leads to conflicts in certain packages. Therefore, please add
+  dependencies cautiously and only include necessary libraries. If dependencies
+  cause installation issues, your feature might be removed (see the next rule).
+
 * Module compatibility and removal policy.
   If a module causes installation or compatibility issues with existing modules or
   those in the PySCF core branch, a post will be created on GitHub issue board to
   address the problem. Features may be removed without notifying to the contributor.
 
-* Compiling C/C++ extensions
+* Compiling C/C++ extensions.
   You can utilize CMake or `setuptools.Extension` in setup.py within the
   PySCF-forge to compile simple extensions. For complex compiling configurations,
   it is advisable to release the feature as a PySCF extension. C/C++ libraries
   should be compiled and placed under the directory `pyscf-forge/pyscf/lib`.
   This is the location where .so files will be packaged in wheel.
 
-## How to prompt to PySCF core branch
+## How to transfer a feature to PySCF core branch?
 
 After a feature has been added to PySCF-forge for over 6 months, developers can
-submit a request to transfer the feature to the PySCF core branch. The proposal
-template can be accessed at (TBD). The proposal will be reviewed during the
-PySCF board meetings, held approximately every 3 months.
-
+open an issue to request transferring the feature to the PySCF core branch.
+The proposal template can be accessed at (TBD). The proposal will be reviewed
+during the PySCF board meetings, held approximately every 3 months.
 
 ---
 
