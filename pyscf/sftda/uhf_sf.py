@@ -448,12 +448,12 @@ class TDA_SF(TDBase):
         nvirb = nmo - noccb
 
         if self.extype==0:
-            self.xy = [(xi[:noccb*nvira].reshape(noccb,nvira),  # X_alpha_beta
-                        (0, 0))  # (Y_beta_alpha)
+            self.xy = [((xi[:noccb*nvira].reshape(noccb,nvira),0),  # X_alpha_beta
+                        (0,0))  # (Y_beta_alpha)
                         for xi in x1]
 
         elif self.extype==1:
-            self.xy = [(xi[:nocca*nvirb].reshape(nocca,nvirb),  # X_beta_alpha
+            self.xy = [((0,xi[:nocca*nvirb].reshape(nocca,nvirb)),  # X_beta_alpha
                         (0, 0))  # (Y_beta_alpha)
                         for xi in x1]
 
