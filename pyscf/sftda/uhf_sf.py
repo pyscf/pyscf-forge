@@ -179,8 +179,6 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
         add_hf_(a, b, hyb)
 
         xctype = ni._xc_type(mf.xc)
-        dm0 = mf.make_rdm1(mo_coeff, mo_occ)
-        make_rho = ni0._gen_rho_evaluator(mol, dm0, hermi=1, with_lapl=False)[0]
         mem_now = lib.current_memory()[0]
         max_memory = max(2000, mf.max_memory*.8-mem_now)
 
@@ -188,10 +186,6 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
             ao_deriv = 0
             for ao, mask, weight, coords \
                     in ni0.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
-                rho0a = make_rho(0, ao, mask, xctype)
-                rho0b = make_rho(1, ao, mask, xctype)
-                # rho = (rho0a, rho0b)
-
                 fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
                 wfxc = fxc[0,0] * weight
 
@@ -218,9 +212,6 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
             ao_deriv = 1
             for ao, mask, weight, coords \
                     in ni.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
-                rho0a = make_rho(0, ao, mask, xctype)
-                rho0b = make_rho(1, ao, mask, xctype)
-                # rho = (rho0a, rho0b)
                 fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
                 wfxc = fxc * weight
 
@@ -255,9 +246,6 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
             ao_deriv = 1
             for ao, mask, weight, coords \
                     in ni.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
-                rho0a = make_rho(0, ao, mask, xctype)
-                rho0b = make_rho(1, ao, mask, xctype)
-                # rho = (rho0a, rho0b)
                 fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
                 wfxc = fxc * weight
                 rho_oa = lib.einsum('xrp,pi->xri', ao, orbo_a)
