@@ -44,25 +44,25 @@ mftd2.extype=1
 mftd2.nstates = 5
 mftd2.kernel()
 
-ssI = tools.spin_square(mf,mftd1.xy[0],extype=1,tdtype='TDA')
+ssI = tools.spin_square(mf,mftd2.xy[0],extype=1,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
 # 3. <S^2> for spin conserving TDA.
 #
-mftd2 = tdscf.TDA(mf)
-mftd2.nstates = 5
-mftd2.kernel()
+mftd3 = tdscf.TDA(mf)
+mftd3.nstates = 5
+mftd3.kernel()
 
-ssI = tools.spin_square(mf,mftd1.xy[0],extype=2,tdtype='TDA')
+ssI = tools.spin_square(mf,mftd3.xy[0],extype=2,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
 # 4. <S^2> for spin conserving TDDFT.
 #
-mftd2 = tdscf.TDDFT(mf)
-mftd2.nstates = 5
-mftd2.kernel()
+mftd4 = tdscf.TDDFT(mf)
+mftd4.nstates = 5
+mftd4.kernel()
 
-ssI = tools.spin_square(mf,mftd1.xy[0],extype=2,tdtype='TDDFT')
+ssI = tools.spin_square(mf,mftd4.xy[0],extype=2,tdtype='TDDFT')
 print('The spin square of the first excited state is : ' + str(ssI))
