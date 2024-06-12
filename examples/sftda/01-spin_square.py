@@ -5,7 +5,7 @@ Test the spin_square calculation tool in sftda.tools_td.py.
 '''
 
 from pyscf import gto,dft,sftda,tdscf
-from pyscf.sftda import tools
+from pyscf.sftda import tools_td
 
 # ToDo : add the spin flip TDDFT parts.
 
@@ -33,7 +33,7 @@ mftd1.kernel()
 
 # extype serves for controling spin excitation type in the spin_square function.
 # tdtype serves for TDA/ TDDFT object in using 'TDA' or 'TDDFT'.
-ssI = tools.spin_square(mf,mftd1.xy[0],extype=0,tdtype='TDA')
+ssI = tools_td.spin_square(mf,mftd1.xy[0],extype=0,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
@@ -44,7 +44,7 @@ mftd2.extype=1
 mftd2.nstates = 5
 mftd2.kernel()
 
-ssI = tools.spin_square(mf,mftd2.xy[0],extype=1,tdtype='TDA')
+ssI = tools_td.spin_square(mf,mftd2.xy[0],extype=1,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
@@ -54,7 +54,7 @@ mftd3 = tdscf.TDA(mf)
 mftd3.nstates = 5
 mftd3.kernel()
 
-ssI = tools.spin_square(mf,mftd3.xy[0],extype=2,tdtype='TDA')
+ssI = tools_td.spin_square(mf,mftd3.xy[0],extype=2,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
@@ -64,5 +64,5 @@ mftd4 = tdscf.TDDFT(mf)
 mftd4.nstates = 5
 mftd4.kernel()
 
-ssI = tools.spin_square(mf,mftd4.xy[0],extype=2,tdtype='TDDFT')
+ssI = tools_td.spin_square(mf,mftd4.xy[0],extype=2,tdtype='TDDFT')
 print('The spin square of the first excited state is : ' + str(ssI))
