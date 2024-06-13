@@ -20,22 +20,23 @@ from pyscf.scf.uhf import spin_square as spin_square_scf
 
 def spin_square(mf,xy,extype=0,tdtype='TDDFT'):
     r'''calculator of <S^2> of excited states using tddft/tda.
+        Ref. J. Chem. Phys. 2011, 134, 134101.
 
     Args:
-        mf : 
+        mf :
             UKS object
         xy : tuple
             transition vactor of i-th state
-  
+
     Kwargs:
-        extype : int 
+        extype : int
             excitation types: 0,1,2
             excitation types: spin-flip-up, spin-flip-down, spin-conserved
         tdtype : str
             'TDDFT' or 'TDA' for different objects
 
     Returns:
-        ssI : 
+        ssI :
             The expectation value of S^2.
     '''
     mo = mf.mo_coeff
@@ -55,7 +56,7 @@ def spin_square(mf,xy,extype=0,tdtype='TDDFT'):
     s = (dsp1-1) *.5
 
     x,y = xy
-    # sxx_xx : spin transfer matrix 
+    # sxx_xx : spin transfer matrix
     sab_oo = reduce(numpy.dot, (mooa.conj().T, ovlp, moob))
     sba_oo = sab_oo.conj().T
     sab_vo = reduce(numpy.dot, (mova.conj().T, ovlp, moob))
@@ -71,16 +72,16 @@ def spin_square(mf,xy,extype=0,tdtype='TDDFT'):
             x_ab = x_ab.transpose(1,0)
             if tdtype=='TDDFT':
                 y_ba = y_ba.transpose(1,0)
-            
+
             P_ab = lib.einsum('ai,aj,jk,ki',x_ab.conj(),x_ab,sab_oo.T.conj(),sab_oo)\
                   -lib.einsum('ai,bi,kb,ak',x_ab.conj(),x_ab,sab_vo.T.conj(),sab_vo)\
                   +lib.einsum('ai,bj,jb,ai',x_ab.conj(),x_ab,sab_vo.T.conj(),sab_vo)
-                  
-            if tdtype=='TDDFT':  
+
+            if tdtype=='TDDFT':
                 P_ab+= lib.einsum('ai,aj,ik,kj',y_ba.conj(),y_ba,sab_oo,sab_oo.T.conj())\
-                    -lib.einsum('ai,bi,ka,bk',y_ba.conj(),y_ba,sba_vo.T.conj(),sba_vo)\
-                    +lib.einsum('ai,bj,ia,bj',y_ba.conj(),y_ba,sba_vo.T.conj(),sba_vo)
-                
+                      -lib.einsum('ai,bi,ka,bk',y_ba.conj(),y_ba,sba_vo.T.conj(),sba_vo)\
+                      +lib.einsum('ai,bj,ia,bj',y_ba.conj(),y_ba,sba_vo.T.conj(),sba_vo)
+
                 P_ab-= lib.einsum('ai,bj,ai,bj',x_ab.conj(),y_ba,sab_vo,sba_vo) *2.0
 
             ds2 = P_ab + 2*s+1
@@ -89,16 +90,16 @@ def spin_square(mf,xy,extype=0,tdtype='TDDFT'):
             x_ba = x_ba.transpose(1,0)
             if tdtype=='TDDFT':
                 y_ab = y_ab.transpose(1,0)
-            
+
             P_ab = lib.einsum('ai,aj,jk,ki',x_ba.conj(),x_ba,sba_oo.T.conj(),sba_oo)\
                   -lib.einsum('ai,bi,kb,ak',x_ba.conj(),x_ba,sba_vo.T.conj(),sba_vo)\
                   +lib.einsum('ai,bj,jb,ai',x_ba.conj(),x_ba,sba_vo.T.conj(),sba_vo)
-                  
+
             if tdtype=='TDDFT':
                 P_ab+= lib.einsum('ai,aj,ik,kj',y_ab.conj(),y_ab,sba_oo,sba_oo.T.conj())\
-                    -lib.einsum('ai,bi,ka,bk',y_ab.conj(),y_ab,sab_vo.T.conj(),sab_vo)\
-                    +lib.einsum('ai,bj,ia,bj',y_ab.conj(),y_ab,sab_vo.T.conj(),sab_vo)
-                
+                      -lib.einsum('ai,bi,ka,bk',y_ab.conj(),y_ab,sab_vo.T.conj(),sab_vo)\
+                      +lib.einsum('ai,bj,ia,bj',y_ab.conj(),y_ab,sab_vo.T.conj(),sab_vo)
+
                 P_ab-= lib.einsum('ai,bj,ai,bj',x_ba.conj(),y_ab,sba_vo,sab_vo) *2.0
 
             ds2 = P_ab - 2*s+1
@@ -113,18 +114,18 @@ def spin_square(mf,xy,extype=0,tdtype='TDDFT'):
             y_bb = y_bb.transpose(1,0)
 
         P_ab = lib.einsum('ai,aj,ki,jk',x_aa.conj(),x_aa,sba_oo,sab_oo)\
-              -lib.einsum('ai,bi,ak,kb',x_aa.conj(),x_aa,sab_vo,sab_vo.conj().T) 
+              -lib.einsum('ai,bi,ak,kb',x_aa.conj(),x_aa,sab_vo,sab_vo.conj().T)
         P_ab+= lib.einsum('ai,aj,ki,jk',x_bb.conj(),x_bb,sab_oo,sba_oo)\
               -lib.einsum('ai,bi,ak,kb',x_bb.conj(),x_bb,sba_vo,sba_vo.conj().T)
         P_ab-= lib.einsum('ai,bj,ji,ab',x_aa.conj(),x_bb,sba_oo,sab_vv) *2.0
 
         if tdtype=='TDDFT':
             P_ab+= lib.einsum('ai,aj,kj,ik',y_aa.conj(),y_aa,sba_oo,sab_oo)\
-                  -lib.einsum('ai,bi,bk,ka',y_aa.conj(),y_aa,sab_vo,sab_vo.conj().T)  
+                  -lib.einsum('ai,bi,bk,ka',y_aa.conj(),y_aa,sab_vo,sab_vo.conj().T)
             P_ab+= lib.einsum('ai,aj,kj,ik',y_bb.conj(),y_bb,sab_oo,sba_oo)\
                   -lib.einsum('ai,bi,bk,ka',y_bb.conj(),y_bb,sba_vo,sba_vo.conj().T)
             P_ab-= lib.einsum('ai,bj,ba,ij',y_aa.conj(),y_bb,sba_vv,sab_oo) *2.0
-            
+
             P_ab+= lib.einsum('ai,bj,aj,bi',x_aa.conj(),y_bb,sab_vo,sba_vo) *2.0
             P_ab+= lib.einsum('ai,bj,aj,bi',x_bb.conj(),y_aa,sba_vo,sab_vo) *2.0
 
