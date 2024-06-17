@@ -420,7 +420,7 @@ class _PDFT:
     def _init_ot_grids(self, my_ot, grids_attr=None):
         if grids_attr is None: grids_attr = {}
         old_grids = getattr(self, 'grids', None)
-        if isinstance(my_ot, (str, np.string_)):
+        if isinstance(my_ot, (str, np.bytes_)):
             self.otfnal = get_transfnal(self.mol, my_ot)
         else:
             self.otfnal = my_ot

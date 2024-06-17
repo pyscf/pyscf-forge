@@ -353,7 +353,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         '''
         si_dict = {'MCSCF': self.si_mcscf,
                    'MSPDFT': self.si_pdft}
-        if isinstance (uci, (str,np.string_)):
+        if isinstance (uci, (str,np.bytes_)):
             if uci.upper () in si_dict:
                 uci = si_dict[uci.upper ()]
             else:
