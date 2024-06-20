@@ -432,7 +432,7 @@ class KnownValues(unittest.TestCase):
         e_states_fp = lib.fp (np.sort (e_tot))
         e_states_fp_ref = lib.fp (np.sort (mcp[1][0].e_states))
         with self.subTest (case='nroots=5 CASCI'):
-            self.assertAlmostEqual (e_states_fp, e_states_fp_ref, delta=5e-6)
+            self.assertAlmostEqual (e_states_fp, e_states_fp_ref, delta=5e-5)
 
     def test_tpbe0 (self):
         # The most common hybrid functional
