@@ -222,7 +222,7 @@ def get_mcdcft_child_class (mc, ot, **kwargs):
                 self._init_ot_grids(my_ot, ot_name, grids_level=grids_level)
 
         def _init_ot_grids (self, my_ot, ot_name, grids_level=None):
-            if isinstance (my_ot, (str, np.string_)):
+            if isinstance (my_ot, (str, np.bytes_)):
                 ks = dft.RKS(self.mol)
                 ks.xc = my_ot
                 self.otfnal = convfnal(ks)
