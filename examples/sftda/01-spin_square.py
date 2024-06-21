@@ -31,7 +31,8 @@ mftd1.extype=0
 mftd1.nstates = 5
 mftd1.kernel()
 
-# extype serves for controling spin excitation type in the spin_square function.
+# extype serves for controling the spin excitation type in the spin_square fu-
+# nction. 0 for spin flip up, 1 for spin flip down and 2 for spin conserving.
 # tdtype serves for TDA/ TDDFT object in using 'TDA' or 'TDDFT'.
 ssI = tools_td.spin_square(mf,mftd1.xy[0],extype=0,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
