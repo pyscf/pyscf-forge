@@ -30,7 +30,7 @@ from pyscf.sftda.numint2c_sftd import cache_xc_kernel_sf
 # import class
 from pyscf.tdscf.uhf import TDBase
 
-def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0):
+def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0,collinear_samples=200):
     '''A x for spin flip TDDFT case.
 
     Kwargs:
@@ -80,7 +80,8 @@ def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0):
     max_memory = max(2000, mf.max_memory*.8-mem_now)
 
     # _gen_uhf_tda_response_sf() should be used by : mf.gen_response
-    vresp = _gen_uhf_tda_response_sf(mf, hermi=0, max_memory=max_memory)
+    vresp = _gen_uhf_tda_response_sf(mf, hermi=0, max_memory=max_memory,
+                                     collinear_samples=collinear_samples)
 
     def vind(zs):
         zs = numpy.asarray(zs)
@@ -298,7 +299,8 @@ class TDA_SF(TDBase):
             mf = self._scf
         if extype is None:
             extype = self.extype
-        return gen_tda_hop_sf(mf, wfnsym=self.wfnsym,extype=self.extype)
+        return gen_tda_hop_sf(mf, wfnsym=self.wfnsym,extype=self.extype,
+                              collinear_samples=self.collinear_samples)
 
     def init_guess0(self, mf, nstates=None, wfnsym=None,extype=None):
         if nstates is None: nstates = self.nstates
@@ -436,12 +438,12 @@ class TDA_SF(TDBase):
         nvirb = nmo - noccb
 
         if self.extype==0:
-            self.xy = [(xi[:noccb*nvira].reshape(noccb,nvira),  # X_alpha_beta
-                        (0, 0))  # (Y_beta_alpha)
+            self.xy = [((xi[:noccb*nvira].reshape(noccb,nvira),0),  # X_alpha_beta
+                        (0,0))  # (Y_beta_alpha)
                         for xi in x1]
 
         elif self.extype==1:
-            self.xy = [(xi[:nocca*nvirb].reshape(nocca,nvirb),  # X_beta_alpha
+            self.xy = [((0,xi[:nocca*nvirb].reshape(nocca,nvirb)),  # X_beta_alpha
                         (0, 0))  # (Y_beta_alpha)
                         for xi in x1]
 
