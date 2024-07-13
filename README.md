@@ -24,7 +24,7 @@ installation:
 ```
 pip install --no-deps -e /path/to/pyscf-forge
 ```
-This method will adds a `.pth` file in `~/.local/lib/python3.*/site-packages/`
+This method will add a `.pth` file in `~/.local/lib/python3.*/site-packages/`
 or other Python runtime paths. It is recommended to use this method with Python
 virtual environment.
 
