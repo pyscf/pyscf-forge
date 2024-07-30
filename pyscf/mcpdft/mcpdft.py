@@ -405,12 +405,13 @@ class _PDFT:
         if issubclass (self._mc_class, _DFCAS):
             self._mc_class.__init__(self, self, scf.with_df)
         keys = set(('e_ot', 'e_mcscf', 'get_pdft_veff', 'get_pdft_feff', 'e_states', 'otfnal',
-                    'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel'))
+                    'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel', 'chkfile'))
         self.max_cycle_fp = getattr(__config__, 'mcscf_mcpdft_max_cycle_fp',
                                     50)
         self.conv_tol_ci_fp = getattr(__config__,
                                       'mcscf_mcpdft_conv_tol_ci_fp', 1e-8)
         self.mcscf_kernel = self._mc_class.kernel
+        self.chkfile = self._scf.chkfile
         self._in_mcscf_env = False
         self._keys = set(self.__dict__.keys()).union(keys)
         if grids_level is not None:
@@ -490,6 +491,8 @@ class _PDFT:
             e_states = [self.e_tot]
 
         if dump_chk:
+            e_tot = self.e_tot
+            e_ot = self.e_ot
             self.dump_chk(locals())
 
         return self.e_tot, self.e_ot, e_states
@@ -756,9 +759,23 @@ class _PDFT:
         if not self.chkfile:
             return self
 
-        self._mc_class.dump_chk(self, envs)
+        # Hack, basically if we are optimizing mcscf, then call that dump
+        # Otherwise, we need to dump the pdft dump...
+        if self._in_mcscf_env:
+            self._mc_class.dump_chk(self, envs)
 
-        chkfile.dump_pdft(self, chkfile=self.chkfile, key="pdft")
+        else:
+            chkfile.dump_mcpdft(self, chkfile=self.chkfile, key="pdft", e_tot=envs["e_tot"], e_ot=envs["e_ot"], e_states=envs["e_states"])
+
+    def update_from_chk(self, chkfile=None, mcscf_key="mcscf", pdft_key="pdft"):
+        if chkfile is None:
+            chkfile = self.chkfile
+
+        self.__dict__.update(lib.chkfile.load(chkfile, mcscf_key))
+        self.__dict__.update(lib.chkfile.load(chkfile, pdft_key))
+        return self
+    
+    update = update_from_chk
 
 def get_mcpdft_child_class(mc, ot, **kwargs):
     # Inheritance magic

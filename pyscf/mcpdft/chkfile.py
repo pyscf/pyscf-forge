@@ -15,11 +15,33 @@
 #
 # Author: Matthew Hennefath <mhennefarth@uchicago.edu>
 
+import h5py
 from pyscf.lib.chkfile import load_mol, load
+from pyscf.lib import H5FileWrap
 
 def load_pdft(chkfile):
     return load_mol(chkfile), load(chkfile, "pdft")
 
-def dump_pdft(mc, chkfile=None, key="pdft", ):
+def dump_mcpdft(mc, chkfile=None, key="pdft", e_tot=None, e_ot=None, e_states=None):
     """Save MC-PDFT calculation results in chkfile"""
     if chkfile is None: chkfile = mc.chkfile
+    if e_tot is None: e_tot = mc.e_tot
+    if e_ot is None: e_ot = mc.e_ot
+    if e_states is None: e_states = mc.e_states
+
+    if h5py.is_hdf5(chkfile):
+        mode = 'a'
+    else:
+        mode = 'w'
+
+    with H5FileWrap(chkfile, mode) as fh5:
+        if mode == "a" and key in fh5:
+            del (fh5[key])
+    
+        def store(subkey, val):
+            if val is not None:
+                fh5[key+"/"+subkey] = val
+
+        store("e_tot", e_tot)
+        store("e_ot", e_ot)
+        store("e_states", e_states)

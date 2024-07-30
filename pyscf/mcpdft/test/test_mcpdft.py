@@ -40,10 +40,8 @@ import unittest
 
 mol_nosym = mol_sym = mf_nosym = mf_sym = mc_nosym = mc_sym = mcp = None
 def auto_setup (xyz='Li 0 0 0\nH 1.5 0 0', fnal='tPBE'):
-    mol_nosym = gto.M (atom = xyz, basis = 'sto3g',
-                       output = '/dev/null', verbose = 0)
-    mol_sym = gto.M (atom = xyz, basis = 'sto3g', symmetry=True,
-                     output = '/dev/null', verbose = 0)
+    mol_nosym = gto.M (atom = xyz, basis = 'sto3g', verbose = 0)
+    mol_sym = gto.M (atom = xyz, basis = 'sto3g', symmetry=True, verbose = 0)
     mf_nosym = scf.RHF (mol_nosym).run ()
     mc_nosym = mcscf.CASSCF (mf_nosym, 5, 2).run (conv_tol=1e-8)
     mf_sym = scf.RHF (mol_sym).run ()
