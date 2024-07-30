@@ -25,6 +25,7 @@ from pyscf.mcscf.df import _DFCASSCF, _DFCAS
 from pyscf.mcpdft import pdft_veff, pdft_feff
 from pyscf.mcpdft.otfnal import transfnal, get_transfnal
 from pyscf.mcpdft import _dms
+from pyscf.mcpdft import chkfile
 
 def energy_tot(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     '''Calculate MC-PDFT total energy
@@ -454,7 +455,7 @@ class _PDFT:
         return self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
-                             grids_level=None, grids_attr=None, **kwargs):
+                             grids_level=None, grids_attr=None, dump_chk=True, **kwargs):
         '''Compute the MC-PDFT energy(ies) (and update stored data)
         with the MC-SCF wave function fixed. '''
         if mo_coeff is not None: self.mo_coeff = mo_coeff
@@ -487,6 +488,10 @@ class _PDFT:
         else:  # nroots==1 not StateAverage class
             self.e_tot, self.e_ot = epdft[0]
             e_states = [self.e_tot]
+
+        if dump_chk:
+            self.dump_chk(locals())
+
         return self.e_tot, self.e_ot, e_states
 
     def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_attr=None,
@@ -747,6 +752,13 @@ class _PDFT:
                     e_tot, ot.otxc, e_ot)
         return e_tot, e_ot
 
+    def dump_chk(self, envs):
+        if not self.chkfile:
+            return self
+
+        self._mc_class.dump_chk(self, envs)
+
+        chkfile.dump_pdft(self, chkfile=self.chkfile, key="pdft")
 
 def get_mcpdft_child_class(mc, ot, **kwargs):
     # Inheritance magic

@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Matthew Hennefarth <mhennefarth@uchicago.com>
+# Author: Matthew Hennefarth <mhennefarth@uchicago.edu>
 
 import numpy as np
 from scipy import linalg
