@@ -20,9 +20,11 @@ from scipy import linalg
 
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
+from pyscf import __config__
 
 from pyscf import mcpdft
 from pyscf.mcpdft import _dms
+from pyscf.mcpdft import chkfile
 
 
 def weighted_average_densities(mc, ci=None, weights=None):
@@ -266,27 +268,36 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
             for s, irrep in zip(mc.fcisolver.fcisolvers, mc._irrep_slices)]
 
 
-def kernel(mc, mo_coeff=None, ci0=None, ot=None, **kwargs):
+def kernel(mc, mo_coeff=None, ci0=None, ot=None, dump_chk=True, **kwargs):
     if ot is None: ot = mc.otfnal
     if mo_coeff is None: mo_coeff = mc.mo_coeff
 
     mc.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
-    mc.ci_mcscf = mc.ci
+    ci_mcscf = mc.ci
     mc.lpdft_ham = mc.make_lpdft_ham_(ot=ot)
     logger.debug(mc, f"L-PDFT Hamiltonian in MC-SCF Basis:\n{mc.get_lpdft_ham()}")
 
     if hasattr(mc, "_irrep_slices"):
         e_states, si_pdft = zip(*map(mc._eig_si, mc.lpdft_ham))
-        mc.e_states = np.concatenate(e_states)
-        mc.si_pdft = linalg.block_diag(*si_pdft)
+        e_states = np.concatenate(e_states)
+        si_pdft = linalg.block_diag(*si_pdft)
 
     else:
-        mc.e_states, mc.si_pdft = mc._eig_si(mc.lpdft_ham)
+        e_states, si_pdft = mc._eig_si(mc.lpdft_ham)
+
+    mc.e_states = e_states
+    mc.si_pdft = si_pdft
 
     logger.debug(mc, f"L-PDFT SI:\n{mc.si_pdft}")
 
-    mc.e_tot = np.dot(mc.e_states, mc.weights)
-    mc.ci = mc._get_ci_adiabats()
+    e_tot = np.dot(e_states, mc.weights)
+    ci = mc._get_ci_adiabats(ci_mcscf)
+    
+    mc.e_tot = e_tot
+    mc.ci = ci
+
+    if dump_chk:
+        mc.dump_chk(locals())
 
     return (
         mc.e_tot, mc.e_mcscf, mc.e_cas, mc.ci,
@@ -303,13 +314,10 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         e_states : ndarray of shape (nroots)
             L-PDFT final energies of the adiabatic states
         ci : list of length (nroots) of ndarrays
-            CI vectors in the optimized adiabatic basis of MC-SCF. Related to
-            the L-PDFT adiabat CI vectors by the expansion coefficients
-            ``si_pdft''.
+            CI vectors in the optimized adiabatic basis of L-PDFT
         si_pdft : ndarray of shape (nroots, nroots)
             Expansion coefficients of the L-PDFT adiabats in terms of the
-            optimized
-            MC-SCF adiabats
+            optimized MC-SCF adiabats
         e_mcscf : ndarray of shape (nroots)
             Energies of the MC-SCF adiabatic states
         lpdft_ham : ndarray of shape (nroots, nroots)
@@ -320,6 +328,8 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         veff2 : pyscf.mcscf.mc_ao2mo._ERIS instance
             Relevant 2-body effective potential in the MO basis.
     '''
+
+    chk_veff = getattr(__config__, 'mcpdft_lpdft_chk_veff', False)
 
     def __init__(self, mc):
         self.__dict__.update(mc.__dict__)
@@ -407,7 +417,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci0 is None and isinstance(getattr(self, 'ci', None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, ot=ot, verbose=log)
+        kernel(self, mo_coeff, ci0, ot=ot, verbose=log, dump_chk=True)
         self._finalize_lin()
         return (
             self.e_tot, self.e_mcscf, self.e_cas, self.ci,
@@ -430,7 +440,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 log.note('  State %d weight %g  ELPDFT = %.15g', i,
                          self.weights[i], self.e_states[i])
 
-    def _get_ci_adiabats(self, ci_mcscf=None):
+    def _get_ci_adiabats(self, ci_mcscf):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
             Kwargs:
@@ -441,7 +451,6 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
                 ci : list of length nroots
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
-        if ci_mcscf is None: ci_mcscf = self.ci_mcscf
         return list(np.tensordot(self.si_pdft.T, np.asarray(ci_mcscf), axes=1))
 
     def _eig_si(self, ham):
@@ -486,6 +495,32 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
             from pyscf.grad.lpdft import Gradients
 
         return Gradients(self, state=state)
+
+    def dump_chk(self, envs):
+        if self.chkfile is None:
+            return self
+
+        if self._in_mcscf_env:
+            self._mc_class.dump_chk(self, envs)
+
+        else:
+            ci = veff1 = veff2 = None
+            if self.chk_ci:
+                ci = envs["ci"]
+
+            if self.chk_veff:
+                veff1 = self.veff1
+                veff2 = self.veff2 
+
+            if "e_mcscf" in envs:
+                e_mcscf = envs["e_mcscf"]
+
+            else:
+                e_mcscf = self.e_mcscf
+
+            chkfile.dump_lpdft(self, chkfile=self.chkfile, key="pdft", e_tot=envs["e_tot"], e_states=envs["e_states"], e_mcscf=e_mcscf, ci=ci, veff1=veff1, veff2=veff2)
+
+        return self
 
 
 class _LPDFTMix(_LPDFT):
@@ -536,18 +571,16 @@ class _LPDFTMix(_LPDFT):
         '''
         return linalg.block_diag(*self.lpdft_ham)
 
-    def _get_ci_adiabats(self, ci_mcscf=None):
+    def _get_ci_adiabats(self, ci_mcscf):
         '''Get the CI vertors in eigenbasis of L-PDFT Hamiltonian
 
-            Kwargs:
-                ci : list of length nroots
-                    MC-SCF ci vectors; defaults to self.ci_mcscf
+            ci : list of length nroots
+                MC-SCF ci vectors
 
             Returns:
                 ci : list of length nroots
                     CI vectors in basis of L-PDFT Hamiltonian eigenvectors
         '''
-        if ci_mcscf is None: ci_mcscf = self.ci_mcscf
         adiabat_ci = [np.tensordot(self.si_pdft[irrep_slice, irrep_slice],
                                    np.asarray(ci_mcscf[irrep_slice]), axes=1) for irrep_slice in self._irrep_slices]
         # Flattens it
