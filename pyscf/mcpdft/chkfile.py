@@ -24,7 +24,9 @@ def load_pdft(chkfile):
     return load_mol(chkfile), load(chkfile, "pdft")
 
 
-def dump_mcpdft(mc, chkfile=None, key="pdft", e_tot=None, e_ot=None, e_states=None):
+def dump_mcpdft(
+    mc, chkfile=None, key="pdft", e_tot=None, e_ot=None, e_states=None, e_mcscf=None
+):
     """Save MC-PDFT calculation results in chkfile"""
     if chkfile is None:
         chkfile = mc.chkfile
@@ -49,3 +51,4 @@ def dump_mcpdft(mc, chkfile=None, key="pdft", e_tot=None, e_ot=None, e_states=No
         store("e_tot", e_tot)
         store("e_ot", e_ot)
         store("e_states", e_states)
+        store("e_mcscf", e_mcscf)

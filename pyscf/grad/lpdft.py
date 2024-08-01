@@ -652,6 +652,8 @@ class Gradients(sacasscf.Gradients):
 
         hop, Adiag = newton_casscf.gen_g_hop(fcasscf, mo, ci, eris, verbose)[2:]
 
+        # TODO: (MR Hennefarth) This is not safe way to check if something is a
+        # mixed solver, can probably do better than this...
         if hasattr(self.base, "_irrep_slices"):
             for ham_slice in ham_od:
                 ham_slice[np.diag_indices_from(ham_slice)] = 0.0

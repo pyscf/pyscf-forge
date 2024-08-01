@@ -781,6 +781,7 @@ class _PDFT:
                 e_tot=envs["e_tot"],
                 e_ot=envs["e_ot"],
                 e_states=e_states,
+                e_mcscf=envs["e_mcscf"]
             )
 
         return self
