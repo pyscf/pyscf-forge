@@ -756,7 +756,11 @@ class _PDFT:
         return e_tot, e_ot
 
     def dump_chk(self, envs):
-        """Dumps information to the chkfile. If called within mcscf environment, it forwards to the mcscf dump_chk. Else, it dumps only the pdft information."""
+        """
+        Dumps information to the chkfile. If called within mcscf environment,
+        it forwards to the mcscf dump_chk. Else, it dumps only the pdft
+        information.
+        """
         if not self.chkfile:
             return self
 
@@ -767,10 +771,17 @@ class _PDFT:
 
         else:
             e_states = None
-            if len(envs["e_states"]) > 1 :
+            if len(envs["e_states"]) > 1:
                 e_states = envs["e_states"]
 
-            chkfile.dump_mcpdft(self, chkfile=self.chkfile, key="pdft", e_tot=envs["e_tot"], e_ot=envs["e_ot"], e_states=e_states)
+            chkfile.dump_mcpdft(
+                self,
+                chkfile=self.chkfile,
+                key="pdft",
+                e_tot=envs["e_tot"],
+                e_ot=envs["e_ot"],
+                e_states=e_states,
+            )
 
         return self
 
@@ -781,7 +792,7 @@ class _PDFT:
         self.__dict__.update(lib.chkfile.load(chkfile, mcscf_key))
         self.__dict__.update(lib.chkfile.load(chkfile, pdft_key))
         return self
-    
+
     update = update_from_chk
 
 def get_mcpdft_child_class(mc, ot, **kwargs):
