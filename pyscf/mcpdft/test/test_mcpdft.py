@@ -549,7 +549,7 @@ class KnownValues(unittest.TestCase):
     def test_scanner(self):
         # Putting more energy into CASSCF than CASCI scanner because this is
         # necessary for geometry optimization, which isn't available for CASCI
-        mcp1 = auto_setup(xyz="Li 0 0 0\nH 1.55 0 0")[-1]
+        mcp1 = auto_setup(xyz="Li 0 0 0\nH 1.55 0 0")[-2]
         for mol0, mc0, mc1 in zip([mol_nosym, mol_sym], mcp[0], mcp1[0]):
             mc_scan = mc1.as_scanner()
             with self.subTest(case="SS CASSCF", symm=mol0.symmetry):
