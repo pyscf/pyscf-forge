@@ -27,7 +27,6 @@ def dump_mcpdft(mc, chkfile=None, key="pdft", e_tot=None, e_ot=None, e_states=No
     if chkfile is None: chkfile = mc.chkfile
     if e_tot is None: e_tot = mc.e_tot
     if e_ot is None: e_ot = mc.e_ot
-    if e_states is None: e_states = mc.e_states
 
     if h5py.is_hdf5(chkfile):
         mode = 'a'
