@@ -42,6 +42,8 @@ import pyscf.isdf.isdf_tools_linearop    as     lib_isdf
 
 def _preprocess_dm(mydf, dm):
 
+    log = lib.logger.Logger(mydf.cell.stdout, mydf.cell.verbose)
+
     in_real_space = True
 
     kmesh = np.asarray(mydf.kmesh, dtype=np.int32)
@@ -92,11 +94,11 @@ def _preprocess_dm(mydf, dm):
                         #print("diff = ", diff) ## NOTE: should be very small
                         #assert diff < 1e-7
                         if diff > 1e-7:
-                            print("warning, the input density matrix is not symmetric.")
-                            print("k1    = (%d, %d, %d) " % (ix, iy, iz))
-                            print("k2    = (%d, %d, %d) " % ((kmesh[0] - ix) % kmesh[0], (kmesh[1] - iy) % kmesh[1], (kmesh[2] - iz) % kmesh[2]))
-                            print("kmesh = ", kmesh)
-                            print("diff  = ", diff)
+                            log.debug4("warning, the input density matrix is not symmetric.")
+                            log.debug4("k1    = (%d, %d, %d) " % (ix, iy, iz))
+                            log.debug4("k2    = (%d, %d, %d) " % ((kmesh[0] - ix) % kmesh[0], (kmesh[1] - iy) % kmesh[1], (kmesh[2] - iz) % kmesh[2]))
+                            log.debug4("kmesh = ", kmesh)
+                            log.debug4("diff  = ", diff)
             dm_complex = np.zeros((ncell_complex, nao_prim, nao_prim), dtype=np.complex128)
             loc = 0
             for ix in range(kmesh[0]):
@@ -1522,7 +1524,7 @@ def get_jk_dm_translation_symmetry(mydf, dm, hermi=1, kpt=np.zeros(3),
         raise NotImplementedError("ISDF does not support use_mpi")
     
     if len(dm.shape) == 3:
-        assert dm.shape[0] <= 2
+        assert dm.shape[0] <= 4
         #dm = dm[0]
     else:
         assert dm.ndim == 2
@@ -1594,7 +1596,7 @@ def get_jk_dm_translation_symmetry(mydf, dm, hermi=1, kpt=np.zeros(3),
             dm_kpts = lib.asarray(dm_kpts, order='C')
             dms     = _format_dms(dm_kpts, kpts)
             nset, nkpts, nao = dms.shape[:3]
-            assert nset <= 2
+            assert nset <= 4
             kpts_band, input_band = _format_kpts_band(kpts_band, kpts), kpts_band
             nband = len(kpts_band)
             assert nband == 1

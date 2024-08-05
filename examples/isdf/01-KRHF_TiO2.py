@@ -1,5 +1,3 @@
-# from pyscf.pbc.df.isdf.test.test_isdf_fast import PBC_ISDF_Info
-
 from functools import reduce
 import numpy as np
 from pyscf import lib

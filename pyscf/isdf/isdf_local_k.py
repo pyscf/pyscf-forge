@@ -1216,7 +1216,7 @@ class PBC_ISDF_Info_Quad_K(ISDF_Local.PBC_ISDF_Info_Quad):
             assert dm_kpts.shape[2] == dm_kpts.shape[3]
             dms = _format_dms(dm_kpts, kpts)
             nset, nkpts, nao = dms.shape[:3]
-            assert nset <= 2
+            assert nset <= 4
                         
             kpts_band, input_band = _format_kpts_band(kpts_band, kpts), kpts_band
             nband = len(kpts_band)

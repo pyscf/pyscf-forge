@@ -2248,7 +2248,7 @@ def get_jk_dm_quadratic(mydf, dm, hermi=1, kpt=np.zeros(3),
     else:
         dm = np.asarray(dm)
         if len(dm.shape) == 3:
-            assert dm.shape[0] <= 2
+            assert dm.shape[0] <= 4
         # if use_occ_RI_K:
         #     assert dm.shape[0] == 1
         #     dm = dm[0]
@@ -2276,8 +2276,8 @@ def get_jk_dm_quadratic(mydf, dm, hermi=1, kpt=np.zeros(3),
         raise NotImplementedError("ISDF does not support use_mpi and direct=False")
     
     if len(dm.shape) == 3:
-        assert dm.shape[0] <= 2
-        #dm = dm[0]
+        assert dm.shape[0] <= 4
+        ## NOTE: 1 for RHF 2 for UHF 3/4 for GHF
 
     if hasattr(mydf, 'Ls') and mydf.Ls is not None:
         from pyscf.isdf.isdf_tools_densitymatrix import symmetrize_dm
@@ -2321,7 +2321,7 @@ def get_jk_dm_quadratic(mydf, dm, hermi=1, kpt=np.zeros(3),
     assert j_real
     assert k_real
 
-    mem_now = lib.current_memory()[0]
+    mem_now    = lib.current_memory()[0]
     max_memory = max(2000, (mydf.max_memory - mem_now))
 
     log.debug1('max_memory = %d MB (%d in use)', max_memory, mem_now)
@@ -2329,6 +2329,9 @@ def get_jk_dm_quadratic(mydf, dm, hermi=1, kpt=np.zeros(3),
     # if use_occ_RI_K:
     #     vj, vk = get_jk_occRI(mydf, dm, use_mpi, with_j, with_k)
     # else:
+    
+    ### TODO: improve the efficiency ###
+    
     vj = np.zeros_like(dm)
     vk = np.zeros_like(dm)
     for iset in range(nset):
@@ -2343,25 +2346,6 @@ def get_jk_dm_quadratic(mydf, dm, hermi=1, kpt=np.zeros(3),
             else:
                 vk[iset] = _contract_k_dm_quadratic(mydf, dm[iset], mydf.with_robust_fitting, use_mpi=use_mpi)
 
-    # if mydf.rsjk is not None:
-    #     assert use_mpi == False
-    #     assert dm.shape[0] == 1
-    #     dm = dm[0]
-    #     vj_sr, vk_sr = mydf.rsjk.get_jk(
-    #         dm, 
-    #         hermi, 
-    #         kpt, 
-    #         kpts_band, 
-    #         with_j, 
-    #         with_k, 
-    #         omega, 
-    #         exxdiv, **kwargs)
-    #     if with_j:
-    #         vj += vj_sr
-    #     if with_k:
-    #         vk += vk_sr
-    #     dm = dm.reshape(1, dm.shape[0], dm.shape[1])
-
     ##### the following code is added to deal with _ewald_exxdiv_for_G0 #####
     
     if not use_mpi or (use_mpi and rank==0):
@@ -2372,7 +2356,7 @@ def get_jk_dm_quadratic(mydf, dm, hermi=1, kpt=np.zeros(3),
         dm_kpts = lib.asarray(dm_kpts, order='C')
         dms = _format_dms(dm_kpts, kpts)
         nset, nkpts, nao = dms.shape[:3]
-        assert nset <= 2
+        assert nset  <= 4
         assert nkpts == 1
     
         kpts_band, input_band = _format_kpts_band(kpts_band, kpts), kpts_band
