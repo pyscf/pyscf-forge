@@ -46,7 +46,9 @@ def weighted_average_densities(mc, ci=None, weights=None):
         weighted averages where the weights are given.
     '''
 
-    return _dms.make_weighted_casdm1s(mc, ci=ci, weights=weights), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
+    return _dms.make_weighted_casdm1s(
+        mc, ci=ci, weights=weights
+    ), _dms.make_weighted_casdm2(mc, ci=ci, weights=weights)
 
 
 def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=None, veff1=None, veff2=None,
@@ -87,11 +89,17 @@ def get_lpdft_hconst(mc, E_ot, casdm1s_0, casdm2_0, hyb=1.0, ncas=None, ncore=No
     Returns:
         Constant term h_const for the expansion term.
     '''
-    if ncas is None: ncas = mc.ncas
-    if ncore is None: ncore = mc.ncore
-    if veff1 is None: veff1 = mc.veff1
-    if veff2 is None: veff2 = mc.veff2
-    if mo_coeff is None: mo_coeff = mc.mo_coeff
+
+    if ncas is None:
+        ncas = mc.ncas
+    if ncore is None:
+        ncore = mc.ncore
+    if veff1 is None:
+        veff1 = mc.veff1
+    if veff2 is None:
+        veff2 = mc.veff2
+    if mo_coeff is None:
+        mo_coeff = mc.mo_coeff
 
     nocc = ncore + ncas
 

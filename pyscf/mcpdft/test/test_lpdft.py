@@ -15,8 +15,9 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
+import tempfile, h5py
 import numpy as np
-from pyscf import gto, scf, fci
+from pyscf import gto, scf, fci, lib
 from pyscf import mcpdft
 import unittest
 
@@ -56,6 +57,7 @@ def get_water(functional='tpbe', basis='6-31g'):
     solver2.spin = 2
 
     mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mc.chkfile = tempfile.NamedTemporaryFile().name 
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc
@@ -209,6 +211,14 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 6)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 6)
         self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 6)
+
+    def test_chkfile(self):
+        for mc, case in zip([water, t_water], ["SA", "SA Mix"]):
+            with self.subTest(case=case):
+                self.assertTrue(h5py.is_hdf5(mc.chkfile))
+                self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "mcscf/mo_coeff")))
+
+
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
