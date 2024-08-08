@@ -6,6 +6,9 @@ TREX-IO interface
 References:
     https://trex-coe.github.io/trexio/trex.html
     https://github.com/TREX-CoE/trexio-tutorials/blob/ad5c60aa6a7bca802c5918cef2aeb4debfa9f134/notebooks/tutorial_benzene.md
+
+Installation instruction:
+    https://github.com/TREX-CoE/trexio/blob/master/python/README.md
 '''
 
 import numpy as np
