@@ -12,5 +12,7 @@ python -m pip install --upgrade pip
 pip install pytest
 pip install .
 
+pip install trexio
+
 # TODO: check if pyscf code is changed using dist-info file
 #pip uninstall -y pyscf-forge
