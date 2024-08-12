@@ -789,7 +789,7 @@ class _PDFT:
     def update_from_chk(self, chkfile=None, pdft_key="pdft"):
         if chkfile is None:
             chkfile = self.chkfile
-        
+
         # When the chkfile is saved, we utilize hard links to the mcscf data
         self.__dict__.update(lib.chkfile.load(chkfile, pdft_key))
         return self

@@ -20,6 +20,7 @@ from pyscf.lib.chkfile import load_mol, load, dump
 from pyscf.lib import H5FileWrap
 from pyscf.mcscf.addons import StateAverageMixFCISolver
 
+
 def load_pdft(chkfile):
     return load_mol(chkfile), load(chkfile, "pdft")
 
@@ -120,9 +121,7 @@ def dump_lpdft(
             store("ci", ci)
 
         if mcscf_key in fh5:
-            hard_links = {
-                "mo_coeff": "mo_coeff"
-            }
+            hard_links = {"mo_coeff": "mo_coeff"}
             for s, d in hard_links.items():
                 if s in fh5[mcscf_key]:
                     fh5[key + "/" + d] = fh5[mcscf_key + "/" + s]
