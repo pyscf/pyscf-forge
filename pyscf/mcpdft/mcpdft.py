@@ -781,16 +781,16 @@ class _PDFT:
                 e_tot=envs["e_tot"],
                 e_ot=envs["e_ot"],
                 e_states=e_states,
-                e_mcscf=envs["e_mcscf"]
+                e_mcscf=self.e_mcscf,
             )
 
         return self
 
-    def update_from_chk(self, chkfile=None, mcscf_key="mcscf", pdft_key="pdft"):
+    def update_from_chk(self, chkfile=None, pdft_key="pdft"):
         if chkfile is None:
             chkfile = self.chkfile
-
-        self.__dict__.update(lib.chkfile.load(chkfile, mcscf_key))
+        
+        # When the chkfile is saved, we utilize hard links to the mcscf data
         self.__dict__.update(lib.chkfile.load(chkfile, pdft_key))
         return self
 

@@ -52,7 +52,7 @@ def auto_setup(xyz="Li 0 0 0\nH 1.5 0 0", fnal="tPBE"):
     mcp_ss_nosym = mcpdft.CASSCF(mc_nosym, fnal, 5, 2).run(conv_tol=1e-8)
     mcp_ss_sym = (
         mcpdft.CASSCF(mc_sym, fnal, 5, 2)
-        .set(chkfile=tempfile.NamedTemporaryFile().name)
+        .set(chkfile=tempfile.NamedTemporaryFile().name, chk_ci=True)
         .run(conv_tol=1e-8)
     )
     mcp_sa_0 = mcp_ss_nosym.state_average(
@@ -85,7 +85,7 @@ def auto_setup(xyz="Li 0 0 0\nH 1.5 0 0", fnal="tPBE"):
             ]
             * 5,
         )
-        .set(ci=None, chkfile=tempfile.NamedTemporaryFile().name)
+        .set(ci=None, chkfile=tempfile.NamedTemporaryFile().name, chk_ci=True)
         .run(conv_tol=1e-8)
     )
     mcp = [[mcp_ss_nosym, mcp_ss_sym], [mcp_sa_0, mcp_sa_1, mcp_sa_2]]
@@ -620,12 +620,16 @@ class KnownValues(unittest.TestCase):
             
             with self.subTest(case=case):
                 self.assertTrue(h5py.is_hdf5(mc.chkfile))
-                self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "mcscf/mo_coeff")))
+                self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/mo_coeff")))
                 self.assertEqual(mc.e_tot, lib.chkfile.load(mc.chkfile, "pdft/e_tot"))
                 self.assertEqual(lib.fp(mc.e_ot), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_ot")))
+                self.assertEqual(lib.fp(mc.e_mcscf), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_mcscf")))
+                for state, (c_ref, c) in enumerate(zip(mc.ci, lib.chkfile.load(mc.chkfile, "pdft/ci"))):
+                    with self.subTest(state=state):
+                        self.assertEqual(lib.fp(c_ref), lib.fp(c))
+                
                 if case=="SA CASSCF":
                     self.assertEqual(lib.fp(mc.e_states), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_states")))
-            
 
 if __name__ == "__main__":
     print("Full Tests for MC-PDFT energy API")

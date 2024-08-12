@@ -25,7 +25,14 @@ def load_pdft(chkfile):
 
 
 def dump_mcpdft(
-    mc, chkfile=None, key="pdft", e_tot=None, e_ot=None, e_states=None, e_mcscf=None
+    mc,
+    chkfile=None,
+    key="pdft",
+    e_tot=None,
+    e_ot=None,
+    e_states=None,
+    e_mcscf=None,
+    mcscf_key="mcscf",
 ):
     """Save MC-PDFT calculation results in chkfile"""
     if chkfile is None:
@@ -46,6 +53,7 @@ def dump_mcpdft(
 
         def store(subkey, val):
             if val is not None:
+
                 fh5[key + "/" + subkey] = val
 
         store("e_tot", e_tot)
@@ -53,7 +61,30 @@ def dump_mcpdft(
         store("e_states", e_states)
         store("e_mcscf", e_mcscf)
 
-def dump_lpdft(mc, chkfile=None, key="pdft", e_tot=None, e_states=None, e_mcscf=None, ci=None, veff1=None, veff2=None):
+        # Now lets link
+        if mcscf_key in fh5:
+            hard_links = {
+                "mo_coeff": "mo_coeff",
+                "ci__from_list__": "ci__from_list__",
+                "ci": "ci",
+            }
+
+            for s, d in hard_links.items():
+                if s in fh5[mcscf_key]:
+                    fh5[key + "/" + d] = fh5[mcscf_key + "/" + s]
+
+
+def dump_lpdft(
+    mc,
+    chkfile=None,
+    key="pdft",
+    e_tot=None,
+    e_states=None,
+    e_mcscf=None,
+    ci=None,
+    veff1=None,
+    veff2=None,
+):
     """Save L-PDFT calculation results in chkfile"""
     if chkfile is None:
         chkfile = mc.chkfile
