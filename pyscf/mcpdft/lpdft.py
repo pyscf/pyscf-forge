@@ -337,7 +337,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
             Relevant 2-body effective potential in the MO basis.
     '''
 
-    chk_veff = getattr(__config__, 'mcpdft_lpdft_chk_veff', False)
+    # chk_veff = getattr(__config__, 'mcpdft_lpdft_chk_veff', False)
 
     def __init__(self, mc):
         self.__dict__.update(mc.__dict__)
@@ -516,17 +516,11 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
             if self.chk_ci:
                 ci = envs["ci"]
 
-            if self.chk_veff:
-                veff1 = self.veff1
-                veff2 = self.veff2 
+            # if self.chk_veff:
+                # veff1 = self.veff1
+                # veff2 = self.veff2 
 
-            if "e_mcscf" in envs:
-                e_mcscf = envs["e_mcscf"]
-
-            else:
-                e_mcscf = self.e_mcscf
-
-            chkfile.dump_lpdft(self, chkfile=self.chkfile, key="pdft", e_tot=envs["e_tot"], e_states=envs["e_states"], e_mcscf=e_mcscf, ci=ci, veff1=veff1, veff2=veff2)
+            chkfile.dump_lpdft(self, chkfile=self.chkfile, key="pdft", e_tot=envs["e_tot"], e_states=envs["e_states"], e_mcscf=self.e_mcscf, ci=ci)
 
         return self
 

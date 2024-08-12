@@ -16,9 +16,9 @@
 # Author: Matthew Hennefath <mhennefarth@uchicago.edu>
 
 import h5py
-from pyscf.lib.chkfile import load_mol, load
+from pyscf.lib.chkfile import load_mol, load, dump
 from pyscf.lib import H5FileWrap
-
+from pyscf.mcscf.addons import StateAverageMixFCISolver
 
 def load_pdft(chkfile):
     return load_mol(chkfile), load(chkfile, "pdft")
@@ -82,8 +82,7 @@ def dump_lpdft(
     e_states=None,
     e_mcscf=None,
     ci=None,
-    veff1=None,
-    veff2=None,
+    mcscf_key="mcscf",
 ):
     """Save L-PDFT calculation results in chkfile"""
     if chkfile is None:
@@ -104,6 +103,8 @@ def dump_lpdft(
     else:
         mode = "w"
 
+    mixed_ci = isinstance(mc.fcisolver, StateAverageMixFCISolver) and ci is not None
+
     with H5FileWrap(chkfile, mode) as fh5:
         if mode == "a" and key in fh5:
             del fh5[key]
@@ -115,6 +116,16 @@ def dump_lpdft(
         store("e_tot", e_tot)
         store("e_states", e_states)
         store("e_mcscf", e_mcscf)
-        store("ci", ci)
-        store("veff1", veff1)
-        store("veff2", veff2)
+        if not mixed_ci:
+            store("ci", ci)
+
+        if mcscf_key in fh5:
+            hard_links = {
+                "mo_coeff": "mo_coeff"
+            }
+            for s, d in hard_links.items():
+                if s in fh5[mcscf_key]:
+                    fh5[key + "/" + d] = fh5[mcscf_key + "/" + s]
+
+    if mixed_ci:
+        dump(chkfile, "pdft/ci", ci)
