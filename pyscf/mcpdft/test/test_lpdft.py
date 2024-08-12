@@ -58,7 +58,7 @@ def get_water(functional='tpbe', basis='6-31g'):
 
     mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
     mc.chkfile = tempfile.NamedTemporaryFile().name 
-    mc.chk_ci = True
+    # mc.chk_ci = True
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc
@@ -83,7 +83,7 @@ def get_water_triplet(functional='tPBE', basis="6-31G"):
 
     mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
     mc.chkfile = tempfile.NamedTemporaryFile().name 
-    mc.chk_ci = True
+    # mc.chk_ci = True
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc
@@ -225,9 +225,10 @@ class KnownValues(unittest.TestCase):
                 self.assertEqual(lib.fp(mc.e_mcscf), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_mcscf")))
                 self.assertEqual(lib.fp(mc.e_states), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_states")))        
 
-                for state, (c_ref, c) in enumerate(zip(mc.ci, lib.chkfile.load(mc.chkfile, "pdft/ci"))):
-                    with self.subTest(state=state):
-                        self.assertEqual(lib.fp(c_ref), lib.fp(c))
+                # Requires PySCF version > 2.6.2 which is not available on pip currently
+                # for state, (c_ref, c) in enumerate(zip(mc.ci, lib.chkfile.load(mc.chkfile, "pdft/ci"))):
+                    # with self.subTest(state=state):
+                        # self.assertEqual(lib.fp(c_ref), lib.fp(c))
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
