@@ -6,22 +6,9 @@
 #include <omp.h>
 #include "fft.h"
 #include <stdlib.h>
-#include <lapacke.h>
 
 int get_omp_threads();
 int omp_get_thread_num();
-
-void Complex_Cholesky(double __complex__ *A, int n)
-{
-    // A will be overwritten with the lower triangular Cholesky factor
-    lapack_int info;
-    info = LAPACKE_zpotrf(LAPACK_ROW_MAJOR, 'U', n, A, n);
-    if (info != 0)
-    {
-        fprintf(stderr, "Cholesky decomposition failed: %d\n", info);
-        exit(1);
-    }
-}
 
 void _FFT_Matrix_Col_InPlace(double *matrix, // the size of matrix should be (nRow, nCol* *mesh)
                              int nRow, int nCol, int *mesh,
@@ -212,70 +199,6 @@ void _iFFT_Matrix_Col_InPlace(double __complex__ *matrix, // the size of matrix 
     }
 
     memcpy(mat_real, buf_real, sizeof(double) * m * nCol * mesh[0] * mesh[1] * mesh[2]);
-}
-
-void Solve_LLTEqualB_Complex_Parallel(
-    const int n,
-    const double __complex__ *a, // call cholesky first!
-    double __complex__ *b,
-    const int nrhs,
-    const int BunchSize)
-{
-    int nThread = get_omp_threads();
-
-    int64_t nBunch = (nrhs / BunchSize);
-    int64_t nLeft = nrhs - nBunch * BunchSize;
-
-    printf("nThread  : %d\n", nThread);
-    printf("nBunch   : %d\n", nBunch);
-    printf("nLeft    : %d\n", nLeft);
-    printf("BunchSize: %d\n", BunchSize);
-    printf("n        : %d\n", n);
-    printf("nrhs     : %d\n", nrhs);
-
-#pragma omp parallel num_threads(nThread)
-    {
-        double __complex__ *ptr_b;
-        lapack_int info;
-
-#pragma omp for schedule(static, 1) nowait
-        for (int64_t i = 0; i < nBunch; i++)
-        {
-            ptr_b = b + BunchSize * i;
-
-            // forward transform
-
-            info = LAPACKE_zpotrs(LAPACK_ROW_MAJOR, 'U', n, BunchSize, a, n, ptr_b, nrhs);
-
-            if (info != 0)
-            {
-                fprintf(stderr, "Solving system failed: %d\n", info);
-                exit(1);
-            }
-        }
-
-#pragma omp single
-        {
-            if (nLeft > 0)
-            {
-                // int thread_id = omp_get_thread_num();
-
-                double __complex__ *ptr_b = b + BunchSize * nBunch;
-
-                lapack_int info;
-
-                // forward transform
-
-                info = LAPACKE_zpotrs(LAPACK_ROW_MAJOR, 'U', n, nLeft, a, n, ptr_b, nrhs);
-
-                if (info != 0)
-                {
-                    fprintf(stderr, "Solving system failed: %d\n", info);
-                    exit(1);
-                }
-            }
-        }
-    }
 }
 
 void _FinalFFT(

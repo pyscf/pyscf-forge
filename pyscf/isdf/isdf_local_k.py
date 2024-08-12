@@ -684,6 +684,8 @@ class PBC_ISDF_Info_Quad_K(ISDF_Local.PBC_ISDF_Info_Quad):
     
     def build_IP_local(self, c=5, m=5, first_natm=None, group=None, Ls = None, debug=True):
         
+        print("In build_IP_local")
+        
         assert self.use_aft_ao == False
         
         first_natm = self.first_natm 
@@ -786,8 +788,8 @@ class PBC_ISDF_Info_Quad_K(ISDF_Local.PBC_ISDF_Info_Quad):
         
         t2 = (lib.logger.process_clock(), lib.logger.perf_counter())
         
-        if self.verbose and debug:
-            _benchmark_time(t1, t2, "build_partition_aoR", self)
+        # if self.verbose and debug:
+        _benchmark_time(t1, t2, "build_partition_aoR", self)
         
         t1 = t2 
         
@@ -837,19 +839,18 @@ class PBC_ISDF_Info_Quad_K(ISDF_Local.PBC_ISDF_Info_Quad):
         
         t2 = (lib.logger.process_clock(), lib.logger.perf_counter())
         
-        if self.verbose and debug:
-            _benchmark_time(t1, t2, "select_IP", self)
+        #if self.verbose and debug:
+        _benchmark_time(t1, t2, "select_IP", self)
         
         t1 = t2 
         
         ISDF_Local.build_aux_basis_ls(
-            self, group, self.IP_group, debug=debug, use_mpi=self.use_mpi
-        )
+            self, group, self.IP_group, debug=debug, use_mpi=self.use_mpi)
         
         t2 = (lib.logger.process_clock(), lib.logger.perf_counter())
         
-        if self.verbose and debug:
-            _benchmark_time(t1, t2, "build_aux_basis", self)
+        #if self.verbose and debug:
+        _benchmark_time(t1, t2, "build_aux_basis", self)
     
         t1 = t2
         
@@ -1286,9 +1287,10 @@ if __name__ == "__main__":
                                          # direct=True, 
                                          direct=False, 
                                          rela_cutoff_QRCP=3e-3,
-                                         limited_memory=True, build_K_bunchsize=32)
-    pbc_isdf_info.build_IP_local(c=C, m=5, group=prim_partition, Ls=[Ls[0]*10, Ls[1]*10, Ls[2]*10])
+                                         limited_memory=True, 
+                                         build_K_bunchsize=32)
     pbc_isdf_info.verbose = 10
+    pbc_isdf_info.build_IP_local(c=C, m=5, group=prim_partition, Ls=[Ls[0]*10, Ls[1]*10, Ls[2]*10])
     
     # exit(1)
     

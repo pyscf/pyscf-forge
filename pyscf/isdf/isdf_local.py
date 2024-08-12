@@ -42,7 +42,8 @@ import pyscf.isdf.isdf_tools_linearop    as     lib_isdf
 
 ##### all the involved algorithm in ISDF based on aoR_Holder ##### 
 
-USE_SCIPY_QR = False  ## true for single-thread mode to compare with Kori's code
+USE_SCIPY_QR       = False  ## true for single-thread mode to compare with Kori's code
+USE_SCIPY_CHOLESKY = True
 
 ############ subroutines --- select IP ############
 
@@ -494,7 +495,6 @@ def find_common_elements_positions(arr1, arr2):
 
 def build_aux_basis_ls(mydf, group, IP_group, debug=True, use_mpi=False):
 
-
     log = lib.logger.Logger(mydf.cell.stdout, mydf.cell.verbose)
 
     if use_mpi:
@@ -530,12 +530,12 @@ def build_aux_basis_ls(mydf, group, IP_group, debug=True, use_mpi=False):
     
     for i in range(ngroup):
         mydf.aux_basis.append(None)
-        
-    fn_cholesky = getattr(libisdf, "Cholesky", None)
-    assert (fn_cholesky is not None)
     
-    fn_build_aux = getattr(libisdf, "Solve_LLTEqualB_Parallel", None)
-    assert(fn_build_aux is not None)
+    if not USE_SCIPY_CHOLESKY:
+        fn_cholesky = getattr(libisdf, "Cholesky", None)
+        assert (fn_cholesky is not None)
+        fn_build_aux = getattr(libisdf, "Solve_LLTEqualB_Parallel", None)
+        assert(fn_build_aux is not None)
     
     for i in range(group_begin, group_end):
         
@@ -564,24 +564,29 @@ def build_aux_basis_ls(mydf, group, IP_group, debug=True, use_mpi=False):
         grid_ID = mydf.partition_group_to_gridID[i]
         B = lib.ddot(aoRg1.T, aoR1)
         lib_isdf.square_inPlace(B)
-                    
-        fn_cholesky = getattr(libisdf, "Cholesky", None)
-        assert(fn_cholesky is not None)
-        fn_cholesky(
-            A.ctypes.data_as(ctypes.c_void_p),
-            ctypes.c_int(A.shape[0]),
-        ) 
-        nThread = lib.num_threads()
-        bunchsize = B.shape[1]//nThread
-        fn_build_aux(
-            ctypes.c_int(B.shape[0]),
-            A.ctypes.data_as(ctypes.c_void_p),
-            B.ctypes.data_as(ctypes.c_void_p),
-            ctypes.c_int(B.shape[1]),
-            ctypes.c_int(bunchsize)
-        )
+        
+        if not USE_SCIPY_CHOLESKY:
+            print("SCIPY is not called")
+            fn_cholesky(
+                A.ctypes.data_as(ctypes.c_void_p),
+                ctypes.c_int(A.shape[0]),
+            ) 
+            nThread = lib.num_threads()
+            bunchsize = B.shape[1]//nThread
+            fn_build_aux(
+                ctypes.c_int(B.shape[0]),
+                A.ctypes.data_as(ctypes.c_void_p),
+                B.ctypes.data_as(ctypes.c_void_p),
+                ctypes.c_int(B.shape[1]),
+                ctypes.c_int(bunchsize)
+            )
+        else:
+            # print("SCIPY is called")
+            C = scipy.linalg.cholesky(A, lower=True, overwrite_a=True, check_finite=False)
+            B = scipy.linalg.cho_solve((C, True), B, overwrite_b=True, check_finite=False)
         
         mydf.aux_basis[i] = B.copy()
+        # exit(1)
 
     ### sync aux_basis ###
     
@@ -1360,8 +1365,8 @@ class PBC_ISDF_Info_Quad(ISDF.PBC_ISDF_Info):
         
         t2 = (lib.logger.process_clock(), lib.logger.perf_counter())
         
-        if self.verbose and debug:
-            _benchmark_time(t1, t2, "build_partition_aoR", self)
+        # if self.verbose and debug:
+        _benchmark_time(t1, t2, "build_partition_aoR", self)
         
         t1 = t2
         

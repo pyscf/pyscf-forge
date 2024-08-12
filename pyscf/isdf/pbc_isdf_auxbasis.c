@@ -3,13 +3,16 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include <lapacke.h>
-
 int get_omp_threads();
 int omp_get_thread_num();
 
-//
+// #define USE_LAPACKE
 
+#ifdef USE_LAPACKE
+#include <lapacke.h>
+#endif
+
+#ifdef USE_LAPACKE
 void Cholesky(double *A, int n)
 {
     // A will be overwritten with the lower triangular Cholesky factor
@@ -85,6 +88,12 @@ void Solve_LLTEqualB_Parallel(
         }
     }
 }
+
+#endif
+
+#ifdef USE_LAPACKE
+#undef USE_LAPACKE
+#endif
 
 void ColPivotQRRelaCut(
     double *aoPaironGrid, // (nPair, nGrid)

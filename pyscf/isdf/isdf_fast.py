@@ -434,8 +434,8 @@ def build_aux_basis(mydf, debug=True, use_mpi=False):
     mydf.aux_basis = np.asarray(lib.ddot(aoRg.T, aoR), order='C')   # buffer 2 size = naux * ngrids
     lib.square_inPlace(mydf.aux_basis)
     
-    fn_build_aux = getattr(libisdf, "Solve_LLTEqualB_Parallel", None)
-    assert(fn_build_aux is not None)
+    #fn_build_aux = getattr(libisdf, "Solve_LLTEqualB_Parallel", None)
+    #assert(fn_build_aux is not None)
 
     nThread = lib.num_threads()
     nGrids  = aoR.shape[1]

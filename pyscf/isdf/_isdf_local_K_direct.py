@@ -358,7 +358,7 @@ def _isdf_get_K_direct_kernel_1(
                         
                         # print("atm_id = ", atm_id, "ILOC = ", ILOC, "shape = ", aoR_holder.aoR.shape)
             
-                        ##### packed involved DgAO #####
+                        ##### packed involved RgAO #####
             
                         if kx ==0 and ky == 0 and kz == 0:
                             ao_permutation = aoR_holder.ao_involved

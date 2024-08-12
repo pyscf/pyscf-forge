@@ -735,9 +735,9 @@ def _contract_j_dm_wo_robust_fitting(mydf, dm, use_mpi=False):
 
 def __get_DensityMatrixonRgAO_qradratic(mydf, dm, 
                                         bra_aoR_holder, 
-                                        bra_type       = None,
+                                        bra_type        = None,
                                         _res:np.ndarray = None, 
-                                        verbose        = 1):
+                                        verbose         = 1):
     
     assert bra_type in [None, "all", "compact", "diffuse"]
         
@@ -778,9 +778,9 @@ def __get_DensityMatrixonRgAO_qradratic(mydf, dm,
     
     ### allocate buf ###
     
-    offset = 0
-    ddot_buf = np.ndarray((max_ngrid_bra, nao), buffer=mydf.build_k_buf, offset=offset)
-    offset  += ddot_buf.size * ddot_buf.dtype.itemsize
+    offset      = 0
+    ddot_buf    = np.ndarray((max_ngrid_bra, nao), buffer=mydf.build_k_buf, offset=offset)
+    offset     += ddot_buf.size * ddot_buf.dtype.itemsize
     dm_pack_buf = np.ndarray((dm.shape[0], dm.shape[1]), buffer=mydf.build_k_buf, offset=offset)
         
     ### get pack fn ### 
@@ -793,8 +793,8 @@ def __get_DensityMatrixonRgAO_qradratic(mydf, dm,
     ### perform aoR_bra.T * dm
     
     ordered_ao_ind = np.arange(nao)
-    grid_shift = None
-    ngrid_loc = 0
+    grid_shift     = None
+    ngrid_loc      = 0
     
     for aoR_holder in bra_aoR_holder:
         
