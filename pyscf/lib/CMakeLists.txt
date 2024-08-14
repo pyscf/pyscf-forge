@@ -120,3 +120,30 @@ set_target_properties (clib_pdft PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
+
+# Build the LibXC CFFI library
+execute_process(
+    COMMAND python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
+    OUTPUT_VARIABLE PYTHON_EXT_SUFFIX
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+set (LIBXC_CFFI_BUILDER "${PROJECT_SOURCE_DIR}/dft/build_libxc_cffi.py")
+set (LIBXC_CFFI_SO "${PROJECT_SOURCE_DIR}/../dft2/libxc_cffi${PYTHON_EXT_SUFFIX}")
+add_custom_command(
+    OUTPUT ${LIBXC_CFFI_SO}
+    COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} python3 ${LIBXC_CFFI_BUILDER} ${PYSCF_SOURCE_DIR}
+    DEPENDS ${LIBXC_CFFI_BUILDER}
+    COMMENT "Building LibXC CFFI library"
+)
+add_custom_target(libxc_cffi ALL
+    DEPENDS ${LIBXC_CFFI_SO}
+)
+
+# Build the libxc_itrf2 library
+set (LIBXC_ITRF2_SOURCE_FILES "dft/libxc_itrf2.c")
+add_library (clib_libxc2 SHARED ${LIBXC_ITRF2_SOURCE_FILES})
+target_link_libraries (clib_libxc2 dft ${PYSCF_SOURCE_DIR}/lib/deps/lib/libxc.so)
+set_target_properties (clib_libxc2 PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "xc_itrf2")
