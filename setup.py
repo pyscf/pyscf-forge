@@ -19,7 +19,7 @@ AUTHOR_EMAIL = None
 DESCRIPTION  = 'Staging ground for PySCF core features'
 SO_EXTENSIONS = {
 }
-DEPENDENCIES = ['pyscf', 'numpy']
+DEPENDENCIES = ['pyscf', 'numpy', 'cffi']
 VERSION = '1.0.0'
 
 #######################################################################
