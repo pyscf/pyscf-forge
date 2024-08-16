@@ -71,21 +71,12 @@ _DOUBLE_PTR_TYPE = _ffi.typeof("double*")
 _DOUBLE_ARRAY_2_TYPE = _ffi.typeof("double[2]")
 _DOUBLE_ARRAY_3_TYPE = _ffi.typeof("double[3]")
 
-#  def _xc_func_destruct(func):
-    #  import traceback
-    #  traceback.print_stack()
-    #  print('   DESTRUCT', _ffi.string(func.info.name))
-    #  _lib.xc_func_end(func)
-
 def xc_func_init(xc_code, nspin=_lib.XC_UNPOLARIZED):
     func = _ffi.new(_XC_FUNC_TYPE_PTR_TYPE)
     if _lib.xc_func_init(func, xc_code, nspin) != 0:
         raise ValueError(f"Functional '{xc_code}' not found")
     #  xc_func_end() will automatically be called when `func` is destructed
     return _ffi.gc(func, _lib.xc_func_end)
-    #  print('   INIT', _ffi.string(func.info.name))
-    #  return _ffi.gc(func, _xc_func_destruct_)
-    #  return func
 
 def _to_xc_objs(xc_code, spin=0):
     '''Parse an xc_code into xc_objs
@@ -144,7 +135,7 @@ def xc_reference(xc_code):
 
 def _xc_reference(xc_objs):
     refs = []
-    for xc in _to_xc_objs(xc_code):
+    for xc in xc_objs:
         for i in range(_lib.XC_MAX_REFERENCES):
             c_ref = xc.info.refs[i]
             if c_ref:
