@@ -25,6 +25,7 @@ from pyscf.mcscf.df import _DFCASSCF, _DFCAS
 from pyscf.mcpdft import pdft_veff, pdft_feff
 from pyscf.mcpdft.otfnal import transfnal, get_transfnal
 from pyscf.mcpdft import _dms
+from pyscf.mcpdft import chkfile
 
 def energy_tot(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     '''Calculate MC-PDFT total energy
@@ -404,12 +405,13 @@ class _PDFT:
         if issubclass (self._mc_class, _DFCAS):
             self._mc_class.__init__(self, self, scf.with_df)
         keys = set(('e_ot', 'e_mcscf', 'get_pdft_veff', 'get_pdft_feff', 'e_states', 'otfnal',
-                    'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel'))
+                    'grids', 'max_cycle_fp', 'conv_tol_ci_fp', 'mcscf_kernel', 'chkfile'))
         self.max_cycle_fp = getattr(__config__, 'mcscf_mcpdft_max_cycle_fp',
                                     50)
         self.conv_tol_ci_fp = getattr(__config__,
                                       'mcscf_mcpdft_conv_tol_ci_fp', 1e-8)
         self.mcscf_kernel = self._mc_class.kernel
+        self.chkfile = self._scf.chkfile
         self._in_mcscf_env = False
         self._keys = set(self.__dict__.keys()).union(keys)
         if grids_level is not None:
@@ -454,7 +456,7 @@ class _PDFT:
         return self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
-                             grids_level=None, grids_attr=None, **kwargs):
+                             grids_level=None, grids_attr=None, dump_chk=True, **kwargs):
         '''Compute the MC-PDFT energy(ies) (and update stored data)
         with the MC-SCF wave function fixed. '''
         if mo_coeff is not None: self.mo_coeff = mo_coeff
@@ -487,6 +489,12 @@ class _PDFT:
         else:  # nroots==1 not StateAverage class
             self.e_tot, self.e_ot = epdft[0]
             e_states = [self.e_tot]
+
+        if dump_chk:
+            e_tot = self.e_tot
+            e_ot = self.e_ot
+            self.dump_chk(locals())
+
         return self.e_tot, self.e_ot, e_states
 
     def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_attr=None,
@@ -747,6 +755,46 @@ class _PDFT:
                     e_tot, ot.otxc, e_ot)
         return e_tot, e_ot
 
+    def dump_chk(self, envs):
+        """
+        Dumps information to the chkfile. If called within mcscf environment,
+        it forwards to the mcscf dump_chk. Else, it dumps only the pdft
+        information.
+        """
+        if not self.chkfile:
+            return self
+
+        # Hack, basically if we are optimizing mcscf, then call that dump
+        # Otherwise, we need to dump the pdft dump...
+        if self._in_mcscf_env:
+            self._mc_class.dump_chk(self, envs)
+
+        else:
+            e_states = None
+            if len(envs["e_states"]) > 1:
+                e_states = envs["e_states"]
+
+            chkfile.dump_mcpdft(
+                self,
+                chkfile=self.chkfile,
+                key="pdft",
+                e_tot=envs["e_tot"],
+                e_ot=envs["e_ot"],
+                e_states=e_states,
+                e_mcscf=self.e_mcscf,
+            )
+
+        return self
+
+    def update_from_chk(self, chkfile=None, pdft_key="pdft"):
+        if chkfile is None:
+            chkfile = self.chkfile
+
+        # When the chkfile is saved, we utilize hard links to the mcscf data
+        self.__dict__.update(lib.chkfile.load(chkfile, pdft_key))
+        return self
+
+    update = update_from_chk
 
 def get_mcpdft_child_class(mc, ot, **kwargs):
     # Inheritance magic
