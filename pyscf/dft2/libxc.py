@@ -909,7 +909,7 @@ def eval_xc1(xc_info, rho, spin=0, deriv=1, omega=None):
     Returns an array with the order of derivatives following xcfun convention.
     '''
     out = _eval_xc(xc_info, rho, spin, deriv=deriv, omega=omega)
-    xctype = _xc_type(xc_objs[0])
+    xctype = _xc_type(xc_info[0])
     if deriv <= 1:
         return out
     elif xctype == 'LDA' or xctype == 'HF':
