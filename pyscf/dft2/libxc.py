@@ -24,7 +24,6 @@ XC functional, the interface to libxc
 
 import sys
 import warnings
-import ctypes
 import math
 import numpy
 from functools import lru_cache
@@ -47,8 +46,6 @@ def warn_with_traceback(message, category, filename, lineno, file=None, line=Non
 warnings.showwarning = warn_with_traceback
 ########################
 
-_itrf = lib.load_library('libxc_itrf2')
-
 def libxc_version():
     '''Returns the version of libxc'''
     return _ffi.string(_lib.xc_version_string()).decode("UTF-8")
@@ -68,6 +65,7 @@ __reference_doi__ = libxc_reference_doi()
 _XC_FUNC_TYPE_PTR_TYPE = _ffi.typeof("xc_func_type*")
 _XC_FUNC_TYPE_PTR_ARRAY_TYPE = _ffi.typeof("xc_func_type*[]")
 _DOUBLE_PTR_TYPE = _ffi.typeof("double*")
+_DOUBLE_ARRAY_TYPE = _ffi.typeof("double[]")
 _DOUBLE_ARRAY_2_TYPE = _ffi.typeof("double[2]")
 _DOUBLE_ARRAY_3_TYPE = _ffi.typeof("double[3]")
 
@@ -89,42 +87,22 @@ def _to_xc_objs(xc_code, spin=0):
     return [xc_func_init(xid, nspin) for xid, fac in fn_facs]
 
 def _to_xc_info(xc_code, spin=0):
-    '''Parse an xc_code into xc_objs
-       xc_objs is a tuple containing three components:
+    '''Parse an xc_code into xc_info
+       xc_info is a tuple containing four components:
        1. xc_objs: a list containing all the cffi objects representing the
           `xc_func_type` struct of each functional components
-       2. hyb: as produced by `parse_xc()`
-       3. fn_facs: as produced by `parse_xc()`
+       2. xc_arr: a cffi array containing pointers to `xc_func_type` struct
+          of each functional components
+       3. hyb: as produced by `parse_xc()`
+       4. fn_facs: as produced by `parse_xc()`
     '''
     if isinstance(xc_code, tuple):
         return xc_code
     hyb, fn_facs = parse_xc(xc_code)
     nspin = _lib.XC_POLARIZED if spin else _lib.XC_UNPOLARIZED
-    return [xc_func_init(xid, nspin) for xid, fac in fn_facs], hyb, fn_facs
-
-def _to_ctype_obj(cffi_obj):
-    """Convert a cffi object to ctypes void pointer
-    https://groups.google.com/g/python-cffi/c/lwmb1xUqJRQ/m/K7r0RgNeDAAJ
-    """
-    return ctypes.cast(int(_ffi.cast("intptr_t", cffi_obj)), ctypes.c_void_p)
-
-def _xc_info_to_xc_ctypes(xc_info):
-    """Convert a xc_info object to xc_ctypes
-       xc_ctypes is a 4-tuple similar to xc_info. The first element is
-       a ctypes void* array pointing to the `xc_func_type` structs.
-       The last three elements are the same as xc_info.
-    """
-    xc_objs, hyb, fn_facs = xc_info
-    arr = _ffi.new(_XC_FUNC_TYPE_PTR_ARRAY_TYPE, xc_objs)
-    #  print('arr', xc_objs, list(arr))
-    xc_objs_ctypes = _to_ctype_obj(arr)
-    #  store `arr` as a property to prevent `arr` from being removed by GC
-    xc_objs_ctypes._arr = arr
-    #  tmp = xc_objs_ctypes
-    #  tmp = ctypes.cast(tmp.value, ctypes.c_void_p)
-    #  tmp = ctypes.cast(tmp.value, ctypes.c_void_p)
-    #  print(hex(tmp.value))
-    return xc_objs_ctypes, xc_objs, hyb, fn_facs
+    xc_objs = [xc_func_init(xid, nspin) for xid, fac in fn_facs]
+    xc_arr = _ffi.new(_XC_FUNC_TYPE_PTR_ARRAY_TYPE, xc_objs)
+    return xc_objs, xc_arr, hyb, fn_facs
 
 XC_CODE_DEPRECATION = 'Use of xc_code is deprecated'
 
@@ -312,7 +290,7 @@ def hybrid_coeff(xc_code, spin=0):
     return _hybrid_coeff(xc_info)
 
 def _hybrid_coeff(xc_info, spin=0):
-    xc_objs, hyb, fn_facs = xc_info
+    xc_objs, xc_arr, hyb, fn_facs = xc_info
     hybs = (fac * _lib.xc_hyb_exx_coef(xc) for xc, (xid, fac) in zip(xc_objs, fn_facs)
             if _XC_TYPE_TABLE.get(xc.info.family, (None, False))[1])
     return hyb[0] + sum(hybs)
@@ -326,7 +304,7 @@ def nlc_coeff(xc_code):
     return _nlc_coeff(xc_info)
 
 def _nlc_coeff(xc_info):
-    xc_objs, hyb, fn_facs = xc_info
+    xc_objs, xc_arr, hyb, fn_facs = xc_info
     nlc_pars = []
     nlc_tmp = _ffi.new(_DOUBLE_ARRAY_2_TYPE)
     for xc, (xid, fac) in zip(xc_objs, fn_facs):
@@ -364,7 +342,7 @@ def rsh_coeff(xc_code):
     return _rsh_coeff(xc_info, check_omega)
 
 def _rsh_coeff(xc_info, check_omega=True):
-    xc_objs, hyb, fn_facs = xc_info
+    xc_objs, xc_arr, hyb, fn_facs = xc_info
 
     hyb, alpha, omega = hyb
     beta = hyb - alpha
@@ -542,7 +520,7 @@ def parse_xc(description):
                     else:
                         # Some libxc functionals may not be listed in the
                         # XC_CODES table. Query libxc directly
-                        x_id = _itrf.xc_functional_get_number(ctypes.c_char_p(key.encode()))
+                        x_id = _lib.xc_functional_get_number(key.encode())
                         if x_id == -1:
                             raise KeyError(f"LibXCFunctional: name '{key}' not found.")
                 if isinstance(x_id, str):
@@ -744,7 +722,7 @@ def eval_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=Non
     return _eval_xc_(xc_info, rho, spin, relativity, deriv, omega, verbose)
 
 def _eval_xc_(xc_info, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
-    outbuf = _eval_xc(_xc_info_to_xc_ctypes(xc_info), rho, spin, deriv, omega)
+    outbuf = _eval_xc(xc_info, rho, spin, deriv, omega)
     exc = outbuf[0]
     vxc = fxc = kxc = None
     xctype = _xc_type(xc_info[0])
@@ -926,12 +904,12 @@ _MGGA_SORT = {
     ])
 }
 
-def eval_xc1(xc_ctypes, rho, spin=0, deriv=1, omega=None):
+def eval_xc1(xc_info, rho, spin=0, deriv=1, omega=None):
     '''Similar to eval_xc.
     Returns an array with the order of derivatives following xcfun convention.
     '''
-    out = _eval_xc(xc_ctypes, rho, spin, deriv=deriv, omega=omega)
-    xctype = _xc_type(xc_ctypes[1])
+    out = _eval_xc(xc_info, rho, spin, deriv=deriv, omega=omega)
+    xctype = _xc_type(xc_objs[0])
     if deriv <= 1:
         return out
     elif xctype == 'LDA' or xctype == 'HF':
@@ -952,8 +930,8 @@ def eval_xc1(xc_ctypes, rho, spin=0, deriv=1, omega=None):
             idx.append(_MGGA_SORT[(spin, i)])
     return out[numpy.hstack(idx)]
 
-def _eval_xc(xc_ctypes, rho, spin=0, deriv=1, omega=None):
-    xc_objs_ctypes, xc_objs, hyb, fn_facs = xc_ctypes
+def _eval_xc(xc_info, rho, spin=0, deriv=1, omega=None):
+    xc_objs, xc_arr, hyb, fn_facs = xc_info
     assert deriv <= _max_deriv_order(xc_objs)
     xctype = _xc_type(xc_objs)
     assert xctype in ('HF', 'LDA', 'GGA', 'MGGA')
@@ -991,16 +969,16 @@ def _eval_xc(xc_ctypes, rho, spin=0, deriv=1, omega=None):
     n = len(fn_ids)
     if n > 0:
         density_threshold = 0
-        _itrf.LIBXC_eval_xc(ctypes.c_int(n),
-                            xc_objs_ctypes,
-                            (ctypes.c_double*n)(*facs),
-                            (ctypes.c_double*n)(*omega),
-                            ctypes.c_int(spin), ctypes.c_int(deriv),
-                            ctypes.c_int(nvar), ctypes.c_int(ngrids),
-                            ctypes.c_int(outlen),
-                            rho.ctypes.data_as(ctypes.c_void_p),
-                            out.ctypes.data_as(ctypes.c_void_p),
-                            ctypes.c_double(density_threshold))
+        _lib.LIBXC_eval_xc(n,
+                           xc_arr,
+                           facs,
+                           omega,
+                           spin, deriv,
+                           nvar, ngrids,
+                           outlen,
+                           _ffi.cast(_DOUBLE_PTR_TYPE, rho.ctypes.data),
+                           _ffi.cast(_DOUBLE_PTR_TYPE, out.ctypes.data),
+                           density_threshold)
     return out
 
 def eval_xc_eff(xc_code, rho, deriv=1, omega=None):
@@ -1032,8 +1010,8 @@ def eval_xc_eff(xc_code, rho, deriv=1, omega=None):
     return _eval_xc_eff(xc_info, rho, deriv, omega)
 
 def _eval_xc_eff(xc_info, rho, deriv=1, omega=None):
-    xc_ctypes = _xc_info_to_xc_ctypes(xc_info)
     xctype = _xc_type(xc_info[0])
+    xc_arr = xc_info[1]
     rho = numpy.asarray(rho, order='C', dtype=numpy.double)
     if xctype == 'MGGA' and rho.shape[-2] == 6:
         rho = numpy.asarray(rho[...,[0,1,2,3,5],:], order='C')
@@ -1043,7 +1021,7 @@ def _eval_xc_eff(xc_info, rho, deriv=1, omega=None):
         spin = 1
     else:
         spin = 0
-    out = eval_xc1(xc_ctypes, rho, spin, deriv, omega)
+    out = eval_xc1(xc_arr, rho, spin, deriv, omega)
     return xc_deriv.transform_xc(rho, out, xctype, spin, deriv)
 
 def define_xc_(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0), spin=0):
@@ -1116,8 +1094,7 @@ class XCFunctional:
         self.xc_code = xc_code
         self.spin = spin
         self.xc_info = _to_xc_info(xc_code, spin)
-        self.xc_objs, self.hyb, self.fn_facs = self.xc_info
-        self.xc_ctypes = _xc_info_to_xc_ctypes(self.xc_info)
+        self.xc_objs, self.xc_arr, self.hyb, self.fn_facs = self.xc_info
 
     def eval_xc(self, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
         return _eval_xc_(self.xc_info, rho, spin, relativity, deriv, omega, verbose)
