@@ -97,7 +97,7 @@ class KnownValues(unittest.TestCase):
             return exc, vxc, fxc, kxc
 
         mf = dft1.RKS(mol)
-        ni = dft1.libxc.define_xc(mf._numint, eval_xc, 'GGA', hyb=0.2)
+        ni = dft.libxc.define_xc(mf._numint, eval_xc, 'GGA', hyb=0.2)
         numpy.random.seed(1)
         rho = numpy.random.random((4,10))
         exc, vxc = ni.eval_xc(None, rho, 0, deriv=1)[:2]
@@ -219,6 +219,40 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(abs(numpy.hstack([vxc[i] for i in [0,1,3]])-vxc_ref).max(), 0, 7)
         self.assertAlmostEqual(abs(numpy.hstack([fxc[i] for i in [0,1,2,4,6,9]])-fxc_ref).max(), 0, 7)
         self.assertAlmostEqual(abs(numpy.hstack([kxc[i] for i in [0,1,2,3,5,7,10,12,15,19]])-kxc_ref).max(), 0, 6)
+
+    def test_set_param(self):
+        XC_ID_B97_2 = 410
+
+        param_b97_1 = numpy.array([0.789518, 0.573805, 0.660975, 0.0, 0.0,
+                                   0.0820011, 2.71681, -2.87103, 0.0, 0.0,
+                                   0.955689, 0.788552, -5.47869, 0.0, 0.0,
+                                   0.21
+        ])
+
+        param_b97_3 = numpy.array([0.7334648, 0.292527, 3.338789, -10.51158, 10.60907,
+                                   0.5623649, -1.32298, 6.359191, -7.464002, 1.827082,
+                                   1.13383, -2.811967, 7.431302, -1.969342, -11.74423,
+                                   2.692880E-01
+        ])
+
+        fun1 = dft.libxc.XCFunctional('B97-1', 0)
+        e1, v1, f1 = fun1.eval_xc(rho, deriv=2)[:3]
+
+        fun3 = dft.libxc.XCFunctional('B97-3', 0)
+        e3, v3, f3 = fun3.eval_xc(rho, deriv=2)[:3]
+
+        fun2 = dft.libxc.XCFunctional('B97-2', 0)
+        fun2.set_ext_params(XC_ID_B97_2, param_b97_1)
+        e, v, f = fun2.eval_xc(rho, deriv=2)[:3]
+        self.assertTrue(numpy.allclose(e, e1, 1e-7))
+        self.assertTrue(numpy.allclose(v, v1, 1e-7))
+        self.assertTrue(numpy.allclose(f, f1, 1e-7))
+
+        fun2.set_ext_params(XC_ID_B97_2, param_b97_3)
+        e, v, f = fun2.eval_xc(rho, deriv=2)[:3]
+        self.assertTrue(numpy.allclose(e, e3, 1e-7))
+        self.assertTrue(numpy.allclose(v, v3, 1e-7))
+        self.assertTrue(numpy.allclose(f, f3, 1e-7))
 
 if __name__ == "__main__":
     print("Test libxc")

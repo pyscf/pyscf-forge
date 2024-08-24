@@ -221,7 +221,7 @@ class KnownValues(unittest.TestCase):
             return exc, vxc, fxc, kxc
 
         mf = dft1.RKS(mol)
-        ni = dft1.libxc.define_xc(mf._numint, eval_xc, 'GGA', hyb=0.2)
+        ni = dft.libxc.define_xc(mf._numint, eval_xc, 'GGA', hyb=0.2)
         numpy.random.seed(1)
         rho = numpy.random.random((4,10))
         exc, vxc = ni.eval_xc(None, rho, 0, deriv=1)[:2]

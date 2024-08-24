@@ -902,10 +902,15 @@ _MGGA_SORT = {
     ])
 }
 
-def eval_xc1(xc_info, rho, spin=0, deriv=1, omega=None):
+def eval_xc1(xc_code, rho, spin=0, deriv=1, omega=None):
     '''Similar to eval_xc.
     Returns an array with the order of derivatives following xcfun convention.
     '''
+    warnings.warn(XC_CODE_DEPRECATION)
+    xc_info = _to_xc_info(xc_code, spin)
+    return _eval_xc1(xc_info, rho, spin, deriv, omega)
+
+def _eval_xc1(xc_info, rho, spin=0, deriv=1, omega=None):
     out = _eval_xc(xc_info, rho, spin, deriv=deriv, omega=omega)
     xctype = _xc_type(xc_info[0])
     if deriv <= 1:
@@ -1009,7 +1014,6 @@ def eval_xc_eff(xc_code, rho, deriv=1, omega=None):
 
 def _eval_xc_eff(xc_info, rho, deriv=1, omega=None):
     xctype = _xc_type(xc_info[0])
-    xc_arr = xc_info[1]
     rho = numpy.asarray(rho, order='C', dtype=numpy.double)
     if xctype == 'MGGA' and rho.shape[-2] == 6:
         rho = numpy.asarray(rho[...,[0,1,2,3,5],:], order='C')
@@ -1019,7 +1023,7 @@ def _eval_xc_eff(xc_info, rho, deriv=1, omega=None):
         spin = 1
     else:
         spin = 0
-    out = eval_xc1(xc_arr, rho, spin, deriv, omega)
+    out = eval_xc1(xc_info, rho, spin, deriv, omega)
     return xc_deriv.transform_xc(rho, out, xctype, spin, deriv)
 
 def define_xc_(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0), spin=0):
@@ -1068,11 +1072,10 @@ def define_xc_(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0), spin=0):
     if isinstance(description, str):
         func = XCFunctional(description, spin)
         ni._func = func
-        ni.eval_xc = lambda xc_code, rho, *args, **kwargs: \
-                func.eval_xc(rho, *args, **kwargs)
-        ni.hybrid_coeff = func.hybrid_coeff
-        ni.rsh_coeff = func.rsh_coeff
-        ni._xc_type = func.xc_type()
+        ni.eval_xc = func.eval_xc_
+        ni.hybrid_coeff = func.hybrid_coeff_
+        ni.rsh_coeff = func.rsh_coeff_
+        ni._xc_type = func.xc_type_
 
     elif callable(description):
         ni.eval_xc = description
@@ -1093,24 +1096,35 @@ class XCFunctional:
         self.spin = spin
         self.xc_info = _to_xc_info(xc_code, spin)
         self.xc_objs, self.xc_arr, self.hyb, self.fn_facs = self.xc_info
+        self.obj_by_id = {xid: func for (xid, fac), func in zip(self.fn_facs, self.xc_objs)}
 
     def eval_xc(self, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
+        return _eval_xc_(self.xc_info, rho, spin, relativity, deriv, omega, verbose)
+
+    def eval_xc_(self, xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
         return _eval_xc_(self.xc_info, rho, spin, relativity, deriv, omega, verbose)
 
     def rsh_coeff(self):
         return _rsh_coeff(self.xc_info)
 
+    def rsh_coeff_(self, *args, **kwargs):
+        return _rsh_coeff(self.xc_info)
+
     def hybrid_coeff(self):
+        return _hybrid_coeff(self.xc_info, self.spin)
+
+    def hybrid_coeff_(self, *args, **kwargs):
         return _hybrid_coeff(self.xc_info, self.spin)
 
     def xc_type(self):
         return _xc_type(self.xc_objs)
 
+    def xc_type_(self, *args, **kwargs):
+        return _xc_type(self.xc_objs)
+
     def set_ext_params(self, fn_id, parameter):
-        for xc, (xid, fac) in zip(self.xc_objs, self.fn_facs):
-            if xid == fn_id:
-                _lib.set_ext_params(xc, parameter)
-                break
-        else:
-            raise ValueError('functional {fn_id} is not part of this functional object')
+        func = self.obj_by_id[fn_id]
+        parameter = numpy.asarray(parameter)
+        parameter = _ffi.cast(_DOUBLE_PTR_TYPE, parameter.ctypes.data)
+        _lib.xc_func_set_ext_params(func, parameter)
 
