@@ -21,7 +21,7 @@
  */
 
 // omega is the range separation parameter mu in xcfun
-void LIBXC_eval_xc(int nfn, xc_func_type **fn_obj, double *fac, double *omega,
+void LIBXC_eval_xc(int nfn, xc_func_type *fn_obj, double *fac, double *omega,
                    int spin, int deriv, int nvar, int np, int outlen,
                    double *rho_u, double *output, double dens_threshold);
 

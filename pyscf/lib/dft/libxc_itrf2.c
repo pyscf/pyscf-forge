@@ -564,7 +564,7 @@ static void merge_xc(double *dst, double *ebuf, double fac,
 }
 
 // omega is the range separation parameter mu in xcfun
-void LIBXC_eval_xc(int nfn, xc_func_type **fn_obj, double *fac, double *omega,
+void LIBXC_eval_xc(int nfn, xc_func_type *fn_obj, double *fac, double *omega,
                    int spin, int deriv, int nvar, int np, int outlen,
                    double *rho_u, double *output, double dens_threshold)
 {
@@ -574,8 +574,8 @@ void LIBXC_eval_xc(int nfn, xc_func_type **fn_obj, double *fac, double *omega,
         _eval_rho(rho, rho_u, spin, nvar, np);
 
         int i, j;
+        xc_func_type *func = fn_obj;
         for (i = 0; i < nfn; i++) {
-                xc_func_type *func = fn_obj[i];
                 if (dens_threshold > 0) {
                         xc_func_set_dens_threshold(func, dens_threshold);
                 }
@@ -622,6 +622,7 @@ void LIBXC_eval_xc(int nfn, xc_func_type **fn_obj, double *fac, double *omega,
                 _eval_xc(func, spin, deriv, np, rho, ebuf);
                 merge_xc(output, ebuf, fac[i],
                          spin, deriv, nvar, np, outlen, func->info->family);
+                ++func;
         }
         free(ebuf);
         free(rho);

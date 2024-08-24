@@ -34,18 +34,6 @@ from pyscf.dft.libxc import XC_CODES, XC, PROBLEMATIC_XC, XC_KEYS, XC_ALIAS, _NA
 from pyscf import __config__
 from .libxc_cffi import ffi as _ffi, lib as _lib
 
-########################
-import traceback
-def warn_with_traceback(message, category, filename, lineno, file=None, line=None):
-
-    log = file if hasattr(file,'write') else sys.stderr
-    traceback.print_stack(file=log)
-    log.write(warnings.formatwarning(message, category, filename, lineno, line))
-    print('----------------------')
-
-warnings.showwarning = warn_with_traceback
-########################
-
 def libxc_version():
     '''Returns the version of libxc'''
     return _ffi.string(_lib.xc_version_string()).decode("UTF-8")
@@ -63,7 +51,7 @@ __reference__ = libxc_reference()
 __reference_doi__ = libxc_reference_doi()
 
 _XC_FUNC_TYPE_PTR_TYPE = _ffi.typeof("xc_func_type*")
-_XC_FUNC_TYPE_PTR_ARRAY_TYPE = _ffi.typeof("xc_func_type*[]")
+_XC_FUNC_TYPE_ARRAY_TYPE = _ffi.typeof("xc_func_type[]")
 _DOUBLE_PTR_TYPE = _ffi.typeof("double*")
 _DOUBLE_ARRAY_TYPE = _ffi.typeof("double[]")
 _DOUBLE_ARRAY_2_TYPE = _ffi.typeof("double[2]")
@@ -100,8 +88,18 @@ def _to_xc_info(xc_code, spin=0):
         return xc_code
     hyb, fn_facs = parse_xc(xc_code)
     nspin = _lib.XC_POLARIZED if spin else _lib.XC_UNPOLARIZED
-    xc_objs = [xc_func_init(xid, nspin) for xid, fac in fn_facs]
-    xc_arr = _ffi.new(_XC_FUNC_TYPE_PTR_ARRAY_TYPE, xc_objs)
+    n = len(fn_facs)
+    xc_arr = _ffi.new(_XC_FUNC_TYPE_ARRAY_TYPE, n)
+    xc_objs = [_ffi.addressof(xc_arr, i) for i in range(n)]
+    for (xid, fac), func in zip(fn_facs, xc_objs):
+        if _lib.xc_func_init(func, xid, nspin) != 0:
+            raise ValueError(f"Functional '{xid}' not found")
+
+    def destructor(xc_arr):
+        for func in xc_objs:
+            _lib.xc_func_end(func)
+
+    xc_arr = _ffi.gc(xc_arr, destructor)
     return xc_objs, xc_arr, hyb, fn_facs
 
 XC_CODE_DEPRECATION = 'Use of xc_code is deprecated'
