@@ -13,24 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyscf.mcpdft.otfnal import otfnal, t_hybrid_coeff, t_nlc_coeff, t_rsh_coeff, t_eval_xc, t_xc_type
 from pyscf.lib import logger
+from pyscf.dft2.libxc import XCFunctional
+from pyscf import dft
 import numpy as np
 import copy
 
 
-class convfnal(otfnal):
-    def __init__ (self, ks, **kwargs):
-        otfnal.__init__(self, ks.mol, **kwargs)
-        self.otxc = 'c' + ks.xc
-        self._numint = copy.copy(ks._numint)
-        self.grids = copy.copy(ks.grids)
-        self._numint.hybrid_coeff = t_hybrid_coeff.__get__(self._numint)
-        self._numint.nlc_coeff = t_nlc_coeff.__get__(self._numint)
-        self._numint.rsh_coeff = t_rsh_coeff.__get__(self._numint)
-        self._numint.eval_xc = t_eval_xc.__get__(self._numint)
-        self._numint._xc_type = t_xc_type.__get__(self._numint)
-        self._init_info()
+class convfnal:
+    def __init__ (self, mol, xc_code, hyb_x=0., grids=None, display_name=None, **kwargs):
+        self.mol = mol
+        self.otxc = xc_code
+        self.hyb_x = hyb_x
+        self.display_name = 'c' + xc_code if display_name is None else display_name
+        xcfunc = XCFunctional(xc_code, 1)
+        ni = dft.numint.NumInt()
+        ni.eval_xc = xcfunc.eval_xc
+        ni.hybrid_coeff = lambda *x: 0.
+        ni.rsh_coeff = lambda *x: (0., 0., 0.)
+        ni._xc_type = xcfunc.xc_type_
+        self._numint = ni
+        self.xcfunc = xcfunc
+        self.xctype = xcfunc.xc_type()
+        self.dens_deriv = ['LDA', 'GGA', 'MGGA'].index(self.xctype)
+        self.grids = dft.grid.Grids(mol).build() if grids is None else grids
+        self.xcfunc = xcfunc
         self.ms = 0.0
 
     def _set_natorb(self, natorb, occ):
@@ -60,7 +67,7 @@ class convfnal(otfnal):
         rho = np.squeeze(rho)
 
         dexc_ddens = self._numint.eval_xc(
-            self.otxc, (rho_t[0,:,:], rho_t[1,:,:]), spin=1, relativity=0, deriv=0, verbose=self.verbose)[0]
+            (rho_t[0,:,:], rho_t[1,:,:]), spin=1, relativity=0, deriv=0, verbose=self.verbose)[0]
         rho = rho_t[:,0,:].sum(0)
         rho *= weight
         dexc_ddens *= rho

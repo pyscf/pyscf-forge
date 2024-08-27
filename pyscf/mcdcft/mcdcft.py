@@ -86,8 +86,6 @@ def kernel(mc, ot, root=-1):
         mc_1root.e_tot = mc.e_states[root]
     dm1s = np.asarray (mc_1root.make_rdm1s ())
     spin = abs(mc.nelecas[0] - mc.nelecas[1])
-    omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
-    hyb_x, hyb_c = hyb
     t0 = logger.timer (ot, 'rdms', *t0)
 
     Vnn = mc._scf.energy_nuc ()
@@ -109,7 +107,7 @@ def kernel(mc, ot, root=-1):
 
     E_ot = get_E_ot (ot, dm1s)
     t0 = logger.timer (ot, 'E_ot', *t0)
-    e_tot = Vnn + Te_Vne + E_j + (hyb_x * E_x) + E_ot
+    e_tot = Vnn + Te_Vne + E_j + (ot.hyb_x * E_x) + E_ot
     logger.note (ot, 'MC-DCFT E = %s, Eot(%s) = %s', e_tot, ot.otxc, E_ot)
 
     chkdata = {'Vnn':Vnn, 'Te_Vne':Te_Vne, 'E_j':E_j, 'E_x':E_x, 'dm1s':dm1s, 'spin':spin}
@@ -129,7 +127,6 @@ def _recalculate_with_xc(ot, chkdata):
     '''
     t0 = (logger.process_clock(), logger.perf_counter())
     omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=chkdata['spin'])
-    hyb_x, hyb_c = hyb
 
     Vnn = chkdata['Vnn']
     Te_Vne = chkdata['Te_Vne']
@@ -142,16 +139,12 @@ def _recalculate_with_xc(ot, chkdata):
     logger.debug(ot, 'Te + Vne = %s', Te_Vne)
     logger.debug(ot, 'E_j = %s', E_j)
     logger.debug(ot, 'E_x = %s', E_x)
-    if abs(hyb_x) > 1e-10 or abs(hyb_c) > 1e-10:
-        logger.debug(ot, 'Adding %s * %s CAS exchange, %s * %s CAS correlation to E_ot', hyb_x, E_x, hyb_c)
-        if E_x == 0:
-            logger.warn(ot, 'E_x == 0. Hybrid functionals might give wrong results!')
     t0 = logger.timer(ot, 'Vnn, Te, Vne, E_j, E_x', *t0)
 
     E_ot = get_E_ot(ot, dm1s)
 
     t0 = logger.timer (ot, 'E_ot', *t0)
-    e_tot = Vnn + Te_Vne + E_j + (hyb_x * E_x) + E_ot
+    e_tot = Vnn + Te_Vne + E_j + (ot.hyb_x * E_x) + E_ot
     logger.note(ot, 'MC-DCFT E = %s, Eot(%s) = %s', e_tot, ot.ot_name, E_ot)
 
     return e_tot, E_ot
@@ -225,7 +218,7 @@ def get_mcdcft_child_class (mc, ot, **kwargs):
             if isinstance (my_ot, (str, np.bytes_)):
                 ks = dft.RKS(self.mol)
                 ks.xc = my_ot
-                self.otfnal = convfnal(ks)
+                self.otfnal = convfnal(self.mol, my_ot)
                 self.otfnal.scaleD = None
             else:
                 self.otfnal = my_ot
@@ -285,7 +278,7 @@ def get_mcdcft_child_class (mc, ot, **kwargs):
         def kernel(self, mo_coeff=None, ci=None, skip_scf=False, **kwargs):
             # Hafta reset the grids so that geometry optimization works!
             ot_name = self.ot_name
-            self._init_ot_grids(self.otfnal.otxc[1:], ot_name, grids_level=self.grids.level)
+            self._init_ot_grids(self.otfnal.otxc, ot_name, grids_level=self.grids.level)
             if not skip_scf:
                 self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy = super().kernel(mo_coeff,
                                                                                                   ci, **kwargs)
