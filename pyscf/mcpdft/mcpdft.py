@@ -289,8 +289,7 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
         e_1e = []
         e_coul = []
         e_otxc = []
-        e_ncwfn = []
-        
+        e_ncwfn = [] 
         for ix in range(nroots):
             row = _get_e_decomp(mc, mo_coeff, ci, ot, state=ix)
             e_1e.append(row[0])
@@ -299,7 +298,7 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
             e_ncwfn.append(row[3])
         e_otxc = [[e[i] for e in e_otxc] for i in range(len(e_otxc[0]))]
     else:
-        e_1e, e_coul, e_otxc, e_ncwfn =  _get_e_decomp(mc, mo_coeff, ci, ot) 
+        e_1e, e_coul, e_otxc, e_ncwfn =  _get_e_decomp(mc, mo_coeff, ci, ot)
 
     if split_x_c:
         e_otx, e_otc = e_otxc
@@ -310,8 +309,6 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
 def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     ncore = mc.ncore
     ncas = mc.ncas
-    nelecas = mc.nelecas
-
     if ot is None: ot = mc.otfnal
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
@@ -320,16 +317,13 @@ def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     casdm1s = mc.make_one_casdm1s(ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
     casdm2 = mc.make_one_casdm2(ci, state=state)
-
-    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff,\
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff,
             ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-
     e_nuc = mc._scf.energy_nuc()
     h = mc.get_hcore()
     h1, h0 = mc.h1e_for_cas()
     h2 = ao2mo.restore(1, mc.get_h2eff(), ncas)
-    
     j = mc._scf.get_j(dm=dm1)
     e_1e = np.dot(h.ravel(), dm1.ravel())
     e_coul = np.dot(j.ravel(), dm1.ravel()) / 2
