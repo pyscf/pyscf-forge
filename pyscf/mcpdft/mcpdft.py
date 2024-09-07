@@ -289,7 +289,7 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
         e_1e = []
         e_coul = []
         e_otxc = []
-        e_ncwfn = [] 
+        e_ncwfn = []
         for ix in range(nroots):
             row = _get_e_decomp(mc, mo_coeff, ci, ot, state=ix)
             e_1e.append(row[0])
