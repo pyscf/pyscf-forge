@@ -280,63 +280,61 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
         ot = list(ot.split_x_c())
     else:
         ot = [ot, ]
-    e_nuc = mc._scf.energy_nuc()
-    h = mc.get_hcore()
+
     nroots = getattr(mc.fcisolver, 'nroots', 1)
+
+    e_nuc = mc._scf.energy_nuc()
+
     if nroots > 1:
         e_1e = []
         e_coul = []
         e_otxc = []
         e_ncwfn = []
-        nelec_root = [mc.nelecas, ] * nroots
-        if isinstance(mc.fcisolver, StateAverageMixFCISolver):
-            nelec_root = []
-            for s in mc.fcisolver.fcisolvers:
-                ne_root_s = mc.fcisolver._get_nelec(s, mc.nelecas)
-                nelec_root.extend([ne_root_s, ] * s.nroots)
-        for ci_i, nelec in zip(ci, nelec_root):
-            row = _get_e_decomp(mc, ot, mo_coeff, ci_i, e_nuc, h, nelec)
+        for ix in range(nroots):
+            row = _get_e_decomp(mc, mo_coeff, ci, ot, state=ix)
             e_1e.append(row[0])
             e_coul.append(row[1])
             e_otxc.append(row[2])
             e_ncwfn.append(row[3])
         e_otxc = [[e[i] for e in e_otxc] for i in range(len(e_otxc[0]))]
     else:
-        e_1e, e_coul, e_otxc, e_ncwfn = _get_e_decomp(
-            mc, ot, mo_coeff, ci, e_nuc, h, mc.nelecas
-        )
+        e_1e, e_coul, e_otxc, e_ncwfn =  _get_e_decomp(mc, mo_coeff, ci, ot)
+
     if split_x_c:
         e_otx, e_otc = e_otxc
         return e_nuc, e_1e, e_coul, e_otx, e_otc, e_ncwfn
     else:
         return e_nuc, e_1e, e_coul, e_otxc[0], e_ncwfn
 
+def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
+    ncore = mc.ncore
+    ncas = mc.ncas
+    if ot is None: ot = mc.otfnal
+    if mo_coeff is None: mo_coeff = mc.mo_coeff
+    if ci is None: ci = mc.ci
+    if verbose is None: verbose = mc.verbose
 
-def _get_e_decomp(mc, ot, mo_coeff, ci, e_nuc, h, nelecas):
-    ncore, ncas = mc.ncore, mc.ncas
-    _rdms = mcscf.CASCI(mc._scf, ncas, nelecas)
-    _rdms.fcisolver = fci.solver(mc._scf.mol, singlet=False, symm=False)
-    _rdms.mo_coeff = mo_coeff
-    _rdms.ci = ci
-    _casdms = _rdms.fcisolver
-    h1, h0 = _rdms.h1e_for_cas()
-    h2 = ao2mo.restore(1, _rdms.get_h2eff(), ncas)
-    dm1s = np.stack(_rdms.make_rdm1s(), axis=0)
+    casdm1s = mc.make_one_casdm1s(ci, state=state)
+    casdm1 = casdm1s[0] + casdm1s[1]
+    casdm2 = mc.make_one_casdm2(ci, state=state)
+    dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff,
+            ncore=ncore, ncas=ncas)
     dm1 = dm1s[0] + dm1s[1]
-    j = _rdms._scf.get_j(dm=dm1)
+    e_nuc = mc._scf.energy_nuc()
+    h = mc.get_hcore()
+    h1, h0 = mc.h1e_for_cas()
+    h2 = ao2mo.restore(1, mc.get_h2eff(), ncas)
+    j = mc._scf.get_j(dm=dm1)
     e_1e = np.dot(h.ravel(), dm1.ravel())
     e_coul = np.dot(j.ravel(), dm1.ravel()) / 2
-    adm1, adm2 = _casdms.make_rdm12(_rdms.ci, ncas, nelecas)
-    e_mcscf = h0 + np.dot(h1.ravel(), adm1.ravel()) + (
-            np.dot(h2.ravel(), adm2.ravel()) * 0.5)
-    adm1s = np.stack(_casdms.make_rdm1s(ci, ncas, nelecas), axis=0)
-    adm2 = _casdms.make_rdm12(_rdms.ci, ncas, nelecas)[1]
-    e_otxc = [fnal.energy_ot(adm1s, adm2, mo_coeff, ncore,
+
+    e_mcscf = h0 + np.dot(h1.ravel(), casdm1.ravel()) + (
+            np.dot(h2.ravel(), casdm2.ravel()) * 0.5)
+    e_otxc = [fnal.energy_ot(casdm1s, casdm2, mo_coeff, ncore,
                              max_memory=mc.max_memory)
               for fnal in ot]
     e_ncwfn = e_mcscf - e_nuc - e_1e - e_coul
     return e_1e, e_coul, e_otxc, e_ncwfn
-
 
 class _mcscf_env:
     '''Prevent MC-SCF step of MC-PDFT from overwriting redefined
