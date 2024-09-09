@@ -566,7 +566,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         prop.__path__.append (myproppath)
         prop.__path__=list(set(prop.__path__))
         from pyscf.prop.dip_moment.mspdft import ElectricDipole
-        if not isinstance(state, int):
+        if not isinstance(state, (int, np.integer)):
             raise RuntimeError ('Permanent dipole requires a single state')
         dip_obj =  ElectricDipole(self)
         mol_dipole = dip_obj.kernel (state=state, unit=unit, origin=origin)

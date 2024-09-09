@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import numpy as np
 from pyscf.dft.libxc import XC_ALIAS, XC_CODES, XC_KEYS
 from pyscf.dft.libxc import hybrid_coeff, rsh_coeff
 
@@ -56,7 +57,7 @@ def split_x_c_comma (xc):
             break
         elif xc in XC_ALIAS_KEYS:
             xc = XC_ALIAS[xc]
-        elif isinstance (XC_CODES.get (xc, None), int):
+        elif isinstance (XC_CODES.get (xc, None), (int, np.integer)):
             xc_int = XC_CODES[xc]
             if xc_int in INTCODES_HYB:
                 raise myerr ('LibXC built-in hybrid')
