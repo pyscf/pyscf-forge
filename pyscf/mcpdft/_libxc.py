@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import numpy as np
 from pyscf.dft.libxc import XC_ALIAS, XC_CODES, XC_KEYS
 from pyscf.dft.libxc import hybrid_coeff, rsh_coeff
 from pyscf import lib
