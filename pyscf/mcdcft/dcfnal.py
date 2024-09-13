@@ -133,7 +133,8 @@ class dcfnal:
                 The density-coherence exchange-correlation energy, for an density-coherence xc functional
                 which uses a converted density with an otherwise standard xc functional
         '''
-        assert (natorb.shape[0] == natorb.shape[1] == occ.shape[0]), f"{natorb.shape=}, {occ.shape=}"
+        assert (natorb.shape[0] == natorb.shape[1] == occ.shape[0]), \
+                f"natorb.shape = {natorb.shape}, occ.shape = {occ.shape}"
 
         rho_c = self.get_converted_rho(natorb, occ, ao, self.dens_deriv, **self.get_converted_rho_args)
 
