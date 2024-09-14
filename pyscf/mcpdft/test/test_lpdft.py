@@ -15,8 +15,9 @@
 #
 # Author: Matthew Hennefarth <mhennefarth@uchicago.com>
 
+import tempfile, h5py
 import numpy as np
-from pyscf import gto, scf, fci
+from pyscf import gto, scf, fci, lib
 from pyscf import mcpdft
 import unittest
 
@@ -56,6 +57,8 @@ def get_water(functional='tpbe', basis='6-31g'):
     solver2.spin = 2
 
     mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mc.chkfile = tempfile.NamedTemporaryFile().name 
+    # mc.chk_ci = True
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc
@@ -79,6 +82,8 @@ def get_water_triplet(functional='tPBE', basis="6-31G"):
     solver2.nroots = 2
 
     mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=1)
+    mc.chkfile = tempfile.NamedTemporaryFile().name 
+    # mc.chk_ci = True
     mc = mc.multi_state_mix([solver1, solver2], weights, "lin")
     mc.run()
     return mc
@@ -209,6 +214,21 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(e_states, E_STATES_EXPECTED, 6)
         self.assertListAlmostEqual(hdiag, HDIAG_EXPECTED, 6)
         self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 6)
+
+    def test_chkfile(self):
+        for mc, case in zip([water, t_water], ["SA", "SA Mix"]):
+            print(mc.chkfile)
+            with self.subTest(case=case):
+                self.assertTrue(h5py.is_hdf5(mc.chkfile))
+                self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/mo_coeff")))
+                self.assertEqual(mc.e_tot, lib.chkfile.load(mc.chkfile, "pdft/e_tot"))
+                self.assertEqual(lib.fp(mc.e_mcscf), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_mcscf")))
+                self.assertEqual(lib.fp(mc.e_states), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_states")))        
+
+                # Requires PySCF version > 2.6.2 which is not available on pip currently
+                # for state, (c_ref, c) in enumerate(zip(mc.ci, lib.chkfile.load(mc.chkfile, "pdft/ci"))):
+                    # with self.subTest(state=state):
+                        # self.assertEqual(lib.fp(c_ref), lib.fp(c))
 
 if __name__ == "__main__":
     print("Full Tests for Linearized-PDFT")
