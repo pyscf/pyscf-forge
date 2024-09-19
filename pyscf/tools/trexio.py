@@ -11,6 +11,7 @@ Installation instruction:
     https://github.com/TREX-CoE/trexio/blob/master/python/README.md
 '''
 
+import re
 import numpy as np
 from pyscf import lib
 from pyscf import gto
@@ -32,7 +33,91 @@ def _mol_to_trexio(mol, trexio_file):
     labels = [mol.atom_pure_symbol(i) for i in range(mol.natm)]
     trexio.write_nucleus_label(trexio_file, labels)
     if mol._ecp:
-        raise NotImplementedError
+
+        # internal format of pyscf is described in
+        # https://pyscf.org/pyscf_api_docs/pyscf.gto.html?highlight=ecp#module-pyscf.gto.ecp
+
+        ecp_num = 0
+        ecp_max_ang_mom_plus_1 = []
+        ecp_z_core = []
+        ecp_nucleus_index = []
+        ecp_ang_mom = []
+        ecp_coefficient = []
+        ecp_exponent = []
+        ecp_power = []
+
+        chemical_symbol_list = [mol.atom_pure_symbol(i) for i in range(mol.natm)]
+        atom_symbol_list = [mol.atom_symbol(i) for i in range(mol.natm)]
+
+        for nuc_index, (chemical_symbol, atom_symbol) in enumerate(
+            zip(chemical_symbol_list, atom_symbol_list)
+        ):
+            if re.match(r"X-.*", chemical_symbol) or re.match(r"X-.*", atom_symbol):
+                ecp_num += 1
+                ecp_max_ang_mom_plus_1.append(1)
+                ecp_z_core.append(0)
+                ecp_nucleus_index.append(nuc_index)
+                ecp_ang_mom.append(0)
+                ecp_coefficient.append(0.0)
+                ecp_exponent.append(1.0)
+                ecp_power.append(0)
+                continue
+
+            # atom_symbol is superior to atom_pure_symbol
+            try:
+                z_core, ecp_list = mol._ecp[atom_symbol]
+            except KeyError:
+                z_core, ecp_list = mol._ecp[chemical_symbol]
+
+            # ecp zcore
+            ecp_z_core.append(z_core)
+
+            # max_ang_mom
+            max_ang_mom = max([ecp[0] for ecp in ecp_list])
+            if max_ang_mom == -1:
+                # Special treatments are needed for H and He.
+                # The PySCF database does not define the ul-s part for them.
+                dummy_ul_s_part = True
+                max_ang_mom = 0
+                max_ang_mom_plus_1 = 1
+            else:
+                dummy_ul_s_part = False
+                max_ang_mom_plus_1 = max_ang_mom + 1
+
+            ecp_max_ang_mom_plus_1.append(max_ang_mom_plus_1)
+
+            for ecp in ecp_list:
+                ang_mom = ecp[0]
+                if ang_mom == -1:
+                    ang_mom = max_ang_mom_plus_1
+                for r, exp_coeff_list in enumerate(ecp[1]):
+                    for exp_coeff in exp_coeff_list:
+                        exp, coeff = exp_coeff
+
+                        ecp_num += 1
+                        ecp_nucleus_index.append(nuc_index)
+                        ecp_ang_mom.append(ang_mom)
+                        ecp_coefficient.append(coeff)
+                        ecp_exponent.append(exp)
+                        ecp_power.append(r - 2)
+
+            if dummy_ul_s_part:
+                # A dummy ECP is put for the ul-s part here for H and He cases.
+                ecp_num += 1
+                ecp_nucleus_index.append(nuc_index)
+                ecp_ang_mom.append(0)
+                ecp_coefficient.append(0.0)
+                ecp_exponent.append(1.0)
+                ecp_power.append(0)
+
+        trexio.write_ecp_num(trexio_file, ecp_num)
+        trexio.write_ecp_max_ang_mom_plus_1(trexio_file, ecp_max_ang_mom_plus_1)
+        trexio.write_ecp_z_core(trexio_file, ecp_z_core)
+        trexio.write_ecp_nucleus_index(trexio_file, ecp_nucleus_index)
+        trexio.write_ecp_ang_mom(trexio_file, ecp_ang_mom)
+        trexio.write_ecp_coefficient(trexio_file, ecp_coefficient)
+        trexio.write_ecp_exponent(trexio_file, ecp_exponent)
+        trexio.write_ecp_power(trexio_file, ecp_power)
     trexio.write_nucleus_charge(trexio_file, mol.atom_charges())
     trexio.write_nucleus_coord(trexio_file, mol.atom_coords())
 
