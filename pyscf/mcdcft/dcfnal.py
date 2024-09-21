@@ -31,7 +31,7 @@ def get_f_v2_m(m):
 
 f_v2 = get_f_v2_m(0.96)
 
-def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2):
+def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
     '''  Calculate rho used in eval_xc
          This rho may contain the converted density, density derivitive, and kinetic
          energy density.
@@ -46,12 +46,19 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2):
                 magnitude of atomic basis function [and gradients]
             xctype_id : int
                 0 for LDA; 1 for GGA; 2 for MGGA
+            f : callable
+                a callable that evaluates f(occ)±occ, where f(occ) is the effective
+                numbers of unpaired electrons of a natural orbital with occupation
+                number `occ`. It takes one argument `occ` as input, and returns a
+                2-tuple, with the larger value being the first tuple element.
+            negative_rho : bool
+                if set to True, set negative converted rho values and their gradients
+                to zero
 
         Returns : two ndarrays with shape (ngrids,) for LDA or (4, ngrids) for GGA
             or (6, ngrids) for MGGA
             This varible may be passed to eval_xc to evaluate the nonclassical energy
     '''
-    natorb = natorb.T
 
     if ao.ndim == 3:  # GGA
         ao_magnitude = ao[0]
@@ -60,30 +67,36 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2):
         ao_magnitude = ao
 
     # phi is the Magnitude of natural orbital and gradient
-    phi = natorb @ ao_magnitude.T
+    phi = np.matmul(ao_magnitude, natorb)
 
     c_a, c_b = f(occ)
     phi_squared = phi * phi
-    rho_a = phi_squared.T @ c_a * 0.5
-    rho_b = phi_squared.T @ c_b * 0.5
+    rhos_size = (1, 4, 6)[xctype_id]
+    ngrids = ao.shape[-2]
+    rhos_a = np.zeros((rhos_size, ngrids))
+    rhos_b = np.zeros((rhos_size, ngrids))
+    rho_a = rhos_a[0]
+    rho_b = rhos_b[0]
+    np.matmul(phi_squared, c_a, out=rho_a)
+    np.matmul(phi_squared, c_b, out=rho_b)
+    rho_a *= 0.5
+    rho_b *= 0.5
     if xctype_id >= 1: # grad for GGA and MGGA
-        phi_grad = natorb @ ao_magnitude_grad.transpose((0,2,1))
+        phi_grad = np.matmul(ao_magnitude_grad, natorb)
         phi_phigrad = phi[None, :, :] * phi_grad
-        rhog_a = phi_phigrad.transpose((0,2,1)) @ c_a
-        rhog_b = phi_phigrad.transpose((0,2,1)) @ c_b
+        np.matmul(phi_phigrad, c_a, out=rhos_a[1:4])
+        np.matmul(phi_phigrad, c_b, out=rhos_b[1:4])
         if xctype_id >= 2: # tau for MGGA
             phigrad_phigrad = phi_grad * phi_grad
-            tau_a = np.einsum('a,dag->g', c_a, phigrad_phigrad)
-            tau_b = np.einsum('a,dag->g', c_b, phigrad_phigrad)
-    if xctype_id == 1:
-        return (np.vstack((rho_a[None, :], rhog_a)),
-                np.vstack((rho_b[None, :], rhog_b)))
-    if xctype_id == 2:
-        laplacian_dummy = np.zeros_like(tau_a)
-        return (np.vstack((rho_a[None, :], rhog_a, laplacian_dummy, tau_a[None, :])),
-                np.vstack((rho_b[None, :], rhog_b, laplacian_dummy, tau_b[None, :])))
-    if xctype_id == 0:
-        return (rho_a, rho_b)
+            np.einsum('a,dga->g', c_a, phigrad_phigrad, out=rhos_a[5])
+            np.einsum('a,dga->g', c_b, phigrad_phigrad, out=rhos_b[5])
+    if negative_rho:
+        idx = rho_b < 0.
+        rhos_b[:, idx] = 0.
+    if rhos_size == 1:
+        rhos_a = rhos_a[0]
+        rhos_b = rhos_b[0]
+    return (rhos_a, rhos_b)
 
 class dcfnal:
     def __init__ (self, mol, xc_code, hyb_x=0., display_name=None, grids_level=None, verbose=0, **kwargs):
