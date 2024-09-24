@@ -98,13 +98,40 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
         rhos_b = rhos_b[0]
     return (rhos_a, rhos_b)
 
+# ALIAS for preset DC functionals
+# `xc_code` and `hyb_x` are required keys
+DC_ALIAS = {
+        'DC24': {
+            'xc_code': 164,
+            'hyb_x': 4.525671e-01,
+            'params': {164: [8.198942e-01, 4.106753e+00, -3.716774e+01, 1.100812e+02, -9.600026e+01,
+                             1.352989e+01, -6.881959e+01, 2.371350e+02, -3.433615e+02, 1.720927e+02,
+                             1.134169e+00, 1.148509e+01, -2.210990e+01, -1.006682e+02, 1.477906e+02]},
+            'args': {'f': f_v2},
+        },
+}
+
+DEFAULT_RHO_ARGS = dict(f=f_v2)
+
 class dcfnal:
-    def __init__ (self, mol, xc_code, hyb_x=0., display_name=None, grids_level=None, verbose=0, **kwargs):
+    def __init__ (self, mol, xc_code, xc_preset=None, grids_level=None, verbose=0, **kwargs):
         self.mol = mol
-        self.dcxc = xc_code
-        self.hyb_x = hyb_x
-        self.display_name = 'c' + xc_code if display_name is None else display_name
-        xcfunc = XCFunctional(xc_code, 1)
+        self.xc_code = xc_code
+        preset = DC_ALIAS.get(xc_code) if xc_preset is None else xc_preset
+        if preset is None:
+            self.hyb_x = 0.
+            self.display_name = 'c' + xc_code
+            xcfunc = XCFunctional(xc_code, 1)
+            self.get_converted_rho_args = DEFAULT_RHO_ARGS
+            self.get_converted_rho = get_converted_rho
+        else:
+            self.hyb_x = preset.get('hyb_x', 0.)
+            self.display_name = xc_code if xc_preset is None else preset.get('display_name', 'c' + xc_code)
+            xcfunc = XCFunctional(preset.get('xc_code', xc_code), 1)
+            for c, p in preset.get('params', {}).items():
+                xcfunc.set_ext_params(c, p)
+            self.get_converted_rho_args = preset.get('args', DEFAULT_RHO_ARGS)
+            self.get_converted_rho = preset.get('get_converted_rho', get_converted_rho)
         ni = dft.numint.NumInt()
         ni.eval_xc = xcfunc.eval_xc
         ni.hybrid_coeff = lambda *x: 0.
@@ -122,8 +149,6 @@ class dcfnal:
                 self.grids.atom_grid = grids_level
         self.grids.build()
         self.xcfunc = xcfunc
-        self.get_converted_rho = get_converted_rho
-        self.get_converted_rho_args = dict(f=f_v1)
         self.verbose = verbose
         if self.verbose >= logger.DEBUG:
             self.ms = 0.0
