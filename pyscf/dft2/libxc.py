@@ -79,10 +79,10 @@ def _to_xc_info(xc_code, spin=0):
        xc_info is a tuple containing four components:
        1. xc_objs: a list containing all the cffi objects representing the
           `xc_func_type` struct of each functional components
-       2. xc_arr: a cffi array containing pointers to `xc_func_type` struct
+       2. xc_arr: a cffi array of `xc_func_type` struct
           of each functional components
-       3. hyb: as produced by `parse_xc()`
-       4. fn_facs: as produced by `parse_xc()`
+       3. hyb: hybrid coefficients as produced by `parse_xc()`
+       4. fn_facs: functional factors as produced by `parse_xc()`
     '''
     if isinstance(xc_code, tuple):
         return xc_code
@@ -102,11 +102,11 @@ def _to_xc_info(xc_code, spin=0):
     xc_arr = _ffi.gc(xc_arr, destructor)
     return xc_objs, xc_arr, hyb, fn_facs
 
-XC_CODE_DEPRECATION = 'Use of xc_code is deprecated'
+XC_CODE_WARNING = 'Use of xc_code may cause performance issues. Use XCFunctional instead.'
 
 def xc_reference(xc_code):
     '''Returns the references to a functional as a list of str'''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     return _xc_reference(_to_xc_objs(xc_code))
 
 def _xc_reference(xc_objs):
@@ -139,7 +139,7 @@ _XC_FAMILIES = ["LDA", "GGA", "MGGA", "UNKNOWN"]
 def xc_type(xc_code):
     '''Returns the type of a functional as a str
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     if xc_code is None:
         return None
     if isinstance(xc_code, str):
@@ -157,7 +157,7 @@ def _xc_type(xc_objs):
 def is_lda(xc_code):
     '''Returns True if a functional is a LDA
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     return xc_type(xc_code) == 'LDA'
 
 def _is_lda(xc_objs):
@@ -166,7 +166,7 @@ def _is_lda(xc_objs):
 def is_hybrid_xc(xc_code):
     '''Returns True if a functional is a hybrid functional
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     if xc_code is None:
         return False
     elif isinstance(xc_code, str):
@@ -190,7 +190,7 @@ def _is_hybrid_xc(xc_info):
 def is_meta_gga(xc_code):
     '''Returns True if a functional is a meta GGA
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     return xc_type(xc_code) == 'MGGA'
 
 def _is_meta_gga(xc_objs):
@@ -199,7 +199,7 @@ def _is_meta_gga(xc_objs):
 def is_gga(xc_code):
     '''Returns True if a functional is a GGA
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     return xc_type(xc_code) == 'GGA'
 
 def _is_gga(xc_objs):
@@ -208,7 +208,7 @@ def _is_gga(xc_objs):
 @lru_cache(100)
 def is_nlc(xc_code):
     # identify nlc by xc_code itself if enable_nlc is None
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     if isinstance(xc_code, str) or \
             numpy.issubdtype(type(xc_code), numpy.integer):
         xc_objs = _to_xc_objs(xc_code)
@@ -220,7 +220,7 @@ def _is_nlc(xc_objs):
     return any(xc.info.flags & _lib.XC_FLAGS_VV10 for xc in xc_objs)
 
 def needs_laplacian(xc_code):
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     xc_objs = _to_xc_objs(xc_code)
     return _needs_laplacian(xc_objs)
 
@@ -237,7 +237,7 @@ _DERIV_FLAGS_TABLE = [
 
 @lru_cache(100)
 def max_deriv_order(xc_code):
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     xc_objs = _to_xc_objs(xc_code)
     return _max_deriv_order(xc_objs)
 
@@ -283,7 +283,7 @@ def test_deriv_order(xc_code, deriv, raise_error=False):
 def hybrid_coeff(xc_code, spin=0):
     '''Support recursively defining hybrid functional
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     xc_info = _to_xc_info(xc_code)
     return _hybrid_coeff(xc_info)
 
@@ -297,7 +297,7 @@ def _hybrid_coeff(xc_info, spin=0):
 def nlc_coeff(xc_code):
     '''Get NLC coefficients
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     xc_info = _to_xc_info(xc_code)
     return _nlc_coeff(xc_info)
 
@@ -324,7 +324,7 @@ def rsh_coeff(xc_code):
     alpha = c_LR
     beta = c_SR - c_LR = hyb - alpha
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     if xc_code is None:
         return 0, 0, 0
 
@@ -715,7 +715,7 @@ def eval_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=Non
 
         see also libxc_itrf.c
     '''  # noqa: E501
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     xc_info = _to_xc_info(xc_code, spin)
     return _eval_xc_(xc_info, rho, spin, relativity, deriv, omega, verbose)
 
@@ -906,7 +906,7 @@ def eval_xc1(xc_code, rho, spin=0, deriv=1, omega=None):
     '''Similar to eval_xc.
     Returns an array with the order of derivatives following xcfun convention.
     '''
-    warnings.warn(XC_CODE_DEPRECATION)
+    warnings.warn(XC_CODE_WARNING)
     xc_info = _to_xc_info(xc_code, spin)
     return _eval_xc1(xc_info, rho, spin, deriv, omega)
 
@@ -1091,6 +1091,33 @@ def define_xc(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0)):
 define_xc.__doc__ = define_xc_.__doc__
 
 class XCFunctional:
+    '''
+    A high-level API for constructing LibXC exchange-correlation functionals
+
+    Attributes for XCFunctional:
+        xc_code : str
+            A string to describe the XC functional. See `parse_xc` for details.
+        spin : int
+            spin polarized if spin > 0
+        xc_objs : list of cffi objects representing the `xc_func_type` struct
+            of each functional components
+        xc_info : tuple with the following four components:
+            1. xc_objs: a list containing all the cffi objects representing the
+               `xc_func_type` struct of each functional components
+            2. xc_arr: a cffi array of `xc_func_type` struct
+               of each functional components
+            3. hyb: hybrid coefficients as produced by `parse_xc()`
+            4. fn_facs: functional factors as produced by `parse_xc()`
+        hyb : hybrid coefficients as produced by `parse_xc()`
+        fn_facs : functional factors as produced by `parse_xc()`
+        obj_by_id : dict
+            LibXC functional IDs are used as the key, and the
+            corresponding cffi object of the `xc_func_type` structs
+            are used as the value.
+            This dict is useful for users who wish to perform low-level
+            operations on the underlying LibXC data structure.
+
+    '''
     def __init__(self, xc_code, spin=0):
         self.xc_code = xc_code
         self.spin = spin
@@ -1102,6 +1129,7 @@ class XCFunctional:
         return _eval_xc_(self.xc_info, rho, spin, relativity, deriv, omega, verbose)
 
     def eval_xc_(self, xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
+        '''eval_xc with a dummy `xc_code` parameter for backward compatibility'''
         return _eval_xc_(self.xc_info, rho, spin, relativity, deriv, omega, verbose)
 
     def rsh_coeff(self):
@@ -1122,9 +1150,24 @@ class XCFunctional:
     def xc_type_(self, *args, **kwargs):
         return _xc_type(self.xc_objs)
 
+    # TODO: Implement all other APIs
+
     def set_ext_params(self, fn_id, parameter):
+        '''Set external parameters of the LibXC functional component
+        using the `xc_func_set_ext_params` API of LibXC.
+
+    Args:
+        fn_id : int
+            The LibXC functional ID
+        parameter : ndarray or list of float
+            The parameters to be set
+        '''
         func = self.obj_by_id[fn_id]
-        parameter = numpy.asarray(parameter)
+        parameter = numpy.asarray(parameter, dtype=numpy.double)
+        n = _lib.xc_func_info_get_n_ext_params(func.info)
+        assert n == parameter.size, \
+                f"""Unexpected size of external parameters for functional {fn_id}.
+Expected {n} but {parameter.size} provided."""
         parameter = _ffi.cast(_DOUBLE_PTR_TYPE, parameter.ctypes.data)
         _lib.xc_func_set_ext_params(func, parameter)
 
