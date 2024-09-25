@@ -155,7 +155,7 @@ def get_E_dc(dcxc, natorb, occ, max_memory=20000, hermi=1):
 
     '''
     ni, dens_deriv = dcxc._numint, dcxc.dens_deriv
-    norbs_ao = occ.size
+    norbs_ao = natorb.shape[0]
 
     E_dc = 0.0
     dcxc.ms = 0.0
