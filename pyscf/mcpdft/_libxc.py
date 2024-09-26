@@ -15,6 +15,7 @@
 #
 from pyscf.dft.libxc import XC_ALIAS, XC_CODES, XC_KEYS
 from pyscf.dft.libxc import hybrid_coeff, rsh_coeff
+from pyscf import lib
 
 XC_ALIAS_KEYS = set (XC_ALIAS.keys ())
 XC_TYPE_HDR = tuple (['LDA_','GGA_','MGGA_'])
@@ -56,7 +57,7 @@ def split_x_c_comma (xc):
             break
         elif xc in XC_ALIAS_KEYS:
             xc = XC_ALIAS[xc]
-        elif isinstance (XC_CODES.get (xc, None), int):
+        elif lib.isinteger (XC_CODES.get (xc, None)):
             xc_int = XC_CODES[xc]
             if xc_int in INTCODES_HYB:
                 raise myerr ('LibXC built-in hybrid')
