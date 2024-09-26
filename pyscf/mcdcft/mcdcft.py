@@ -243,6 +243,8 @@ class DCFT_base(lib.StreamObject):
             self.e_tot, self.e_dc, self.chkdata = kernel(self, self.dcfnal, **kwargs)
             self.chkdata['n_states'] = 1
         self.chkdata['e_tot'] = {self.dcfnal.display_name: self.e_tot}
+        if self.chkfile is not None:
+            self.dump_mcdcft_chk(self.chkfile)
         return self.e_tot, self.e_dc, self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     def dump_mcdcft_chk(self, chkfile, key='mcdcft', chkdata=None):
@@ -265,10 +267,6 @@ class DCFT_base(lib.StreamObject):
     @property
     def xc_code(self):
         return self.dcfnal.xc_code
-
-    @xc_code.setter
-    def xc_code(self, x):
-        self.dcfnal.xc_code = x
 
 
 def get_mcdcft_child_class(mc, dc, ncas, nelecas, **kwargs):

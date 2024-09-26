@@ -1,15 +1,12 @@
-import pyscf
-from pyscf import scf, gto, mcscf, lib
+from pyscf import scf, gto, lib, mcscf, mcdcft
 import numpy as np
-#from pyscf.fci import csf_solver
-from pyscf.mcdcft import mcdcft, dcfnal
 
 '''
 This input file performs a potential energy scan of H2 using cBLYP (density
 coherence functional without reparameterization).
 '''
 
-xc_preset = dict(args=dict(f=dcfnal.f_v1, negative_rho=True))
+xc_preset = dict(args=dict(f=mcdcft.dcfnal.f_v1, negative_rho=True))
 
 def run(r, chkfile=None, mo_coeff=None):
     r *= 0.5
@@ -41,7 +38,6 @@ def scan():
         if mc and mc.converged:
             mo_coeff = mc.mo_coeff
             e_tot = mc.e_tot
-            mc.dump_mcdcft_chk(chkfile)
         else:
             print(f"Warning: bond distance {r:02.2f} not converged")
 

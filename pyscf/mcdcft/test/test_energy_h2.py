@@ -27,11 +27,9 @@ def run(r, xc, xc_preset, chkfile):
     mf = scf.RHF(mol)
     mf.kernel()
     mc = mcdcft.CASSCF(mf, xc, 2, 2, xc_preset=xc_preset, grids_level=6)
-    #mc.fcisolver = csf_solver(mol, smult=1)
     mc.fix_spin_(ss=0)
     mc.chkfile = chkfile
     mc.kernel()
-    mc.dump_mcdcft_chk(chkfile)
     return mc.e_tot
 
 def run2(r, xc, xc_preset, chkfile):
@@ -40,10 +38,8 @@ def run2(r, xc, xc_preset, chkfile):
           symmetry=False, verbose=0)
     mf = scf.RHF(mol)
     mf.kernel()
-    #  xc0 = 'B1LYP'
     xc0 = 'LDA'
     mc = mcdcft.CASSCF(mf, xc0, 2, 2, grids_level=6)
-    #mc.fcisolver = csf_solver(mol, smult=1)
     mc.fix_spin_(ss=0)
     mc.kernel()
     mc.recalculate_with_xc(xc, xc_preset=xc_preset, load_chk=chkfile)
@@ -86,6 +82,9 @@ class KnownValues(unittest.TestCase):
                                        run2(0.78, 'BLYP', cBLYP_preset, chkname2), 0.15624825293702616, 5)
                 self.assertAlmostEqual(restart('PBE', cPBE_preset, chkname1) -
                                        restart('PBE', cPBE_preset, chkname2), 0.14898997201251052, 5)
+
+    def test_DC24(self):
+        self.assertAlmostEqual(run(0.78, 'DC24', None, None), -1.25248849, 5)
 
 if __name__ == "__main__":
     print("Full Tests for MC-DCFT energies of H2 molecule")
