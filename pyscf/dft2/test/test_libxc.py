@@ -13,6 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This file is adapted from `dft/test/test_libxc.py` of the PySCF core module.
+
 import os
 import ctypes
 import unittest

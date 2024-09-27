@@ -18,6 +18,8 @@
  *
  * libxc from
  * http://www.tddft.org/programs/octopus/wiki/index.php/Libxc:manual
+ *
+ * This file is adapted from `lib/dft/libxc_itrf.c` of the PySCF core module.
  */
 
 #include <stdio.h>

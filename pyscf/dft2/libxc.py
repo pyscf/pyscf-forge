@@ -16,6 +16,7 @@
 #
 # Authors: Qiming Sun <osirpt.sun@gmail.com>
 #          Susi Lehtola <susi.lehtola@gmail.com>
+# This file is adapted from `dft/libxc.py` of the PySCF core module.
 
 '''
 XC functional, the interface to libxc
