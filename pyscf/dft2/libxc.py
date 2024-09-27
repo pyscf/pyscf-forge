@@ -102,10 +102,20 @@ def _to_xc_info(xc_code, spin=0):
     xc_arr = _ffi.gc(xc_arr, destructor)
     return xc_objs, xc_arr, hyb, fn_facs
 
+def available_libxc_functionals():
+    # Number of functionals is
+    nfunc = _lib.xc_number_of_functionals()
+    # Get functional numbers
+    func_ids = _ffi.new("int[]", nfunc)
+    _lib.xc_available_functional_numbers(func_ids)
+    # Returned array
+    return {_ffi.string(_lib.xc_functional_get_name(x)).decode("UTF-8").upper() : x
+            for x in func_ids}
+
 XC_CODE_WARNING = 'Use of xc_code may cause performance issues. Use XCFunctional instead.'
 
 def xc_reference(xc_code):
-    '''Returns the references to a functional as a list of str'''
+    '''Returns the reference to the individual XC functional'''
     warnings.warn(XC_CODE_WARNING)
     return _xc_reference(_to_xc_objs(xc_code))
 
@@ -155,8 +165,6 @@ def _xc_type(xc_objs):
     return _XC_FAMILIES[max(types)]
 
 def is_lda(xc_code):
-    '''Returns True if a functional is a LDA
-    '''
     warnings.warn(XC_CODE_WARNING)
     return xc_type(xc_code) == 'LDA'
 
@@ -164,8 +172,6 @@ def _is_lda(xc_objs):
     return _xc_type(xc_objs) == 'LDA'
 
 def is_hybrid_xc(xc_code):
-    '''Returns True if a functional is a hybrid functional
-    '''
     warnings.warn(XC_CODE_WARNING)
     if xc_code is None:
         return False
@@ -464,7 +470,7 @@ def parse_xc(description):
                 fac, key = token.split('*')
                 if fac[0].isalpha():
                     fac, key = key, fac
-                fac = sign * float(fac)
+                fac = sign * float(fac.replace('E_', 'E-'))
             else:
                 fac, key = sign, token
 
@@ -913,13 +919,17 @@ def eval_xc1(xc_code, rho, spin=0, deriv=1, omega=None):
 def _eval_xc1(xc_info, rho, spin=0, deriv=1, omega=None):
     out = _eval_xc(xc_info, rho, spin, deriv=deriv, omega=omega)
     xctype = _xc_type(xc_info[0])
+    idx = _libxc_to_xcfun_indices(xctype, spin, deriv)
+    return out[idx]
+
+def _libxc_to_xcfun_indices(xctype, spin=0, deriv=1):
     if deriv <= 1:
-        return out
+        return slice(None)
     elif xctype == 'LDA' or xctype == 'HF':
-        return out
+        return slice(None)
     elif xctype == 'GGA':
         if spin == 0:
-            return out
+            return slice(None)
         else:
             idx = [numpy.arange(6)] # up to deriv=1
             for i in range(2, deriv+1):
@@ -931,7 +941,7 @@ def _eval_xc1(xc_info, rho, spin=0, deriv=1, omega=None):
             idx = [numpy.arange(8)] # up to deriv=1
         for i in range(2, deriv+1):
             idx.append(_MGGA_SORT[(spin, i)])
-    return out[numpy.hstack(idx)]
+    return numpy.hstack(idx)
 
 def _eval_xc(xc_info, rho, spin=0, deriv=1, omega=None):
     xc_objs, xc_arr, hyb, fn_facs = xc_info
@@ -1078,12 +1088,35 @@ def define_xc_(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0), spin=0):
         ni._xc_type = func.xc_type_
 
     elif callable(description):
-        ni.eval_xc = description
+        ni.eval_xc = _eval_xc = description
         ni.hybrid_coeff = lambda *args, **kwargs: hyb
         ni.rsh_coeff = lambda *args, **kwargs: rsh
         ni._xc_type = lambda *args: xctype
+
     else:
         raise ValueError('Unknown description %s' % description)
+
+    def _eval_xc1(xc_code, rho, spin=0, deriv=1, omega=None):
+        libxc_out = _eval_xc(xc_code, rho, spin, deriv=deriv, omega=omega)
+        nvar, xlen = xc_deriv._XC_NVAR[xctype, spin]
+        outlen = lib.comb(xlen+deriv, deriv)
+        exc, vxc, fxc, kxc = libxc_out[:4]
+        out = [exc]
+        if vxc is not None:
+            out.extend([x for x in vxc if x is not None])
+        if fxc is not None:
+            out.extend([fxc[i] for i in [0, 1, 2, 6, 4, 9]])
+        if kxc is not None:
+            out.extend([x for x in kxc if x is not None])
+        if spin == 1:
+            # Returns of eval_xc are structured as [grid_id,deriv_component]
+            # for each term in libxc_out. Change the shape to [deriv_comp, grid_id]
+            out = [x.T for x in out]
+        out = numpy.vstack(out)[:outlen]
+        assert len(out) == outlen
+        idx = _libxc_to_xcfun_indices(xctype, spin, deriv)
+        return out[idx]
+    ni.eval_xc1 = _eval_xc1
     return ni
 
 def define_xc(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0)):

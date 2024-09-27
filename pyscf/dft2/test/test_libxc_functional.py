@@ -23,7 +23,7 @@ from pyscf import dft as dft1
 from pyscf import lib
 
 def setUpModule():
-    global mol, mf, ao, rho
+    global mol, mf, ao, rho, dm
     mol = gto.Mole()
     mol.verbose = 0
     mol.output = None
@@ -32,19 +32,29 @@ def setUpModule():
     mol.build()
     #dm = scf.RHF(mol).run(conv_tol=1e-14).make_rdm1()
     dm = numpy.load(os.path.realpath(os.path.join(__file__, '..', 'dm_h4.npy')))
-    mf = dft1.RKS(mol)
-    mf.grids.atom_grid = {"H": (50, 110)}
-    mf.prune = None
-    mf.grids.build(with_non0tab=False)
-    nao = mol.nao_nr()
-    ao = dft1.numint.eval_ao(mol, mf.grids.coords, deriv=1)
-    rho = dft1.numint.eval_rho(mol, ao, dm, xctype='GGA')
+    with lib.temporary_env(dft1.radi, ATOM_SPECIFIC_TREUTLER_GRIDS=False):
+        mf = dft1.RKS(mol)
+        mf.grids.atom_grid = {"H": (50, 110)}
+        mf.prune = None
+        mf.grids.build(with_non0tab=False)
+        nao = mol.nao_nr()
+        ao = dft1.numint.eval_ao(mol, mf.grids.coords, deriv=1)
+        rho = dft1.numint.eval_rho(mol, ao, dm, xctype='GGA')
 
 def tearDownModule():
     global mol, mf, ao, rho
     del mol, mf, ao, rho
 
 class KnownValues(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.original_grids = dft1.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+        dft1.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
+
+    @classmethod
+    def tearDownClass(cls):
+        dft1.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = cls.original_grids
+
     def test_lda(self):
         fun = dft.libxc.XCFunctional('lda,', 0)
         e,v,f,k = fun.eval_xc(rho[0], deriv=3)
