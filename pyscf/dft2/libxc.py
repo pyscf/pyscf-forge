@@ -33,7 +33,31 @@ from pyscf.dft.xc.utils import remove_dup, format_xc_code
 from pyscf.dft import xc_deriv
 from pyscf.dft.libxc import XC_CODES, XC, PROBLEMATIC_XC, XC_KEYS, XC_ALIAS, _NAME_WITH_DASH
 from pyscf import __config__
-from .libxc_cffi import ffi as _ffi, lib as _lib
+try:
+    # API mode interface
+    from .libxc_cffi import ffi as _ffi, lib as _lib
+    _lib_eval_xc = _lib
+except ImportError:
+    # ABI mode interface
+    def cffi_abi_import():
+        global lib
+        import os
+        import cffi
+        from ._libxc_header import preprocess_header, load_file
+        pyscf_lib_path = os.path.dirname(lib.__file__)
+        forge_path = os.path.dirname(__file__)
+        header_file_path = os.path.join(pyscf_lib_path, 'deps', 'include', 'xc.h')
+        libxc_path = os.path.join(pyscf_lib_path, 'deps', 'lib', 'libxc.so')
+        eval_xc_path = os.path.join(forge_path, '..', 'lib', 'libxc_itrf2.so')
+        itrf_h_path = os.path.join(forge_path, '..', 'lib', 'dft', 'libxc_itrf2.h')
+
+        _ffi = cffi.FFI()
+        _ffi.cdef(preprocess_header(header_file_path) + load_file(itrf_h_path))
+        _lib = _ffi.dlopen(libxc_path)
+        _lib_eval_xc = _ffi.dlopen(eval_xc_path)
+        return _ffi, _lib, _lib_eval_xc
+    _ffi, _lib, _lib_eval_xc = cffi_abi_import()
+    del cffi_abi_import
 
 def libxc_version():
     '''Returns the version of libxc'''
@@ -983,7 +1007,7 @@ def _eval_xc(xc_info, rho, spin=0, deriv=1, omega=None):
     n = len(fn_ids)
     if n > 0:
         density_threshold = 0
-        _lib.LIBXC_eval_xc(n,
+        _lib_eval_xc.LIBXC_eval_xc(n,
                            xc_arr,
                            facs,
                            omega,

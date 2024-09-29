@@ -58,6 +58,8 @@ else()
   endif()
 endif()
 
+option(BUILD_CFFI_API_MODE "Compiling CFFI library with CFFI API mode support" OFF)
+
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Whether or not to compile with MKL
@@ -122,20 +124,32 @@ set_target_properties (clib_pdft PROPERTIES
     OUTPUT_NAME "pdft")
 
 # Build the LibXC CFFI library
-execute_process(
+if (BUILD_CFFI_API_MODE)
+  # Compile in API mode. It has better performance and reliability, but will build a C
+  # extension that depends on the Python version.
+  execute_process(
     COMMAND python3 -c "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     OUTPUT_VARIABLE PYTHON_EXT_SUFFIX
     OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-set (LIBXC_CFFI_BUILDER "${PROJECT_SOURCE_DIR}/dft/build_libxc_cffi.py")
-set (LIBXC_CFFI_SO "${PROJECT_SOURCE_DIR}/../dft2/libxc_cffi${PYTHON_EXT_SUFFIX}")
-add_custom_command(
+  )
+  set (LIBXC_CFFI_BUILDER "${PROJECT_SOURCE_DIR}/dft/build_libxc_cffi.py")
+  set (LIBXC_CFFI_SO "${PROJECT_SOURCE_DIR}/../dft2/libxc_cffi${PYTHON_EXT_SUFFIX}")
+  add_custom_command(
     OUTPUT ${LIBXC_CFFI_SO}
     COMMAND ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} python3 ${LIBXC_CFFI_BUILDER} ${PYSCF_SOURCE_DIR}
     DEPENDS ${LIBXC_CFFI_BUILDER}
     COMMENT "Building LibXC CFFI library"
-)
-add_custom_target(libxc_cffi ALL
+  )
+  add_custom_target(libxc_cffi ALL
     DEPENDS ${LIBXC_CFFI_SO}
-)
-
+  )
+else ()
+  # Compile in ABI mode. It is more portable across different Python versions.
+  set (LIBXC2_SOURCE_FILES "dft/libxc_itrf2.c")
+  add_library (clib_libxc_itrf2 SHARED ${LIBXC2_SOURCE_FILES})
+  target_link_libraries (clib_libxc_itrf2 xc)
+  set_target_properties (clib_libxc_itrf2 PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "xc_itrf2")
+endif ()
