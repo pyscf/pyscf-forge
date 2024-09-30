@@ -9,6 +9,9 @@ include pyscf/lib/*.so
 # macos dynamic libraries
 include pyscf/lib/*.dylib
 
+# include libxc_cffi
+include pyscf/dft2/libxc_cffi.*
+
 # source code
 prune pyscf/lib/build
 recursive-include pyscf/lib *.c *.h CMakeLists.txt
