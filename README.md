@@ -86,7 +86,8 @@ pyscf-forge
             └── kuhf.py
 ```
 
-4. There may exist scenarios that the directory you plan to create already exists within `pyscf`.
+### Path Conflicts
+There may exist scenarios that the directory you plan to create already exists within `pyscf`.
 For example, if you want to add a new method, like `pp_rpa.py`, to the `pyscf/tdscf` folder,
 this could conflict with the existing `pyscf.tdscf` module in the pyscf core repository.
 Adding features to existing modules requires more complex configuration.
@@ -128,3 +129,9 @@ pyscf-forge
     └── tdscf  // no __init__.py file in pyscf-forge
         └── pp_rpa.py
 ```
+
+When installing the `pyscf-forge` wheels using `pip install` in the normal
+installation mode, the `pp_rpa.py` file will be added to the `pyscf/tdscf`
+folder, integrating seamlessly as part of the regular `pyscf` module.
+After this standard installation, there is no need to adjust the `__path__`
+attribute, as all features and modules are located within the same directory.
