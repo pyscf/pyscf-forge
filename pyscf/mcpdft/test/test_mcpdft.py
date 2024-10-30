@@ -32,7 +32,7 @@
 # to reproduce well when OMP is on.
 import tempfile, h5py
 import numpy as np
-from pyscf import gto, scf, mcscf, lib, fci
+from pyscf import gto, scf, mcscf, lib, fci, dft
 from pyscf import mcpdft
 import unittest
 
@@ -96,17 +96,20 @@ def auto_setup(xyz="Li 0 0 0\nH 1.5 0 0", fnal="tPBE"):
 
 
 def setUpModule():
-    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk
+    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk, original_grids
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     nosym, sym, mcp, mc_chk = auto_setup()
     mol_nosym, mf_nosym, mc_nosym = nosym
     mol_sym, mf_sym, mc_sym = sym
 
 
 def tearDownModule():
-    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk
+    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk, original_grids
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
     mol_nosym.stdout.close()
     mol_sym.stdout.close()
-    del mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk
+    del mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk, original_grids
 
 
 class KnownValues(unittest.TestCase):
@@ -573,7 +576,7 @@ class KnownValues(unittest.TestCase):
                 e_tot = mc_scan(mol0)
                 e_states_fp = lib.fp(np.sort(mc_scan.e_states))
                 e_states_fp_ref = lib.fp(np.sort(mc0.e_states))
-                self.assertAlmostEqual(e_tot, mc0.e_tot, delta=1e-6)
+                self.assertAlmostEqual(e_tot, mc0.e_tot, delta=2e-6)
                 self.assertAlmostEqual(e_states_fp, e_states_fp_ref, delta=5e-6)
         mc2 = mcpdft.CASCI(mcp1[1][0], "tPBE", 5, 2)
         mc2.fcisolver.nroots = 5

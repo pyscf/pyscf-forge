@@ -1,6 +1,6 @@
 
 import numpy as np
-from pyscf import gto, scf, mcpdft
+from pyscf import gto, scf, dft, mcpdft
 from pyscf.mcpdft import xmspdft
 
 import unittest
@@ -16,15 +16,18 @@ def get_lih(r, weights=None):
     return mc
 
 def setUpModule():
-    global mc, mc_unequal
+    global mc, mc_unequal, original_grids
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     mc = get_lih(1.5)
     mc_unequal = get_lih(1.5, weights=[0.9, 0.1])
 
 def tearDownModule():
-    global mc, mc_unequal
+    global mc, mc_unequal, original_grids
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
     mc.mol.stdout.close()
     mc_unequal.mol.stdout.close()
-    del mc, mc_unequal
+    del mc, mc_unequal, original_grids
 
 class KnownValues(unittest.TestCase):
 
