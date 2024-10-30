@@ -1,0 +1,22 @@
+PySCF-Forge 1.0.1 (2024-10-31)
+------------------------------
+* New features
+  - PySCF-TrexIO interface
+
+
+PySCF-Forge 1.0.0 (2024-05-31)
+------------------------------
+* PyPI wheels with initial features
+  - CMS-PDFT (Multiconfiguration Pair-Density Functional Theory) energy and analytical nuclear gradients
+  - LPDFT energy and analytical nuclear gradients
+  - MC-PDFT energy and analytical nuclear gradients
+  - MS-PDFT energy and analytical nuclear gradients
+  - XMS-PDFT method
+  - Non-adiabatic couplings between states using MS-PDFT method
+  - MCDCFT (Multiconfiguration Density-Coherence Functional Theory) method
+  - MCDCFT dipole moment
+  - MC-PDFT dipole moment and transition dipole moment
+  - MC-PDFT energy decomposition analysis
+  - LRDF (Long-Range Density Fitting) for energy and analytical nuclear gradients and Hessian 
+  - Spin-flip TDA using multi-collinear functionals
+  - M3SOSCF (Markovian Multiagent Monte-Carlo second order SCF) method
