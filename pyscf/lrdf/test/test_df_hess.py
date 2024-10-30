@@ -43,7 +43,7 @@ class KnownValues(unittest.TestCase):
         mf = mol.RHF().density_fit()
         mf.chkfile = None
         mf.with_df = lrdf.LRDF(mol)
-        mf.with_df.omega = 0.15
+        mf.with_df.omega = 0.1
         mf.with_df.lr_thresh = 1e-4
         mf.run()
         h1 = rhf_hess.Hessian(mf).kernel()
