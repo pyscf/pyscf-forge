@@ -120,3 +120,16 @@ set_target_properties (clib_pdft PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
+
+# Build the ISDF library
+add_library(isdf SHARED 
+../isdf/pbc_isdf_samplek.c 
+../isdf/pbc_isdf_V.c 
+../isdf/pbc_isdf_auxbasis.c 
+../isdf/pbc_isdf_sparse.c 
+../isdf/pbc_isdf_eri.c
+../isdf/fft.c)
+
+target_link_libraries(isdf cgto cint cvhf np_helper fftw3_threads fftw3 ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+set_target_properties(isdf PROPERTIES
+LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR})
