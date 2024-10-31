@@ -206,7 +206,7 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
     E(MC-SCF) = E0 + E1 + E2c + Enc
     E(MC-PDFT) = E0 + E1 + E2c + EOTx + EOTc
 
-    For hybrid functionals, 
+    For hybrid functionals,
 
     E(MC-PDFT) = E0 + E1 + E2c + EOTx + EOTc + Enc
 
@@ -322,16 +322,20 @@ def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
 
     if len(ot) == 1:
         hyb_x, hyb_c = ot[0]._numint.hybrid_coeff(ot[0].otxc)
-    
+
     elif len(ot) == 2:
-        hyb_x, hyb_c = [fnal._numint.hybrid_coeff(fnal.otxc)[idx] for idx, fnal in enumerate(ot)]
+        hyb_x, hyb_c = [
+            fnal._numint.hybrid_coeff(fnal.otxc)[idx] for idx, fnal in enumerate(ot)
+        ]
 
     else:
         raise ValueError("ot must be length of 1 or 2")
 
     if abs(hyb_x - hyb_c) > 1e-11:
-        raise NotImplementedError("hybrid functionals with different exchange, correlations components")
-    
+        raise NotImplementedError(
+            "hybrid functionals with different exchange, correlations components"
+        )
+
     casdm1s = mc.make_one_casdm1s(ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
     casdm2 = mc.make_one_casdm2(ci, state=state)
@@ -354,8 +358,8 @@ def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     e_ncwfn = e_mcscf - e_nuc - e_1e - e_coul
 
     if abs(hyb_x) > 1e-10:
-        e_ncwfn = hyb_x*e_ncwfn
-    
+        e_ncwfn = hyb_x * e_ncwfn
+
     return e_1e, e_coul, e_otxc, e_ncwfn
 
 class _mcscf_env:
