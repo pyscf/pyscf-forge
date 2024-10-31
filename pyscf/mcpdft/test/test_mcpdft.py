@@ -256,6 +256,28 @@ class KnownValues(unittest.TestCase):
                 with self.subTest(objtype=objtype, symmetry=bool(ix), term="sanity"):
                     self.assertAlmostEqual(np.sum(test[:-1]), obj.e_tot, 9)
 
+    def test_decomposition_hybrid(self):
+        ref = [
+            1.0583544218,
+            -12.5375911135,
+            5.8093938665,
+            -1.6287258807,
+            -0.0619586538,
+            -0.5530763650,
+        ]
+        terms = ["nuc", "core", "Coulomb", "OT(X)", "OT(C)", "WFN(XC)"]
+        for ix, mc in enumerate(mcp[0]):
+            mc_scf = mcpdft.CASSCF(mc, "tPBE0", 5, 2).run()
+            mc_ci = mcpdft.CASCI(mc, "tPBE0", 5, 2).run()
+            for obj, objtype in zip((mc_scf, mc_ci), ("CASSCF", "CASCI")):
+                test = obj.get_energy_decomposition()
+                for t, r, term in zip(test, ref, terms):
+                    with self.subTest(objtype=objtype, symmetry=bool(ix), term=term):
+                        self.assertAlmostEqual(t, r, delta=1e-5)
+                with self.subTest(objtype=objtype, symmetry=bool(ix), term="sanity"):
+                    self.assertAlmostEqual(np.sum(test), obj.e_tot, 9)
+
+
     def test_decomposition_sa(self):
         ref_nuc = 1.0583544218
         ref_states = np.array(
