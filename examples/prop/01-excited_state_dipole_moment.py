@@ -12,12 +12,17 @@ mol = gto.M(
     atom="""O 0 0 0
           H 0 -0.757 0.587
           H 0  0.757 0.587""",
-    basis='6-31G',
+    basis="6-31G",
 )
 mf = scf.RHF(mol).run()
-mc = mcpdft.CASSCF(mf, 'tPBE', 4, 4)
+mc = mcpdft.CASSCF(mf, "tPBE", 4, 4)
 
-mc_sa = mc.state_average([1.0/4,]*4)
+mc_sa = mc.state_average(
+    [
+        1.0 / 4,
+    ]
+    * 4
+)
 mc_sa.run()
 
 for state in range(4):
@@ -26,7 +31,13 @@ for state in range(4):
     print(" {:8.5f} {:8.5f} {:8.5f}\n".format(*d_state))
 
 
-mc_cms = mc.multi_state([1.0/4,]*4, method="cms")
+mc_cms = mc.multi_state(
+    [
+        1.0 / 4,
+    ]
+    * 4,
+    method="cms",
+)
 mc_cms.run()
 
 for state in range(4):

@@ -11,9 +11,7 @@ h2co_xyz = """C  0.534004  0.000000  0.000000
 O -0.676110  0.000000  0.000000
 H  1.102430  0.000000  0.920125
 H  1.102430  0.000000 -0.920125"""
-mol = gto.M(
-    atom=h2co_xyz, basis="def2svp", symmetry=False 
-)
+mol = gto.M(atom=h2co_xyz, basis="def2svp", symmetry=False)
 mf = scf.RHF(mol).run()
 mc = mcpdft.CASSCF(mf, "tPBE", 6, 6)
 mc.kernel()
