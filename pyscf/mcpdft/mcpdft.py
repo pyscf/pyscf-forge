@@ -206,9 +206,13 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
     E(MC-SCF) = E0 + E1 + E2c + Enc
     E(MC-PDFT) = E0 + E1 + E2c + EOTx + EOTc
 
-    Only compatible with pure translated or fully-translated fnals. If
-    mc.fcisolver.nroots > 1, lists are returned for everything except
-    the nuclear potential energy.
+    For hybrid functionals,
+
+    E(MC-PDFT) = E0 + E1 + E2c + EOTx + EOTc + Enc
+
+    Where the Enc and EOTx/c terms are premultiplied by the hybrid factor. If
+    mc.fcisolver.nroots > 1, lists are returned for everything except the
+    nuclear potential energy.
 
     Args:
         mc : an instance of CASSCF or CASCI class
@@ -246,6 +250,8 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
             EOTc = correlation part of translated functional
         e_ncwfn : float or list of length nroots
             E2ncc = <H> - E0 - E1 - E2c
+            If hybrid functional, this term is weighted appropriately. For pure
+            functionals, it is the full NC component
     '''
     if verbose is None: verbose = mc.verbose
     log = logger.new_logger(mc, verbose)
@@ -271,8 +277,8 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
         )
 
     hyb_x, hyb_c = ot._numint.hybrid_coeff(ot.otxc)
-    if hyb_x > 1e-10 or hyb_c > 1e-10:
-        raise NotImplementedError("Decomp for hybrid PDFT fnals")
+    if abs(hyb_x - hyb_c) > 1e-11:
+        raise NotImplementedError("hybrid functionals with different exchange, correlations components")
     if not isinstance(ot, transfnal):
         raise NotImplementedError("Decomp for non-translated PDFT fnals")
 
@@ -309,10 +315,26 @@ def get_energy_decomposition(mc, mo_coeff=None, ci=None, ot=None, otxc=None,
 def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
     ncore = mc.ncore
     ncas = mc.ncas
-    if ot is None: ot = mc.otfnal
+    if ot is None: ot = [mc.otfnal,]
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
     if verbose is None: verbose = mc.verbose
+
+    if len(ot) == 1:
+        hyb_x, hyb_c = ot[0]._numint.hybrid_coeff(ot[0].otxc)
+
+    elif len(ot) == 2:
+        hyb_x, hyb_c = [
+            fnal._numint.hybrid_coeff(fnal.otxc)[idx] for idx, fnal in enumerate(ot)
+        ]
+
+    else:
+        raise ValueError("ot must be length of 1 or 2")
+
+    if abs(hyb_x - hyb_c) > 1e-11:
+        raise NotImplementedError(
+            "hybrid functionals with different exchange, correlations components"
+        )
 
     casdm1s = mc.make_one_casdm1s(ci, state=state)
     casdm1 = casdm1s[0] + casdm1s[1]
@@ -334,6 +356,10 @@ def _get_e_decomp(mc, mo_coeff=None, ci=None, ot=None, state=0, verbose=None):
                              max_memory=mc.max_memory)
               for fnal in ot]
     e_ncwfn = e_mcscf - e_nuc - e_1e - e_coul
+
+    if abs(hyb_x) > 1e-10:
+        e_ncwfn = hyb_x * e_ncwfn
+
     return e_1e, e_coul, e_otxc, e_ncwfn
 
 class _mcscf_env:
