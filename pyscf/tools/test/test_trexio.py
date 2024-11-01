@@ -28,3 +28,9 @@ def test_mf():
     trexio.write_eri(mf._eri, filename)
     eri = trexio.read_eri(filename)
     assert abs(mf._eri - eri).max() < 1e-12
+
+def test_mf_ecp():
+    filename = 'test2.h5'
+    mol = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='cc-pVQZ', ecp='ccECP')
+    mf = mol.RHF().run()
+    trexio.to_trexio(mf, filename)
