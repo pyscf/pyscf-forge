@@ -593,7 +593,7 @@ class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
         prop.__path__.append (myproppath)
         prop.__path__=list(set(prop.__path__))
         from pyscf.prop.trans_dip_moment.mspdft import TransitionDipole
-        if not isinstance(state, list) or len(state)!=2:
+        if not hasattr(state, '__len__') or len(state) !=2:
             raise RuntimeError ('Transition dipole requires two states')
         tran_dip_obj = TransitionDipole(self)
         mol_trans_dipole = tran_dip_obj.kernel (state=state, unit=unit, origin=origin)
