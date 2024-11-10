@@ -238,7 +238,7 @@ def get_occsa_and_occsb(mcscf, norb, nelec):
     for i in range(min(len(selected_occslst), mcscf.ci.shape[0])):
         for j in range(min(len(selected_occslst), mcscf.ci.shape[1])):
             ci_coeff = mcscf.ci[i, j]
-            if np.abs(ci_coeff) > 1e-2:  # Check if CI coefficient is significant
+            if np.abs(ci_coeff) > 1e-8:  # Check if CI coefficient is significant
                 occsa.append(selected_occslst[i])
                 occsb.append(selected_occslst[j])
                 ci_values.append(ci_coeff)
