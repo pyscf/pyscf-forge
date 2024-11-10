@@ -123,7 +123,7 @@ def hf_det_ovlp(msks, mfs):
     # * A factor for generalized Slater-Condon integral
     # * Number of different spin-orbitals
     det_ovlp_cache = {}
-    svd_threshold = mfks.svd_threshold
+    svd_threshold = msks.svd_threshold
     for i, mf_bra in enumerate(mfs):
         mo1_a, mo1_b = occ_mos[i]
         for j, mf_ket in enumerate(mfs[:i]):
