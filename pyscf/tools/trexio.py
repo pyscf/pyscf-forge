@@ -261,8 +261,8 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5'):
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
       det_tmp     = []
-      det_tmp    += trexio_det.to_determinant_list(occsa_upshifted, int64_num)
-      det_tmp    += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
+      det_tmp    += trexio_det.to_determinant_list(occsa, int64_num)
+      det_tmp    += trexio_det.to_determinant_list(occsb, int64_num)
       det_list.append(det_tmp)
     
     offset_file = 0
