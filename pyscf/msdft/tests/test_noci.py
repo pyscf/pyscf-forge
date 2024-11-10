@@ -79,7 +79,6 @@ def scoup_dml(mol, mo0, mo1, occ0, occ1):
     dm_01 = mf.make_asym_dm(mo0, mo1, occ0, occ1, x)
     # One-electron part contrbution
     h1e = mf.get_hcore(mol)
-    e1_01 = numpy.einsum('ji,ji', h1e.conj(), dm_01[0]+dm_01[1])
     # Two-electron part contrbution. D_{IF} is asymmetric
     #vhf_01 = get_veff(mf, dm_01, hermi=0)
     vj, vk = mf.get_jk(mol, dm_01, hermi=0)
