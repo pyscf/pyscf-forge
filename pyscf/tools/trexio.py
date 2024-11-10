@@ -260,31 +260,33 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5'):
 
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
-      det_tmp     = []
-      det_tmp    += trexio_det.to_determinant_list(occsa, int64_num)
-      det_tmp    += trexio_det.to_determinant_list(occsb, int64_num)
-      det_list.append(det_tmp)
+        occsa_upshifted = [orb + 1 for orb in a]  
+        occsb_upshifted = [orb + 1 for orb in b]
+        det_tmp     = []
+        det_tmp    += trexio_det.to_determinant_list(occsa_upshifted, int64_num)
+        det_tmp    += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
+        det_list.append(det_tmp)
     
     offset_file = 0
 
     with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
-      if(trexio.has_determinant(tf)):
-        trexio.delete_determinant(tf)
-      trexio.write_mo_num(tf, mo_num)
-      trexio.write_electron_up_num(tf, len(a))
-      trexio.write_electron_dn_num(tf, len(b))
-      trexio.write_electron_num(tf, len(a)+len(b))
-      trexio.write_determinant_list(tf, offset_file, num_determinants, det_list)
-      trexio.write_determinant_coefficient(tf, offset_file, num_determinants, ci_values)
+        if(trexio.has_determinant(tf)):
+            trexio.delete_determinant(tf)
+        trexio.write_mo_num(tf, mo_num)
+        trexio.write_electron_up_num(tf, len(a))
+        trexio.write_electron_dn_num(tf, len(b))
+        trexio.write_electron_num(tf, len(a)+len(b))
+        trexio.write_determinant_list(tf, offset_file, num_determinants, det_list)
+        trexio.write_determinant_coefficient(tf, offset_file, num_determinants, ci_values)
 
 
 def read_det_trexio(filename, backend='h5'):
     with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
-      offset_file = 0
+        offset_file = 0
 
-      num_det = trexio.read_determinant_num(tf)
-      coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
-      det = trexio.read_determinant_list(tf, offset_file, num_det)
+        num_det = trexio.read_determinant_num(tf)
+        coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
+        det = trexio.read_determinant_list(tf, offset_file, num_det)
   
-      return num_det, coeff[0], det[0]
+        return num_det, coeff[0], det[0]
 
