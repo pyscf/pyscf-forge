@@ -273,6 +273,9 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5'):
       if(trexio.has_determinant(tf)):
         trexio.delete_determinant(tf)
       trexio.write_mo_num(tf, mo_num)
+      trexio.write_electron_up_num(tf, len(a))
+      trexio.write_electron_dn_num(tf, len(b))
+      trexio.write_electron_num(tf, len(a)+len(b))
       trexio.write_determinant_list(tf, offset_file, num_determinants, det_list)
       trexio.write_determinant_coefficient(tf, offset_file, num_determinants, ci_values)
 
