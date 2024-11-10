@@ -71,8 +71,52 @@ def hf_det_ovlp(msks, mfs):
             raise RuntimeError('Electron numbers must be equal')
         assert mo_coeff_a.dtype == np.float64
 
-    # Below, the <I|H|J> is evaluated using generalized Slater-Condon rule
-    # Cache four elements:
+    # <I|H|J> can be evaluated using
+    # * the generalized Slater-Condon rule (J. Chem. Phys. 131, 124113, 2009) or
+    # * the density matrix limitation (dml) method (J. Am. Chem. SOC. 1990, 112, 4214).
+    #   E = Tr(dm_12, H[dm_12]) where dm_12 = T_I S_{IJ}^{-1} T_J.
+    #def dml(mo1_a, mo1_b, mo2_a, mo2_b, f):
+    #    '''See also the det_ovlp function in test_noci.py'''
+    #    o_a = mo1_a.conj().T.dot(s).dot(mo2_a)
+    #    o_b = mo1_b.conj().T.dot(s).dot(mo2_b)
+    #    u_a, s_a, vt_a = scipy.linalg.svd(o_a)
+    #    u_b, s_b, vt_b = scipy.linalg.svd(o_b)
+    #    s_a = np.where(abs(s_a) > 1e-11, s_a, 1e-11)
+    #    s_b = np.where(abs(s_b) > 1e-11, s_b, 1e-11)
+    #    x_a = (u_a/s_a).dot(vt_a)
+    #    x_b = (u_b/s_b).dot(vt_b)
+    #    phase = (np.linalg.det(u_a) * np.linalg.det(u_b) *
+    #             np.linalg.det(vt_a) * np.linalg.det(vt_b))
+    #    det_ovlp = phase * np.prod(s_a)*np.prod(s_b)
+    #    # One-particle asymmetric density matrix. See also pyscf.scf.uhf.make_asym_dm
+    #    dm_a = mo1_a.dot(x_a).dot(mo2_a.conj().T)
+    #    dm_b = mo1_b.dot(x_b).dot(mo2_b.conj().T)
+    #    dm_01 = (dm_a, dm_b)
+    #    return scf.uhf.UHF.energy_elec(mol, dm_01) * det_ovlp
+    #
+    # when I and J differ by symmetry and <I|H|J> is strictly zero, the density
+    # matrix limitation method may encounter numerical issues since |S_{IJ}| is
+    # strictly zero.
+    # Here, citing the discussions in https://github.com/pyscf/pyscf-forge/pull/77:
+    # * If there is only one zero singular value due to symmetry, then the symmetry of
+    #   the two-electron integrals will ultimately cancel the crazy (AO-basis) JK
+    #   matrix. (ii'|jj') and (ij'|ji') are only nonzero if j\to j' corresponds to the
+    #   same symmetry element as i\to i', but this would imply that the jth singular
+    #   value must also be zero, and the i==j case is canceled by exchange. So the
+    #   two-electron part of the energy can't contribute, and neither can the
+    #   one-electron part because it will be zero by symmetry.
+    # * If there are two singular values corresponding to the same symmetry change,
+    #   then the two states do not in fact have different symmetries. The artificial
+    #   1e-11 floored singular values cancel between the two factors of the density
+    #   matrix and the final multiplication by det_ovlp, and all is well.
+    # * If there are more than two zero singular values, then neither of the two terms
+    #   of the Hamiltonian can cancel all of the 1e-11 factors in det_ovlp, and the
+    #   whole thing is at most ~1e-11, which is close enough to zero in most cases.
+    #
+    # Below, <I|H|J> is evaluated using dml when zero singular values in the
+    # orbital overlap. Otherwise, generalized Slater-Condon rule is applied.
+
+    # Five elements are cached in det_ovlp_cache:
     # * Determinants overlap
     # * Asymmetric density matrix for evaluating JK
     # * The second density matrix for computing HF energy: Tr(dm, hcore+VHF/2)
@@ -98,15 +142,15 @@ def hf_det_ovlp(msks, mfs):
 
             if differs == 0:
                 # Evaluate <I|H|J> using the density matrix limitation method
-                ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
+                det_ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
                 # One-particle asymmetric density matrix. See also pyscf.scf.uhf.make_asym_dm
                 dm_a = mo1_a.dot(np.linalg.solve(o_a.T, mo2_a.conj().T))
                 dm_b = mo1_b.dot(np.linalg.solve(o_b.T, mo2_b.conj().T))
                 dm_01 = (dm_a, dm_b)
-                det_ovlp_cache[i, j] = (ovlp, dm_01, dm_01, ovlp, differs)
+                det_ovlp_cache[i, j] = (det_ovlp, dm_01, dm_01, det_ovlp, differs)
 
             elif differs == 1: # Generalized Slater-Condon rule
-                ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
+                det_ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
                 c1_a = mo1_a.dot(u_a[:,s_a<svd_threshold])
                 c1_b = mo1_b.dot(u_b[:,s_b<svd_threshold])
                 c2_a = mo2_a.dot(vt_a[s_a<svd_threshold].conj().T)
@@ -125,10 +169,10 @@ def hf_det_ovlp(msks, mfs):
                          np.linalg.det(vt_a) * np.linalg.det(vt_b))
                 fac = phase * np.prod(s_a_overlapped)*np.prod(s_b_overlapped)
 
-                det_ovlp_cache[i, j] = (ovlp, dm_r, dm_01, fac, differs)
+                det_ovlp_cache[i, j] = (det_ovlp, dm_r, dm_01, fac, differs)
 
             elif differs == 2: # Generalized Slater-Condon rule
-                ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
+                det_ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
                 c1_a = mo1_a.dot(u_a[:,s_a<svd_threshold])
                 c1_b = mo1_b.dot(u_b[:,s_b<svd_threshold])
                 c2_a = mo2_a.dot(vt_a[s_a<svd_threshold].conj().T)
@@ -141,7 +185,7 @@ def hf_det_ovlp(msks, mfs):
                          np.linalg.det(vt_a) * np.linalg.det(vt_b))
                 fac = phase * np.prod(s_a_overlapped)*np.prod(s_b_overlapped)
 
-                det_ovlp_cache[i, j] = (ovlp, dm_01, dm_01, fac, differs)
+                det_ovlp_cache[i, j] = (det_ovlp, dm_01, dm_01, fac, differs)
 
         dm_a = mo1_a.dot(mo1_a.conj().T)
         dm_b = mo1_b.dot(mo1_b.conj().T)
@@ -156,8 +200,8 @@ def hf_det_ovlp(msks, mfs):
     s = np.eye(n_csf)
     h = np.zeros_like(s)
     for idx, vj, vk in zip(det_ovlp_cache, vjs, vks):
-        ovlp, _, dm_01, fac, differs = det_ovlp_cache[idx]
-        s[idx] = ovlp
+        det_ovlp, _, dm_01, fac, differs = det_ovlp_cache[idx]
+        s[idx] = det_ovlp
         vhf_01 = vj[0] + vj[1] - vk
         e1  = np.einsum('ij,ji->', hcore, dm_01[0]).real
         e1 += np.einsum('ij,ji->', hcore, dm_01[1]).real
