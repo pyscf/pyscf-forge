@@ -377,8 +377,8 @@ class NOCI(lib.StreamObject):
         e_hf, s_csf = hf_det_ovlp(self, mfs)
         Enuc = self.mol.energy_nuc()
         e_ks = np.array([mf.e_tot for mf in mfs])
-        e_ks -= Enuc
         log.debug1('KS energies %s', e_ks)
+        e_ks -= Enuc
 
         # Compute transition density functional energy
         if self.coup == 0:
@@ -398,8 +398,7 @@ class NOCI(lib.StreamObject):
             n_triplets = len(mfs_t)
             assert n_triplets * 2 == len(mfs_s)
             e_t = np.array([mf.e_tot for mf in mfs_t])
-            e_t -= Enuc
-            e_s = e_ks[:n_triplets*2]
+            e_s = e_ks[:n_triplets*2] + Enuc
             log.debug1('KS singlet energies %s', e_s)
             log.debug1('KS triplet energies %s', e_t)
 

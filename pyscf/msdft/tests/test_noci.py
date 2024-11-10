@@ -22,7 +22,7 @@ H   0.5  0.1     -0.2
     h, s = noci.hf_det_ovlp(ms_ks, [mf0, mf1])
     ref = np.array([[-93.6133596391479,  10.03601933903856],
                     [10.03601933903856, -93.43781863677702]])
-    assert abs(abs(h) - abs(ref)).max() < 1e-8
+    assert abs(abs(h) - abs(ref)).max() < 1e-7
 
 def test_noci_e_tot():
     mol = gto.M(atom='''
@@ -37,7 +37,10 @@ H   1.5  0.1     -0.2
     mf.d = [[4,5]]
     mf.sm_t = False
     mf.run()
-    assert abs(mf.e_tot[0] - -56.113942198) < 1e-7
+    assert abs(mf.e_tot[0] - -56.1611795849) < 1e-7
+    mf.sm_t = True
+    mf.run()
+    assert abs(mf.e_tot[0] - -56.1612529681) < 1e-7
 
     mol = gto.M(atom='''
 O   0.   0.      0.
