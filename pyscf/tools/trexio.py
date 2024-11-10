@@ -15,6 +15,7 @@ import numpy as np
 from pyscf import lib
 from pyscf import gto
 from pyscf import scf
+from pyscf import fci 
 import trexio
 
 def to_trexio(obj, filename, backend='h5'):
@@ -223,3 +224,66 @@ def _group_by(a, keys):
     assert all(keys[:-1] <= keys[1:])
     idx = np.unique(keys, return_index=True)[1]
     return np.split(a, idx[1:])
+
+def get_occsa_and_occsb(mcscf, norb, nelec):
+    ci_coeff = mcscf.ci
+    num_determinants = int(np.sum(np.abs(ci_coeff) > 1e-8))
+    occslst = fci.cistring.gen_occslst(range(norb), nelec // 2)
+    selected_occslst = occslst[:num_determinants]
+
+    occsa = []
+    occsb = []
+    ci_values = []
+
+    for i in range(min(len(selected_occslst), mcscf.ci.shape[0])):
+        for j in range(min(len(selected_occslst), mcscf.ci.shape[1])):
+            ci_coeff = mcscf.ci[i, j]
+            if np.abs(ci_coeff) > 1e-2:  # Check if CI coefficient is significant
+                occsa.append(selected_occslst[i])
+                occsb.append(selected_occslst[j])
+                ci_values.append(ci_coeff)
+
+    # Sort by the absolute value of the CI coefficients in descending order
+    sorted_indices = np.argsort(-np.abs(ci_values))
+    occsa_sorted = [occsa[idx] for idx in sorted_indices]
+    occsb_sorted = [occsb[idx] for idx in sorted_indices]
+    ci_values_sorted = [ci_values[idx] for idx in sorted_indices]
+
+    return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
+
+def det_to_trexio(mcscf, norb, nelec, filename, backend='h5'):
+    from trexio_tools.group_tools import determinant as trexio_det
+
+    mo_num = mcscf.mo_energy.size
+    int64_num = int((mo_num-1)/64) + 1
+    occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec)
+
+    det_list = []
+    for a, b, coeff in zip(occsa, occsb, ci_values):
+      occsa_upshifted = [orb + 1 for orb in a]  
+      occsb_upshifted = [orb + 1 for orb in b]
+      det_tmp     = []
+      det_tmp    += trexio_det.to_determinant_list(occsa_upshifted, int64_num)
+      det_tmp    += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
+      det_list.append(det_tmp)
+    
+    offset_file = 0
+
+    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+      if(trexio.has_determinant(tf)):
+        trexio.delete_determinant(tf)
+      trexio.write_mo_num(tf, mo_num)
+      trexio.write_determinant_list(tf, offset_file, num_determinants, det_list)
+      trexio.write_determinant_coefficient(tf, offset_file, num_determinants, ci_values)
+
+
+def read_det_trexio(filename, backend='h5'):
+    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+      offset_file = 0
+
+      num_det = trexio.read_determinant_num(tf)
+      coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
+      det = trexio.read_determinant_list(tf, offset_file, num_det)
+  
+      return num_det, coeff[0], det[0]
+
