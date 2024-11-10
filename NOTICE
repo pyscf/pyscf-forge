@@ -1,6 +1,7 @@
 The MC-PDFT module within this package was developed by:
 
 (in chronological order of first commit)
+Qiming Sun
 Matthew R Hermes (University of Chicago)
 Dayou Zhang (University of Minnesota)
 Aleksandr Lykhin (University of Chicago)
@@ -10,3 +11,4 @@ Linus Dittmer
 Hao Li
 Bhavnesh Jangid
 Shirong Wang
+Peng Bao

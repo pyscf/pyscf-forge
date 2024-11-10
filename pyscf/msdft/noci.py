@@ -49,12 +49,11 @@ from pyscf.data.nist import HARTREE2EV as au2ev
 
 __all__ = ['NOCI']
 
-SVD_THRESHOLD = 1e-11
-
 def hf_det_ovlp(msks, mfs):
     '''Compute the standard interaction <I|H|J> between two non-orthogonal
     determinants I and J
     '''
+    log = logger.new_logger(msks)
     mol = msks.mol
     _mf = mfs[0].copy()
     ovlp = _mf.get_ovlp()
@@ -70,48 +69,110 @@ def hf_det_ovlp(msks, mfs):
         occ_mos.append([occ_mo_a, occ_mo_b])
         if occ_mo_a.shape[1] != neleca or occ_mo_b.shape[1] != nelecb:
             raise RuntimeError('Electron numbers must be equal')
+        assert mo_coeff_a.dtype == np.float64
 
-    dms = []
-    det_ovlp = []
+    # Below, the <I|H|J> is evaluated using generalized Slater-Condon rule
+    # Cache four elements:
+    # * Determinants overlap
+    # * Asymmetric density matrix for evaluating JK
+    # * The second density matrix for computing HF energy: Tr(dm, hcore+VHF/2)
+    # * A factor for generalized Slater-Condon integral
+    # * Number of different spin-orbitals
+    det_ovlp_cache = {}
+    svd_threshold = mfks.svd_threshold
     for i, mf_bra in enumerate(mfs):
-        c1_a, c1_b = occ_mos[i]
+        mo1_a, mo1_b = occ_mos[i]
         for j, mf_ket in enumerate(mfs[:i]):
-            c2_a, c2_b = occ_mos[j]
-            o_a = c1_a.conj().T.dot(ovlp).dot(c2_a)
-            o_b = c1_b.conj().T.dot(ovlp).dot(c2_b)
+            mo2_a, mo2_b = occ_mos[j]
+            o_a = mo1_a.conj().T.dot(ovlp).dot(mo2_a)
+            o_b = mo1_b.conj().T.dot(ovlp).dot(mo2_b)
 
             u_a, s_a, vt_a = scipy.linalg.svd(o_a)
             u_b, s_b, vt_b = scipy.linalg.svd(o_b)
-            s_a = np.where(abs(s_a) > SVD_THRESHOLD, s_a, SVD_THRESHOLD)
-            s_b = np.where(abs(s_b) > SVD_THRESHOLD, s_b, SVD_THRESHOLD)
-            x_a = (u_a/s_a).dot(vt_a)
-            x_b = (u_b/s_b).dot(vt_b)
-            phase = (np.linalg.det(u_a) * np.linalg.det(u_b) *
-                     np.linalg.det(vt_a) * np.linalg.det(vt_b))
-            det_ovlp.append(phase * np.prod(s_a)*np.prod(s_b))
+            s_a_overlapped = s_a[s_a > svd_threshold]
+            s_b_overlapped = s_b[s_b > svd_threshold]
+            differs_a = s_a.size - s_a_overlapped.size
+            differs_b = s_b.size - s_b_overlapped.size
+            differs = differs_a + differs_b
+            log.debug1('states = (%d %d), GSC differs = %d', i, j, differs)
 
-            # One-particle asymmetric density matrix. See also pyscf.scf.uhf.make_asym_dm
-            dm_01a = c1_a.dot(x_a).dot(c2_a.conj().T)
-            dm_01b = c1_b.dot(x_b).dot(c2_b.conj().T)
-            dms.append((dm_01a, dm_01b))
+            if differs == 0:
+                # Evaluate <I|H|J> using the density matrix limitation method
+                ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
+                # One-particle asymmetric density matrix. See also pyscf.scf.uhf.make_asym_dm
+                dm_a = mo1_a.dot(np.linalg.solve(o_a.T, mo2_a.conj().T))
+                dm_b = mo1_b.dot(np.linalg.solve(o_b.T, mo2_b.conj().T))
+                dm_01 = (dm_a, dm_b)
+                det_ovlp_cache[i, j] = (ovlp, dm_01, dm_01, ovlp, differs)
 
-        det_ovlp.append(1.)
-        dm_a = c1_a.dot(c1_a.conj().T)
-        dm_b = c1_b.dot(c1_b.conj().T)
-        dms.append((dm_a, dm_b))
+            elif differs == 1: # Generalized Slater-Condon rule
+                ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
+                c1_a = mo1_a.dot(u_a[:,s_a<svd_threshold])
+                c1_b = mo1_b.dot(u_b[:,s_b<svd_threshold])
+                c2_a = mo2_a.dot(vt_a[s_a<svd_threshold].conj().T)
+                c2_b = mo2_b.dot(vt_b[s_b<svd_threshold].conj().T)
+                dm_a = c1_a.dot(c2_a.conj().T)
+                dm_b = c1_b.dot(c2_b.conj().T)
+                dm_01 = (dm_a, dm_b)
 
-    dms = np.stack(dms)
+                x_a = u_a[:,s_a>svd_threshold].dot(vt_a[s_a>svd_threshold])
+                x_b = u_b[:,s_b>svd_threshold].dot(vt_b[s_b>svd_threshold])
+                dm_a = mo1_a.dot(x_a).dot(mo2_a.conj().T)
+                dm_b = mo1_b.dot(x_b).dot(mo2_b.conj().T)
+                dm_r = (dm_a, dm_b)
+
+                phase = (np.linalg.det(u_a) * np.linalg.det(u_b) *
+                         np.linalg.det(vt_a) * np.linalg.det(vt_b))
+                fac = phase * np.prod(s_a_overlapped)*np.prod(s_b_overlapped)
+
+                det_ovlp_cache[i, j] = (ovlp, dm_r, dm_01, fac, differs)
+
+            elif differs == 2: # Generalized Slater-Condon rule
+                ovlp = np.linalg.det(o_a) * np.linalg.det(o_b)
+                c1_a = mo1_a.dot(u_a[:,s_a<svd_threshold])
+                c1_b = mo1_b.dot(u_b[:,s_b<svd_threshold])
+                c2_a = mo2_a.dot(vt_a[s_a<svd_threshold].conj().T)
+                c2_b = mo2_b.dot(vt_b[s_b<svd_threshold].conj().T)
+                dm_a = c1_a.dot(c2_a.conj().T)
+                dm_b = c1_b.dot(c2_b.conj().T)
+                dm_01 = (dm_a, dm_b)
+
+                phase = (np.linalg.det(u_a) * np.linalg.det(u_b) *
+                         np.linalg.det(vt_a) * np.linalg.det(vt_b))
+                fac = phase * np.prod(s_a_overlapped)*np.prod(s_b_overlapped)
+
+                det_ovlp_cache[i, j] = (ovlp, dm_01, dm_01, fac, differs)
+
+        dm_a = mo1_a.dot(mo1_a.conj().T)
+        dm_b = mo1_b.dot(mo1_b.conj().T)
+        dm = (dm_a, dm_b)
+        det_ovlp_cache[i, i] = (1., dm, dm, 1., 0)
+
+    dms = np.stack([v[1] for v in det_ovlp_cache.values()])
+    vjs, vks = _mf.get_jk(mol, dms, hermi=0)
+
     hcore = _mf.get_hcore()
-    #FIXME: dms might be very huge, integral screening does not work well in get_jk
-    vjs, vks = scf.uhf.UHF.get_jk(_mf, mol, dms, hermi=0)
-    h = []
-    for dm_01, vj, vk in zip(dms, vjs, vks):
+    n_csf = len(mfs)
+    s = np.eye(n_csf)
+    h = np.zeros_like(s)
+    for idx, vj, vk in zip(det_ovlp_cache, vjs, vks):
+        ovlp, _, dm_01, fac, differs = det_ovlp_cache[idx]
+        s[idx] = ovlp
         vhf_01 = vj[0] + vj[1] - vk
-        e_tot = scf.uhf.energy_elec(_mf, dm_01, hcore, vhf_01)[0]
-        h.append(e_tot)
-    det_ovlp = np.asarray(det_ovlp)
-    h = lib.unpack_tril(det_ovlp * np.asarray(h))
-    s = lib.unpack_tril(det_ovlp)
+        e1  = np.einsum('ij,ji->', hcore, dm_01[0]).real
+        e1 += np.einsum('ij,ji->', hcore, dm_01[1]).real
+        e2  = np.einsum('ij,ji->', vhf_01[0], dm_01[0]).real
+        e2 += np.einsum('ij,ji->', vhf_01[1], dm_01[1]).real
+        e2 *= .5
+        if differs == 2:
+            # When differed by 2 spin-orbitals, only the two-electron part
+            # contributes to Slater-Condon integrals
+            h[idx] = e2 * fac
+        else:
+            h[idx] = (e1 + e2) * fac
+
+    h = lib.hermi_triu(h, inplace=True)
+    s = lib.hermi_triu(s, inplace=True)
     return h, s
 
 def multi_states_scf(msks, ground_ks=None):
@@ -184,7 +245,7 @@ def multi_states_scf(msks, ground_ks=None):
         e_split = (mf_s.e_tot - mf_t.e_tot) * au2ev
         log.info('%-2d %18.15g AU %18.15g AU %15.9g eV %15.9g eV',
                  i+1, mf_s.e_tot, mf_t.e_tot, dEt, e_split)
-    return mfs_s + mfs_d + [ground_ks]
+    return [ground_ks], mfs_s, mfs_d, mfs_t
 
 class NOCI(lib.StreamObject):
     '''
@@ -193,6 +254,12 @@ class NOCI(lib.StreamObject):
     Attributes:
         xc : str
             Name of exchange-correlation functional
+        s :
+            A list of singly excited orbital pairs. Each pair [i, a] means an
+            excitation from occupied orbital i to a.
+        d :
+            A list of doubly excited orbital pairs. Each pair [i, a] means both
+            alpha and beta electrons at orbital i are excited to orbital a.
         coup : int
             How to compute the electronic coupling between diabatic states (Bao, JCTC, 17, 240).
             * 0: geometric average over diagonal terms.
@@ -200,12 +267,10 @@ class NOCI(lib.StreamObject):
             * 2 (default): overlap-scaled average of correlation.
         ci_g : bool
             Whether to compute the adiabatic ground-state energy. True by default.
-        s :
-            A list of singly excited orbital pairs. Each pair [i, a] means an
-            excitation from occupied orbital i to a.
-        d :
-            A list of doubly excited orbital pairs. Each pair [i, a] means both
-            alpha and beta electrons at orbital i are excited to orbital a.
+        sm_t: bool
+            Use the energy difference between mix state and Ms=1 triplet state
+            as the coupling between two symmetry-adapted mix state. This can be
+            more accurate than the approximate HF coupling. True by default.
 
     Saved results:
         e_tot : float
@@ -216,17 +281,20 @@ class NOCI(lib.StreamObject):
             KS instances of the underlying diabatic states)
     '''
     _keys = {
-        'mol', 'verbose', 'stdout', 'xc', 'coup', 'ci_g', 's', 'd',
+        'mol', 'verbose', 'stdout', 'xc', 'coup', 'ci_g', 's', 'd', 'sm_t',
         'e_tot', 'csfvec', 'mfs',
     }
 
-    def __init__(self, mol, xc=None, coup=2):
+    coup = 2
+    ci_g = True
+    sm_t = True
+    svd_threshold = 1e-7
+
+    def __init__(self, mol, xc=None):
         self.mol = mol
         self.verbose = mol.verbose
         self.stdout = mol.stdout
         self.xc = xc
-        self.coup = 2
-        self.ci_g = True
         self.s = []
         self.d = []
 ##################################################
@@ -245,21 +313,28 @@ class NOCI(lib.StreamObject):
         log.info('xc = %s', self.xc)
         log.info('coup = %s', self.coup)
         log.info('ci_g = %s', self.ci_g)
+        log.info('sm_t = %s', self.sm_t)
         log.info('single excitation = %s', self.s)
         log.info('double excitation = %s', self.d)
+        log.info('Overlap svd threshold = %s', self.svd_threshold)
         return self
 
     def kernel(self, ground_ks=None):
         log = logger.new_logger(self)
-        cpu0 = (logger.process_clock(), logger.perf_counter())
         self.dump_flags(log)
         self.check_sanity()
 
-        mfs = self.mfs = multi_states_scf(self, ground_ks)
+        mf_gs, mfs_s, mfs_d, mfs_t = multi_states_scf(self, ground_ks)
+        mfs = mfs_s + mfs_d
+        if self.ci_g:
+            mfs = mfs + mf_gs
+        self.mfs = mfs
+
         e_hf, s_csf = hf_det_ovlp(self, mfs)
         Enuc = self.mol.energy_nuc()
         e_ks = np.array([mf.e_tot for mf in mfs])
         e_ks -= Enuc
+        log.debug1('KS energies %s', e_ks)
 
         # Compute transition density functional energy
         if self.coup == 0:
@@ -275,11 +350,25 @@ class NOCI(lib.StreamObject):
             d = e_ks - e_hf.diagonal()
             h_tdf = e_hf + s_csf * ((d[:,None] + d) / 2 + Enuc)
 
+        if self.sm_t:
+            n_triplets = len(mfs_t)
+            assert n_triplets * 2 == len(mfs_s)
+            e_t = np.array([mf.e_tot for mf in mfs_t])
+            e_t -= Enuc
+            e_s = e_ks[:n_triplets*2]
+            log.debug1('KS singlet energies %s', e_s)
+            log.debug1('KS triplet energies %s', e_t)
+
+            for i in range(n_triplets):
+                j = 2*i
+                s_t_coupling = e_s[i] + (s_csf[j,j+1] - 1.) * e_t[i]
+                h_tdf[j,j+1] = h_tdf[j+1,j] = s_t_coupling
         self.e_tot, self.csfvec = scipy.linalg.eigh(h_tdf, s_csf)
         log.note('MSDFT eigs %s', self.e_tot)
-        log.timer('MSDFT', *cpu0)
         return self.e_tot
 
     @property
     def converged(self):
         return all(mf.converged for mf in self.mfs)
+
+    to_gpu = lib.to_gpu
