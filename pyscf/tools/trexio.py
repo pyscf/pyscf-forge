@@ -252,9 +252,10 @@ def get_occsa_and_occsb(mcscf, norb, nelec):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, mo_num, filename, backend='h5', chunk_size=100000):  
+def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', chunk_size=100000):  
     from trexio_tools.group_tools import determinant as trexio_det
 
+    mo_num = norb
     int64_num = int((mo_num - 1) / 64) + 1 
     occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec)
 
