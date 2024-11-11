@@ -50,13 +50,13 @@ def setUpModule():
     mf.kernel()
 
 def tearDownModule():
-    global mf
+    global mol, mf
     mol.stdout.close()
     del mol, mf
 
 class KnownValues(unittest.TestCase):
     def test_pv(self):
-#       Reference results (for PV) are obtained from DIRAC24
+#       Reference results (for PV) compared with DIRAC24
         Epv = Epv_molecule(mol, mf)
         Epv_Oxigen = numpy.sum(Epv, axis=1)[0]
         self.assertAlmostEqual(Epv_Oxigen, -2.745821e-21, 5)
