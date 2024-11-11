@@ -404,7 +404,7 @@ class NOCI(lib.StreamObject):
 
             for i in range(n_triplets):
                 j = 2*i
-                s_t_coupling = e_s[i] + (s_csf[j,j+1] - 1.) * e_t[i]
+                s_t_coupling = e_s[j] + (s_csf[j,j+1] - 1.) * e_t[i]
                 h_tdf[j,j+1] = h_tdf[j+1,j] = s_t_coupling
         self.e_tot, self.csfvec = scipy.linalg.eigh(h_tdf, s_csf)
         log.note('MSDFT eigs %s', self.e_tot)
