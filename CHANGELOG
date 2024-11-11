@@ -1,3 +1,9 @@
+PySCF-Forge 1.0.2 (2024-11-11)
+------------------------------
+* New features
+  - Parity Violating contributions to energy
+
+
 PySCF-Forge 1.0.1 (2024-10-31)
 ------------------------------
 * New features
