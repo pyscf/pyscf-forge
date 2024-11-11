@@ -44,7 +44,7 @@ def setUpModule():
     basis = 'sto3g',
     verbose = 3)
 
-    mf = scf.DHF(mol_alanine)
+    mf = scf.DHF(mol)
     mf.conv_tol = 1e-9
     mf.with_ssss=False
     mf.kernel()
