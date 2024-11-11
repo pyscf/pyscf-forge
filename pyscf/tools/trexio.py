@@ -12,6 +12,7 @@ Installation instruction:
 '''
 
 import numpy as np
+import math
 from pyscf import lib
 from pyscf import gto
 from pyscf import scf
@@ -251,13 +252,11 @@ def get_occsa_and_occsb(mcscf, norb, nelec):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', chunk_size=1e5):
+def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', chunk_size=100000):  
     from trexio_tools.group_tools import determinant as trexio_det
-    import trexio
-    import math
 
     mo_num = mcscf.mo_energy.size
-    int64_num = int((mo_num-1)/64) + 1
+    int64_num = int((mo_num - 1) / 64) + 1 
     occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec)
 
     det_list = []
@@ -269,25 +268,29 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', chunk_size=1e5):
         det_tmp += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
         det_list.append(det_tmp)
 
-    n_chunks = math.ceil(num_determinants / chunk_size)
+    if num_determinants > chunk_size:
+        n_chunks = math.ceil(num_determinants / chunk_size)
+    else:
+        n_chunks = 1 
 
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf: 
         if trexio.has_determinant(tf):
             trexio.delete_determinant(tf)
         trexio.write_mo_num(tf, mo_num)
         trexio.write_electron_up_num(tf, len(a))
         trexio.write_electron_dn_num(tf, len(b))
-        trexio.write_electron_num(tf, len(a)+len(b))
+        trexio.write_electron_num(tf, len(a) + len(b))
 
-        offset_file = 0
+        offset_file = 0 
         for i in range(n_chunks):
             start = i * chunk_size
             end = min((i + 1) * chunk_size, num_determinants)
             current_chunk_size = end - start
 
-            trexio.write_determinant_list(tf, offset_file, current_chunk_size, det_list[start:end])
-            trexio.write_determinant_coefficient(tf, offset_file, current_chunk_size, ci_values[start:end])
-            offset_file += current_chunk_size
+            if current_chunk_size > 0:
+                trexio.write_determinant_list(tf, offset_file, current_chunk_size, det_list[start:end])
+                trexio.write_determinant_coefficient(tf, offset_file, current_chunk_size, ci_values[start:end])
+                offset_file += current_chunk_size
 
 
 def read_det_trexio(filename, backend='h5'):
