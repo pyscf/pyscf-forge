@@ -36,7 +36,8 @@ def _mol_to_trexio(mol, trexio_file):
 
     # 2 System
     trexio.write_nucleus_num(trexio_file, mol.natm)
-    trexio.write_nucleus_charge(trexio_file, mol.atom_charges())
+    nucleus_charge = [mol.atom_charge(i) for i in range(mol.natm)]
+    trexio.write_nucleus_charge(trexio_file, nucleus_charge)
     trexio.write_nucleus_coord(trexio_file, mol.atom_coords())
     labels = [mol.atom_pure_symbol(i) for i in range(mol.natm)]
     trexio.write_nucleus_label(trexio_file, labels)
@@ -71,7 +72,7 @@ def _mol_to_trexio(mol, trexio_file):
     trexio.write_basis_shell_index(trexio_file, np.hstack(prim2sh))
     trexio.write_basis_exponent(trexio_file, np.hstack(mol.bas_exps()))
     if not all(mol._bas[:,gto.NCTR_OF] == 1):
-        raise NotImplementedError
+        raise NotImplementedError('The generalized contraction is not supported.')
     coef = [mol.bas_ctr_coeff(i).ravel() for i in range(mol.nbas)]
     trexio.write_basis_coefficient(trexio_file, np.hstack(coef))
     prim_norms = [gto.gto_norm(mol.bas_angular(i), mol.bas_exp(i)) for i in range(mol.nbas)]
