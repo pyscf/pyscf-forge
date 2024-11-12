@@ -93,9 +93,10 @@ def _cc_to_trexio(cc_obj, trexio_file):
 def _mcscf_to_trexio(cas_obj, trexio_file):
     raise NotImplementedError
 
-def mol_from_trexio(filename,backend=trexio.TREXIO_AUTO):
+
+def mol_from_trexio(filename, backend='h5'):
     mol = gto.Mole()
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, 'r', backend=trexio.TREXIO_AUTO) as tf:
         assert trexio.read_basis_type(tf) == 'Gaussian'
         if trexio.has_ecp(tf):
             raise NotImplementedError
@@ -132,9 +133,9 @@ def mol_from_trexio(filename,backend=trexio.TREXIO_AUTO):
     mol._basis = basis
     return mol.build()
 
-def scf_from_trexio(filename, backend=trexio.TREXIO_AUTO):
+def scf_from_trexio(filename, backend='h5'):
     mol = mol_from_trexio(filename, backend)
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, 'r', backend=trexio.TREXIO_AUTO) as tf:
         mo_energy = trexio.read_mo_energy(tf)
         mo        = trexio.read_mo_coefficient(tf)
         mo_occ    = trexio.read_mo_occupation(tf)
@@ -174,9 +175,9 @@ def write_eri(eri, filename, backend='h5'):
     with trexio.File(filename, 'w', back_end=_mode(backend)) as tf:
         trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
 
-def read_eri(filename, backend=trexio.TREXIO_AUTO):
+def read_eri(filename, backend='h5'):
     '''Read ERIs in AO basis, 8-fold symmetry is assumed'''
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, 'r', backend=trexio.TREXIO_AUTO) as tf:
         nmo = trexio.read_mo_num(tf)
         nao_pair = nmo * (nmo+1) // 2
         eri_size = nao_pair * (nao_pair+1) // 2
@@ -280,7 +281,7 @@ def det_to_trexio(mcscf, norb, nelec, ci_threshold_or_filename, filename=None, b
     else:
         n_chunks = 1 
 
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf: 
+    with trexio.File(filename, 'w', back_end=_mode(backend)) as tf: 
         if trexio.has_determinant(tf):
             trexio.delete_determinant(tf)
         trexio.write_mo_num(tf, mo_num)
@@ -300,8 +301,8 @@ def det_to_trexio(mcscf, norb, nelec, ci_threshold_or_filename, filename=None, b
                 offset_file += current_chunk_size
 
 
-def read_det_trexio(filename, backend=trexio.TREXIO_AUTO):
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+def read_det_trexio(filename, backend='h5'):
+    with trexio.File(filename, 'r', backend=trexio.TREXIO_AUTO) as tf:
         offset_file = 0
 
         num_det = trexio.read_determinant_num(tf)
