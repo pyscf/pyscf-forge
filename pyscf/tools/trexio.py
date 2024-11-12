@@ -226,9 +226,9 @@ def _group_by(a, keys):
     idx = np.unique(keys, return_index=True)[1]
     return np.split(a, idx[1:])
 
-def get_occsa_and_occsb(mcscf, norb, nelec):
+def get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=1e-8):
     ci_coeff = mcscf.ci
-    num_determinants = int(np.sum(np.abs(ci_coeff) > 1e-8))
+    num_determinants = int(np.sum(np.abs(ci_coeff) > ci_threshold))
     occslst = fci.cistring.gen_occslst(range(norb), nelec // 2)
     selected_occslst = occslst[:num_determinants]
 
@@ -239,7 +239,7 @@ def get_occsa_and_occsb(mcscf, norb, nelec):
     for i in range(min(len(selected_occslst), mcscf.ci.shape[0])):
         for j in range(min(len(selected_occslst), mcscf.ci.shape[1])):
             ci_coeff = mcscf.ci[i, j]
-            if np.abs(ci_coeff) > 1e-8:  # Check if CI coefficient is significant compared to user defined value
+            if np.abs(ci_coeff) > ci_threshold:  # Check if CI coefficient is significant compared to user defined value
                 occsa.append(selected_occslst[i])
                 occsb.append(selected_occslst[j])
                 ci_values.append(ci_coeff)
@@ -252,12 +252,19 @@ def get_occsa_and_occsb(mcscf, norb, nelec):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', chunk_size=100000):  
+def det_to_trexio(mcscf, norb, nelec, ci_threshold_or_filename, filename=None, backend='h5', chunk_size=100000):
     from trexio_tools.group_tools import determinant as trexio_det
+
+    # Determine if ci_threshold is provided
+    if filename is None:
+        filename = ci_threshold_or_filename
+        ci_threshold = 1e-8  # Default value
+    else:
+        ci_threshold = ci_threshold_or_filename
 
     mo_num = norb
     int64_num = int((mo_num - 1) / 64) + 1 
-    occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec)
+    occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
 
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
