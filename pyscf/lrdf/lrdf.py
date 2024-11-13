@@ -245,10 +245,10 @@ class _VHFOpt(_vhf._VHFOpt):
 
     @property
     def direct_scf_tol(self):
-        return np.exp(self._this.direct_scf_cutoff)
+        return np.exp(self._this.direct_scf_tol)
     @direct_scf_tol.setter
     def direct_scf_tol(self, v):
-        self._this.direct_scf_cutoff = np.log(v)
+        self._this.direct_scf_tol = np.log(v)
 
     def init_cvhf_direct(self, mol, intor=None, qcondname=None):
         nbas = mol.nbas

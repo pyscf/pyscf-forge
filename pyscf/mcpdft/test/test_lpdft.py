@@ -17,7 +17,7 @@
 
 import tempfile, h5py
 import numpy as np
-from pyscf import gto, scf, fci, lib
+from pyscf import gto, scf, dft, fci, lib
 from pyscf import mcpdft
 import unittest
 
@@ -90,7 +90,9 @@ def get_water_triplet(functional='tPBE', basis="6-31G"):
 
 
 def setUpModule():
-    global lih, lih_4, lih_tpbe, lih_tpbe0, water, t_water
+    global lih, lih_4, lih_tpbe, lih_tpbe0, water, t_water, original_grids
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     lih = get_lih(1.5)
     lih_4 = get_lih(1.5, n_states=4, basis="6-31G")
     lih_tpbe = get_lih(1.5, functional="tPBE")
@@ -99,14 +101,15 @@ def setUpModule():
     t_water = get_water_triplet()
 
 def tearDownModule():
-    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water
+    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water, original_grids
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
     lih.mol.stdout.close()
     lih_4.mol.stdout.close()
     lih_tpbe0.mol.stdout.close()
     lih_tpbe.mol.stdout.close()
     water.mol.stdout.close()
     t_water.mol.stdout.close()
-    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water
+    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water, original_grids
 
 class KnownValues(unittest.TestCase):
 

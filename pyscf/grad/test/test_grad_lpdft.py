@@ -24,7 +24,7 @@
 
 import unittest
 
-from pyscf import scf, gto, df, lib
+from pyscf import scf, gto, df, dft, lib
 from pyscf import mcpdft
 
 
@@ -86,14 +86,16 @@ def diatomic(
 
 
 def setUpModule():
-    global mols
+    global mols, original_grids
     mols = []
-
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
 
 def tearDownModule():
-    global mols, diatomic
+    global mols, diatomic, original_grids
     [m.stdout.close() for m in mols]
-    del mols, diatomic
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
+    del mols, diatomic, original_grids
 
 
 class KnownValues(unittest.TestCase):
