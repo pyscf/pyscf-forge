@@ -16,7 +16,7 @@ import math
 from pyscf import lib
 from pyscf import gto
 from pyscf import scf
-from pyscf import fci 
+from pyscf import fci
 import trexio
 
 def to_trexio(obj, filename, backend='h5'):
@@ -133,7 +133,7 @@ def mol_from_trexio(filename):
     return mol.build()
 
 def scf_from_trexio(filename):
-    mol = mol_from_trexio(filename, backend)
+    mol = mol_from_trexio(filename)
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         mo_energy = trexio.read_mo_energy(tf)
         mo        = trexio.read_mo_coefficient(tf)
@@ -256,7 +256,7 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
     from trexio_tools.group_tools import determinant as trexio_det
 
     mo_num = norb
-    int64_num = int((mo_num - 1) / 64) + 1 
+    int64_num = int((mo_num - 1) / 64) + 1
     occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
 
     det_list = []
@@ -271,9 +271,9 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
     if num_determinants > chunk_size:
         n_chunks = math.ceil(num_determinants / chunk_size)
     else:
-        n_chunks = 1 
+        n_chunks = 1
 
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf: 
+    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
         if trexio.has_determinant(tf):
             trexio.delete_determinant(tf)
         trexio.write_mo_num(tf, mo_num)
@@ -281,7 +281,7 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
         trexio.write_electron_dn_num(tf, len(b))
         trexio.write_electron_num(tf, len(a) + len(b))
 
-        offset_file = 0 
+        offset_file = 0
         for i in range(n_chunks):
             start = i * chunk_size
             end = min((i + 1) * chunk_size, num_determinants)
