@@ -299,6 +299,5 @@ def read_det_trexio(filename):
         num_det = trexio.read_determinant_num(tf)
         coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
         det = trexio.read_determinant_list(tf, offset_file, num_det)
-  
         return num_det, coeff, det
 
