@@ -19,6 +19,7 @@ import pyscf
 from pyscf import lib
 from pyscf import gto
 from pyscf import scf
+from pyscf import pbc
 from pyscf import fci
 
 import trexio
@@ -49,15 +50,20 @@ def _mol_to_trexio(mol, trexio_file):
         trexio.write_nucleus_point_group(trexio_file, mol.groupname)
 
     # 2.3 Periodic boundary calculations
-    try:
-        mol.a
-        periodic = True
-        raise NotImplementedError('PBC is not supported yet.')
+    if isinstance(mol, pbc.gto.Cell):
+        # 2.3 Periodic boundary calculations (pbc group)
+        trexio.write_pbc_periodic(trexio_file, True)
         # 2.2 Cell
-
-    except AttributeError:
-        periodic = False
-        trexio.write_pbc_periodic(trexio_file, periodic)
+        Bohr = lib.param.BOHR
+        a = np.array(mol.a[0]) / Bohr  # angstrom -> bohr
+        b = np.array(mol.a[1]) / Bohr  # angstrom -> bohr
+        c = np.array(mol.a[2]) / Bohr  # angstrom -> bohr
+        trexio.write_cell_a(trexio_file, a)
+        trexio.write_cell_b(trexio_file, b)
+        trexio.write_cell_c(trexio_file, c)
+    else:
+        # 2.3 Periodic boundary calculations (pbc group)
+        trexio.write_pbc_periodic(trexio_file, False)
 
     # 2.4 Electron (electron group)
     electron_up_num, electron_dn_num = mol.nelec
@@ -200,9 +206,27 @@ def _mol_to_trexio(mol, trexio_file):
 
 
 def _scf_to_trexio(mf, trexio_file):
-    # 4.2 Molecular orbitals (mo group)
     mol = mf.mol
     _mol_to_trexio(mol, trexio_file)
+
+    # 2.3 Periodic boundary calculations (pbc group)
+    if isinstance(mol, pbc.gto.Cell):
+        try:
+            kpt = mf.kpt
+            kpt = mol.get_scaled_kpts(kpt)
+            if np.all(np.array(kpt) == 0.0):
+                # gamma point PBC. Real wavefunction
+                trexio.write_pbc_k_point_num(trexio_file, 1)
+                trexio.write_pbc_k_point(trexio_file, [kpt])
+                trexio.write_pbc_k_point_weight(trexio_file, [1.0])
+            else:
+                # general point PBC. Complex wavefunction
+                raise NotImplementedError("Complex WF is not yet implemented.")
+        except ValueError:
+            # general points PBC. Complex wavefunctions
+            raise NotImplementedError("Twisted-average is not yet implemented.")
+
+    # 4.2 Molecular orbitals (mo group)
     if isinstance(mf, scf.uhf.UHF):
         mo_energy = np.ravel(mf.mo_energy)
         mo = np.hstack(*mf.mo_coeff)
