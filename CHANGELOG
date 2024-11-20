@@ -1,7 +1,12 @@
-PySCF-Forge 1.0.2 (2024-11-11)
+PySCF-Forge 1.0.2 (2024-12-04)
 ------------------------------
 * New features
   - Parity Violating contributions to energy
+  - Particle-particle random phase approximation (ppRPA)
+* Improvments
+  - The ECP section in the TREXIO interface.
+  - The treatments of contracted basis functions in the TREXIO interface.
+  - Users can register determinant into trexio format.
 
 
 PySCF-Forge 1.0.1 (2024-10-31)
