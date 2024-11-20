@@ -19,6 +19,7 @@ def test_mol_ae_6_31g():
     assert abs(ref - s1).max() < 1e-12
 
 def test_mol_general_contraction():
+    filename = 'test_mol_general_contraction_sphe.h5'
     mol = pyscf.M(atom='C', basis='ano')
     ref = mol.intor('int1e_ovlp')
     trexio.to_trexio(mol, filename)
