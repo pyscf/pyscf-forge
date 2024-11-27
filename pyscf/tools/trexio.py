@@ -11,10 +11,16 @@ Installation instruction:
     https://github.com/TREX-CoE/trexio/blob/master/python/README.md
 '''
 
+import re
+import math
 import numpy as np
+
+import pyscf
 from pyscf import lib
 from pyscf import gto
 from pyscf import scf
+from pyscf import fci
+
 import trexio
 
 def to_trexio(obj, filename, backend='h5'):
@@ -27,15 +33,39 @@ def to_trexio(obj, filename, backend='h5'):
             raise NotImplementedError(f'Conversion function for {obj.__class__}')
 
 def _mol_to_trexio(mol, trexio_file):
-    trexio.write_nucleus_num(trexio_file, mol.natm)
+    # 1 Metadata
+    trexio.write_metadata_code_num(trexio_file, 1)
+    trexio.write_metadata_code(trexio_file, [f'PySCF-v{pyscf.__version__}'])
+    #trexio.write_metadata_package_version(trexio_file, f'TREXIO-v{trexio.__version__}')
 
+    # 2 System
+    trexio.write_nucleus_num(trexio_file, mol.natm)
+    nucleus_charge = [mol.atom_charge(i) for i in range(mol.natm)]
+    trexio.write_nucleus_charge(trexio_file, nucleus_charge)
+    trexio.write_nucleus_coord(trexio_file, mol.atom_coords())
     labels = [mol.atom_pure_symbol(i) for i in range(mol.natm)]
     trexio.write_nucleus_label(trexio_file, labels)
-    if mol._ecp:
-        raise NotImplementedError
-    trexio.write_nucleus_charge(trexio_file, mol.atom_charges())
-    trexio.write_nucleus_coord(trexio_file, mol.atom_coords())
+    if mol.symmetry:
+        trexio.write_nucleus_point_group(trexio_file, mol.groupname)
 
+    # 2.3 Periodic boundary calculations
+    try:
+        mol.a
+        periodic = True
+        raise NotImplementedError('PBC is not supported yet.')
+        # 2.2 Cell
+
+    except AttributeError:
+        periodic = False
+        trexio.write_pbc_periodic(trexio_file, periodic)
+
+    # 2.4 Electron (electron group)
+    electron_up_num, electron_dn_num = mol.nelec
+    trexio.write_electron_num(trexio_file, electron_up_num + electron_dn_num )
+    trexio.write_electron_up_num(trexio_file, electron_up_num)
+    trexio.write_electron_dn_num(trexio_file, electron_dn_num)
+
+    # 3.1 Basis set
     trexio.write_basis_type(trexio_file, 'Gaussian')
     trexio.write_basis_shell_num(trexio_file, mol.nbas)
     trexio.write_basis_prim_num(trexio_file, int(mol._bas[:,gto.NPRIM_OF].sum()))
@@ -45,22 +75,132 @@ def _mol_to_trexio(mol, trexio_file):
     prim2sh = [[ib]*nprim for ib, nprim in enumerate(mol._bas[:,gto.NPRIM_OF])]
     trexio.write_basis_shell_index(trexio_file, np.hstack(prim2sh))
     trexio.write_basis_exponent(trexio_file, np.hstack(mol.bas_exps()))
-    assert all(mol._bas[:,gto.NCTR_OF] == 1)
+    if not all(mol._bas[:,gto.NCTR_OF] == 1):
+        raise NotImplementedError('The generalized contraction is not supported.')
     coef = [mol.bas_ctr_coeff(i).ravel() for i in range(mol.nbas)]
     trexio.write_basis_coefficient(trexio_file, np.hstack(coef))
-    prim_norms = [gto.gto_norm(mol.bas_angular(i), mol.bas_exp(i))
-                  for i in range(mol.nbas)]
+    prim_norms = [gto.gto_norm(mol.bas_angular(i), mol.bas_exp(i)) for i in range(mol.nbas)]
     trexio.write_basis_prim_factor(trexio_file, np.hstack(prim_norms))
 
-    if mol.symmetry:
-        trexio.write_nucleus_point_group(trexio_file, mol.groupname)
+    # 3.2 Effective core potentials (ecp group)
+    if len(mol._pseudo) > 0:
+        raise NotImplementedError(
+            "TREXIO does not support 'pseudo' format. Please use 'ecp'"
+        )
 
+    if mol._ecp:
+        # internal format of pyscf is described in
+        # https://pyscf.org/pyscf_api_docs/pyscf.gto.html?highlight=ecp#module-pyscf.gto.ecp
+
+        ecp_num = 0
+        ecp_max_ang_mom_plus_1 = []
+        ecp_z_core = []
+        ecp_nucleus_index = []
+        ecp_ang_mom = []
+        ecp_coefficient = []
+        ecp_exponent = []
+        ecp_power = []
+
+        chemical_symbol_list = [mol.atom_pure_symbol(i) for i in range(mol.natm)]
+        atom_symbol_list = [mol.atom_symbol(i) for i in range(mol.natm)]
+
+        for nuc_index, (chemical_symbol, atom_symbol) in enumerate(
+            zip(chemical_symbol_list, atom_symbol_list)
+        ):
+            if re.match(r"X-.*", chemical_symbol) or re.match(r"X-.*", atom_symbol):
+                ecp_num += 1
+                ecp_max_ang_mom_plus_1.append(1)
+                ecp_z_core.append(0)
+                ecp_nucleus_index.append(nuc_index)
+                ecp_ang_mom.append(0)
+                ecp_coefficient.append(0.0)
+                ecp_exponent.append(1.0)
+                ecp_power.append(0)
+                continue
+
+            # atom_symbol is superior to atom_pure_symbol
+            try:
+                z_core, ecp_list = mol._ecp[atom_symbol]
+            except KeyError:
+                z_core, ecp_list = mol._ecp[chemical_symbol]
+
+            # ecp zcore
+            ecp_z_core.append(z_core)
+
+            # max_ang_mom
+            max_ang_mom = max([ecp[0] for ecp in ecp_list])
+            if max_ang_mom == -1:
+                # Special treatments are needed for H and He.
+                # PySCF database does not define the ul-s part for these elements.
+                dummy_ul_s_part = True
+                max_ang_mom = 0
+                max_ang_mom_plus_1 = 1
+            else:
+                dummy_ul_s_part = False
+                max_ang_mom_plus_1 = max_ang_mom + 1
+
+            ecp_max_ang_mom_plus_1.append(max_ang_mom_plus_1)
+
+            for ecp in ecp_list:
+                ang_mom = ecp[0]
+                if ang_mom == -1:
+                    ang_mom = max_ang_mom_plus_1
+                for r, exp_coeff_list in enumerate(ecp[1]):
+                    for exp_coeff in exp_coeff_list:
+                        exp, coeff = exp_coeff
+                        ecp_num += 1
+                        ecp_nucleus_index.append(nuc_index)
+                        ecp_ang_mom.append(ang_mom)
+                        ecp_coefficient.append(coeff)
+                        ecp_exponent.append(exp)
+                        ecp_power.append(r - 2)
+
+            if dummy_ul_s_part:
+                # A dummy ECP is put for the ul-s part here for H and He atoms.
+                ecp_num += 1
+                ecp_nucleus_index.append(nuc_index)
+                ecp_ang_mom.append(0)
+                ecp_coefficient.append(0.0)
+                ecp_exponent.append(1.0)
+                ecp_power.append(0)
+
+        trexio.write_ecp_num(trexio_file, ecp_num)
+        trexio.write_ecp_max_ang_mom_plus_1(trexio_file, ecp_max_ang_mom_plus_1)
+        trexio.write_ecp_z_core(trexio_file, ecp_z_core)
+        trexio.write_ecp_nucleus_index(trexio_file, ecp_nucleus_index)
+        trexio.write_ecp_ang_mom(trexio_file, ecp_ang_mom)
+        trexio.write_ecp_coefficient(trexio_file, ecp_coefficient)
+        trexio.write_ecp_exponent(trexio_file, ecp_exponent)
+        trexio.write_ecp_power(trexio_file, ecp_power)
+
+    # 4.1 Atomic orbitals (ao group)
     if mol.cart:
         trexio.write_ao_cartesian(trexio_file, 1)
+        ao_shell = []
+        ao_normalization = []
+        for i, ang_mom in enumerate(mol._bas[:,gto.ANG_OF]):
+            ao_shell += [i] * int((ang_mom+1) * (ang_mom+2) / 2)
+            # note: PySCF(libintc) normalizes s and p only.
+            if ang_mom == 0 or ang_mom == 1:
+                ao_normalization += [float(np.sqrt((2*ang_mom+1)/(4*np.pi)))] * int((ang_mom+1) * (ang_mom+2) / 2)
+            else:
+                ao_normalization += [1.0] * int((ang_mom+1) * (ang_mom+2) / 2)
     else:
         trexio.write_ao_cartesian(trexio_file, 0)
+        ao_shell = []
+        ao_normalization = []
+        for i, ang_mom in enumerate(mol._bas[:,gto.ANG_OF]):
+            ao_shell += [i] * (2*ang_mom+1)
+            # note: TREXIO employs the solid harmonics notation,; thus, we need these factors.
+            ao_normalization += [float(np.sqrt((2*ang_mom+1)/(4*np.pi)))] * (2*ang_mom+1)
+
+    trexio.write_ao_num(trexio_file, int(mol.nao))
+    trexio.write_ao_shell(trexio_file, ao_shell)
+    trexio.write_ao_normalization(trexio_file, ao_normalization)
+
 
 def _scf_to_trexio(mf, trexio_file):
+    # 4.2 Molecular orbitals (mo group)
     mol = mf.mol
     _mol_to_trexio(mol, trexio_file)
     if isinstance(mf, scf.uhf.UHF):
@@ -78,7 +218,6 @@ def _scf_to_trexio(mf, trexio_file):
         mo_type = 'RHF'
     trexio.write_mo_type(trexio_file, mo_type)
     idx = _order_ao_index(mf.mol)
-    trexio.write_ao_num(trexio_file, int(mol.nao))
     trexio.write_mo_num(trexio_file, mo_energy.size)
     trexio.write_mo_coefficient(trexio_file, mo[idx].T.ravel())
     trexio.write_mo_energy(trexio_file, mo_energy)
@@ -91,9 +230,9 @@ def _cc_to_trexio(cc_obj, trexio_file):
 def _mcscf_to_trexio(cas_obj, trexio_file):
     raise NotImplementedError
 
-def mol_from_trexio(filename, backend='h5'):
+def mol_from_trexio(filename):
     mol = gto.Mole()
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         assert trexio.read_basis_type(tf) == 'Gaussian'
         if trexio.has_ecp(tf):
             raise NotImplementedError
@@ -130,9 +269,9 @@ def mol_from_trexio(filename, backend='h5'):
     mol._basis = basis
     return mol.build()
 
-def scf_from_trexio(filename, backend='h5'):
-    mol = mol_from_trexio(filename, backend)
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+def scf_from_trexio(filename):
+    mol = mol_from_trexio(filename)
+    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         mo_energy = trexio.read_mo_energy(tf)
         mo        = trexio.read_mo_coefficient(tf)
         mo_occ    = trexio.read_mo_occupation(tf)
@@ -172,9 +311,9 @@ def write_eri(eri, filename, backend='h5'):
     with trexio.File(filename, 'w', back_end=_mode(backend)) as tf:
         trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
 
-def read_eri(filename, backend='h5'):
+def read_eri(filename):
     '''Read ERIs in AO basis, 8-fold symmetry is assumed'''
-    with trexio.File(filename, 'r', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         nmo = trexio.read_mo_num(tf)
         nao_pair = nmo * (nmo+1) // 2
         eri_size = nao_pair * (nao_pair+1) // 2
@@ -223,3 +362,79 @@ def _group_by(a, keys):
     assert all(keys[:-1] <= keys[1:])
     idx = np.unique(keys, return_index=True)[1]
     return np.split(a, idx[1:])
+
+def get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
+    ci_coeff = mcscf.ci
+    num_determinants = int(np.sum(np.abs(ci_coeff) > ci_threshold))
+    occslst = fci.cistring.gen_occslst(range(norb), nelec // 2)
+    selected_occslst = occslst[:num_determinants]
+
+    occsa = []
+    occsb = []
+    ci_values = []
+
+    for i in range(min(len(selected_occslst), mcscf.ci.shape[0])):
+        for j in range(min(len(selected_occslst), mcscf.ci.shape[1])):
+            ci_coeff = mcscf.ci[i, j]
+            if np.abs(ci_coeff) > ci_threshold:  # Check if CI coefficient is significant compared to user defined value
+                occsa.append(selected_occslst[i])
+                occsb.append(selected_occslst[j])
+                ci_values.append(ci_coeff)
+
+    # Sort by the absolute value of the CI coefficients in descending order
+    sorted_indices = np.argsort(-np.abs(ci_values))
+    occsa_sorted = [occsa[idx] for idx in sorted_indices]
+    occsb_sorted = [occsb[idx] for idx in sorted_indices]
+    ci_values_sorted = [ci_values[idx] for idx in sorted_indices]
+
+    return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
+
+def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., chunk_size=100000):
+    from trexio_tools.group_tools import determinant as trexio_det
+
+    mo_num = norb
+    int64_num = int((mo_num - 1) / 64) + 1
+    occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
+
+    det_list = []
+    for a, b, coeff in zip(occsa, occsb, ci_values):
+        occsa_upshifted = [orb + 1 for orb in a]
+        occsb_upshifted = [orb + 1 for orb in b]
+        det_tmp = []
+        det_tmp += trexio_det.to_determinant_list(occsa_upshifted, int64_num)
+        det_tmp += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
+        det_list.append(det_tmp)
+
+    if num_determinants > chunk_size:
+        n_chunks = math.ceil(num_determinants / chunk_size)
+    else:
+        n_chunks = 1
+
+    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        if trexio.has_determinant(tf):
+            trexio.delete_determinant(tf)
+        trexio.write_mo_num(tf, mo_num)
+        trexio.write_electron_up_num(tf, len(a))
+        trexio.write_electron_dn_num(tf, len(b))
+        trexio.write_electron_num(tf, len(a) + len(b))
+
+        offset_file = 0
+        for i in range(n_chunks):
+            start = i * chunk_size
+            end = min((i + 1) * chunk_size, num_determinants)
+            current_chunk_size = end - start
+
+            if current_chunk_size > 0:
+                trexio.write_determinant_list(tf, offset_file, current_chunk_size, det_list[start:end])
+                trexio.write_determinant_coefficient(tf, offset_file, current_chunk_size, ci_values[start:end])
+                offset_file += current_chunk_size
+
+def read_det_trexio(filename):
+    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
+        offset_file = 0
+
+        num_det = trexio.read_determinant_num(tf)
+        coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
+        det = trexio.read_determinant_list(tf, offset_file, num_det)
+        return num_det, coeff, det
+

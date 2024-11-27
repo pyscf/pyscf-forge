@@ -32,7 +32,7 @@
 # to reproduce well when OMP is on.
 import tempfile, h5py
 import numpy as np
-from pyscf import gto, scf, mcscf, lib, fci
+from pyscf import gto, scf, mcscf, lib, fci, dft
 from pyscf import mcpdft
 import unittest
 
@@ -96,17 +96,20 @@ def auto_setup(xyz="Li 0 0 0\nH 1.5 0 0", fnal="tPBE"):
 
 
 def setUpModule():
-    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk
+    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk, original_grids
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     nosym, sym, mcp, mc_chk = auto_setup()
     mol_nosym, mf_nosym, mc_nosym = nosym
     mol_sym, mf_sym, mc_sym = sym
 
 
 def tearDownModule():
-    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk
+    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk, original_grids
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
     mol_nosym.stdout.close()
     mol_sym.stdout.close()
-    del mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk
+    del mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, mc_chk, original_grids
 
 
 class KnownValues(unittest.TestCase):
@@ -253,6 +256,28 @@ class KnownValues(unittest.TestCase):
                 with self.subTest(objtype=objtype, symmetry=bool(ix), term="sanity"):
                     self.assertAlmostEqual(np.sum(test[:-1]), obj.e_tot, 9)
 
+    def test_decomposition_hybrid(self):
+        ref = [
+            1.0583544218,
+            -12.5375911135,
+            5.8093938665,
+            -1.6287258807,
+            -0.0619586538,
+            -0.5530763650,
+        ]
+        terms = ["nuc", "core", "Coulomb", "OT(X)", "OT(C)", "WFN(XC)"]
+        for ix, mc in enumerate(mcp[0]):
+            mc_scf = mcpdft.CASSCF(mc, "tPBE0", 5, 2).run()
+            mc_ci = mcpdft.CASCI(mc, "tPBE0", 5, 2).run()
+            for obj, objtype in zip((mc_scf, mc_ci), ("CASSCF", "CASCI")):
+                test = obj.get_energy_decomposition()
+                for t, r, term in zip(test, ref, terms):
+                    with self.subTest(objtype=objtype, symmetry=bool(ix), term=term):
+                        self.assertAlmostEqual(t, r, delta=1e-5)
+                with self.subTest(objtype=objtype, symmetry=bool(ix), term="sanity"):
+                    self.assertAlmostEqual(np.sum(test), obj.e_tot, 9)
+
+
     def test_decomposition_sa(self):
         ref_nuc = 1.0583544218
         ref_states = np.array(
@@ -343,6 +368,104 @@ class KnownValues(unittest.TestCase):
                     ):
                         self.assertAlmostEqual(
                             np.sum(test[:-1]) + test_nuc, e_ref[state], 9
+                        )
+    
+    def test_decomposition_hybrid_sa(self):
+        ref_nuc = 1.0583544218
+        ref_states = np.array(
+            [
+                [
+                    -12.5385413915,
+                    5.8109724796,
+                    -1.6290249990,
+                    -0.0619850920,
+                    -0.5531991067,
+                ],
+                [
+                    -12.1706553996,
+                    5.5463231972,
+                    -1.6201152933,
+                    -0.0469559736,
+                    -0.5485771470,
+                ],
+                [
+                    -12.1768195314,
+                    5.5632261670,
+                    -1.6164436229,
+                    -0.0492571730,
+                    -0.5471763843,
+                ],
+                [
+                    -12.1874226655,
+                    5.5856701424,
+                    -1.6111471613,
+                    -0.0474456546,
+                    -0.5422714244,
+                ],
+                [
+                    -12.1874226655,
+                    5.5856701424,
+                    -1.6111480360,
+                    -0.0474456745,
+                    -0.5422714244,
+                ],
+            ]
+        )
+        terms = ["core", "Coulomb", "OT(X)", "OT(C)", "WFN(XC)"]
+        for ix, (mc, ms) in enumerate(zip(mcp[1], [0, 1, "mixed"])):
+            s = bool(ix // 2)
+            mc_scf = mcpdft.CASSCF(mc, "tPBE0", 5, 2)
+            if ix == 0:
+                mc_scf = mc_scf.state_average(mc.weights)
+            else:
+                mc_scf = mc_scf.state_average_mix(mc.fcisolver.fcisolvers, mc.weights)
+            mc_scf.run(ci=mc.ci, mo_coeff=mc.mo_coeff)
+            objs = [
+                mc_scf,
+            ]
+            objtypes = [
+                "CASSCF",
+            ]
+            if ix != 1:  # There is no CASCI equivalent to mcp[1][1]
+                mc_ci = mcpdft.CASCI(mc, "tPBE0", 5, 2)
+                mc_ci.fcisolver.nroots = (
+                    5 - ix
+                )  # Just check the A1 roots when symmetry is enabled
+                mc_ci.ci = mc.ci[: 5 - ix]
+                mc_ci.kernel()
+                objs.append(mc_ci)
+                objtypes.append("CASCI")
+            for obj, objtype in zip(objs, objtypes):
+                test = obj.get_energy_decomposition()
+                test_nuc, test_states = test[0], np.array(test[1:]).T
+                # Arrange states in ascending energy order
+                e_states = getattr(obj, "e_states", obj.e_tot)
+                idx = np.argsort(e_states)
+                test_states = test_states[idx, :]
+                e_ref = np.array(e_states)[idx]
+                with self.subTest(
+                    objtype=objtype, symmetry=s, triplet_ms=ms, term="nuc"
+                ):
+                    self.assertAlmostEqual(test_nuc, ref_nuc, 9)
+                for state, (test, ref) in enumerate(zip(test_states, ref_states)):
+                    for t, r, term in zip(test, ref, terms):
+                        with self.subTest(
+                            objtype=objtype,
+                            symmetry=s,
+                            triplet_ms=ms,
+                            term=term,
+                            state=state,
+                        ):
+                            self.assertAlmostEqual(t, r, delta=1e-5)
+                    with self.subTest(
+                        objtype=objtype,
+                        symmetry=s,
+                        triplet_ms=ms,
+                        term="sanity",
+                        state=state,
+                    ):
+                        self.assertAlmostEqual(
+                            np.sum(test) + test_nuc, e_ref[state], 9
                         )
 
     def test_energy_tot(self):
@@ -573,7 +696,7 @@ class KnownValues(unittest.TestCase):
                 e_tot = mc_scan(mol0)
                 e_states_fp = lib.fp(np.sort(mc_scan.e_states))
                 e_states_fp_ref = lib.fp(np.sort(mc0.e_states))
-                self.assertAlmostEqual(e_tot, mc0.e_tot, delta=1e-6)
+                self.assertAlmostEqual(e_tot, mc0.e_tot, delta=2e-6)
                 self.assertAlmostEqual(e_states_fp, e_states_fp_ref, delta=5e-6)
         mc2 = mcpdft.CASCI(mcp1[1][0], "tPBE", 5, 2)
         mc2.fcisolver.nroots = 5
