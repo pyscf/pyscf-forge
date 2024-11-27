@@ -15,18 +15,23 @@
  *
  * Authors: Qiming Sun <osirpt.sun@gmail.com>
  *          Susi Lehtola <susi.lehtola@gmail.com>
+ *          Xing Zhang <zhangxing.nju@gmail.com>
  *
  * libxc from
  * http://www.tddft.org/programs/octopus/wiki/index.php/Libxc:manual
  *
- * This file is adapted from `lib/dft/libxc_itrf.c` of the PySCF core module.
+ * This file is adapted from `lib/dft/libxc_itrf.c` of the PySCF core module
+ * commit 25eaa9572977b903de24d5c11ad345cecd744728
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <xc.h>
+#include "config.h"
 #define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
+#define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
+#define MAX_THREADS     256
 
 // TODO: register python signal
 #define raise_error     return
@@ -85,13 +90,14 @@
  * In spin restricted case (spin == 1), rho_u is assumed to be the
  * spin-free quantities, rho_d is not used.
  */
-static void _eval_rho(double *rho, double *rho_u, int spin, int nvar, int np)
+static void _eval_rho(double *restrict rho, double *restrict rho_u, const int spin,
+        const int nvar, const int np, int ld_rho_u)
 {
         int i;
         double *sigma, *tau;
         double *gxu, *gyu, *gzu, *gxd, *gyd, *gzd;
         double *tau_u, *tau_d;
-        double *rho_d = rho_u + np * nvar;
+        double *rho_d = rho_u + ld_rho_u * nvar;
 
         switch (nvar) {
         case LDA_NVAR:
@@ -109,12 +115,12 @@ static void _eval_rho(double *rho, double *rho_u, int spin, int nvar, int np)
         case GGA_NVAR:
                 if (spin == 1) {
                         sigma = rho + np * 2;
-                        gxu = rho_u + np;
-                        gyu = rho_u + np * 2;
-                        gzu = rho_u + np * 3;
-                        gxd = rho_d + np;
-                        gyd = rho_d + np * 2;
-                        gzd = rho_d + np * 3;
+                        gxu = rho_u + ld_rho_u;
+                        gyu = rho_u + ld_rho_u * 2;
+                        gzu = rho_u + ld_rho_u * 3;
+                        gxd = rho_d + ld_rho_u;
+                        gyd = rho_d + ld_rho_u * 2;
+                        gzd = rho_d + ld_rho_u * 3;
                         for (i = 0; i < np; i++) {
                                 rho[i*2+0] = rho_u[i];
                                 rho[i*2+1] = rho_d[i];
@@ -124,9 +130,9 @@ static void _eval_rho(double *rho, double *rho_u, int spin, int nvar, int np)
                         }
                 } else {
                         sigma = rho + np;
-                        gxu = rho_u + np;
-                        gyu = rho_u + np * 2;
-                        gzu = rho_u + np * 3;
+                        gxu = rho_u + ld_rho_u;
+                        gyu = rho_u + ld_rho_u * 2;
+                        gzu = rho_u + ld_rho_u * 3;
                         for (i = 0; i < np; i++) {
                                 rho[i] = rho_u[i];
                                 sigma[i] = gxu[i]*gxu[i] + gyu[i]*gyu[i] + gzu[i]*gzu[i];
@@ -137,14 +143,14 @@ static void _eval_rho(double *rho, double *rho_u, int spin, int nvar, int np)
                 if (spin == 1) {
                         sigma = rho + np * 2;
                         tau = sigma + np * 3;
-                        gxu = rho_u + np;
-                        gyu = rho_u + np * 2;
-                        gzu = rho_u + np * 3;
-                        gxd = rho_d + np;
-                        gyd = rho_d + np * 2;
-                        gzd = rho_d + np * 3;
-                        tau_u  = rho_u + np * 4;
-                        tau_d  = rho_d + np * 4;
+                        gxu = rho_u + ld_rho_u;
+                        gyu = rho_u + ld_rho_u * 2;
+                        gzu = rho_u + ld_rho_u * 3;
+                        gxd = rho_d + ld_rho_u;
+                        gyd = rho_d + ld_rho_u * 2;
+                        gzd = rho_d + ld_rho_u * 3;
+                        tau_u  = rho_u + ld_rho_u * 4;
+                        tau_d  = rho_d + ld_rho_u * 4;
                         for (i = 0; i < np; i++) {
                                 rho[i*2+0] = rho_u[i];
                                 rho[i*2+1] = rho_d[i];
@@ -159,10 +165,10 @@ static void _eval_rho(double *rho, double *rho_u, int spin, int nvar, int np)
                 } else {
                         sigma = rho + np;
                         tau  = sigma + np;
-                        gxu = rho_u + np;
-                        gyu = rho_u + np * 2;
-                        gzu = rho_u + np * 3;
-                        tau_u = rho_u + np * 4;
+                        gxu = rho_u + ld_rho_u;
+                        gyu = rho_u + ld_rho_u * 2;
+                        gzu = rho_u + ld_rho_u * 3;
+                        tau_u = rho_u + ld_rho_u * 4;
                         for (i = 0; i < np; i++) {
                                 rho[i] = rho_u[i];
                                 sigma[i] = gxu[i]*gxu[i] + gyu[i]*gyu[i] + gzu[i]*gzu[i];
@@ -172,8 +178,8 @@ static void _eval_rho(double *rho, double *rho_u, int spin, int nvar, int np)
                 break;
         }
 }
-static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
-                     double *rho, double *exc)
+static void _eval_xc(const xc_func_type *func_x, const int spin, const int deriv, const int np,
+                     double *restrict rho, double *restrict exc, const int offset, const int blksize)
 {
         double *sigma, *tau;
         double *lapl = rho;
@@ -268,6 +274,21 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
                         if (deriv > 3) {
                                 v4rho4 = v3rho3 + np * 4;
                         }
+
+                        // set offset
+                        exc += offset;
+                        if (deriv > 0) {
+                                vrho += offset * 2;
+                        }
+                        if (deriv > 1) {
+                                v2rho2 += offset * 3;
+                        }
+                        if (deriv > 2) {
+                                v3rho3 += offset * 4;
+                        }
+                        if (deriv > 3) {
+                                v4rho4 += offset * 5;
+                        }
                 } else {
                         if (deriv > 0) {
                                 vrho = exc + np;
@@ -281,15 +302,30 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
                         if (deriv > 3) {
                                 v4rho4 = v3rho3 + np;
                         }
+
+                        // set offset
+                        exc += offset;
+                        if (deriv > 0) {
+                                vrho += offset;
+                        }
+                        if (deriv > 1) {
+                                v2rho2 += offset;
+                        }
+                        if (deriv > 2) {
+                                v3rho3 += offset;
+                        }
+                        if (deriv > 3) {
+                                v4rho4 += offset;
+                        }
                 }
-                xc_lda(func_x, np, rho, exc, vrho, v2rho2, v3rho3, v4rho4);
+                xc_lda(func_x, blksize, rho, exc, vrho, v2rho2, v3rho3, v4rho4);
                 break;
         case XC_FAMILY_GGA:
 #ifdef XC_FAMILY_HYB_GGA
         case XC_FAMILY_HYB_GGA:
 #endif
                 if (spin == 1) {
-                        sigma = rho + np * 2;
+                        sigma = rho + blksize * 2;
                         if (deriv > 0) {
                                 vrho = exc + np;
                                 vsigma = vrho + np * 2;
@@ -312,8 +348,33 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
                                 v4rhosigma3  = v4rho2sigma2 + np * 3*6 ;
                                 v4sigma4     = v4rhosigma3  + np * 2*10;
                         }
+
+                        // set offset
+                        exc += offset;
+                        if (deriv > 0) {
+                                vrho += offset * 2;
+                                vsigma += offset * 3;
+                        }
+                        if (deriv > 1) {
+                                v2rho2 += offset * 3;
+                                v2rhosigma += offset * 6;
+                                v2sigma2 += offset * 6;
+                        }
+                        if (deriv > 2) {
+                                v3rho3 += offset * 4;
+                                v3rho2sigma += offset * 9;
+                                v3rhosigma2 += offset * 12;
+                                v3sigma3 += offset * 10;
+                        }
+                        if (deriv > 3) {
+                                v4rho4 += offset * 5;
+                                v4rho3sigma += offset * 4*3;
+                                v4rho2sigma2 += offset * 3*6;
+                                v4rhosigma3 += offset * 2*10;
+                                v4sigma4 += offset * 15;
+                        }
                 } else {
-                        sigma = rho + np;
+                        sigma = rho + blksize;
                         if (deriv > 0) {
                                 vrho = exc + np;
                                 vsigma = vrho + np;
@@ -336,8 +397,33 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
                                 v4rhosigma3  = v4rho2sigma2 + np;
                                 v4sigma4     = v4rhosigma3  + np;
                         }
+
+                        // set offset
+                        exc += offset;
+                        if (deriv > 0) {
+                                vrho += offset;
+                                vsigma += offset;
+                        }
+                        if (deriv > 1) {
+                                v2rho2 += offset;
+                                v2rhosigma += offset;
+                                v2sigma2 += offset;
+                        }
+                        if (deriv > 2) {
+                                v3rho3 += offset;
+                                v3rho2sigma += offset;
+                                v3rhosigma2 += offset;
+                                v3sigma3 += offset;
+                        }
+                        if (deriv > 3) {
+                                v4rho4 += offset;
+                                v4rho3sigma += offset;
+                                v4rho2sigma2 += offset;
+                                v4rhosigma3 += offset;
+                                v4sigma4 += offset;
+                        }
                 }
-                xc_gga(func_x, np, rho, sigma,
+                xc_gga(func_x, blksize, rho, sigma,
                        exc, vrho, vsigma,
                        v2rho2, v2rhosigma, v2sigma2,
                        v3rho3, v3rho2sigma, v3rhosigma2, v3sigma3,
@@ -348,8 +434,8 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
         case XC_FAMILY_HYB_MGGA:
 #endif
                 if (spin == 1) {
-                        sigma = rho + np * 2;
-                        tau = sigma + np * 3;
+                        sigma = rho + blksize * 2;
+                        tau = sigma + blksize * 3;
                         if (deriv > 0) {
                                 vrho = exc + np;
                                 vsigma = vrho + np * 2;
@@ -392,9 +478,54 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
                                 v4sigmatau3    = v4sigma2tau2   + np * 6*3  ;
                                 v4tau4         = v4sigmatau3    + np * 3*4  ;
                         }
+
+                        // set offset
+                        exc += offset;
+                        if (deriv > 0) {
+                                vrho   += offset * 2;
+                                vsigma += offset * 3;
+                                vtau   += offset * 2;
+                        }
+                        if (deriv > 1) {
+                                v2rho2      += offset * 3;
+                                v2rhosigma  += offset * 6;
+                                v2sigma2    += offset * 6;
+                                v2rhotau    += offset * 4;
+                                v2sigmatau  += offset * 6;
+                                v2tau2      += offset * 3;
+                        }
+                        if (deriv > 2) {
+                                v3rho3         += offset * 4 ;
+                                v3rho2sigma    += offset * 9 ;
+                                v3rhosigma2    += offset * 12;
+                                v3sigma3       += offset * 10;
+                                v3rho2tau      += offset * 6 ;
+                                v3rhosigmatau  += offset * 12;
+                                v3rhotau2      += offset * 6 ;
+                                v3sigma2tau    += offset * 12;
+                                v3sigmatau2    += offset * 9 ;
+                                v3tau3         += offset * 4 ;
+                        }
+                        if (deriv > 3) {
+                                v4rho4         += offset * 5    ;
+                                v4rho3sigma    += offset * 4*3  ;
+                                v4rho2sigma2   += offset * 3*6  ;
+                                v4rhosigma3    += offset * 2*10 ;
+                                v4sigma4       += offset * 15   ;
+                                v4rho3tau      += offset * 4*2  ;
+                                v4rho2sigmatau += offset * 3*3*2;
+                                v4rho2tau2     += offset * 3*3  ;
+                                v4rhosigma2tau += offset * 2*6*2;
+                                v4rhosigmatau2 += offset * 2*3*3;
+                                v4rhotau3      += offset * 2*4  ;
+                                v4sigma3tau    += offset * 10*2 ;
+                                v4sigma2tau2   += offset * 6*3  ;
+                                v4sigmatau3    += offset * 3*4  ;
+                                v4tau4         += offset * 5    ;
+                        }
                 } else {
-                        sigma = rho + np;
-                        tau = sigma + np;
+                        sigma = rho + blksize;
+                        tau = sigma + blksize;
                         if (deriv > 0) {
                                 vrho = exc + np;
                                 vsigma = vrho + np;
@@ -437,8 +568,53 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
                                 v4sigmatau3    = v4sigma2tau2   + np;
                                 v4tau4         = v4sigmatau3    + np;
                         }
+
+                        // set offset
+                        exc += offset;
+                        if (deriv > 0) {
+                                vrho   += offset;
+                                vsigma += offset;
+                                vtau   += offset;
+                        }
+                        if (deriv > 1) {
+                                v2rho2      += offset;
+                                v2rhosigma  += offset;
+                                v2sigma2    += offset;
+                                v2rhotau    += offset;
+                                v2sigmatau  += offset;
+                                v2tau2      += offset;
+                        }
+                        if (deriv > 2) {
+                                v3rho3         += offset;
+                                v3rho2sigma    += offset;
+                                v3rhosigma2    += offset;
+                                v3sigma3       += offset;
+                                v3rho2tau      += offset;
+                                v3rhosigmatau  += offset;
+                                v3rhotau2      += offset;
+                                v3sigma2tau    += offset;
+                                v3sigmatau2    += offset;
+                                v3tau3         += offset;
+                        }
+                        if (deriv > 3) {
+                                v4rho4         += offset;
+                                v4rho3sigma    += offset;
+                                v4rho2sigma2   += offset;
+                                v4rhosigma3    += offset;
+                                v4sigma4       += offset;
+                                v4rho3tau      += offset;
+                                v4rho2sigmatau += offset;
+                                v4rho2tau2     += offset;
+                                v4rhosigma2tau += offset;
+                                v4rhosigmatau2 += offset;
+                                v4rhotau3      += offset;
+                                v4sigma3tau    += offset;
+                                v4sigma2tau2   += offset;
+                                v4sigmatau3    += offset;
+                                v4tau4         += offset;
+                        }
                 }
-                xc_mgga(func_x, np, rho, sigma, lapl, tau,
+                xc_mgga(func_x, blksize, rho, sigma, lapl, tau,
                      exc, vrho, vsigma, vlapl, vtau,
                      v2rho2, v2rhosigma, v2rholapl, v2rhotau, v2sigma2,
                      v2sigmalapl, v2sigmatau, v2lapl2, v2lapltau, v2tau2,
@@ -464,37 +640,242 @@ static void _eval_xc(xc_func_type *func_x, int spin, int deriv, int np,
         }
 }
 
-static int xc_nvar1_offsets[] = {0, 1, 2, 3, 4, 5};
-static int xc_nvar2_offsets[] = {0, 1, 3, 6, 10, 15};
-static int xc_nvar3_offsets[] = {0, 1, 4, 10, 20, 35};
-static int xc_nvar5_offsets[] = {0, 1, 6, 21, 56, 126};
-static int xc_nvar7_offsets[] = {0, 1, 8, 36, 120, 330};
+int LIBXC_is_lda(const xc_func_type *func)
+{
+        int lda;
+        switch(func->info->family)
+        {
+                case XC_FAMILY_LDA:
+#ifdef XC_FAMILY_HYB_LDA
+                case XC_FAMILY_HYB_LDA:
+#endif
+                        lda = 1;
+                        break;
+                default:
+                        lda = 0;
+        }
 
-static void axpy(double *dst, double *src, double fac,
-                 int np, int nsrc)
+        return lda;
+}
+
+int LIBXC_is_gga(const xc_func_type *func)
+{
+        int gga;
+        switch(func->info->family)
+        {
+                case XC_FAMILY_GGA:
+#ifdef XC_FAMILY_HYB_GGA
+                case XC_FAMILY_HYB_GGA:
+#endif
+                        gga = 1;
+                        break;
+                default:
+                        gga = 0;
+        }
+
+        return gga;
+}
+
+int LIBXC_is_meta_gga(const xc_func_type *func)
+{
+        int mgga;
+        switch(func->info->family)
+        {
+                case XC_FAMILY_MGGA:
+#ifdef XC_FAMILY_HYB_MGGA
+                case XC_FAMILY_HYB_MGGA:
+#endif
+                        mgga = 1;
+                        break;
+                default:
+                        mgga = 0;
+        }
+
+        return mgga;
+}
+
+int LIBXC_needs_laplacian(const int nfunc, const xc_func_type *func)
+{
+        int i;
+        for (i = 0; i < nfunc; i++) {
+                if (func[i].info->flags & XC_FLAGS_NEEDS_LAPLACIAN) {
+                        return 1;
+                }
+        }
+        return 0;
+}
+
+int LIBXC_is_hybrid(const xc_func_type *func)
+{
+        int hyb;
+
+#if XC_MAJOR_VERSION <= 6
+        switch(func->info->family)
+        {
+#ifdef XC_FAMILY_HYB_LDA
+                case XC_FAMILY_HYB_LDA:
+#endif
+                case XC_FAMILY_HYB_GGA:
+                case XC_FAMILY_HYB_MGGA:
+                        hyb = 1;
+                        break;
+                default:
+                        hyb = 0;
+        }
+#else
+        hyb = (xc_hyb_type(func) == XC_HYB_HYBRID);
+#endif
+
+        return hyb;
+}
+
+double LIBXC_hybrid_coeff(const xc_func_type *func)
+{
+        double factor;
+
+#if XC_MAJOR_VERSION <= 6
+        switch(func->info->family)
+        {
+#ifdef XC_FAMILY_HYB_LDA
+                case XC_FAMILY_HYB_LDA:
+#endif
+                case XC_FAMILY_HYB_GGA:
+                case XC_FAMILY_HYB_MGGA:
+                        factor = xc_hyb_exx_coef(func);
+                        break;
+                default:
+                        factor = 0;
+        }
+
+#else
+        if(xc_hyb_type(func) == XC_HYB_HYBRID)
+                factor = xc_hyb_exx_coef(func);
+        else
+                factor = 0.0;
+#endif
+
+        return factor;
+}
+
+void LIBXC_nlc_coeff(const xc_func_type *func, double *nlc_pars) {
+
+        XC(nlc_coef)(func, &nlc_pars[0], &nlc_pars[1]);
+}
+
+void LIBXC_rsh_coeff(const xc_func_type *func, double *rsh_pars) {
+
+        rsh_pars[0] = 0.0;
+        rsh_pars[1] = 0.0;
+        rsh_pars[2] = 0.0;
+
+#if XC_MAJOR_VERSION <= 6
+        XC(hyb_cam_coef)(func, &rsh_pars[0], &rsh_pars[1], &rsh_pars[2]);
+#else
+        switch(xc_hyb_type(func)) {
+        case(XC_HYB_HYBRID):
+        case(XC_HYB_CAM):
+                XC(hyb_cam_coef)(func, &rsh_pars[0], &rsh_pars[1], &rsh_pars[2]);
+        }
+#endif
+}
+
+int LIBXC_is_cam_rsh(const xc_func_type *func) {
+#if XC_MAJOR_VERSION <= 6
+        return func->info->flags & XC_FLAGS_HYB_CAM;
+#else
+        return (xc_hyb_type(func) == XC_HYB_CAM);
+#endif
+}
+
+/*
+ * XC_FAMILY_LDA           1
+ * XC_FAMILY_GGA           2
+ * XC_FAMILY_MGGA          4
+ * XC_FAMILY_LCA           8
+ * XC_FAMILY_OEP          16
+ * XC_FAMILY_HYB_GGA      32
+ * XC_FAMILY_HYB_MGGA     64
+ * XC_FAMILY_HYB_LDA     128
+ */
+int LIBXC_xc_type(const int nfunc, const xc_func_type *func)
+{
+        int i;
+        int type = -1;
+        for (i = 0; i < nfunc; i++) {
+                int t;
+                switch(func[i].info->family)
+                {
+                        case XC_FAMILY_LDA:
+#ifdef XC_FAMILY_HYB_LDA
+                        case XC_FAMILY_HYB_LDA:
+#endif
+                                t = 0;
+                                break;
+                        case XC_FAMILY_GGA:
+#ifdef XC_FAMILY_HYB_GGA
+                        case XC_FAMILY_HYB_GGA:
+#endif
+                                t = 1;
+                                break;
+                        case XC_FAMILY_MGGA:
+#ifdef XC_FAMILY_HYB_MGGA
+                        case XC_FAMILY_HYB_MGGA:
+#endif
+                                t = 2;
+                                break;
+                        default:
+                                return -1;
+                }
+                type = MAX(t, type);
+        }
+        return type;
+}
+
+//static int xc_output_length(int nvar, int deriv)
+//{
+//        int i;
+//        int len = 1;
+//        for (i = 1; i <= nvar; i++) {
+//                len *= deriv + i;
+//                len /= i;
+//        }
+//        return len;
+//}
+// offsets = [xc_output_length(nvar, i) for i in range(deriv+1)
+//            for nvar in [1,2,3,5,7]]
+static const int xc_nvar1_offsets[] = {0, 1, 2, 3, 4, 5};
+static const int xc_nvar2_offsets[] = {0, 1, 3, 6, 10, 15};
+static const int xc_nvar3_offsets[] = {0, 1, 4, 10, 20, 35};
+static const int xc_nvar5_offsets[] = {0, 1, 6, 21, 56, 126};
+static const int xc_nvar7_offsets[] = {0, 1, 8, 36, 120, 330};
+
+static void axpy(double *restrict dst, double *restrict src, const double fac,
+                 const int np, const int nsrc)
 {
         int i, j;
         for (j = 0; j < nsrc; j++) {
+                #pragma omp parallel for schedule(static)
                 for (i = 0; i < np; i++) {
                         dst[j*np+i] += fac * src[i*nsrc+j];
                 }
         }
 }
-static int vseg1[] = {2, 3, 2};
-static int fseg1[] = {3, 6, 6, 4, 6, 3};
-static int kseg1[] = {4, 9, 12, 10, 6, 12, 6, 12, 9, 4};
-static int lseg1[] = {5, 12, 18, 20, 15, 8, 18, 9, 24, 18, 8, 20, 18, 12, 5};
-static int *seg1[] = {NULL, vseg1, fseg1, kseg1, lseg1};
+static const int vseg1[] = {2, 3, 2};
+static const int fseg1[] = {3, 6, 6, 4, 6, 3};
+static const int kseg1[] = {4, 9, 12, 10, 6, 12, 6, 12, 9, 4};
+static const int lseg1[] = {5, 12, 18, 20, 15, 8, 18, 9, 24, 18, 8, 20, 18, 12, 5};
+static const int *seg1[] = {NULL, vseg1, fseg1, kseg1, lseg1};
 
-static void merge_xc(double *dst, double *ebuf, double fac,
-                     int spin, int deriv, int nvar, int np, int outlen, int type)
+static void merge_xc(double *restrict dst, double *restrict ebuf, const double fac,
+                     const int spin, const int deriv, const int nvar, const int np,
+                     const int outlen, const int type)
 {
         int order, nsrc, i;
         for (i = 0; i < np; i++) {
                 dst[i] += fac * ebuf[i];
         }
 
-        int *offsets0, *offsets1;
+        const int *offsets0, *offsets1;
         double *pout, *pin;
         switch (type) {
         case XC_FAMILY_GGA:
@@ -530,6 +911,7 @@ static void merge_xc(double *dst, double *ebuf, double fac,
                         pout = dst + offsets1[order] * np;
                         pin = ebuf + offsets0[order] * np;
                         nsrc = offsets0[order+1] - offsets0[order];
+                        #pragma omp parallel for schedule(static)
                         for (i = 0; i < np * nsrc; i++) {
                                 pout[i] += fac * pin[i];
                         }
@@ -550,7 +932,7 @@ static void merge_xc(double *dst, double *ebuf, double fac,
         }
 
         int terms;
-        int *pseg1;
+        const int *pseg1;
         pin = ebuf + np;
         for (order = 1; order <= deriv; order++) {
                 pseg1 = seg1[order];
@@ -566,15 +948,131 @@ static void merge_xc(double *dst, double *ebuf, double fac,
 }
 
 // omega is the range separation parameter mu in xcfun
-void LIBXC_eval_xc(int nfn, xc_func_type *fn_obj, double *fac, double *omega,
-                   int spin, int deriv, int nvar, int np, int outlen,
-                   double *rho_u, double *output, double dens_threshold)
+void LIBXC_eval_xc(const int nfn, xc_func_type *fn_obj, const double *fac, const int spin,
+                   const int deriv, const int nvar, const int np, const int outlen,
+                   double *restrict rho_u, double *restrict output)
 {
         assert(deriv <= 4);
         double *ebuf = malloc(sizeof(double) * np * outlen);
-        double *rho = malloc(sizeof(double) * np * 7);
-        _eval_rho(rho, rho_u, spin, nvar, np);
 
+        double *rhobufs[MAX_THREADS];
+        int offsets[MAX_THREADS+1];
+#pragma omp parallel
+{
+        const int iblk = omp_get_thread_num();
+        const int nblk = omp_get_num_threads();
+        assert(nblk <= MAX_THREADS);
+
+        int blksize = np / nblk;
+        int ioff = iblk * blksize;
+        const int np_mod = np % nblk;
+        if (iblk < np_mod) {
+            blksize += 1;
+        }
+        if (np_mod > 0) {
+            ioff += MIN(iblk, np_mod);
+        }
+        offsets[iblk] = ioff;
+        if (iblk == nblk-1) {
+            offsets[nblk] = np;
+            assert(ioff + blksize == np);
+        }
+
+        double *rho_priv = malloc(sizeof(double) * blksize * 7);
+        rhobufs[iblk] = rho_priv;
+        _eval_rho(rho_priv, rho_u+ioff, spin, nvar, blksize, np);
+}
+
+        int i;
+        xc_func_type *func = fn_obj;
+        for (i = 0; i < nfn; i++) {
+#pragma omp parallel
+{
+                const int iblk = omp_get_thread_num();
+                const int offset = offsets[iblk];
+                const int blksize = offsets[iblk+1] - offset;
+                _eval_xc(func, spin, deriv, np, rhobufs[iblk], ebuf, offset, blksize);
+}
+
+                merge_xc(output, ebuf, fac[i],
+                         spin, deriv, nvar, np, outlen, func->info->family);
+                ++func;
+        }
+        free(ebuf);
+#pragma omp parallel
+{
+        const int iblk = omp_get_thread_num();
+        free(rhobufs[iblk]);
+}
+}
+
+int LIBXC_max_deriv_order(const int nfunc, const xc_func_type *func)
+{
+        int ord = 4;
+        int i, o;
+        const int DERIV_FLAGS_TABLE[] = {
+                XC_FLAGS_HAVE_EXC, /* order 0 */
+                XC_FLAGS_HAVE_VXC, /* order 1 */
+                XC_FLAGS_HAVE_FXC, /* order 2 */
+                XC_FLAGS_HAVE_KXC, /* order 3 */
+                XC_FLAGS_HAVE_LXC  /* order 4 */
+        };
+
+        for (i = 0; i < nfunc; i++) {
+                /* find the minimum order of all functionals */
+                const int flag = func[i].info->flags;
+                for (o = ord; o > 0; o--) {
+                        if (flag & DERIV_FLAGS_TABLE[o]) {
+                                ord = o;
+                                break;
+                        }
+                }
+                if (o == -1) return -1;
+        }
+
+        return ord;
+}
+
+void LIBXC_xc_reference(const int nfn, const xc_func_type *func, const char **refs)
+{
+        int i, f;
+        int ref_count = 0;
+        const char **current_ref = refs;
+        for (f = 0; f < nfn; f++) {
+                for (i = 0; ref_count < XC_MAX_REFERENCES * nfn - 1; i++) {
+                        if (func[f].info->refs[i] == NULL || func[f].info->refs[i]->ref == NULL) {
+                                break;
+                        }
+                        *current_ref++ = func[f].info->refs[i]->ref;
+                        ref_count++;
+                }
+        }
+        *current_ref = NULL;
+}
+
+int LIBXC_is_nlc(const int nfunc, const xc_func_type *func)
+{
+        int i;
+        for (i = 0; i < nfunc; i++) {
+                if (func[i].info->flags & XC_FLAGS_VV10) {
+                        return 1;
+                }
+        }
+        return 0;
+}
+
+void LIBXC_xc_func_end(const int nfn, xc_func_type *func)
+{
+        int i;
+        for (i = 0; i < nfn; i++) {
+                xc_func_end(func + i);
+        }
+        free(func);
+}
+
+void LIBXC_xc_func_set_params(const int nfn, xc_func_type *fn_obj, const double *omega,
+                              const double dens_threshold)
+{
         int i, j;
         xc_func_type *func = fn_obj;
         for (i = 0; i < nfn; i++) {
@@ -621,12 +1119,28 @@ void LIBXC_eval_xc(int nfn, xc_func_type *fn_obj, double *fac, double *omega,
 #if defined XC_SET_RELATIVITY
                 xc_lda_x_set_params(func, relativity);
 #endif
-                _eval_xc(func, spin, deriv, np, rho, ebuf);
-                merge_xc(output, ebuf, fac[i],
-                         spin, deriv, nvar, np, outlen, func->info->family);
                 ++func;
         }
-        free(ebuf);
-        free(rho);
 }
 
+xc_func_type *LIBXC_xc_func_init(const int nfn, const int *xc_ids, const int spin)
+{
+        int i;
+        const int s = spin > 0 ? XC_POLARIZED : XC_UNPOLARIZED;
+        xc_func_type *func;
+        func = malloc(nfn * sizeof(xc_func_type));
+        for (i = 0; i < nfn; i++) {
+                const int xc_id = xc_ids[i];
+                if (xc_func_init(func + i, xc_id, s) != 0){
+                        fprintf(stderr, "XC functional %d not found\n", xc_id);
+                        LIBXC_xc_func_end(i, func);
+                        raise_error NULL;
+                }
+        }
+        return func;
+}
+
+size_t LIBXC_xc_func_type_size()
+{
+        return sizeof(xc_func_type);
+}

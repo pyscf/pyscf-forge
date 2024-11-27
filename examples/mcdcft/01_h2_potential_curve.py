@@ -6,7 +6,8 @@ This input file performs a potential energy scan of H2 using cBLYP (density
 coherence functional without reparameterization).
 '''
 
-xc_preset = dict(args=dict(f=mcdcft.dcfnal.f_v1, negative_rho=True))
+preset = dict(args=dict(f=mcdcft.dcfnal.f_v1, negative_rho=True), xc_code='BLYP')
+mcdcft.dcfnal.register_dcfnal_('cBLYP', preset)
 
 def run(r, chkfile=None, mo_coeff=None):
     r *= 0.5
@@ -14,8 +15,7 @@ def run(r, chkfile=None, mo_coeff=None):
           symmetry=False, verbose=3, unit='angstrom')
     mf = scf.RHF(mol)
     mf.kernel()
-    mc = mcdcft.CASSCF(mf, 'BLYP', 2, 2, xc_preset=xc_preset,
-                       grids_level=6)
+    mc = mcdcft.CASSCF(mf, 'cBLYP', 2, 2, grids_level=6)
     #mc.fcisolver = csf_solver(mol, smult=1)
     mc.fix_spin_(ss=0)
     if mo_coeff is not None:

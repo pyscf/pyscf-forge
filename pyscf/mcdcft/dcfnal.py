@@ -14,8 +14,8 @@
 # limitations under the License.
 #
 from pyscf.lib import logger
-from pyscf.dft2.libxc import XCFunctional
 from pyscf import dft, lib
+from pyscf.dft2 import libxc
 import numpy as np
 import copy
 
@@ -31,7 +31,7 @@ def get_f_v2_m(m):
 
 f_v2 = get_f_v2_m(0.96)
 
-def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
+def get_converted_rho(natorb, occ, ao, type_id, f=f_v2, negative_rho=False):
     '''  Calculate rho used in eval_xc
          This rho may contain the converted density, density derivitive, and kinetic
          energy density.
@@ -44,7 +44,7 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
             ao : ndarray of shape (ngrids, nao) for LDA or (4, ngrids, nao) for GGA
                 and MGGA
                 magnitude of atomic basis function [and gradients]
-            xctype_id : int
+            type_id : int
                 0 for LDA; 1 for GGA; 2 for MGGA
             f : callable
                 a callable that evaluates f(occ)±occ, where f(occ) is the effective
@@ -71,7 +71,7 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
 
     c_a, c_b = f(occ)
     phi_squared = phi * phi
-    rhos_size = (1, 4, 6)[xctype_id]
+    rhos_size = (1, 4, 6)[type_id]
     ngrids = ao.shape[-2]
     rhos_a = np.zeros((rhos_size, ngrids))
     rhos_b = np.zeros((rhos_size, ngrids))
@@ -81,12 +81,12 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
     np.matmul(phi_squared, c_b, out=rho_b)
     rho_a *= 0.5
     rho_b *= 0.5
-    if xctype_id >= 1: # grad for GGA and MGGA
+    if type_id >= 1: # grad for GGA and MGGA
         phi_grad = np.matmul(ao_magnitude_grad, natorb)
         phi_phigrad = phi[None, :, :] * phi_grad
         np.matmul(phi_phigrad, c_a, out=rhos_a[1:4])
         np.matmul(phi_phigrad, c_b, out=rhos_b[1:4])
-        if xctype_id >= 2: # tau for MGGA
+        if type_id >= 2: # tau for MGGA
             phigrad_phigrad = phi_grad * phi_grad
             np.einsum('a,dga->g', c_a, phigrad_phigrad, out=rhos_a[5])
             np.einsum('a,dga->g', c_b, phigrad_phigrad, out=rhos_b[5])
@@ -100,7 +100,7 @@ def get_converted_rho(natorb, occ, ao, xctype_id, f=f_v2, negative_rho=False):
 
 # ALIAS for preset DC functionals
 # `xc_code` and `hyb_x` are required keys
-DC_ALIAS = {
+DC_PRESETS = {
         'DC24': {
             'xc_code': 164,
             'hyb_x': 4.525671e-01,
@@ -111,35 +111,53 @@ DC_ALIAS = {
         },
 }
 
+_REGISTERED_PRESETS = {}
+
 DEFAULT_RHO_ARGS = dict(f=f_v2)
 
-class dcfnal(lib.StreamObject):
-    def __init__ (self, mol, xc_code, xc_preset=None, grids_level=None, verbose=0, **kwargs):
-        self.mol = mol
-        self.xc_code = xc_code
-        preset = DC_ALIAS.get(xc_code) if xc_preset is None else xc_preset
+_LIBXC_REGISTER_PREFIX = '_MC-DCFT_'
+
+def register_dcfnal_(dc_code, preset):
+    libxc_register_code = _LIBXC_REGISTER_PREFIX + dc_code
+    libxc_base_code = preset['xc_code']
+
+    # register in libxc module
+    ext_params = preset.get('params')
+    libxc.register_custom_functional_(libxc_register_code, libxc_base_code, ext_params=ext_params, hyb=0.)
+    _REGISTERED_PRESETS[dc_code] = preset
+
+def unregister_dcfnal_(dc_code):
+    libxc_register_code = _LIBXC_REGISTER_PREFIX + dc_code
+    libxc.unregister_custom_functional_(libxc_register_code)
+    del _REGISTERED_PRESETS[dc_code]
+
+def _get_dc(dc_code):
+    try:
+        return _REGISTERED_PRESETS[dc_code]
+    except KeyError:
+        preset = DC_PRESETS.get(dc_code)
         if preset is None:
-            self.hyb_x = 0.
-            self.display_name = 'c' + xc_code
-            xcfunc = XCFunctional(xc_code, 1)
-            self.get_converted_rho_args = DEFAULT_RHO_ARGS
-            self.get_converted_rho = get_converted_rho
-        else:
-            self.hyb_x = preset.get('hyb_x', 0.)
-            self.display_name = xc_code if xc_preset is None else preset.get('display_name', 'c' + xc_code)
-            xcfunc = XCFunctional(preset.get('xc_code', xc_code), 1)
-            for c, p in preset.get('params', {}).items():
-                xcfunc.set_ext_params(c, p)
-            self.get_converted_rho_args = preset.get('args', DEFAULT_RHO_ARGS)
-            self.get_converted_rho = preset.get('get_converted_rho', get_converted_rho)
+            raise KeyError(f'DC functional {dc_code} not defined.')
+        register_dcfnal_(dc_code, preset)
+        return preset
+
+class dcfnal(lib.StreamObject):
+    def __init__ (self, mol, dc_code, grids_level=None, verbose=0, **kwargs):
+        self.mol = mol
+        self.dc_code = dc_code
+        preset = _get_dc(dc_code)
+        self.hyb_x = preset.get('hyb_x', 0.)
+        self.display_name = preset.get('display_name', dc_code)
+        self.libxc_code = _LIBXC_REGISTER_PREFIX + dc_code
+        self.get_converted_rho_args = preset.get('args', DEFAULT_RHO_ARGS)
+        self.get_converted_rho = preset.get('get_converted_rho', get_converted_rho)
         ni = dft.numint.NumInt()
-        ni.eval_xc = xcfunc.eval_xc
+        ni.eval_xc = libxc.eval_xc
         ni.hybrid_coeff = lambda *x: 0.
         ni.rsh_coeff = lambda *x: (0., 0., 0.)
-        ni._xc_type = xcfunc.xc_type_
         self._numint = ni
-        self.xcfunc = xcfunc
-        self.xctype = xcfunc.xc_type()
+        self.xctype = libxc.xc_type(self.libxc_code)
+        ni._xc_type = lambda *x: self.xctype
         self.dens_deriv = ['LDA', 'GGA', 'MGGA'].index(self.xctype)
         self.grids = dft.grid.Grids(mol)
         if grids_level is not None:
@@ -148,7 +166,6 @@ class dcfnal(lib.StreamObject):
             elif isinstance(grids_level, tuple):
                 self.grids.atom_grid = grids_level
         self.grids.build()
-        self.xcfunc = xcfunc
         self.verbose = verbose
         if self.verbose >= logger.DEBUG:
             self.ms = 0.0
@@ -175,7 +192,7 @@ class dcfnal(lib.StreamObject):
 
         rho_c = self.get_converted_rho(natorb, occ, ao, self.dens_deriv, **self.get_converted_rho_args)
 
-        dexc_ddens = self._numint.eval_xc(
+        dexc_ddens = self._numint.eval_xc(self.libxc_code,
             rho_c, spin=1, relativity=0, deriv=0, verbose=self.verbose)[0]
         rho = rho_c[0][0] + rho_c[1][0]
         rho *= weight

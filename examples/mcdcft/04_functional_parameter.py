@@ -14,7 +14,10 @@ mf.kernel()
 # Define a preset for the DC24 functional, which contains functional parameters.
 preset = {
     # Display name of the new functional. It will be used in displayed messages and chkfiles.
-    'display_name': 'DC24_custom',
+    'display_name': 'DC24,custom',
+    # The Kohn-Sham exchange correlation functional the DC functional is based on.
+    # Use the same notation as used in the KS module
+    'xc_code': 'HCTH407',
     # Ratio of the MCSCF exchange-correlation energy
     'hyb_x': 4.525671e-01,
     # Functional parameters. We will set the functional parameters of HCTH407 (LibXC
@@ -25,8 +28,11 @@ preset = {
                      1.134169e+00, 1.148509e+01, -2.210990e+01, -1.006682e+02, 1.477906e+02]},
 }
 
-# DC24 is based on HCTH407 functional form. We put "HCTH407" as xc_code.
-mc = mcdcft.CASSCF(mf, 'HCTH407', 2, 2, xc_preset=preset, grids_level=(99, 590))
+# Register the functional preset to the dcfnal module with identifier 'DC24_custom'
+mcdcft.dcfnal.register_dcfnal_('DC24_custom', preset)
+
+# Evaluate MC-DCFT energy of the custom functional
+mc = mcdcft.CASSCF(mf, 'DC24_custom', 2, 2, grids_level=(99, 590))
 e1 = mc.kernel()[0]
 
 # Compare with the results from pre-defined DC24
