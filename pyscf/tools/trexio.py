@@ -54,10 +54,10 @@ def _mol_to_trexio(mol, trexio_file):
         # 2.3 Periodic boundary calculations (pbc group)
         trexio.write_pbc_periodic(trexio_file, True)
         # 2.2 Cell
-        Bohr = lib.param.BOHR
-        a = np.array(mol.a[0]) / Bohr  # angstrom -> bohr
-        b = np.array(mol.a[1]) / Bohr  # angstrom -> bohr
-        c = np.array(mol.a[2]) / Bohr  # angstrom -> bohr
+        lattice = mol.lattice_vectors()
+        a = lattice[0] # unit is Bohr
+        b = lattice[1] # unit is Bohr
+        c = lattice[2] # unit is Bohr
         trexio.write_cell_a(trexio_file, a)
         trexio.write_cell_b(trexio_file, b)
         trexio.write_cell_c(trexio_file, c)
