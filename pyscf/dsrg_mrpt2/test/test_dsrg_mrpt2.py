@@ -24,22 +24,7 @@ from pyscf import scf
 from pyscf import ao2mo
 from pyscf import mcscf
 from pyscf import fci
-from pyscf.mrpt import dsrg_mrpt2
-
-# import sys
-# sys.path.insert(0, '..')
-# import dsrg_mrpt2
-
-import unittest
-from pyscf import gto
-from pyscf import scf
-from pyscf import ao2mo
-from pyscf import mcscf
-from pyscf import fci
-from pyscf.mrpt import dsrg_mrpt2
-# import sys
-# sys.path.insert(0, '..')
-# import dsrg_mrpt2
+from pyscf import dsrg_mrpt2
 
 def setUpModule():
     global moln2, molhf, molo2, molo2_df, molh2o, molbeh, molh2op, mfn2, mfhf, mfo2, mfo2_df, mfh2o, mfbeh, mfh2op

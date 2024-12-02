@@ -122,7 +122,7 @@ set_target_properties (clib_pdft PROPERTIES
     OUTPUT_NAME "pdft")
 
 # Build the DSRG library
-set (DSRG_SOURCE_FILES "../dsrg-mrpt2/dsrg_helper.c")
+set (DSRG_SOURCE_FILES "../dsrg_mrpt2/dsrg_helper.c")
 add_library (clib_dsrg SHARED ${DSRG_SOURCE_FILES})
 set_target_properties (clib_dsrg PROPERTIES
     CLEAN_DIRECT_OUTPUT 1

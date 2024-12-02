@@ -28,7 +28,7 @@ from pyscf import df
 MACHEPS = 1e-9
 TAYLOR_THRES = 1e-3
 
-libmc = lib.load_library('libdsrg')
+libdsrg = lib.load_library('libdsrg')
 
 def taylor_exp(z):
     '''
@@ -327,7 +327,7 @@ class DSRG_MRPT2(lib.StreamObject):
             if Vblock != "aaaa":
                 block = Vblock[2] + Vblock[3] + Vblock[0] + Vblock[1]   
                 self.T2[block] = np.einsum("abij->ijab", tensor).copy()
-                libmc.compute_T2_block(self.T2[block].ctypes.data_as(ctypes.c_void_p),
+                libdsrg.compute_T2_block(self.T2[block].ctypes.data_as(ctypes.c_void_p),
                                        self.e_orb[block[0]].ctypes.data_as(ctypes.c_void_p),
                                        self.e_orb[block[1]].ctypes.data_as(ctypes.c_void_p),
                                        self.e_orb[block[2]].ctypes.data_as(ctypes.c_void_p),
@@ -354,7 +354,7 @@ class DSRG_MRPT2(lib.StreamObject):
     
     def renormalize_V(self):
         for block, tensor in self.V.items():
-            libmc.renormalize_V(tensor.ctypes.data_as(ctypes.c_void_p),
+            libdsrg.renormalize_V(tensor.ctypes.data_as(ctypes.c_void_p),
                                 self.e_orb[block[0]].ctypes.data_as(ctypes.c_void_p),
                                 self.e_orb[block[1]].ctypes.data_as(ctypes.c_void_p),
                                 self.e_orb[block[2]].ctypes.data_as(ctypes.c_void_p),
@@ -386,7 +386,7 @@ class DSRG_MRPT2(lib.StreamObject):
 
         _ei = np.diagonal(self.fock)[self.hole].copy()
         _ea = np.diagonal(self.fock)[self.part].copy()
-        libmc.compute_T1(self.T1.ctypes.data_as(ctypes.c_void_p), 
+        libdsrg.compute_T1(self.T1.ctypes.data_as(ctypes.c_void_p), 
                          _ei.ctypes.data_as(ctypes.c_void_p), 
                          _ea.ctypes.data_as(ctypes.c_void_p), 
                          ctypes.c_double(self.flow_param),
@@ -408,7 +408,7 @@ class DSRG_MRPT2(lib.StreamObject):
         
         _eh = np.float64(np.diagonal(self.fock))[self.hole].copy()
         _ep = np.float64(np.diagonal(self.fock))[self.part].copy()
-        libmc.renormalize_F(_tmp.ctypes.data_as(ctypes.c_void_p),
+        libdsrg.renormalize_F(_tmp.ctypes.data_as(ctypes.c_void_p),
                             _eh.ctypes.data_as(ctypes.c_void_p),
                             _ep.ctypes.data_as(ctypes.c_void_p),
                             ctypes.c_double(self.flow_param),
@@ -518,7 +518,7 @@ class DSRG_MRPT2(lib.StreamObject):
                         optimize='optimal').copy()
                 JK_mn = 2.0 * J_mn - J_mn.T
                                 
-                libmc.renormalize_CCVV_batch(J_mn.ctypes.data_as(ctypes.c_void_p),
+                libdsrg.renormalize_CCVV_batch(J_mn.ctypes.data_as(ctypes.c_void_p),
                                      ctypes.c_double(_ec[m] + _ev[n]),
                                      _ev.ctypes.data_as(ctypes.c_void_p),
                                      ctypes.c_double(self.flow_param),
@@ -536,7 +536,7 @@ class DSRG_MRPT2(lib.StreamObject):
             J_m = np.einsum("eL,fnL->efn", np.squeeze(self.Bpq[self.pv, m, :]), B_Lfn, optimize='optimal').copy()
             JK_m = 2.0 * J_m - np.einsum("efn->fen", J_m.copy())
             
-            libmc.renormalize_CCVV(J_m.ctypes.data_as(ctypes.c_void_p),
+            libdsrg.renormalize_CCVV(J_m.ctypes.data_as(ctypes.c_void_p),
                                    ctypes.c_double(_ec[m]),
                                     _ev.ctypes.data_as(ctypes.c_void_p),
                                     _ec.ctypes.data_as(ctypes.c_void_p),
@@ -559,7 +559,7 @@ class DSRG_MRPT2(lib.StreamObject):
             J_m = np.einsum("eL,fvL->efv", np.squeeze(self.Bpq[self.pv, m, :]), B_Lfv, optimize='optimal').copy()
             JK_m = 2.0 * J_m - np.einsum("efv->fev", J_m).copy()
             
-            libmc.renormalize_CAVV(JK_m.ctypes.data_as(ctypes.c_void_p),
+            libdsrg.renormalize_CAVV(JK_m.ctypes.data_as(ctypes.c_void_p),
                                    J_m.ctypes.data_as(ctypes.c_void_p),
                                     ctypes.c_double(_ec[m]),
                                     _ev.ctypes.data_as(ctypes.c_void_p),
@@ -589,7 +589,7 @@ class DSRG_MRPT2(lib.StreamObject):
                 J_mn_2 = np.einsum("eL,uL->eu", np.squeeze(self.Bpq[self.pv, n, :]), np.squeeze(self.Bpq[self.pa, m, :]), optimize='optimal').copy()
                 JK_mn = 2.0 * J_mn - J_mn_2
                 
-                libmc.renormalize_CCAV(JK_mn.ctypes.data_as(ctypes.c_void_p),
+                libdsrg.renormalize_CCAV(JK_mn.ctypes.data_as(ctypes.c_void_p),
                                         J_mn.ctypes.data_as(ctypes.c_void_p),
                                         ctypes.c_double(_ec[m] + _ec[n]),
                                         _ev.ctypes.data_as(ctypes.c_void_p),
