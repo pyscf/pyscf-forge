@@ -120,3 +120,11 @@ set_target_properties (clib_pdft PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
+
+# Build the DSRG library
+set (DSRG_SOURCE_FILES "../dsrg-mrpt2/dsrg_helper.c")
+add_library (clib_dsrg SHARED ${DSRG_SOURCE_FILES})
+set_target_properties (clib_dsrg PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "dsrg")
