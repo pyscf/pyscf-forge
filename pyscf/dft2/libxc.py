@@ -874,8 +874,8 @@ def _libxc_to_xcfun_indices(xctype, spin=0, deriv=1):
 
 def _eval_xc(xc_code, rho, spin=0, deriv=1, omega=None):
     xc = _get_xc(xc_code, spin)
-    assert deriv <= max_deriv_order(xc_code)
-    xctype = xc_type(xc_code)
+    assert deriv <= xc.max_deriv_order
+    xctype = xc.xc_type
     assert xctype in ('HF', 'LDA', 'GGA', 'MGGA')
 
     rho = numpy.asarray(rho, order='C', dtype=numpy.double)
