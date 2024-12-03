@@ -16,6 +16,7 @@
  * Authors: Qiming Sun <osirpt.sun@gmail.com>
  *          Susi Lehtola <susi.lehtola@gmail.com>
  *          Xing Zhang <zhangxing.nju@gmail.com>
+ *          Dayou Zhang <dayouzhang@outlook.com>
  *
  * libxc from
  * http://www.tddft.org/programs/octopus/wiki/index.php/Libxc:manual

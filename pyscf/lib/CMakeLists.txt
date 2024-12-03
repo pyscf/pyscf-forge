@@ -58,8 +58,6 @@ else()
   endif()
 endif()
 
-option(BUILD_CFFI_API_MODE "Compiling CFFI library with CFFI API mode support" OFF)
-
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 # Whether or not to compile with MKL

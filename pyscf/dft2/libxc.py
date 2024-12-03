@@ -16,6 +16,7 @@
 #
 # Authors: Qiming Sun <osirpt.sun@gmail.com>
 #          Susi Lehtola <susi.lehtola@gmail.com>
+#          Dayou Zhang <dayouzhang@outlook.com>
 # This file is adapted from `dft/libxc.py` of the PySCF core module
 # commit 25eaa9572977b903de24d5c11ad345cecd744728
 
@@ -876,7 +877,7 @@ def _eval_xc(xc_code, rho, spin=0, deriv=1, omega=None):
     if omega is not None:
         raise NotImplementedError('use register_custom_functional_() to set omega')
 
-    if _needs_laplacian(xc.nfunc, xc.xc_arr):
+    if xc.needs_laplacian:
         raise NotImplementedError('laplacian in meta-GGA method')
 
     nvar, xlen = xc_deriv._XC_NVAR[xctype, spin]
