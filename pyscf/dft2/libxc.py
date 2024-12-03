@@ -19,6 +19,14 @@
 #          Dayou Zhang <dayouzhang@outlook.com>
 # This file is adapted from `dft/libxc.py` of the PySCF core module
 # commit 25eaa9572977b903de24d5c11ad345cecd744728
+#
+# Implemented functions register_custom_functional_, update_custom_functional_,
+# and unregister_custom_functional_. To make this new functionality possible,
+# and to improve the memory management of the LibXC data structure, interface
+# functions which originally took arguments of type c_int were modified to take
+# arguments of type xc_func_type from LibXC. The LibXC data structure are cached
+# and managed in the python layer to avoid construction and destruction at every
+# API call.
 
 '''
 XC functional, the interface to libxc
