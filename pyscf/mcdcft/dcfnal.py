@@ -13,6 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+'''
+Multiconfiguration Density-Coherence Functional Theory
+
+Reference:
+[1] Multiconfiguration Density-Coherence Functional Theory
+    Dayou Zhang, Matthew R. Hermes, Laura Gagliardi and Donald G. Truhlar
+    J. Chem. Theory and Comput. 2021 17 (5), 2775-2782
+    DOI: 10.1021/acs.jctc.0c01346
+'''
+
 from pyscf.lib import logger
 from pyscf import dft, lib
 from pyscf.dft2 import libxc
