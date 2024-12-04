@@ -1,22 +1,21 @@
-import pyscf
-from pyscf import scf, gto, mcscf, lib
+from pyscf import scf, gto, lib, mcscf, mcdcft
 import numpy as np
-#from pyscf.fci import csf_solver
-from pyscf.mcdcft import mcdcft
 
 '''
 This input file performs a potential energy scan of H2 using cBLYP (density
 coherence functional without reparameterization).
 '''
 
+preset = dict(args=dict(f=mcdcft.dcfnal.f_v1, negative_rho=True), xc_code='BLYP')
+mcdcft.dcfnal.register_dcfnal_('cBLYP', preset)
+
 def run(r, chkfile=None, mo_coeff=None):
-    r /= 2
-    mol = gto.M(atom=f'H  0 0 {r}; H 0 0 -{r}', basis='cc-pvtz', 
+    r *= 0.5
+    mol = gto.M(atom=f'H  0 0 {r}; H 0 0 -{r}', basis='cc-pvtz',
           symmetry=False, verbose=3, unit='angstrom')
     mf = scf.RHF(mol)
     mf.kernel()
-    mc = mcdcft.CASSCF(mf, 'BLYP', 2, 2, ot_name='cBLYP', 
-                       grids_level=6)
+    mc = mcdcft.CASSCF(mf, 'cBLYP', 2, 2, grids_level=6)
     #mc.fcisolver = csf_solver(mol, smult=1)
     mc.fix_spin_(ss=0)
     if mo_coeff is not None:
@@ -39,7 +38,6 @@ def scan():
         if mc and mc.converged:
             mo_coeff = mc.mo_coeff
             e_tot = mc.e_tot
-            mc.dump_mcdcft_chk(chkfile)
         else:
             print(f"Warning: bond distance {r:02.2f} not converged")
 

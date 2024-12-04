@@ -120,3 +120,13 @@ set_target_properties (clib_pdft PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
+
+# Build the LibXC interface v2 library
+set (LIBXC_ITRF2_SOURCE_FILES "dft/libxc_itrf2.c")
+add_library (clib_libxc_itrf2 SHARED ${LIBXC_ITRF2_SOURCE_FILES})
+target_link_libraries (clib_libxc_itrf2 xc ${OPENMP_C_PROPERTIES})
+set_target_properties (clib_libxc_itrf2 PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "xc_itrf2")
+
