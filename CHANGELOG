@@ -3,6 +3,8 @@ PySCF-Forge 1.0.2 (2024-12-04)
 * New features
   - Parity Violating contributions to energy
   - Particle-particle random phase approximation (ppRPA)
+  - New libxc interface that allows the modification to XC functional parameters
+  - Density coherence functional methods
 * Improvments
   - The ECP section in the TREXIO interface.
   - The treatments of contracted basis functions in the TREXIO interface.
