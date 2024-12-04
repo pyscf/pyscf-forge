@@ -48,7 +48,6 @@ def test_mol_ccecp_ccpvqz():
     assert abs(ref - s1).max() < 1e-12
     '''
 
-''' Todo: it does not work due to the internal contraction in PySCF
 def test_mol_ae_ccpvdz():
     filename = 'test_mol_ae_ccpvdz_sphe.h5'
     mol = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='ccpvdz', cart=False)
@@ -65,7 +64,6 @@ def test_mol_ae_ccpvdz():
     mol = trexio.mol_from_trexio(filename)
     s1 = mol.intor('int1e_ovlp')
     assert abs(ref - s1).max() < 1e-12
-'''
 
 def test_mf_ae_6_31g():
     filename = 'test_mf_ae_6_31g_sphe.h5'
