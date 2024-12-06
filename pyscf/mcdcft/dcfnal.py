@@ -23,7 +23,7 @@ Reference:
     J. Chem. Theory and Comput. 2021 17 (5), 2775-2782
     DOI: 10.1021/acs.jctc.0c01346
 [2] DC24: A new density coherence functional for multiconfiguration
-    density-coherence functional theory. 
+    density-coherence functional theory.
     Dayou Zhang, Yinan Shu and Donald G. Truhlar
     J. Comput. Chem. 2024.
     DOI: 10.1002/jcc.27522
