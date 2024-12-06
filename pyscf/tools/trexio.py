@@ -211,20 +211,16 @@ def _scf_to_trexio(mf, trexio_file):
 
     # 2.3 Periodic boundary calculations (pbc group)
     if isinstance(mol, pbc.gto.Cell):
-        try:
-            kpt = mf.kpt
-            kpt = mol.get_scaled_kpts(kpt)
-            if np.all(np.array(kpt) == 0.0):
-                # gamma point PBC. Real wavefunction
-                trexio.write_pbc_k_point_num(trexio_file, 1)
-                trexio.write_pbc_k_point(trexio_file, [kpt])
-                trexio.write_pbc_k_point_weight(trexio_file, [1.0])
-            else:
-                # general point PBC. Complex wavefunction
-                raise NotImplementedError("Complex WF is not yet implemented.")
-        except ValueError:
-            # general points PBC. Complex wavefunctions
-            raise NotImplementedError("Twisted-average is not yet implemented.")
+        kpt = mf.kpt
+        kpt = mol.get_scaled_kpts(kpt)
+        if np.all(np.array(kpt) == 0.0):
+            # gamma point PBC. Real wavefunction
+            trexio.write_pbc_k_point_num(trexio_file, 1)
+            trexio.write_pbc_k_point(trexio_file, [kpt])
+            trexio.write_pbc_k_point_weight(trexio_file, [1.0])
+        else:
+            # general point PBC. Complex wavefunction
+            raise NotImplementedError("Complex WF is not yet implemented.")
 
     # 4.2 Molecular orbitals (mo group)
     if isinstance(mf, scf.uhf.UHF):
