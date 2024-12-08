@@ -253,11 +253,21 @@ class transfnal (otfnal):
 
     def get_rho_translated (self, Pi, rho, _fn_deriv=0):
         r''' Compute the "translated" alpha and beta densities:
+        For the unrestricted case,
+        rho = [rho^a, rho^b]
+        Here:
+            rho^a will have dim of 1,4 or 6 depends on the functional. For MGGA,
+            rho^a = [rho_u,grad_xu, grad_yu, grad_zu, laplacian_u, tau_u]
+            Similar for rho_b.
+
+        The translation is done as follows:
 
         rho_t^a = (rho/2) * (1 + zeta)
         rho_t^b = (rho/2) * (1 - zeta)
         rho'_t^a = (rho'/2) * (1 + zeta)
         rho'_t^b = (rho'/2) * (1 - zeta)
+        laplacian_t^a = (laplacian/2) * (1 + zeta)
+        tau_t^a = (tau/2) * (1 + zeta)
 
         See "get_zeta" for the meaning of "zeta"
 
@@ -278,7 +288,8 @@ class transfnal (otfnal):
 
         Returns:
             rho_t : ndarray of shape (2,*,ngrids)
-                Translated spin density (and derivatives)
+                Translated spin density (and derivatives) in case of LDA or GGAs
+                Translated spin density, derivatives, and kinetic energy density in case of MGGA
         '''
 
         # For nonzero charge & pair density, set alpha dens = beta dens
