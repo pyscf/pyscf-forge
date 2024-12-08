@@ -120,7 +120,7 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     if 1 < nderiv <= 4:
         rho_deriv = rho_tot[1:4, :]
     elif nderiv > 4:
-        rho_deriv = rho_tot[1:6, :] 
+        rho_deriv = rho_tot[1:6, :]
     else:
         rho_deriv = None
 
