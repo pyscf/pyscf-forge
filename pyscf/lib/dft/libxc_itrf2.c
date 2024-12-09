@@ -710,7 +710,7 @@ int LIBXC_is_hybrid(const xc_func_type *func)
 {
         int hyb;
 
-#if XC_MAJOR_VERSION <= 6
+#if XC_MAJOR_VERSION <= 7
         switch(func->info->family)
         {
 #ifdef XC_FAMILY_HYB_LDA
@@ -734,7 +734,7 @@ double LIBXC_hybrid_coeff(const xc_func_type *func)
 {
         double factor;
 
-#if XC_MAJOR_VERSION <= 6
+#if XC_MAJOR_VERSION <= 7
         switch(func->info->family)
         {
 #ifdef XC_FAMILY_HYB_LDA
@@ -769,7 +769,7 @@ void LIBXC_rsh_coeff(const xc_func_type *func, double *rsh_pars) {
         rsh_pars[1] = 0.0;
         rsh_pars[2] = 0.0;
 
-#if XC_MAJOR_VERSION <= 6
+#if XC_MAJOR_VERSION <= 7
         XC(hyb_cam_coef)(func, &rsh_pars[0], &rsh_pars[1], &rsh_pars[2]);
 #else
         switch(xc_hyb_type(func)) {
@@ -781,7 +781,7 @@ void LIBXC_rsh_coeff(const xc_func_type *func, double *rsh_pars) {
 }
 
 int LIBXC_is_cam_rsh(const xc_func_type *func) {
-#if XC_MAJOR_VERSION <= 6
+#if XC_MAJOR_VERSION <= 7
         return func->info->flags & XC_FLAGS_HYB_CAM;
 #else
         return (xc_hyb_type(func) == XC_HYB_CAM);
@@ -1084,7 +1084,7 @@ void LIBXC_xc_func_set_params(const int nfn, xc_func_type *fn_obj, const double 
                 // set the range-separated parameter
                 if (omega[i] != 0) {
                         // skip if func is not a RSH functional
-#if XC_MAJOR_VERSION <= 6
+#if XC_MAJOR_VERSION <= 7
                         if (func->cam_omega != 0) {
                                 func->cam_omega = omega[i];
                         }
@@ -1096,7 +1096,7 @@ void LIBXC_xc_func_set_params(const int nfn, xc_func_type *fn_obj, const double 
                         // Recursively set the sub-functionals if they are RSH
                         // functionals
                         for (j = 0; j < func->n_func_aux; j++) {
-#if XC_MAJOR_VERSION <= 6
+#if XC_MAJOR_VERSION <= 7
                                 if (func->func_aux[j]->cam_omega != 0) {
                                         func->func_aux[j]->cam_omega = omega[i];
                                 }
