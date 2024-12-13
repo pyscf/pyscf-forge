@@ -64,7 +64,6 @@ jobs:
             mkdir -p /root/wheelhouse $src/linux-wheels && \
             sed -i "/if basename(fn) not in needed_libs:/s/basename.*libs/1/" /opt/_internal/pipx/venvs/auditwheel/lib/python*/site-packages/auditwheel/wheel_abi.py && \
             sed -i "/if src_path is None/a\                    continue" /opt/_internal/pipx/venvs/auditwheel/lib/python*/site-packages/auditwheel/repair.py && \
-            sed -i "s/numpy/h5py==3.10/" $src/pyproject.toml && \
             export PATH=/opt/python/cp39-cp39/bin:$PATH && \
             /opt/python/cp39-cp39/bin/pip wheel -v --no-deps --no-clean -w /root/wheelhouse $src && \
             export whl=`ls /root/wheelhouse/pyscf_forge-*-linux_*.whl` && \
