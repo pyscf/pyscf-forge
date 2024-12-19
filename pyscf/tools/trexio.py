@@ -14,11 +14,13 @@ Installation instruction:
 import re
 import math
 import numpy as np
+import scipy.linalg
 
 import pyscf
 from pyscf import lib
 from pyscf import gto
 from pyscf import scf
+from pyscf import pbc
 from pyscf import fci
 
 import trexio
@@ -49,15 +51,20 @@ def _mol_to_trexio(mol, trexio_file):
         trexio.write_nucleus_point_group(trexio_file, mol.groupname)
 
     # 2.3 Periodic boundary calculations
-    try:
-        mol.a
-        periodic = True
-        raise NotImplementedError('PBC is not supported yet.')
+    if isinstance(mol, pbc.gto.Cell):
+        # 2.3 Periodic boundary calculations (pbc group)
+        trexio.write_pbc_periodic(trexio_file, True)
         # 2.2 Cell
-
-    except AttributeError:
-        periodic = False
-        trexio.write_pbc_periodic(trexio_file, periodic)
+        lattice = mol.lattice_vectors()
+        a = lattice[0] # unit is Bohr
+        b = lattice[1] # unit is Bohr
+        c = lattice[2] # unit is Bohr
+        trexio.write_cell_a(trexio_file, a)
+        trexio.write_cell_b(trexio_file, b)
+        trexio.write_cell_c(trexio_file, c)
+    else:
+        # 2.3 Periodic boundary calculations (pbc group)
+        trexio.write_pbc_periodic(trexio_file, False)
 
     # 2.4 Electron (electron group)
     electron_up_num, electron_dn_num = mol.nelec
@@ -67,6 +74,8 @@ def _mol_to_trexio(mol, trexio_file):
 
     # 3.1 Basis set
     trexio.write_basis_type(trexio_file, 'Gaussian')
+    if any(mol._bas[:,gto.NCTR_OF] > 1):
+        mol = _to_segment_contraction(mol)
     trexio.write_basis_shell_num(trexio_file, mol.nbas)
     trexio.write_basis_prim_num(trexio_file, int(mol._bas[:,gto.NPRIM_OF].sum()))
     trexio.write_basis_nucleus_index(trexio_file, mol._bas[:,gto.ATOM_OF])
@@ -75,8 +84,6 @@ def _mol_to_trexio(mol, trexio_file):
     prim2sh = [[ib]*nprim for ib, nprim in enumerate(mol._bas[:,gto.NPRIM_OF])]
     trexio.write_basis_shell_index(trexio_file, np.hstack(prim2sh))
     trexio.write_basis_exponent(trexio_file, np.hstack(mol.bas_exps()))
-    if not all(mol._bas[:,gto.NCTR_OF] == 1):
-        raise NotImplementedError('The generalized contraction is not supported.')
     coef = [mol.bas_ctr_coeff(i).ravel() for i in range(mol.nbas)]
     trexio.write_basis_coefficient(trexio_file, np.hstack(coef))
     prim_norms = [gto.gto_norm(mol.bas_angular(i), mol.bas_exp(i)) for i in range(mol.nbas)]
@@ -200,9 +207,23 @@ def _mol_to_trexio(mol, trexio_file):
 
 
 def _scf_to_trexio(mf, trexio_file):
-    # 4.2 Molecular orbitals (mo group)
     mol = mf.mol
     _mol_to_trexio(mol, trexio_file)
+
+    # 2.3 Periodic boundary calculations (pbc group)
+    if isinstance(mol, pbc.gto.Cell):
+        kpt = mf.kpt
+        kpt = mol.get_scaled_kpts(kpt)
+        if np.all(np.array(kpt) == 0.0):
+            # gamma point PBC. Real wavefunction
+            trexio.write_pbc_k_point_num(trexio_file, 1)
+            trexio.write_pbc_k_point(trexio_file, [kpt])
+            trexio.write_pbc_k_point_weight(trexio_file, [1.0])
+        else:
+            # general point PBC. Complex wavefunction
+            raise NotImplementedError("Complex WF is not yet implemented.")
+
+    # 4.2 Molecular orbitals (mo group)
     if isinstance(mf, scf.uhf.UHF):
         mo_energy = np.ravel(mf.mo_energy)
         mo = np.hstack(*mf.mo_coeff)
@@ -438,3 +459,23 @@ def read_det_trexio(filename):
         det = trexio.read_determinant_list(tf, offset_file, num_det)
         return num_det, coeff, det
 
+def _to_segment_contraction(mol):
+    '''transform generally contracted basis to segment contracted basis
+    '''
+    _bas = []
+    for shell in mol._bas:
+        nctr = shell[gto.NCTR_OF]
+        if nctr == 1:
+            _bas.append(shell)
+            continue
+
+        nprim = shell[gto.NPRIM_OF]
+        pcoeff = shell[gto.PTR_COEFF]
+        bs = np.repeat(shell[np.newaxis], nctr, axis=0)
+        bs[:,gto.NCTR_OF] = 1
+        bs[:,gto.PTR_COEFF] = np.arange(pcoeff, pcoeff+nprim*nctr, nprim)
+        _bas.append(bs)
+
+    pmol = mol.copy()
+    pmol._bas = np.asarray(np.vstack(_bas), dtype=np.int32)
+    return pmol
