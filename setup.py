@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NAME = 'pyscf-forge'
+NAME = 'pyscf_forge'
 AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
 DESCRIPTION  = 'Staging ground for PySCF core features'
