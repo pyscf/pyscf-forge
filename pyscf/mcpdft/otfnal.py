@@ -46,18 +46,18 @@ def register_ot_libxc(xc_base):
 
     def _register_repM06L():
         '''
-        This function register the reparametrized 
+        This function register the reparametrized
         M06-L functional (used for MC23 Functional) in the libxc library.
         '''
         from pyscf import dft2
         dft.libxc = dft2.libxc
         dft.numint.libxc = dft2.libxc
         dft.numint.LibXCMixin.libxc = dft2.libxc
-        
+
         # Reparametrized-M06L: rep-M06L
         # MC23 = { '0.2952*HF + (1-0.2952)*rep-M06L, 0.2952*HF + (1-0.2952)*rep-M06L'}}
         # Here, I am registering the rep-M06L functional only.
-            
+
         # repM06L_C has 27 parameters
         MC23_C =  np.array([0.06, 0.0031, 0.00515088, 0.00304966, 2.427648, 3.707473,
                             -7.943377, -2.521466, 2.658691, 2.932276, -8.832841e-01,
@@ -70,20 +70,20 @@ def register_ot_libxc(xc_base):
                             2.503819, 8.085354e-01, -3.619144, -5.572321e-01,
                             -4.506606, 9.614774e-01, 6.977048, -1.309337, -2.426371,
                             -7.896540e-03, 1.364510e-02, -1.714252e-06, -4.698672e-05, 0.0])
-        
+
         # See: pyscf/pyscf/dft/libxc_funcs.txt
         XC_ID_MGGA_C_M06_L = 233
         XC_ID_MGGA_X_M06_L = 203
 
         libxc_register_code = 'repM06L'.lower ()
 
-        dft2.libxc.register_custom_functional_(libxc_register_code, 'M06L', 
+        dft2.libxc.register_custom_functional_(libxc_register_code, 'M06L',
                                             ext_params={XC_ID_MGGA_X_M06_L: MC23_X,
                                                         XC_ID_MGGA_C_M06_L: MC23_C})
-    
+
     if xc_base.upper() == 'REPM06L' and REG_FUNCTIONALS.get(xc_base.upper()) is None:
         _register_repM06L()
-    
+
 def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     '''Compute the on-top energy - the last term in
 
@@ -798,16 +798,15 @@ def get_transfnal (mol, otxc):
             'On-top pair-density functional names other than "translated" (t) or '
             '"fully-translated (ft).'
         )
-    
     xc_base = OT_HYB_ALIAS.get (xc_base.upper (), xc_base)
 
     if xc_base.replace("-","").upper() == 'REPM06L':
         # Register the repM06L functional with libxc, if not already done
         register_ot_libxc (xc_base)
-        
+
         # Interface only takes the lower case name for the
         # reparametrized functionals.
-        xc_base = xc_base.lower () 
+        xc_base = xc_base.lower ()
 
     elif ',' not in xc_base and _libxc.is_hybrid_or_rsh (xc_base):
         raise NotImplementedError (
@@ -820,8 +819,6 @@ def get_transfnal (mol, otxc):
     ks = dft.RKS (mol)
     ks.xc = xc_base
     return fnal_class (ks)
-
-
 
 class colle_salvetti_corr (otfnal):
 
