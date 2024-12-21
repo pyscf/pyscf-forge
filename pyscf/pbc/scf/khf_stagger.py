@@ -14,7 +14,9 @@
 # limitations under the License.
 
 from pyscf.pbc.scf import khf
+from pyscf.pbc import df
 import numpy as np
+from pyscf.lib import logger
 
 
 
@@ -176,11 +178,13 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
 
 
 def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kpts=None, 
-                kshift_rel=0.5, fourinterp=False, ss_params={}, modified_madelung_params={}):
+                kshift_rel=0.5, verbose=logger.NOTE):
+    
     from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
     from pyscf.pbc import gto,scf
     #To Do: Additional control arguments such as custom shift, scf control (cycles ..etc), ...
     #Cell formatting used in the built in Madelung code
+    log = logger.Logger(icell.stdout, verbose)
     def set_cell(mf):
         import copy
         Nk = get_monkhorst_pack_size(mf.cell, mf.kpts)
@@ -280,21 +284,21 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
         else:
             df_type = df.FFTDF
 
-    if fourinterp:
-        assert version == "Non-SCF", "Fourier interpolation only available for Non-SCF version"
-
     if version == "Regular":
+        # Extract kpts and append the shifted mesh
         nks = get_monkhorst_pack_size(icell, ikpts)
         shift = icell.get_abs_kpts([kshift_rel / n for n in nks])
+        
         if icell.dimension <=2:
             shift[2] =  0
-        elif icell.dimension == 1:
-            shift[1] = 0
+            if icell.dimension == 1:
+                shift[1] = 0
+                
         Nk = np.prod(nks) * 2
-        print("Shift is: " + str(shift))
+        log.debug("Shift is: " + str(shift))
         kmesh_shifted = ikpts + shift
         combined = np.concatenate((ikpts,kmesh_shifted),axis=0)
-        print(combined)
+        log.debug(combined)
 
         mf2 = scf.KHF(icell, combined)
         mf2.with_df = df_type(icell, combined).build() #For 2d,1d, df_type cannot be FFTDF
@@ -319,14 +323,14 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
         conv_Madelung = 0
         while True and icell.dimension !=1:
             Madelung = staggered_Madelung(cell_input=ecell, shifted=shift, ew_eta=ew_eta, ew_cut=ew_cut)
-            print("Iteration number " + str(count_iter))
-            print("Madelung:" + str(Madelung))
-            print("Eta:" + str(ew_eta))
+            log.debug1("Iteration number " + str(count_iter))
+            log.debug1("Madelung:" + str(Madelung))
+            log.debug1("Eta:" + str(ew_eta))
             if count_iter > 1 and abs(Madelung - prev) < 1e-8:
                 conv_Madelung = Madelung
                 break
             if count_iter > 30:
-                print("Error. Madelung constant not converged")
+                log.debug1("Error. Madelung constant not converged")
                 break
             ew_eta *= 2
             count_iter += 1
@@ -433,278 +437,31 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
         E_stagger = -1./Nk * np.einsum('kij,kji', dm_shift, Kmat) * 0.5
         E_stagger/=2
 
-        if modified_madelung_params:
-            gauss_params = modified_madelung_params.get('gauss_params')
-            num_gaussians = modified_madelung_params.get('num_gaussians')
-            
-            num_gauss_params = int(np.rint(len(gauss_params)/num_gaussians))
-            assert np.isclose(np.sum(gauss_params[0::num_gauss_params]), nocc)
+        count_iter = 1
+        ecell = set_cell(mf2)
+        ew_eta, ew_cut = ecell.get_ewald_params(mf2.cell.precision, mf2.cell.mesh)
+        prev = 0
+        conv_Madelung = 0
+        while True and icell.dimension !=1:
+            Madelung = staggered_Madelung(cell_input=ecell, shifted=shift, ew_eta=ew_eta, ew_cut=ew_cut)
+            print("Iteration number " + str(count_iter))
+            print("Madelung:" + str(Madelung))
+            print("Eta:" + str(ew_eta))
+            if count_iter>1 and abs(Madelung-prev)<1e-8:
+                conv_Madelung = Madelung
+                break
+            if count_iter>30:
+                print("Error. Madelung constant not converged")
+                break
+            ew_eta*=2
+            count_iter+=1
+            prev = Madelung
 
-            print('Computing Integral terms for Modified Madelung correction')
-            chi = 0
-            shifted = shift
-            for i in range(num_gaussians):
-                if num_gauss_params == 4:
-                    c_i, sigma_x, sigma_y, sigma_z = gauss_params[i*num_gauss_params:(i+1)*num_gauss_params]
-                elif num_gauss_params == 2:
-                    c_i, sigma = gauss_params[i*num_gauss_params:(i+1)*num_gauss_params]
-                    sigma_x = sigma_y = sigma_z = sigma
-
-                # Detect anisotropy
-                anisotropic = False
-                if np.abs(sigma_x - sigma_y) < 1e-8 and np.abs(sigma_y - sigma_z) < 1e-8:
-                    ew_eta_i = 1./np.sqrt(2.) * np.mean([sigma_x, sigma_y, sigma_z])# TODO: Implement anisotropy
-                else:
-                    ew_eta_i = 1./np.sqrt(2.) * np.array([sigma_x, sigma_y, sigma_z])
-                    anisotropic = True
-                # ew_eta = 20
-                # ew_eta = 0.219935106676302
-                chi_i = madelung_modified(icell, ikpts, shifted, ew_eta=ew_eta_i,anisotropic=anisotropic)
-                chi = chi + c_i * chi_i
-                print("Term ", i)
-                if anisotropic:
-                    print(f" Input  sigma x = {sigma_x:.12f}, sigma y = {sigma_y:.12f}, sigma z = {sigma_z:.12f}")
-                else:
-                    print(f" Input mean sigma: {np.mean([sigma_x, sigma_y, sigma_z]):.12f}")
-
-                print(f" Input ew_eta:     {ew_eta_i:.12f}")
-                print(f" Coefficient:      {c_i:.12f}")
-                print(f" Chi:              {chi_i:.12f}")
-                print(f" Contribution:     {c_i * chi_i:.12f}")
-
-            nocc = mf2.cell.tot_electrons()//2
-            E_stagger_M = E_stagger + chi
-
-        else:
-            count_iter = 1
-            ecell = set_cell(mf2)
-            ew_eta, ew_cut = ecell.get_ewald_params(mf2.cell.precision, mf2.cell.mesh)
-            prev = 0
-            conv_Madelung = 0
-            while True and icell.dimension !=1:
-                Madelung = staggered_Madelung(cell_input=ecell, shifted=shift, ew_eta=ew_eta, ew_cut=ew_cut)
-                print("Iteration number " + str(count_iter))
-                print("Madelung:" + str(Madelung))
-                print("Eta:" + str(ew_eta))
-                if count_iter>1 and abs(Madelung-prev)<1e-8:
-                    conv_Madelung = Madelung
-                    break
-                if count_iter>30:
-                    print("Error. Madelung constant not converged")
-                    break
-                ew_eta*=2
-                count_iter+=1
-                prev = Madelung
-
-            nocc = mf2.cell.tot_electrons()//2
-            E_stagger_M = E_stagger + nocc*conv_Madelung
+        nocc = mf2.cell.tot_electrons()//2
+        E_stagger_M = E_stagger + nocc*conv_Madelung
         print("Non SCF")
 
-        if ss_params:
-            import pyscf.pbc.scf.ss_localizers as ss_localizers
-
-            # Load default params
-            N_local = ss_params.get('nlocal', 3)
-            localizer = ss_params.get('localizer')
-            H_use_unscaled = ss_params.get('H_use_unscaled', False)
-            full_domain = ss_params.get('full_domain', True)
-            cart_sphr_split = ss_params.get('cart_sphr_split', True)
-            vhR_symm = ss_params.get('vhR_symm', False)
-            subtract_nocc = ss_params.get('subtract_nocc', True)
-            nufft_gl = ss_params.get('nufft_gl', True)
-            n_fft = ss_params.get('n_fft', 350)
-            r1_prefactor = ss_params.get('r1_prefactor', 1.0)
-            SqG_filenames = ss_params.get('SqG_filenames', None)
-
-            # Extract uKpts from each set of kpts
-            # Unshifted
-            if mo_coeff_kpts is None:
-                raise RuntimeError("mo_coeff_kpts must be provided for fourier interpolation")
-            # _, E_madelung1, uKpts1, _, kGrid1 = make_ss_inputs(mf2,mf2.kpts,dm_un, mo_coeff_kpts)
-            shiftFac = [0.5]*3
-            # _, _, uKpts2, qGrid, kGrid2 = make_ss_inputs(mf2,kmesh_shifted,dm_shift, mo_coeff_shift,   shiftFac=shiftFac)
-            E_standard, E_madelung, uKpts1, uKpts2, kGrid1,kGrid2, qGrid = make_ss_inputs_stagger(
-                mf2,kpts_i=ikpts,kpts_j=kmesh_shifted,dm_i=dm_un,dm_j=dm_shift, mo_coeff_i=mo_coeff_kpts,
-                mo_coeff_j=mo_coeff_shift,shiftFac=shiftFac)
-
-            # Set some parameters
-            nkpts = np.prod(nks)
-            nocc = mf2.cell.tot_electrons() // 2
-            nbands = nocc
-            NsCell = mf2.cell.mesh
-            nG = np.prod(NsCell)
-
-            Lvec_real = mf2.cell.lattice_vectors()
-            L_delta = Lvec_real / NsCell[:, None]
-            dvol = np.abs(np.linalg.det(L_delta))
-
-            # Evaluate wavefunction on all real space grid points
-            # Establishing real space grid (Generalized for arbitary volume defined by 3 vectors)
-            xv, yv, zv = np.meshgrid(np.arange(NsCell[0]), np.arange(NsCell[1]), np.arange(NsCell[2]), indexing='ij')
-            mesh_idx = np.hstack([xv.reshape(-1, 1), yv.reshape(-1, 1), zv.reshape(-1, 1)])
-            rptGrid3D = mesh_idx @ L_delta
-            #   Step 1.4: compute the pair product
-            Lvec_recip = icell.reciprocal_vectors()
-            Gx = np.fft.fftfreq(NsCell[0], d=1 / NsCell[0])
-            Gy = np.fft.fftfreq(NsCell[1], d=1 / NsCell[1])
-            Gz = np.fft.fftfreq(NsCell[2], d=1 / NsCell[2])
-            Gxx, Gyy, Gzz = np.meshgrid(Gx, Gy, Gz, indexing='ij')
-            GptGrid3D = np.hstack((Gxx.reshape(-1, 1), Gyy.reshape(-1, 1), Gzz.reshape(-1, 1))) @ Lvec_recip
-
-            # aoval = kmf.cell.pbc_eval_gto("GTO
-            # SqG = np.zeros((nkpts, nG), dtype=np.float64)
-            cell = mf2.cell
-            SqG = build_SqG_k1k2(nkpts, nG, nbands, kGrid1, kGrid2,qGrid, mf2, uKpts1, uKpts2,rptGrid3D, dvol, NsCell, GptGrid3D,nks, debug_options={})
-
-            if subtract_nocc:
-                SqG = SqG - nocc  # remove the zero order approximate nocc
-                assert (np.abs(np.min(SqG)) -nocc< 1e-4)
-            else:
-                assert (np.abs(np.min(SqG)) < 1e-4)
-
-            #   Exchange energy can be formulated as
-            #   Ex = prefactor_ex * bz_dvol * sum_{q} (\sum_G S(q+G) * 4*pi/|q+G|^2)
-            prefactor_ex = -1 / (8 * np.pi ** 3)
-            bz_dvol = np.abs(np.linalg.det(Lvec_recip)) / nkpts
-
-            #   Step 3.1: define the local domain as multiple of BZ
-            Lvec_recip = icell.reciprocal_vectors()
-
-            LsCell_bz_local = N_local * Lvec_recip
-            LsCell_bz_local_norms = np.linalg.norm(LsCell_bz_local, axis=1)
-
-            #   localizer for the local domain
-            # r1 = np.min(LsCell_bz_local_norms) / 2
-            # r1 = r1_prefactor * r1
-            r1, closest_plane_vectors = closest_fbz_distance(Lvec_recip,N_local)
-
-            
-            #   reciprocal lattice within the local domain
-            if N_local % 2 == 1:
-                Grid_1D = np.concatenate((np.arange(0, (N_local - 1) // 2 + 1), np.arange(-(N_local - 1) // 2, 0)))
-            else:
-                # At low Nlocal/Nk, this matters, because we want the direction where G is incremented to be opposite of 
-                # the default direction of a boundary-value q.
-                Grid_1D = np.concatenate((np.arange(0, N_local // 2 + 1), np.arange(-N_local // 2 +1, 0)))
-
-            Gxx_local, Gyy_local, Gzz_local = np.meshgrid(Grid_1D, Grid_1D, Grid_1D, indexing='ij')
-            GptGrid3D_local = np.hstack(
-                (Gxx_local.reshape(-1, 1), Gyy_local.reshape(-1, 1), Gzz_local.reshape(-1, 1))) @ Lvec_recip
-
-            #   location/index of GptGrid3D_local within 'GptGrid3D'
-            idx_GptGrid3D_local = []
-            for Gl in GptGrid3D_local:
-                idx_tmp = np.where(np.linalg.norm(Gl[None, :] - GptGrid3D, axis=1) < 1e-8)[0]
-                if len(idx_tmp) != 1:
-                    raise TypeError("Cannot locate local G vector in the reciprocal lattice.")
-                else:
-                    idx_GptGrid3D_local.append(idx_tmp[0])
-            idx_GptGrid3D_local = np.array(idx_GptGrid3D_local)
-
-            #   focus on S(q + G) with q in qGrid and G in GptGrid3D_local
-            SqG_local = SqG[:, idx_GptGrid3D_local]
-
-            #   Step 3.2: compute the Fourier transform of 1/|q|^2
-            nqG_local = N_local * nks  # lattice size along each dimension in the real-space (equal to q + G size)
-            Lvec_real_local = Lvec_real / N_local  # dual real cell of local domain LsCell_bz_local
-
-            Rx = np.fft.fftfreq(nqG_local[0], d=1 / nqG_local[0])
-            Ry = np.fft.fftfreq(nqG_local[1], d=1 / nqG_local[1])
-            Rz = np.fft.fftfreq(nqG_local[2], d=1 / nqG_local[2])
-            Rxx, Ryy, Rzz = np.meshgrid(Rx, Ry, Rz, indexing='ij')
-            RptGrid3D_local = np.hstack((Rxx.reshape(-1, 1), Ryy.reshape(-1, 1), Rzz.reshape(-1, 1))) @ Lvec_real_local
-
-            if H_use_unscaled:
-                r1_unscaled = N_local/2. # in the basis of reciprocal vectors now.
-                H = lambda q: localizer(q,r1_prefactor * r1_unscaled)
-            else:
-                H = lambda q: localizer(q,r1_prefactor * r1)
-                
-            if full_domain:
-                from scipy.optimize import root_scalar
-
-                # Define r1_h and bounds
-                r1_h = r1
-                # xbounds = LsCell_bzlocal[0] * np.array([-1/2, 1/2])
-                # ybounds = LsCell_bzlocal[1] * np.array([-1/2, 1/2])
-                # zbounds = LsCell_bzlocal[2] * np.array([-1/2, 1/2])
-
-                # Find the closest boundary
-                # min_dir = 0  # Python uses 0-based indexing
-
-                if cart_sphr_split:
-                    h_tol = 5e-7 # the Gaussian reaches this value at the closest boundary
-                    unit_vec = np.array([r1, 0, 0]) # arbitrary direction
-
-                    # Define the zetafunc
-                    # from ss_localizers import localizer_gauss
-                    # import pyscf.pbc.scf.ss_localizers as ss_localizers
-
-                    zetafunc = lambda zeta: ss_localizers.localizer_gauss(unit_vec, r1, zeta)- h_tol
-                    
-                    # Solve for zeta_tol using root finding (equivalent of fzero in MATLAB)
-                    result = root_scalar(zetafunc, bracket=[0.1, 10])  # Adjust bracket range if needed
-                    if result.converged:
-                        zeta_tol = result.root
-                        rmult = 1 / zeta_tol
-                    else:
-                        raise ValueError("Root finding for zetafunc did not converge")
-                    # rmult = 0.2
-                    # Call the Fourier integration function
-                    CoulR = fourier_integration_3d(Lvec_recip, Lvec_real, nks, N_local, r1_h, vhR_symm, True, rmult, RptGrid3D_local, nufft_gl, n_fft)
-
-                else:
-                    raise NotImplementedError("Must use cart-sph split")
-                    # CoulR = fourier_integration_3d(N, xbounds, ybounds, zbounds, r1_h, True, False, np.nan, RptGrid_Fourier)
-
-            else:   
-                raise NotImplementedError("Must use full domain")
-
-                CoulR = 4 * np.pi / normR * sici(normR * r1)[0]
-                CoulR[normR < 1e-8] = 4 * np.pi * r1
-                
-            #   Step 4: Compute the correction
-
-            ss_correction = 0
-            #   Integral with Fourier Approximation
-            for iq, qpt in enumerate(qGrid):
-                qG = qpt[None, :] + GptGrid3D_local
-                exp_mat = np.exp(1j * (qG @ RptGrid3D_local.T))
-                tmp = (exp_mat @ CoulR) / np.abs(np.linalg.det(LsCell_bz_local))
-                if H_use_unscaled:
-                    qG_unscaled = qG @ np.linalg.inv(Lvec_recip)
-                    tmp = SqG_local[iq, :].T * H(qG_unscaled) * tmp
-                else:
-                    tmp = SqG_local[iq, :].T * H(qG) * tmp
-
-                ss_correction += np.real(np.sum(tmp))
-
-            int_terms = bz_dvol * prefactor_ex*4*np.pi*ss_correction
-
-            #   Quadrature with Coulomb kernel
-            for iq, qpt in enumerate(qGrid):
-                qG = qpt[None, :] + GptGrid3D_local
-                if H_use_unscaled:
-                    qG_unscaled = qG @ np.linalg.inv(Lvec_recip)
-                    tmp = SqG_local[iq, :].T * H(qG_unscaled) / np.sum(qG ** 2, axis=1)
-                else:
-                    tmp = SqG_local[iq, :].T * H(qG) / np.sum(qG ** 2, axis=1)
-
-                tmp[np.isinf(tmp) | np.isnan(tmp)] = 0
-                ss_correction -= np.sum(tmp)
-
-            quad_terms = bz_dvol*prefactor_ex*4*np.pi*(ss_correction) - int_terms
-            ss_correction = bz_dvol* 4 * np.pi * ss_correction  # Coulomb kernel = 4 pi / |q|^2
-
-            #   Step 5: apply the correction
-            if subtract_nocc:
-                # e_ex_ss = np.real(E_madelung + prefactor_ex * ss_correction)
-                E_stagger_ss = np.real(E_stagger_M + prefactor_ex * ss_correction)
-
-            else:
-                # e_ex_ss = np.real(E_standard + prefactor_ex * ss_correction)
-                E_stagger_ss = np.real(E_stagger + prefactor_ex * ss_correction)
-
+        
         results_dict = {
             "E_stagger_M":np.real(E_stagger_M),
             "E_stagger":np.real(E_stagger),
@@ -713,13 +470,6 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
             "int_term":0,
             "quad_term":0,
         }
-
-        if ss_params:
-            results_dict["E_stagger_ss"] = E_stagger_ss
-            results_dict["E_madelung"] = E_madelung
-            results_dict["ss_correction"] = prefactor_ex*ss_correction
-            results_dict["int_term"] = int_terms
-            results_dict["quad_term"] = quad_terms
             
         return results_dict
 
@@ -730,7 +480,22 @@ class KHF_stagger(khf.KSCF):
     def __init__(self, mf):
         pass
     def dump_flags(self):
-        pass
+        log = logger.Logger(self.stdout, self.verbose)
+        log.info('')
+        log.info('******** %s ********', self.__class__)
+        log.info('method = %s', self.__class__.__name__)
+        
+        log.info('Staggerd mesh method for MP2 nocc = %d, nvir = %d', nocc, nvir)
+
+        if self.flag_submesh is True:
+            log.info('Two %d*%d*%d-sized submeshes of mf.kpts are used', nks_ov[0], nks_ov[1], nks_ov[2])
+        else:
+            log.info('Two %d*%d*%d-sized meshes are used based on non-SCF calculation', nks_ov[0], nks_ov[1], nks_ov[2])
+
+        if self.frozen is not None:
+            log.info('frozen orbitals = %s', str(self.frozen))
+        log.info('KMP2 energy = %.15g' % (self.e_corr))
+        return self
     def kernel(self):
         pass
     
