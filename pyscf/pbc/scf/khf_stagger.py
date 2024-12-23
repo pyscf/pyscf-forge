@@ -17,6 +17,7 @@ from pyscf.pbc.scf import khf
 from pyscf.pbc import df
 import numpy as np
 from pyscf.lib import logger
+from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 
 
 
@@ -177,8 +178,8 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
         return ewg - ewg_analytical
 
 
-def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kpts=None, 
-                kshift_rel=0.5, verbose=logger.NOTE):
+def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kpts=None, 
+                kshift_rel=0.5, verbose=logger.NOTE, with_vk=False):
     
     from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
     from pyscf.pbc import gto,scf
@@ -283,8 +284,9 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
             df_type = df.GDF
         else:
             df_type = df.FFTDF
-
-    if version == "Regular":
+    if with_vk:
+        Kmat = None
+    if type == 0:
         # Extract kpts and append the shifted mesh
         nks = get_monkhorst_pack_size(icell, ikpts)
         shift = icell.get_abs_kpts([kshift_rel / n for n in nks])
@@ -340,7 +342,7 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
         E_stagger_M = E_stagger + nocc * conv_Madelung
         print("One Shot")
 
-    elif version == "Split-SCF":
+    elif type == 1:
         #Regular scf calculation
         mfs = scf.KHF(icell, ikpts)
         print(mfs.kernel())
@@ -385,7 +387,7 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
         E_stagger_M = E_stagger + nocc * conv_Madelung
 
         print("Two Shot")
-    else: # Non-SCF
+    elif type == 2: # Non-SCF
         mf2 = scf.KHF(icell,ikpts, exxdiv='ewald')
         mf2.with_df = df_type(icell, ikpts).build()
         nocc = mf2.cell.tot_electrons()//2
@@ -421,13 +423,13 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
                 print(' '.join(str(np.real(el)) for el in j))
 
         # Construct the Fock Matrix
-        h1e = get_hcore(mf2, cell=mf2.cell, kpts=kmesh_shifted)
+        h1e = khf.get_hcore(mf2, cell=mf2.cell, kpts=kmesh_shifted)
         Jmat, Kmat = mf2.get_jk(cell=mf2.cell, dm_kpts=dm_un, kpts=mf2.kpts, kpts_band=kmesh_shifted,
                     exxdiv='ewald')
         # Veff = Jmat - Kmat/2
         Veff = mf2.get_veff(cell=mf2.cell, dm_kpts=dm_un, kpts=mf2.kpts, kpts_band=kmesh_shifted)
         F_shift = h1e + Veff
-        s1e = get_ovlp(mf2, cell=mf2.cell, kpts=kmesh_shifted)
+        s1e = khf.get_ovlp(mf2, cell=mf2.cell, kpts=kmesh_shifted)
         mo_energy_shift, mo_coeff_shift = mf2.eig(F_shift, s1e)
         mo_occ_shift = mf2.get_occ(mo_energy_kpts=mo_energy_shift, mo_coeff_kpts=mo_coeff_shift)
         dm_shift = mf2.make_rdm1(mo_coeff_kpts=mo_coeff_shift, mo_occ_kpts=mo_occ_shift)
@@ -466,36 +468,85 @@ def kernel(icell, ikpts, version="Non-SCF", df_type=None, dm_kpts=None, mo_coeff
             "E_stagger_M":np.real(E_stagger_M),
             "E_stagger":np.real(E_stagger),
             # "E_madelung":np.real(E_madelung),
-            "E_stagger_ss":0,
-            "int_term":0,
-            "quad_term":0,
         }
+        if with_vk:
+            results_dict["vk"] = Kmat
             
         return results_dict
+    else:
+        raise ValueError("Invalid stagger type", type)
 
 
+stagger_type_id = {
+    'regular':  0,
+    'split-scf': 1,
+    'splitscf': 1,
+    'split_scf': 1,
+    'non-scf': 2,
+    'nonscf': 2,
+    'non_scf': 2,
+}
 
+def get_stagger_type_id(stagger_type):
+    return stagger_type_id.get(stagger_type.lower())
 
 class KHF_stagger(khf.KSCF):
-    def __init__(self, mf):
-        pass
+    def __init__(self, mf, stagger_type='regular',kshift_rel=0.5, with_vk=False, **kwargs):
+        self.cell = mf.cell
+        self.stdout = mf.cell.stdout
+        self.verbose = mf.cell.verbose
+        self.max_memory = self.cell.max_memory
+        self.stagger_type= get_stagger_type_id(stagger_type)
+        self.kshift_rel = kshift_rel
+        self.kpts = mf.kpts
+        self.df_type = mf.with_df.__class__
+        self.mo_coeff_kpts = mf.mo_coeff_kpts
+        self.dm_kpts = mf.make_rdm1()
+        self.nks = get_monkhorst_pack_size(self.cell, self.kpts)
+        self.Nk = np.prod(self.nks)
+        self.with_vk = with_vk
+        
+        
+        
+        
     def dump_flags(self):
         log = logger.Logger(self.stdout, self.verbose)
         log.info('')
         log.info('******** %s ********', self.__class__)
         log.info('method = %s', self.__class__.__name__)
+
+        log.info('Staggerd mesh method for exact exchange, type = %s', self.stagger_type)
+
         
-        log.info('Staggerd mesh method for MP2 nocc = %d, nvir = %d', nocc, nvir)
-
-        if self.flag_submesh is True:
-            log.info('Two %d*%d*%d-sized submeshes of mf.kpts are used', nks_ov[0], nks_ov[1], nks_ov[2])
-        else:
-            log.info('Two %d*%d*%d-sized meshes are used based on non-SCF calculation', nks_ov[0], nks_ov[1], nks_ov[2])
-
-        if self.frozen is not None:
-            log.info('frozen orbitals = %s', str(self.frozen))
-        log.info('KMP2 energy = %.15g' % (self.e_corr))
+        log.info('ek (%s) = %.15g', self.stagger_type, self.ek)
+        log.info('etot (%s) = %.15g', self.stagger_type, self.e_tot)
         return self
-    def kernel(self):
-        pass
     
+    def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False):
+        Nk = self.Nk
+        dm = self.mf.make_rdm1()
+
+        if hcore:
+            h1e = self.mf.get_hcore()
+            self.ehcore = 1. / Nk * np.einsum('kij,kji->', h1e, dm).real
+        if nuc:
+            self.enuc = self.mf.energy_nuc()
+        if j:
+            Jo, _ = self.mf.get_jk(cell=self.mf.cell, dm_kpts=dm, kpts=self.mf.kpts, kpts_band=self.mf.kpts, with_k=False)
+
+            ej = 1. / Nk * np.einsum('kij,kji', Jo, dm) * 0.5
+            self.ej = ej.real
+
+        if k:
+            results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
+            self.ek = results["E_stagger_M"] 
+
+    def kernel(self):
+        results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
+        self.ek = results["E_stagger_M"] 
+        
+        self.compute_energy_components(hcore=True,nuc=True,j=True,k=False)
+        self.e_tot = self.ek + self.ehcore + self.enuc + self.ej
+        return self.e_tot
+        
+        
