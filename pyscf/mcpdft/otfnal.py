@@ -19,11 +19,16 @@ import copy
 from scipy import linalg
 from pyscf import lib, dft
 from pyscf.lib import logger
+from pyscf.dft2 import libxc
 from pyscf.dft.gen_grid import Grids
 from pyscf.dft.numint import _NumInt, NumInt
 from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff, pdft_eff
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf import __config__
+
+# Points to the libxc of the dft2 module
+dft.numint.libxc = libxc
+dft.numint.LibXCMixin.libxc = libxc
 
 FT_R0 = getattr(__config__, 'mcpdft_otfnal_ftransfnal_R0', 0.9)
 FT_R1 = getattr(__config__, 'mcpdft_otfnal_ftransfnal_R1', 1.15)
@@ -31,58 +36,75 @@ FT_A = getattr(__config__, 'mcpdft_otfnal_ftransfnal_A', -475.60656009)
 FT_B = getattr(__config__, 'mcpdft_otfnal_ftransfnal_B', -379.47331922)
 FT_C = getattr(__config__, 'mcpdft_otfnal_ftransfnal_C', -85.38149682)
 
-OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE'}
-REG_FUNCTIONALS={}
+OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE',
+                'MC23' : 'mc23'} # Note: mc23 is hybrid Meta-GGA OT Functional.
 
-def register_ot_libxc(xc_base):
+REG_OT_FUNCTIONALS={}
+
+# ALIAS for the preset on-top functional
+OT_PRESET={
+    # Reparametrized-M06L: rep-M06L
+    # MC23 = { '0.2952*HF + (1-0.2952)*rep-M06L, 0.2952*HF + (1-0.2952)*rep-M06L'}}
+    # XC_ID_MGGA_C_M06_L = 233
+    # XC_ID_MGGA_X_M06_L = 203
+    'MC23':{
+        'xc_code':'M06L',
+        'ext_params':{203: np.array([3.352197, 6.332929e-01, -9.469553e-01, 2.030835e-01,
+                                     2.503819, 8.085354e-01, -3.619144, -5.572321e-01,
+                                     -4.506606, 9.614774e-01, 6.977048, -1.309337, -2.426371,
+                                     -7.896540e-03, 1.364510e-02, -1.714252e-06, -4.698672e-05, 0.0]),
+                        233: np.array([0.06, 0.0031, 0.00515088, 0.00304966, 2.427648, 3.707473,
+                                       -7.943377, -2.521466, 2.658691, 2.932276, -8.832841e-01,
+                                       -1.895247, -2.899644, -5.068570e-01, -2.712838, 9.416102e-02,
+                                       -3.485860e-03, -5.811240e-04, 6.668814e-04, 0.0, 2.669169e-01,
+                                       -7.563289e-02, 7.036292e-02, 3.493904e-04, 6.360837e-04, 0.0, 1e-10])},
+        'hyb':(0.2952,0,0),
+        'facs':(0.7048,0.7048)}
+        }
+
+def register_otfnal(xc_code, preset):
     '''
-    This is a wrapper function to registers the new ot-functionals if they haven't been
+    This function registers the new on-top functional if it hasn't been
     registered previously.
     Args:
-        xc_base: str
-            The name of the ot-functional to be registered.
+        xc_code: str
+            The name of the on-top functional to be registered.
+        preset: dict
+            The dictionary containing the information about the on-top functional
+            to be registered.
+            xc_base: str
+                The name of the underylying KS-functional in the libxc library.
+            ext_params: dict, with LibXC exchange and correlation functional integer ID as key, and
+                an array-like object containing the functional parameters as value.
+            hyb: tuple
+                The hybrid functional parameters.
+            facs: tuple
+                The mixing factors.
+            kwargs: dict
+                The additional keyword arguments.
     '''
-    xc_base = xc_base.replace("-", "") # In case, the functional name has a hyphen
+    libxc_register_code = xc_code.lower ()
+    libxc_base_code = preset['xc_base']
+    ext_params = preset['ext_params']
+    hyb = preset['hyb']
+    facs = preset['facs']
+    libxc.register_custom_functional_(libxc_register_code, libxc_base_code,
+                                      ext_params=ext_params, hyb=hyb, facs=facs)
 
-    def _register_repM06L():
-        '''
-        This function register the reparametrized
-        M06-L functional (used for MC23 Functional) in the libxc library.
-        '''
-        from pyscf import dft2
-        dft.libxc = dft2.libxc
-        dft.numint.libxc = dft2.libxc
-        dft.numint.LibXCMixin.libxc = dft2.libxc
-
-        # Reparametrized-M06L: rep-M06L
-        # MC23 = { '0.2952*HF + (1-0.2952)*rep-M06L, 0.2952*HF + (1-0.2952)*rep-M06L'}}
-        # Here, I am registering the rep-M06L functional only.
-
-        # repM06L_C has 27 parameters
-        MC23_C =  np.array([0.06, 0.0031, 0.00515088, 0.00304966, 2.427648, 3.707473,
-                            -7.943377, -2.521466, 2.658691, 2.932276, -8.832841e-01,
-                            -1.895247, -2.899644, -5.068570e-01, -2.712838, 9.416102e-02,
-                            -3.485860e-03, -5.811240e-04, 6.668814e-04, 0.0, 2.669169e-01,
-                            -7.563289e-02, 7.036292e-02, 3.493904e-04, 6.360837e-04, 0.0, 1e-10])
-
-        # repM06L_X has 18 parameters
-        MC23_X =  np.array([3.352197, 6.332929e-01, -9.469553e-01, 2.030835e-01,
-                            2.503819, 8.085354e-01, -3.619144, -5.572321e-01,
-                            -4.506606, 9.614774e-01, 6.977048, -1.309337, -2.426371,
-                            -7.896540e-03, 1.364510e-02, -1.714252e-06, -4.698672e-05, 0.0])
-
-        # See: pyscf/pyscf/dft/libxc_funcs.txt
-        XC_ID_MGGA_C_M06_L = 233
-        XC_ID_MGGA_X_M06_L = 203
-
-        libxc_register_code = 'repM06L'.lower ()
-
-        dft2.libxc.register_custom_functional_(libxc_register_code, 'M06L',
-                                            ext_params={XC_ID_MGGA_X_M06_L: MC23_X,
-                                                        XC_ID_MGGA_C_M06_L: MC23_C})
-
-    if xc_base.upper() == 'REPM06L' and REG_FUNCTIONALS.get(xc_base.upper()) is None:
-        _register_repM06L()
+def _get_regsitered_ot_functional(xc_code, mol):
+    '''
+    This function returns the on-top functional if it has been registered
+    previously.
+    Args:
+        xc_code: str
+            The name of the on-top functional to be registered.
+    '''
+    if (xc_code.upper() not in REG_OT_FUNCTIONALS) and (xc_code.upper() in OT_PRESET):
+        preset = OT_PRESET[xc_code.upper()]
+        register_otfnal(xc_code, preset)
+        REG_OT_FUNCTIONALS[xc_code.upper()] = {'hyb_x':preset.get('hyb',0)[0], 'hyb_c':preset.get('hyb',0)[0]}
+        logger.info(mol, 'Registered the on-top functional: %s', xc_code)
+    return xc_code.upper()
 
 def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     '''Compute the on-top energy - the last term in
@@ -318,7 +340,9 @@ class transfnal (otfnal):
         rho'_t^a = (rho'/2) * (1 + zeta)
         rho'_t^b = (rho'/2) * (1 - zeta)
         laplacian_t^a = (laplacian/2) * (1 + zeta)
+        laplacian_t^b = (laplacian/2) * (1 - zeta)
         tau_t^a = (tau/2) * (1 + zeta)
+        tau_t^b = (tau/2) * (1 - zeta)
 
         See "get_zeta" for the meaning of "zeta"
 
@@ -798,17 +822,14 @@ def get_transfnal (mol, otxc):
             'On-top pair-density functional names other than "translated" (t) or '
             '"fully-translated (ft).'
         )
+    # Try to register the functional with libxc, if not already done
+    xc_base = _get_regsitered_ot_functional (xc_base, mol)
+
     xc_base = OT_HYB_ALIAS.get (xc_base.upper (), xc_base)
 
-    if xc_base.replace("-","").upper() == 'REPM06L':
-        # Register the repM06L functional with libxc, if not already done
-        register_ot_libxc (xc_base)
-
-        # Interface only takes the lower case name for the
-        # reparametrized functionals.
-        xc_base = xc_base.lower ()
-
-    elif ',' not in xc_base and _libxc.is_hybrid_or_rsh (xc_base):
+    if ',' not in xc_base and \
+        (xc_base.upper() not in REG_OT_FUNCTIONALS) and \
+        (_libxc.is_hybrid_or_rsh (xc_base)):
         raise NotImplementedError (
             'Aliased or built-in translated hybrid or range-separated '
             'functionals\nother than those listed in otfnal.OT_HYB_ALIAS. '
@@ -870,19 +891,24 @@ def _hybrid_2c_coeff (ni, xc_code, spin=0):
     exchange and correlation components of the hybrid coefficent
     separately '''
 
-    hyb_tot = _NumInt.hybrid_coeff (ni, xc_code, spin=spin)
-    if hyb_tot == 0: return [0, 0]
+    if xc_code.upper() in REG_OT_FUNCTIONALS:
+        hyb_x = REG_OT_FUNCTIONALS[xc_code.upper ()].get('hyb_x', 0)
+        hyb_c = REG_OT_FUNCTIONALS[xc_code.upper ()].get('hyb_c', 0)
+        return [hyb_x, hyb_c]
+    else:
+        hyb_tot = _NumInt.hybrid_coeff (ni, xc_code, spin=spin)
+        if hyb_tot == 0: return [0, 0]
 
-    # For exchange-only functionals, hyb_c = hyb_x
-    x_code, c_code = _libxc.split_x_c_comma (xc_code)
-    x_code = x_code + ','
-    c_code = ',' + c_code
+        # For exchange-only functionals, hyb_c = hyb_x
+        x_code, c_code = _libxc.split_x_c_comma (xc_code)
+        x_code = x_code + ','
+        c_code = ',' + c_code
 
-    # All factors of 'HF' are summed by default. Therefore just run the same
-    # code for the exchange and correlation parts of the string separately
-    hyb_x = _NumInt.hybrid_coeff(ni, x_code, spin=spin) if len (x_code) else 0
-    hyb_c = _NumInt.hybrid_coeff(ni, c_code, spin=spin) if len (c_code) else 0
-    return [hyb_x, hyb_c]
+        # All factors of 'HF' are summed by default. Therefore just run the same
+        # code for the exchange and correlation parts of the string separately
+        hyb_x = _NumInt.hybrid_coeff(ni, x_code, spin=spin) if len (x_code) else 0
+        hyb_c = _NumInt.hybrid_coeff(ni, c_code, spin=spin) if len (c_code) else 0
+        return [hyb_x, hyb_c]
 
 def make_scaled_fnal (xc_code, hyb_x = 0, hyb_c = 0, fnal_x = None,
         fnal_c = None):

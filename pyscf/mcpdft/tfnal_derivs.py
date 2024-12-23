@@ -117,19 +117,17 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         rho_t[0, 0, idx] = 1e-15
     rho_tot = rho.sum(0)
 
+    if nderiv > 4 and dderiv > 0:
+        raise NotImplementedError("Meta-GGA functional derivatives")
+
     if 1 < nderiv <= 4:
         rho_deriv = rho_tot[1:4, :]
-    elif nderiv > 4:
+    elif 4 < nderiv <= 6:
         rho_deriv = rho_tot[1:6, :]
     else:
         rho_deriv = None
 
-    if 1 < nderiv_Pi <= 4:
-        Pi_deriv = Pi[1:4, :]
-    elif nderiv > 4:
-        Pi_deriv = Pi[1:6, :]
-    else:
-        Pi_deriv = None
+    Pi_deriv = Pi[1:4, :] if nderiv_Pi > 1 else None
 
     xc_grid = otfnal._numint.eval_xc(otfnal.otxc, (rho_t[0, :, :],
                                                    rho_t[1, :, :]), spin=1, relativity=0, deriv=dderiv,
