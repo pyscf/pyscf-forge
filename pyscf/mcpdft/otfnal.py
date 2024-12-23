@@ -26,10 +26,6 @@ from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff, pdft_
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf import __config__
 
-# Points to the libxc of the dft2 module
-dft.numint.libxc = libxc
-dft.numint.LibXCMixin.libxc = libxc
-
 FT_R0 = getattr(__config__, 'mcpdft_otfnal_ftransfnal_R0', 0.9)
 FT_R1 = getattr(__config__, 'mcpdft_otfnal_ftransfnal_R1', 1.15)
 FT_A = getattr(__config__, 'mcpdft_otfnal_ftransfnal_A', -475.60656009)
@@ -110,7 +106,7 @@ def unregister_otfnal(xc_code):
     except Exception as e:
         raise RuntimeError(f"Failed to unregister functional '{xc_code}': {e}") from e
 
-def _get_regsitered_ot_functional(xc_code, mol):
+def _get_registered_ot_functional(xc_code, mol):
     '''
     This function returns the on-top functional if it has been registered
     previously.
@@ -296,6 +292,7 @@ class transfnal (otfnal):
         otfnal.__init__(self, ks.mol, **kwargs)
         self.otxc = 't' + ks.xc
         self._numint = copy.copy (ks._numint)
+        self._numint.libxc = libxc
         self.grids = copy.copy (ks.grids)
         self._numint.hybrid_coeff = t_hybrid_coeff.__get__(self._numint)
         self._numint.nlc_coeff = t_nlc_coeff.__get__(self._numint)
@@ -672,6 +669,7 @@ class ftransfnal (transfnal):
         self.C=FT_C
         self.otxc = 'ft' + ks.xc
         self._numint = copy.copy (ks._numint)
+        self._numint.libxc = libxc
         self.grids = copy.copy (ks.grids)
         self._numint.hybrid_coeff = ft_hybrid_coeff.__get__(self._numint)
         self._numint.nlc_coeff = ft_nlc_coeff.__get__(self._numint)
@@ -827,6 +825,15 @@ _CS_b_DEFAULT = 0.132
 _CS_c_DEFAULT = 0.2533
 _CS_d_DEFAULT = 0.349
 
+def _sanity_check_ftot(xc_code):
+    '''
+    This function will check the functional type and will
+    raise the warning for fully-translated MGGAs or custom functionals.
+    '''
+    xc_type = libxc.xc_type(xc_code)
+    if xc_type not in ['LDA', 'GGA']:
+        msg = f"fully-translated {xc_type} on-top functionals are not defined"
+        raise NotImplementedError(msg)
 
 def get_transfnal (mol, otxc):
     if otxc.upper ().startswith ('T'):
@@ -834,6 +841,7 @@ def get_transfnal (mol, otxc):
         fnal_class = transfnal
     elif otxc.upper ().startswith ('FT'):
         xc_base = otxc[2:]
+        _sanity_check_ftot(xc_base)
         fnal_class = ftransfnal
     else:
         raise NotImplementedError (
@@ -841,7 +849,7 @@ def get_transfnal (mol, otxc):
             '"fully-translated (ft).'
         )
     # Try to register the functional with libxc, if not already done
-    xc_base = _get_regsitered_ot_functional (xc_base, mol)
+    xc_base = _get_registered_ot_functional (xc_base, mol)
 
     xc_base = OT_HYB_ALIAS.get (xc_base.upper (), xc_base)
 

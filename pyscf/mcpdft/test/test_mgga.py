@@ -31,7 +31,9 @@ Test the MCPDFT energies calculated for the triplet water molecule at the
 4. Meta-GGA functional (M06L)
 5. MC23 Functional
 
-Note: The reference values from OpenMolcas v24.10, tag 682-gf74be507d
+Note: The reference values are calculated using same geometries and basis set
+from OpenMolcas v24.10, tag 682-gf74be507d.
+
 The OpenMolcas results were obtained with this grid settings
 &SEWARD
 Grid Input
