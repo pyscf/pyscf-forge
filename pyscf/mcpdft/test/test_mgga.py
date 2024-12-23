@@ -131,7 +131,7 @@ def tearDownModule():
     water_tmc23.mol.stdout.close()
     del lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2
     del lih_tm06l0, water_tm06l, water_tmc23
-    
+
 class KnownValues(unittest.TestCase):
 
     def assertListAlmostEqual(self, first_list, second_list, expected):
@@ -142,7 +142,7 @@ class KnownValues(unittest.TestCase):
     def test_tmgga(self):
         e_mcscf = lih_tm06l.e_mcscf
         epdft = lih_tm06l.e_tot
-        
+
         sa_e_mcscf = lih_tm06l_sa2.e_mcscf
         sa_epdft = lih_tm06l_sa2.e_states
 
@@ -155,21 +155,21 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
         self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 6)
         self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 6)
-    
+
     def test_t_hyb_mgga(self):
         e_mcscf = lih_tm06l0.e_mcscf
         epdft = lih_tm06l0.e_tot
-    
+
         E_CASSCF_EXPECTED = -7.88214917
         E_MCPDFT_EXPECTED = -7.93914369
-      
+
         self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
         self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
-      
+
     def test_tmc23(self):
         e_mcscf = lih_tmc23.e_mcscf
         epdft = lih_tmc23.e_tot
-        
+
         sa_e_mcscf = lih_tmc23_sa2.e_mcscf
         sa_epdft = lih_tmc23_sa2.e_states
 
@@ -186,20 +186,20 @@ class KnownValues(unittest.TestCase):
     def test_water_triplet_tm06l(self):
         e_mcscf = water_tm06l.e_mcscf
         epdft = water_tm06l.e_tot
-    
+
         E_CASSCF_EXPECTED = -75.72365496
         E_MCPDFT_EXPECTED = -76.07686505
-      
+
         self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
         self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
-    
+
     def test_water_triplet_tmc23(self):
         e_mcscf = water_tmc23.e_mcscf
         epdft = water_tmc23.e_tot
-    
+
         E_CASSCF_EXPECTED = -75.72365496
         E_MCPDFT_EXPECTED = -76.02630019
-      
+
         self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
         self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
 
