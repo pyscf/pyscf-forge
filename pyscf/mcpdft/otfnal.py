@@ -48,7 +48,7 @@ OT_PRESET={
     # XC_ID_MGGA_C_M06_L = 233
     # XC_ID_MGGA_X_M06_L = 203
     'MC23':{
-        'xc_code':'M06L',
+        'xc_base':'M06L',
         'ext_params':{203: np.array([3.352197, 6.332929e-01, -9.469553e-01, 2.030835e-01,
                                      2.503819, 8.085354e-01, -3.619144, -5.572321e-01,
                                      -4.506606, 9.614774e-01, 6.977048, -1.309337, -2.426371,
@@ -86,10 +86,29 @@ def register_otfnal(xc_code, preset):
     libxc_register_code = xc_code.lower ()
     libxc_base_code = preset['xc_base']
     ext_params = preset['ext_params']
-    hyb = preset['hyb']
-    facs = preset['facs']
+    hyb = preset.get('hyb', None)
+    facs = preset.get('facs', None)
     libxc.register_custom_functional_(libxc_register_code, libxc_base_code,
                                       ext_params=ext_params, hyb=hyb, facs=facs)
+    REG_OT_FUNCTIONALS[xc_code.upper()] = {'hyb_x':preset.get('hyb',[0])[0],
+                                           'hyb_c':preset.get('hyb',[0])[0]}
+
+def unregister_otfnal(xc_code):
+    '''
+    This function unregisters the on-top functional if it has been registered
+    previously.
+    Args:
+        xc_code: str
+            The name of the on-top functional to be unregistered.
+    '''
+    try:
+        if xc_code.upper() in REG_OT_FUNCTIONALS:
+            libxc_unregister_code = xc_code.lower()
+            libxc.unregister_custom_functional_(libxc_unregister_code)
+            del REG_OT_FUNCTIONALS[xc_code.upper()]
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to unregister functional '{xc_code}': {e}") from e
 
 def _get_regsitered_ot_functional(xc_code, mol):
     '''
@@ -102,7 +121,6 @@ def _get_regsitered_ot_functional(xc_code, mol):
     if (xc_code.upper() not in REG_OT_FUNCTIONALS) and (xc_code.upper() in OT_PRESET):
         preset = OT_PRESET[xc_code.upper()]
         register_otfnal(xc_code, preset)
-        REG_OT_FUNCTIONALS[xc_code.upper()] = {'hyb_x':preset.get('hyb',0)[0], 'hyb_c':preset.get('hyb',0)[0]}
         logger.info(mol, 'Registered the on-top functional: %s', xc_code)
     return xc_code.upper()
 

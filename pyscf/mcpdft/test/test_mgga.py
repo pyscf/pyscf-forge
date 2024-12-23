@@ -15,7 +15,6 @@
 #
 # Author: Bhavnesh Jangid <jangidbhavnesh@uchicago.com>
 
-import tempfile
 import numpy as np
 from pyscf import gto, scf, dft, fci
 from pyscf import mcpdft
@@ -24,27 +23,70 @@ import unittest
 '''
 In this unit-test, test the MCPDFT energies calculated for the LiH
 molecule at the state-specific and state-average (2-states) using
-1. Meta-GGA functional (M06L)
-2. Hybrid-meta-GGA functional M06L0
-3. MC23 Functional
-4. Customized Functional
+1. Meta-GGA functional (tM06L)
+2. Hybrid-meta-GGA functional tM06L0
+3. tMC23 Functional
 
 Test the MCPDFT energies calculated for the triplet water molecule at the
-5. Meta-GGA functional (M06L)
-6. MC23 Functional
+4. Meta-GGA functional (M06L)
+5. MC23 Functional
 
-Note: The reference values from OpenMolcas v22.02, tag 177-gc48a1862b
+Note: The reference values from OpenMolcas v24.10, tag 682-gf74be507d
+The OpenMolcas results were obtained with this grid settings
+&SEWARD
+Grid Input
+RQuad=TA
+NR=100
+LMAX=41
+NOPrun
+NOSCreening
 '''
+
+# To be consistent with OpenMolcas Grid Settings. Grids_att is defined as below
+# Source: pyscf/mcpdft/test/test_diatomic_energies.py
+
+om_ta_alpha = [0.8, 0.9, # H, He
+    1.8, 1.4, # Li, Be
+    1.3, 1.1, 0.9, 0.9, 0.9, 0.9, # B - Ne
+    1.4, 1.3, # Na, Mg
+    1.3, 1.2, 1.1, 1.0, 1.0, 1.0, # Al - Ar
+    1.5, 1.4, # K, Ca
+    1.3, 1.2, 1.2, 1.2, 1.2, 1.2, 1.2, 1.1, 1.1, 1.1, # Sc - Zn
+    1.1, 1.0, 0.9, 0.9, 0.9, 0.9] # Ga - Kr
+
+def om_treutler_ahlrichs(n, chg, *args, **kwargs):
+    '''
+    "Treutler-Ahlrichs" as implemented in OpenMolcas
+    '''
+    r = np.empty(n)
+    dr = np.empty(n)
+    alpha = om_ta_alpha[chg-1]
+    step = 2.0 / (n+1) # = numpy.pi / (n+1)
+    ln2 = alpha / np.log(2)
+    for i in range(n):
+        x = (i+1)*step - 1 # = numpy.cos((i+1)*step)
+        r [i] = -ln2*(1+x)**.6 * np.log((1-x)/2)
+        dr[i] = (step #* numpy.sin((i+1)*step)
+                * ln2*(1+x)**.6 *(-.6/(1+x)*np.log((1-x)/2)+1/(1-x)))
+    return r[::-1], dr[::-1]
+
+my_grids = {'atom_grid': (99,590),
+        'radi_method': om_treutler_ahlrichs,
+        'prune': False,
+        'radii_adjust': None}
 
 def get_lih (r, stateaverage=False, functional='tM06L', basis='sto3g'):
     mol = gto.M (atom='Li 0 0 0\nH {} 0 0'.format (r), basis=basis,
                  output='/dev/null', verbose=0)
     mf = scf.RHF (mol).run ()
-    if stateaverage:
-        mc = mcpdft.CASSCF (mf, functional, 2, 2, grids_level=6)
-        mc = mc.state_average_([0.5, 0.5])
+    if functional == 'tM06L0':
+        tM06L0 = 't' + mcpdft.hyb('M06L',0.25, hyb_type='average')
+        mc = mcpdft.CASSCF(mf, tM06L0, 5, 2, grids_attr=my_grids)
     else:
-        mc = mcpdft.CASSCF(mf, functional, 5, 2, grids_level=6)
+        mc = mcpdft.CASSCF(mf, functional, 5, 2, grids_attr=my_grids)
+
+    if stateaverage:
+        mc = mc.state_average_([0.5, 0.5])
 
     mc.fix_spin_(ss=0)
     mc = mc.run()
@@ -55,49 +97,40 @@ def get_water_triplet(functional='tM06L', basis='6-31G'):
  O     0.    0.000    0.1174
  H     0.    0.757   -0.4696
  H     0.   -0.757   -0.4696
-    ''',basis=basis, output='/dev/null', verbose=0)
+    ''',basis=basis, spin=2,output='/dev/null', verbose=0)
 
     mf = scf.RHF(mol).run()
 
-    mc = mcpdft.CASSCF(mf, functional, 4, 4, grids_level=6)
+    mc = mcpdft.CASSCF(mf, functional, 2, 2, grids_attr=my_grids)
+    solver1 = fci.direct_spin1.FCI(mol)
     solver1 = fci.addons.fix_spin(solver1, ss=2)
-    solver1.spin = 2
     mc.fcisolver = solver1
-    mc.run()
+    mc = mc.run()
     return mc
 
 def setUpModule():
-    global original_grids
-    global get_lih, lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2
-    global get_lih_tm06l0, lih_tm06l0
-    global get_lih_custom, lih_custom
+    global get_lih, lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2,lih_tm06l0
     global get_water_triplet, water_tm06l, water_tmc23
-
-    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
-    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     lih_tm06l = get_lih(1.5, functional='tM06L')
     lih_tmc23 = get_lih(1.5, functional='tMC23')
     lih_tm06l_sa2 = get_lih(1.5, stateaverage=True, functional='tM06L')
     lih_tmc23_sa2 = get_lih(1.5, stateaverage=True, functional='tMC23')
-    lih_tm06l0 = get_lih_tm06l0(1.5)
-    lih_custom = get_lih_custom(1.5)
+    lih_tm06l0 = get_lih(1.5, functional='tM06L0')
     water_tm06l = get_water_triplet()
     water_tmc23 = get_water_triplet(functional='tMC23')
 
 def tearDownModule():
-    global original_grids, lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2
-    global lih_tm06l0, get_lih_custom, lih_custom, water_tm06l, water_tmc23
-    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
-    lih_tm06l.mol.stdout.close()#Done
-    lih_tmc23.mol.stdout.close()#Done
-    lih_tm06l_sa2.mol.stdout.close()#Done
-    lih_tmc23_sa2.mol.stdout.close()#Done
-    lih_tm06l0.mol.stdout.close()#Done
-    lih_custom.mol.stdout.close()#Done
-    water_tm06l.mol.stdout.close()#Done
-    water_tmc23.mol.stdout.close()#Done
-    del original_grids, lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2
-    del lih_tm06l0, get_lih_custom, lih_custom, water_tm06l, water_tmc23
+    global lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2
+    global lih_tm06l0, water_tm06l, water_tmc23
+    lih_tm06l.mol.stdout.close()
+    lih_tmc23.mol.stdout.close()
+    lih_tm06l_sa2.mol.stdout.close()
+    lih_tmc23_sa2.mol.stdout.close()
+    lih_tm06l0.mol.stdout.close()
+    water_tm06l.mol.stdout.close()
+    water_tmc23.mol.stdout.close()
+    del lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2
+    del lih_tm06l0, water_tm06l, water_tmc23
     
 class KnownValues(unittest.TestCase):
 
@@ -108,81 +141,68 @@ class KnownValues(unittest.TestCase):
 
     def test_tmgga(self):
         e_mcscf = lih_tm06l.e_mcscf
-        epdft = lih_tm06l.e_pdft
+        epdft = lih_tm06l.e_tot
         
         sa_e_mcscf = lih_tm06l_sa2.e_mcscf
         sa_epdft = lih_tm06l_sa2.e_states
 
-        E_CASSCF_EXPECTED = -7.88112386
-        E_MCPDFT_EXPECTED =   -7.72800554
-        SA_E_CASSCF_EXPECTED = [-7.88112386]
-        SA_E_MCPDFT_EXPECTED = [-7.88112386]
+        E_CASSCF_EXPECTED = -7.88214917
+        E_MCPDFT_EXPECTED = -7.95814186
+        SA_E_CASSCF_EXPECTED = [-7.88205449, -7.74391704]
+        SA_E_MCPDFT_EXPECTED = [-7.95807682, -7.79920022]
 
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 7)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 7)
-        self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 7)
-        self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
+        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
+        self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 6)
+        self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 6)
     
     def test_t_hyb_mgga(self):
         e_mcscf = lih_tm06l0.e_mcscf
-        epdft = lih_tm06l0.e_pdft
+        epdft = lih_tm06l0.e_tot
     
-        E_CASSCF_EXPECTED = -7.88112386
-        E_MCPDFT_EXPECTED =   -7.72800554
+        E_CASSCF_EXPECTED = -7.88214917
+        E_MCPDFT_EXPECTED = -7.93914369
       
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 7)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
+        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
       
     def test_tmc23(self):
         e_mcscf = lih_tmc23.e_mcscf
-        epdft = lih_tmc23.e_pdft
+        epdft = lih_tmc23.e_tot
         
         sa_e_mcscf = lih_tmc23_sa2.e_mcscf
         sa_epdft = lih_tmc23_sa2.e_states
 
-        E_CASSCF_EXPECTED = -7.88112386
-        E_MCPDFT_EXPECTED =   -7.72800554
-        SA_E_CASSCF_EXPECTED = [-7.88112386]
-        SA_E_MCPDFT_EXPECTED = [-7.88112386]
+        E_CASSCF_EXPECTED = -7.88214917
+        E_MCPDFT_EXPECTED = -7.95098727
+        SA_E_CASSCF_EXPECTED = [-7.88205449, -7.74391704]
+        SA_E_MCPDFT_EXPECTED = [-7.95093826, -7.80604012]
 
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 7)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 7)
-        self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 7)
-        self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 7)
-
+        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
+        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
+        self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 6)
+        self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 6)
 
     def test_water_triplet_tm06l(self):
         e_mcscf = water_tm06l.e_mcscf
-        epdft = water_tm06l.e_pdft
+        epdft = water_tm06l.e_tot
     
-        E_CASSCF_EXPECTED = -7.88112386
-        E_MCPDFT_EXPECTED =   -7.72800554
+        E_CASSCF_EXPECTED = -75.72365496
+        E_MCPDFT_EXPECTED = -76.07686505
       
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 7)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 7)
+        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
+        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
     
     def test_water_triplet_tmc23(self):
         e_mcscf = water_tmc23.e_mcscf
-        epdft = water_tmc23.e_pdft
+        epdft = water_tmc23.e_tot
     
-        E_CASSCF_EXPECTED = -7.88112386
-        E_MCPDFT_EXPECTED =   -7.72800554
+        E_CASSCF_EXPECTED = -75.72365496
+        E_MCPDFT_EXPECTED = -76.02630019
       
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 7)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 7)
-    
-    def test_custom_ot_functional(self):
-        e_mcscf = lih_custom.e_mcscf
-        epdft = lih_custom.e_pdft
-    
-        E_CASSCF_EXPECTED = -7.88112386
-        E_MCPDFT_EXPECTED =   -7.72800554
-      
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 7)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 7)
-
-
+        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
+        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
 
 if __name__ == "__main__":
-    print("Full Tests for MGGAs and MC23")
+    print("Full Tests for MGGAs, Hybrid-MGGAs, and MC23")
     unittest.main()
