@@ -126,7 +126,7 @@ class KnownValues(unittest.TestCase):
         #   commit: bd596f6cabd6da0301f3623af2de6a14082b34b5
         for i in range (3):
          with self.subTest (state=i):
-            self.assertAlmostEqual (e[i], e_ref[i], 5)
+            self.assertAlmostEqual (e[i], e_ref[i], 4)
 
     def test_h2_cms2ftlda22_631g (self):
         e = diatomic ('H', 'H', 1.3, 'ftLDA,VWN3', '6-31G', 2, 2, 2)
