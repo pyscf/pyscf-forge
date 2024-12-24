@@ -104,6 +104,8 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     if rho.ndim == 2: rho = rho[:, None, :]
     if Pi.ndim == 1: Pi = Pi[None, :]
     assert (rho.shape[0] == 2)
+    assert (rho.shape[1] <= 6), "Undefined behavior for this function"
+
     nderiv = rho.shape[1]
     nderiv_Pi = Pi.shape[0]
 
