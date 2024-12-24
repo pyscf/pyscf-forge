@@ -492,15 +492,18 @@ def get_stagger_type_id(stagger_type):
 
 class KHF_stagger(khf.KSCF):
     def __init__(self, mf, stagger_type='regular',kshift_rel=0.5, with_vk=False, **kwargs):
+        self.mf = mf
         self.cell = mf.cell
         self.stdout = mf.cell.stdout
         self.verbose = mf.cell.verbose
+        self.rsjk = False
         self.max_memory = self.cell.max_memory
+        self.with_df = mf.with_df
         self.stagger_type= get_stagger_type_id(stagger_type)
         self.kshift_rel = kshift_rel
         self.kpts = mf.kpts
         self.df_type = mf.with_df.__class__
-        self.mo_coeff_kpts = mf.mo_coeff_kpts
+        self.mo_coeff = mf.mo_coeff_kpts
         self.dm_kpts = mf.make_rdm1()
         self.nks = get_monkhorst_pack_size(self.cell, self.kpts)
         self.Nk = np.prod(self.nks)
@@ -524,17 +527,17 @@ class KHF_stagger(khf.KSCF):
     
     def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False):
         Nk = self.Nk
-        dm = self.mf.make_rdm1()
+        dm_kpts = self.dm_kpts
 
         if hcore:
             h1e = self.mf.get_hcore()
-            self.ehcore = 1. / Nk * np.einsum('kij,kji->', h1e, dm).real
+            self.ehcore = 1. / Nk * np.einsum('kij,kji->', h1e, dm_kpts).real
         if nuc:
             self.enuc = self.mf.energy_nuc()
         if j:
-            Jo, _ = self.mf.get_jk(cell=self.mf.cell, dm_kpts=dm, kpts=self.mf.kpts, kpts_band=self.mf.kpts, with_k=False)
+            Jo, _ = self.mf.get_jk(cell=self.mf.cell, dm_kpts=dm_kpts, kpts=self.mf.kpts, kpts_band=self.mf.kpts, with_k=False)
 
-            ej = 1. / Nk * np.einsum('kij,kji', Jo, dm) * 0.5
+            ej = 1. / Nk * np.einsum('kij,kji', Jo, dm_kpts) * 0.5
             self.ej = ej.real
 
         if k:
@@ -542,7 +545,7 @@ class KHF_stagger(khf.KSCF):
             self.ek = results["E_stagger_M"] 
 
     def kernel(self):
-        results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
+        results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
         self.ek = results["E_stagger_M"] 
         
         self.compute_energy_components(hcore=True,nuc=True,j=True,k=False)
