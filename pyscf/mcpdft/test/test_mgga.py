@@ -31,7 +31,9 @@ Test the MCPDFT energies calculated for the triplet water molecule at the
 4. Meta-GGA functional (M06L)
 5. MC23 Functional
 
-Note: The reference values from OpenMolcas v24.10, tag 682-gf74be507d
+Note: The reference values are generated from
+OpenMolcas v24.10, tag 682-gf74be507d
+
 The OpenMolcas results were obtained with this grid settings
 &SEWARD
 Grid Input
@@ -146,6 +148,8 @@ class KnownValues(unittest.TestCase):
         sa_e_mcscf = lih_tm06l_sa2.e_mcscf
         sa_epdft = lih_tm06l_sa2.e_states
 
+        # The CAS and MCPDFT reference values are generated using
+        # OpenMolcas v24.10, tag 682-gf74be507d
         E_CASSCF_EXPECTED = -7.88214917
         E_MCPDFT_EXPECTED = -7.95814186
         SA_E_CASSCF_EXPECTED = [-7.88205449, -7.74391704]
@@ -160,6 +164,8 @@ class KnownValues(unittest.TestCase):
         e_mcscf = lih_tm06l0.e_mcscf
         epdft = lih_tm06l0.e_tot
 
+        # The CAS and MCPDFT reference values are generated using
+        # OpenMolcas v24.10, tag 682-gf74be507d
         E_CASSCF_EXPECTED = -7.88214917
         E_MCPDFT_EXPECTED = -7.93914369
 
@@ -173,6 +179,8 @@ class KnownValues(unittest.TestCase):
         sa_e_mcscf = lih_tmc23_sa2.e_mcscf
         sa_epdft = lih_tmc23_sa2.e_states
 
+        # The CAS and MCPDFT reference values are generated using
+        # OpenMolcas v24.10, tag 682-gf74be507d
         E_CASSCF_EXPECTED = -7.88214917
         E_MCPDFT_EXPECTED = -7.95098727
         SA_E_CASSCF_EXPECTED = [-7.88205449, -7.74391704]
@@ -187,6 +195,8 @@ class KnownValues(unittest.TestCase):
         e_mcscf = water_tm06l.e_mcscf
         epdft = water_tm06l.e_tot
 
+        # The CAS and MCPDFT reference values are generated using
+        # OpenMolcas v24.10, tag 682-gf74be507d
         E_CASSCF_EXPECTED = -75.72365496
         E_MCPDFT_EXPECTED = -76.07686505
 
@@ -197,6 +207,8 @@ class KnownValues(unittest.TestCase):
         e_mcscf = water_tmc23.e_mcscf
         epdft = water_tmc23.e_tot
 
+        # The CAS and MCPDFT reference values are generated using
+        # OpenMolcas v24.10, tag 682-gf74be507d
         E_CASSCF_EXPECTED = -75.72365496
         E_MCPDFT_EXPECTED = -76.02630019
 
