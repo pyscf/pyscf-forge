@@ -357,14 +357,14 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         print(mfs.kernel())
         nks = get_monkhorst_pack_size(mfs.cell, mfs.kpts)
         shift = mfs.cell.get_abs_kpts([kshift_rel / n for n in nks])
-        kmesh_shifted = mfs.kpts + shift
+        kmesh_shifted = ikpts + shift
         #Calculation on shifted mesh
         mf2 = scf.KHF(icell, kmesh_shifted)
         mf2.with_df = df_type(icell, ikpts).build()  # For 2d,1d, df_type cannot be FFTDF
         print(mf2.kernel())
         dm_2 = mf2.make_rdm1()
         #Get K matrix on shifted kpts, dm from unshifted mesh
-        _, Kmat = mf2.get_jk(cell = mf2.cell, dm_kpts = mfs.make_rdm1(), kpts = mfs.kpts, kpts_band = mf2.kpts)
+        _, Kmat = mf2.get_jk(cell = mf2.cell, dm_kpts = kmf.make_rdm1(), kpts = ikpts, kpts_band = kmesh_shifted)
         Nk = np.prod(nks)
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_2, Kmat) * 0.5
         E_stagger/=2

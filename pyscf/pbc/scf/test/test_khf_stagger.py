@@ -70,8 +70,8 @@ def build_h2_gdf_cell():
 def run_kcell_fftdf(cell, nk):
     abs_kpts = cell.make_kpts(nk, wrap_around=True)
     kmf = pbcscf.KRHF(cell, abs_kpts)
-    gdf = df.GDF(cell, abs_kpts).build()
-    kmf.with_df = gdf
+    fftdf = df.FFTDF(cell, abs_kpts).build()
+    kmf.with_df = fftdf
     kmf.conv_tol = 1e-12
     kmf.kernel()
     
@@ -110,8 +110,8 @@ class KnownValues(unittest.TestCase):
         cell = build_h2_gdf_cell()
         nk = [2,2,2]
         etot, ek_stagger = run_kcell_gdf(cell,nk,stagger_type='split-scf')
-        self.assertAlmostEqual(etot, -1.2475007283290824, 7)
-        self.assertAlmostEqual(ek_stagger, -0.7247755894779692, 7)
+        self.assertAlmostEqual(etot, -1.0980852331458024, 7)
+        self.assertAlmostEqual(ek_stagger, -0.575360094294689, 7)
     
     def test_222_h2_gdf_regular(self):
         cell = build_h2_gdf_cell()
