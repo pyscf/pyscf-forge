@@ -178,14 +178,19 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
         return ewg - ewg_analytical
 
 
-def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kpts=None, 
-                kshift_rel=0.5, verbose=logger.NOTE, with_vk=False):
+def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False):
     
     from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
     from pyscf.pbc import gto,scf
     #To Do: Additional control arguments such as custom shift, scf control (cycles ..etc), ...
     #Cell formatting used in the built in Madelung code
+    icell = kmf.cell
+
     log = logger.Logger(icell.stdout, verbose)
+    
+    ikpts = kmf.kpts
+    dm_kpts = kmf.make_rdm1()
+    
     def set_cell(mf):
         import copy
         Nk = get_monkhorst_pack_size(mf.cell, mf.kpts)
@@ -286,7 +291,7 @@ def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kp
             df_type = df.FFTDF
     if with_vk:
         Kmat = None
-    if type == 0:
+    if type == 0: # Regular
         # Extract kpts and append the shifted mesh
         nks = get_monkhorst_pack_size(icell, ikpts)
         shift = icell.get_abs_kpts([kshift_rel / n for n in nks])
@@ -340,10 +345,14 @@ def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kp
 
         nocc = mf2.cell.tot_electrons() // 2
         E_stagger_M = E_stagger + nocc * conv_Madelung
-        print("One Shot")
-
-    elif type == 1:
-        #Regular scf calculation
+        results_dict = {
+            "E_stagger_M":np.real(E_stagger_M),
+            "E_stagger":np.real(E_stagger),
+        }
+        if with_vk:
+            results_dict["vk"] = Kmat
+            
+    elif type == 1: # Split-SCF
         mfs = scf.KHF(icell, ikpts)
         print(mfs.kernel())
         nks = get_monkhorst_pack_size(mfs.cell, mfs.kpts)
@@ -370,14 +379,14 @@ def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kp
             Madelung = staggered_Madelung(cell_input=cell, shifted=shift, ew_eta=ew_eta, ew_cut=ew_cut)
             # Madelung = madelung_modified(cell=ecell, shifted=shift, ew_eta=ew_eta, ew_cut=ew_cut)
 
-            print("Iteration number " + str(count_iter))
-            print("Madelung:" + str(Madelung))
-            print("Eta:" + str(ew_eta))
+            log.debug1("Iteration number " + str(count_iter))
+            log.debug1("Madelung:" + str(Madelung))
+            log.debug1("Eta:" + str(ew_eta))
             if count_iter > 1 and abs(Madelung - prev) < 1e-8:
                 conv_Madelung = Madelung
                 break
             if count_iter > 30:
-                print("Error. Madelung constant not converged")
+                log.debug1("Error. Madelung constant not converged")
                 break
             ew_eta *= 2
             count_iter += 1
@@ -385,19 +394,22 @@ def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kp
 
         nocc = mf2.cell.tot_electrons() // 2
         E_stagger_M = E_stagger + nocc * conv_Madelung
-
-        print("Two Shot")
+        results_dict = {
+            "E_stagger_M":np.real(E_stagger_M),
+            "E_stagger":np.real(E_stagger),
+        }
+        if with_vk:
+            results_dict["vk"] = Kmat
     elif type == 2: # Non-SCF
-        mf2 = scf.KHF(icell,ikpts, exxdiv='ewald')
-        mf2.with_df = df_type(icell, ikpts).build()
+        mf2 = kmf
         nocc = mf2.cell.tot_electrons()//2
 
-        if dm_kpts is None:
-            print(mf2.kernel())
-            # Get converged density matrix
-            dm_un = mf2.make_rdm1()
-        else:
-            dm_un = dm_kpts
+
+
+        # Run SCF; should be one cycle if converged
+        mf2.kernel()
+        dm_un = mf2.make_rdm1()
+        
 
         #  Defining size and making shifted mesh
         nks = get_monkhorst_pack_size(mf2.cell, mf2.kpts)
@@ -411,21 +423,21 @@ def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kp
         print(kmesh_shifted)
 
         print("\n")
-        if dm_kpts is None:
-            print("Converged Density Matrix")
-        else:
-            print("Input density matrix")
+        # if dm_kpts is None:
+        #     log.debug("Converged Density Matrix")
+        # else:
+        #     log.debug("Input density matrix")
 
         for i in range(0,dm_un.shape[0]):
-            print("kpt: " + str(mf2.kpts[i]) + "\n")
+            log.debug1("kpt: " + str(mf2.kpts[i]) + "\n")
             mat = dm_un[i,:,:]
             for j in mat:
-                print(' '.join(str(np.real(el)) for el in j))
+                log.debug1(' '.join(str(np.real(el)) for el in j))
 
         # Construct the Fock Matrix
         h1e = khf.get_hcore(mf2, cell=mf2.cell, kpts=kmesh_shifted)
-        Jmat, Kmat = mf2.get_jk(cell=mf2.cell, dm_kpts=dm_un, kpts=mf2.kpts, kpts_band=kmesh_shifted,
-                    exxdiv='ewald')
+        _, Kmat = mf2.get_jk(cell=mf2.cell, dm_kpts=dm_un, kpts=mf2.kpts, kpts_band=kmesh_shifted,
+                    exxdiv='ewald',with_j=False)
         # Veff = Jmat - Kmat/2
         Veff = mf2.get_veff(cell=mf2.cell, dm_kpts=dm_un, kpts=mf2.kpts, kpts_band=kmesh_shifted)
         F_shift = h1e + Veff
@@ -467,18 +479,20 @@ def kernel(icell, ikpts, type="Non-SCF", df_type=None, dm_kpts=None, mo_coeff_kp
         results_dict = {
             "E_stagger_M":np.real(E_stagger_M),
             "E_stagger":np.real(E_stagger),
-            # "E_madelung":np.real(E_madelung),
         }
         if with_vk:
             results_dict["vk"] = Kmat
             
-        return results_dict
     else:
         raise ValueError("Invalid stagger type", type)
+    
+    return results_dict
+
 
 
 stagger_type_id = {
     'regular':  0,
+    'standard': 0,
     'split-scf': 1,
     'splitscf': 1,
     'split_scf': 1,
@@ -545,7 +559,7 @@ class KHF_stagger(khf.KSCF):
             self.ek = results["E_stagger_M"] 
 
     def kernel(self):
-        results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
+        results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel)
         self.ek = results["E_stagger_M"] 
         
         self.compute_energy_components(hcore=True,nuc=True,j=True,k=False)

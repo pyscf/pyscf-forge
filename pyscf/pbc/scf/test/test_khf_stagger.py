@@ -82,7 +82,7 @@ def run_kcell_fftdf(cell, nk):
     
     return etot, ek_stagger
 
-def run_kcell_gdf(cell, nk):
+def run_kcell_gdf(cell, nk, stagger_type):
     abs_kpts = cell.make_kpts(nk, wrap_around=True)
     kmf = pbcscf.KRHF(cell, abs_kpts)
     gdf = df.GDF(cell, abs_kpts).build()
@@ -90,7 +90,7 @@ def run_kcell_gdf(cell, nk):
     kmf.conv_tol = 1e-12
     kmf.kernel()
     
-    kmf_stagger = KHF_stagger(kmf,stagger_type='non-scf')
+    kmf_stagger = KHF_stagger(kmf,stagger_type)
     kmf_stagger.kernel()
     etot = kmf_stagger.e_tot
     ek_stagger = kmf_stagger.ek
@@ -99,12 +99,26 @@ def run_kcell_gdf(cell, nk):
 
 class KnownValues(unittest.TestCase):
 
-    def test_222_h2_gdf(self):
+    def test_222_h2_gdf_nonscf(self):
         cell = build_h2_gdf_cell()
         nk = [2,2,2]
-        etot, ek_stagger = run_kcell_gdf(cell,nk)
-        self.assertAlmostEqual(etot, -0.40854731697431584, 7)
-        self.assertAlmostEqual(ek_stagger, -0.04014371773827328, 7)
+        etot, ek_stagger = run_kcell_gdf(cell,nk,stagger_type='non-scf')
+        self.assertAlmostEqual(etot, -1.0915433999061728, 7)
+        self.assertAlmostEqual(ek_stagger, -0.5688182610550594, 7)
+        
+    def test_222_h2_gdf_splitscf(self):
+        cell = build_h2_gdf_cell()
+        nk = [2,2,2]
+        etot, ek_stagger = run_kcell_gdf(cell,nk,stagger_type='split-scf')
+        self.assertAlmostEqual(etot, -1.2475007283290824, 7)
+        self.assertAlmostEqual(ek_stagger, -0.7247755894779692, 7)
+    
+    def test_222_h2_gdf_regular(self):
+        cell = build_h2_gdf_cell()
+        nk = [2,2,2]
+        etot, ek_stagger = run_kcell_gdf(cell,nk,stagger_type='regular')
+        self.assertAlmostEqual(etot, -1.0911866312312735, 7)
+        self.assertAlmostEqual(ek_stagger,-0.5684614923801602, 7)
 
 
 if __name__ == '__main__':
