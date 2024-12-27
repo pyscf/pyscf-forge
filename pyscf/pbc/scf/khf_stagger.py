@@ -24,7 +24,6 @@ from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
     # Here, the only difference from overleaf is that eta here is defined as 4eta^2 = eta_paper
     from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
-    from pyscf.pbc.gto.cell import get_Gv_weights
 
     printstr = "Modified Madelung correction"
     if anisotropic:
@@ -32,7 +31,7 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
         assert not isinstance(ew_eta, int)
         raise NotImplementedError("Anisotropic Madelung correction not correctly implemented yet")
 
-    print(printstr)
+    logger.debug(printstr)
     # Make ew_eta into array to allow for anisotropy if len==3
     ew_eta = np.array(ew_eta)
 
@@ -42,7 +41,7 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
     cell_input._atm = np.array([[1, cell._env.size, 0, 0, 0, 0]])
     cell_input._env = np.append(cell._env, [0., 0., 0.])
     cell_input.unit = 'B' # ecell.verbose = 0
-    cell_input.a = a = np.einsum('xi,x->xi', cell.lattice_vectors(), Nk)
+    cell_input.a = np.einsum('xi,x->xi', cell.lattice_vectors(), Nk)
 
     if ew_eta is None:
         ew_eta, _ = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
@@ -73,60 +72,7 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
         # First term
         sum_term = weights*np.einsum('i->',component).real
         # Second Term
-        if anisotropic:
-            from scipy.integrate import tplquad, nquad
-            from cubature import cubature
-            denom = -1 / (4 * ew_eta ** 2)
-
-            # i denotes coordinate, g denotes vector number 
-            def integrand(x, y, z):
-                qG = np.array([x, y, z])
-                denom = -1 / (4 * ew_eta ** 2)
-                exponent = np.einsum('i,i,i->', qG, qG, denom)
-                qG2 = np.einsum('i,i->', qG, qG)
-                out = 4 * np.pi / qG2 * np.exp(exponent)
-                
-                # Handle special case when x, y, and z are very small
-                if np.isscalar(out):
-                    if (np.abs(x) < 1e-12) & (np.abs(y) < 1e-12) & (np.abs(z) < 1e-12):
-                        out = 0
-                else:
-                    mask = (np.abs(x) < 1e-12) & (np.abs(y) < 1e-12) & (np.abs(z) < 1e-12)
-                    out[mask] = 0  # gaussian case
-                return out
-            
-            def integrand_vectorized(x,y,z):
-                qG = np.array([x, y, z])
-                denom = -1 / (4 * ew_eta ** 2)
-                exponent = np.einsum('ig,ig,i->g', qG, qG, denom)
-                qG2 = np.einsum('ig,ig->g', qG, qG)
-                out = 4 * np.pi / qG2 * np.exp(exponent)
-
-                # Handle special case when x, y, and z are very small
-                if np.isscalar(out):
-                    if (np.abs(x) < 1e-12) & (np.abs(y) < 1e-12) & (np.abs(z) < 1e-12):
-                        out = 0
-                else:
-                    mask = (np.abs(x) < 1e-12) & (np.abs(y) < 1e-12) & (np.abs(z) < 1e-12)
-                    out[mask] = 0  # gaussian case
-
-                return out
-
-            x_min, x_max = -10,10
-            y_min, y_max = -10,10
-            z_min, z_max = -10,10
-            global_tol = 1e-5
-            integral_cart_imag = cubature(lambda xall: integrand_vectorized(xall[:,0], xall[:,1], xall[:,2]), 3, 1,
-                                          [x_min, y_min, z_min], [x_max, y_max, z_max],relerr=global_tol,
-                                          abserr=global_tol, vectorized=False)[0][0]
-            # integral_cart_imag = cubature(lambda xall: integrand_vectorized(xall[:,0], xall[:,1], xall[:,2]), 3, 1,
-            #                     [x_min, y_min, z_min], [x_max, y_max, z_max],relerr=global_tol,
-            #                     abserr=global_tol, vectorized=False)[0][0]
-            # subterm =(2*np.pi)**(-3) * tplquad(integrand, -np.inf, np.inf, -np.inf, np.inf, -np.inf, np.inf)[0]
-            # subterm =(2*np.pi)**(-3) * nquad(integrand, [[-np.inf, np.inf], [-np.inf, np.inf], [-np.inf, np.inf]],points=[[0,0,0]])[0]
-            # nquad(integrand, [[-10, 10], [-10, 10], [-10, 10]],opts={'points':[0,0,0]})
-        else:
-            sub_term = 2*np.mean(ew_eta)/np.sqrt(np.pi)
+        sub_term = 2*np.mean(ew_eta)/np.sqrt(np.pi)
         ewovrl = 0.0
         ewself_2 = 0.0
         print("Ewald components = %.15g, %.15g, %.15g,%.15g" % (ewovrl/2, sub_term/2,ewself_2/2, sum_term/2))
@@ -181,33 +127,29 @@ def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
 def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False):
     
     from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
-    from pyscf.pbc import gto,scf
+    from pyscf.pbc import scf
     #To Do: Additional control arguments such as custom shift, scf control (cycles ..etc), ...
-    #Cell formatting used in the built in Madelung code
+    
     icell = kmf.cell
-
     log = logger.Logger(icell.stdout, verbose)
-    
     ikpts = kmf.kpts
-    dm_kpts = kmf.make_rdm1()
     
-    def set_cell(mf):
+    def build_probe_cell(mf):
         import copy
+        # Make unit cell with single probe charge at the origin.
         Nk = get_monkhorst_pack_size(mf.cell, mf.kpts)
         ecell = copy.copy(mf.cell)
         ecell._atm = np.array([[1, mf.cell._env.size, 0, 0, 0, 0]])
         ecell._env = np.append(mf.cell._env, [0., 0., 0.])
         ecell.unit = 'B'
-        # ecell.verbose = 0
+        
+        # Expand the unit cell to the supercell based on the Monkhorst-Pack grid size
         ecell.a = np.einsum('xi,x->xi', mf.cell.lattice_vectors(), Nk)
         ecell.mesh = np.asarray(mf.cell.mesh) * Nk
         return ecell
 
-    # Function for Madelung constant calculation following formula in Stephen's paper
-    def staggered_Madelung(cell_input, shifted, ew_eta=None, ew_cut=None, dm_kpts=None):
+    def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None, dm_kpts=None):
         # Here, the only difference from overleaf is that eta here is defined as 4eta^2 = eta_paper
-        from pyscf.pbc.gto.cell import get_Gv_weights
-        nk = get_monkhorst_pack_size(icell, ikpts)
         if ew_eta is None or ew_cut is None:
             ew_eta, ew_cut = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
         chargs = cell_input.atom_charges()
@@ -222,7 +164,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         # Get grid
         Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh = mesh)
         #Get q+G points
-        G_combined = Gv + shifted
+        G_combined = Gv + kshift_abs
         absG2 = np.einsum('gi,gi->g', G_combined, G_combined)
 
 
@@ -234,10 +176,10 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             # Now putting the ingredients together
             component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
             # First term
-            sum_term = weights*np.einsum('i->',component).real
+            sum_ovrG_term = weights*np.einsum('i->',component).real
             # Second Term
-            sub_term = 2*ew_eta/np.sqrt(np.pi)
-            return sum_term - sub_term
+            self_term = 2*ew_eta/np.sqrt(np.pi)
+            return sum_ovrG_term - self_term
 
         elif cell_input.dimension == 2:  # Truncated Coulomb
             from scipy.special import erfc, erf
@@ -283,6 +225,27 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             ewg_analytical = 2 * ew_eta / np.sqrt(np.pi)
             return ewg - ewg_analytical
 
+    def compute_modified_madelung(kmf, kshift_abs):
+        count_iter = 1
+        ecell = build_probe_cell(kmf)
+        ew_eta, ew_cut = ecell.get_ewald_params(kmf.cell.precision, kmf.cell.mesh)
+        prev = 0
+        converged_madelung = 0
+        while True and icell.dimension !=1:
+            madelung = modified_madelung(cell_input=ecell, kshift_abs=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
+            log.debug1("Iteration number " + str(count_iter))
+            log.debug1("Madelung:" + str(madelung))
+            log.debug1("Eta:" + str(ew_eta))
+            if count_iter > 1 and abs(madelung - prev) < 1e-8:
+                converged_madelung = madelung
+                break
+            if count_iter > 30:
+                log.debug1("Error. Madelung constant not converged")
+                break
+            ew_eta *= 2
+            count_iter += 1
+            prev = madelung
+        return converged_madelung
 
     if df_type is None:
         if icell.dimension <=2:
@@ -291,8 +254,9 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             df_type = df.FFTDF
     if with_vk:
         Kmat = None
+        
     if type == 0: # Regular
-        # Extract kpts and append the shifted mesh
+        # Get absolute kpoint shift
         nks = get_monkhorst_pack_size(icell, ikpts)
         kshift_abs = icell.get_abs_kpts([kshift_rel / n for n in nks])
         
@@ -304,6 +268,8 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         Nk = np.prod(nks) * 2
         log.debug("Absolute kpoint shift is: " + str(kshift_abs))
         kmesh_shifted = ikpts + kshift_abs
+        
+        # Combine the unshifted and shifted meshes
         kmesh_combined = np.concatenate((ikpts,kmesh_shifted),axis=0)
         log.debug(kmesh_combined)
 
@@ -319,40 +285,8 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         #Get dm at kpoints in shifted mesh
         dm_shifted = dm_combined[Nk//2:,:,:]
         #K matrix on shifted mesh with potential defined by dm on unshifted mesh
-        _, Kmat = kmf_combined.get_jk(cell=kmf_combined.cell, dm_kpts= dm_unshifted, kpts=ikpts, kpts_band = kmesh_shifted)
-        E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat)
-        E_stagger /= 2
-
-        #Madelung-like correction
-        count_iter = 1
-        kmf_combined.kpts = ikpts
-        ecell = set_cell(kmf_combined)
-        ew_eta, ew_cut = ecell.get_ewald_params(kmf_combined.cell.precision, kmf_combined.cell.mesh)
-        prev = 0
-        conv_Madelung = 0
-        while True and icell.dimension !=1:
-            Madelung = staggered_Madelung(cell_input=ecell, shifted=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
-            log.debug1("Iteration number " + str(count_iter))
-            log.debug1("Madelung:" + str(Madelung))
-            log.debug1("Eta:" + str(ew_eta))
-            if count_iter > 1 and abs(Madelung - prev) < 1e-8:
-                conv_Madelung = Madelung
-                break
-            if count_iter > 30:
-                log.debug1("Error. Madelung constant not converged")
-                break
-            ew_eta *= 2
-            count_iter += 1
-            prev = Madelung
-
-        nocc = kmf_combined.cell.tot_electrons() // 2
-        E_stagger_M = E_stagger + nocc * conv_Madelung
-        results_dict = {
-            "E_stagger_M":np.real(E_stagger_M),
-            "E_stagger":np.real(E_stagger),
-        }
-        if with_vk:
-            results_dict["vk"] = Kmat
+        _, Kmat = kmf_combined.get_jk(cell=kmf_combined.cell, dm_kpts= dm_unshifted, kpts=ikpts, kpts_band = kmesh_shifted, with_j=False)
+        E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5 
             
     elif type == 1: # Split-SCF
         # Perform kernel with unshifted SCF
@@ -372,37 +306,6 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
         E_stagger/=2
 
-        # Madelung-like correction
-        count_iter = 1
-        cell = set_cell(kmf_shifted)
-        ew_eta, ew_cut = cell.get_ewald_params(kmf_shifted.cell.precision, kmf_shifted.cell.mesh)
-        prev = 0
-        conv_Madelung = 0
-        while True and icell.dimension !=1:
-            Madelung = staggered_Madelung(cell_input=cell, shifted=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
-            # Madelung = madelung_modified(cell=ecell, shifted=shift, ew_eta=ew_eta, ew_cut=ew_cut)
-
-            log.debug1("Iteration number " + str(count_iter))
-            log.debug1("Madelung:" + str(Madelung))
-            log.debug1("Eta:" + str(ew_eta))
-            if count_iter > 1 and abs(Madelung - prev) < 1e-8:
-                conv_Madelung = Madelung
-                break
-            if count_iter > 30:
-                log.debug1("Error. Madelung constant not converged")
-                break
-            ew_eta *= 2
-            count_iter += 1
-            prev = Madelung
-
-        nocc = kmf_shifted.cell.tot_electrons() // 2
-        E_stagger_M = E_stagger + nocc * conv_Madelung
-        results_dict = {
-            "E_stagger_M":np.real(E_stagger_M),
-            "E_stagger":np.real(E_stagger),
-        }
-        if with_vk:
-            results_dict["vk"] = Kmat
     elif type == 2: # Non-SCF
         # Run SCF; should be one cycle if converged
         nocc = kmf.cell.tot_electrons()//2
@@ -443,40 +346,27 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         Nk = np.prod(nks)
         E_stagger = -1./Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
         E_stagger/=2
-
-        # Madelung-like correction
-        count_iter = 1
-        ecell = set_cell(kmf)
-        ew_eta, ew_cut = ecell.get_ewald_params(kmf.cell.precision, kmf.cell.mesh)
-        prev = 0
-        conv_Madelung = 0
-        while True and icell.dimension !=1:
-            Madelung = staggered_Madelung(cell_input=ecell, shifted=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
-            print("Iteration number " + str(count_iter))
-            print("Madelung:" + str(Madelung))
-            print("Eta:" + str(ew_eta))
-            if count_iter>1 and abs(Madelung-prev)<1e-8:
-                conv_Madelung = Madelung
-                break
-            if count_iter>30:
-                print("Error. Madelung constant not converged")
-                break
-            ew_eta*=2
-            count_iter+=1
-            prev = Madelung
-
-        nocc = kmf.cell.tot_electrons()//2
-        E_stagger_M = E_stagger + nocc*conv_Madelung
-        
-        results_dict = {
-            "E_stagger_M":np.real(E_stagger_M),
-            "E_stagger":np.real(E_stagger),
-        }
-        if with_vk:
-            results_dict["vk"] = Kmat
             
     else:
         raise ValueError("Invalid stagger type", type)
+    
+    # Madelung-like correction if exxdiv=="ewald"
+    if kmf.exxdiv == "ewald":
+        madelung = compute_modified_madelung(kmf, kshift_abs)
+    else:
+        log.debug("WARN: No madelung-like correction used")
+        madelung = 0
+        
+    nocc = kmf.cell.tot_electrons() // 2
+    E_stagger_M = E_stagger + nocc * madelung
+    
+    # Finalize Results
+    results_dict = {
+        "E_stagger_M":np.real(E_stagger_M),
+        "E_stagger":np.real(E_stagger),
+    }
+    if with_vk:
+        results_dict["vk"] = Kmat
     
     return results_dict
 
@@ -513,9 +403,6 @@ class KHF_stagger(khf.KSCF):
         self.Nk = np.prod(self.nks)
         self.with_vk = with_vk
         
-        
-        
-        
     def dump_flags(self):
         log = logger.Logger(self.stdout, self.verbose)
         log.info('')
@@ -532,7 +419,7 @@ class KHF_stagger(khf.KSCF):
     def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False):
         Nk = self.Nk
         dm_kpts = self.dm_kpts
-
+        
         if hcore:
             h1e = self.mf.get_hcore()
             self.ehcore = 1. / Nk * np.einsum('kij,kji->', h1e, dm_kpts).real
@@ -543,7 +430,6 @@ class KHF_stagger(khf.KSCF):
 
             ej = 1. / Nk * np.einsum('kij,kji', Jo, dm_kpts) * 0.5
             self.ej = ej.real
-
         if k:
             results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
             self.ek = results["E_stagger_M"] 
