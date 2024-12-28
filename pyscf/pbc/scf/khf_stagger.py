@@ -29,21 +29,24 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     log = logger.Logger(icell.stdout, verbose)
     ikpts = kmf.kpts
     
-    def build_probe_cell(mf):
+    def build_probe_cell(mf, nks=None):
         import copy
         # Make unit cell with single probe charge at the origin.
-        Nk = get_monkhorst_pack_size(mf.cell, mf.kpts)
+        if nks is None:
+            nks = get_monkhorst_pack_size(mf.cell, mf.kpts)
         ecell = copy.copy(mf.cell)
         ecell._atm = np.array([[1, mf.cell._env.size, 0, 0, 0, 0]])
         ecell._env = np.append(mf.cell._env, [0., 0., 0.])
         ecell.unit = 'B'
         
         # Expand the unit cell to the supercell based on the Monkhorst-Pack grid size
-        ecell.a = np.einsum('xi,x->xi', mf.cell.lattice_vectors(), Nk)
-        ecell.mesh = np.asarray(mf.cell.mesh) * Nk
+        ecell.a = np.einsum('xi,x->xi', mf.cell.lattice_vectors(), nks)
+        ecell.mesh = np.asarray(mf.cell.mesh) * nks
+        
+        print('build_probe_cell: nks ',nks)
         return ecell
 
-    def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None, dm_kpts=None):
+    def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None):
         # Here, the only difference from overleaf is that eta here is defined as 4eta^2 = eta_paper
         if ew_eta is None or ew_cut is None:
             ew_eta, ew_cut = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
@@ -66,13 +69,9 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         if cell_input.dimension ==3:
             # Calculate |q+G|^2 values of the shifted points
             qG2 = np.einsum('gi,gi->g', G_combined, G_combined)
-            # Note: Stephen - remove those points where q+G = 0
             qG2[qG2 == 0] = 1e200
-            # Now putting the ingredients together
             component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
-            # First term
             sum_ovrG_term = weights*np.einsum('i->',component).real
-            # Second Term
             self_term = 2*ew_eta/np.sqrt(np.pi)
             return sum_ovrG_term - self_term
 
@@ -120,9 +119,9 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             ewg_analytical = 2 * ew_eta / np.sqrt(np.pi)
             return ewg - ewg_analytical
 
-    def compute_modified_madelung(kmf, kshift_abs):
+    def compute_modified_madelung(kmf, kshift_abs, nks=None):
         count_iter = 1
-        ecell = build_probe_cell(kmf)
+        ecell = build_probe_cell(kmf,nks=nks)
         ew_eta, ew_cut = ecell.get_ewald_params(kmf.cell.precision, kmf.cell.mesh)
         prev = 0
         converged_madelung = 0
@@ -185,6 +184,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         #K matrix on shifted mesh with potential defined by dm on unshifted mesh
         _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_unshifted, kpts=kpts_unshifted, kpts_band=kpts_shifted, with_j=False)
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5 
+        print('E_stagger regular',E_stagger)
             
     elif type == 1: # Split-SCF
         # Perform kernel with unshifted SCF
@@ -250,12 +250,14 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         raise ValueError("Invalid stagger type", type)
     
     # Madelung-like correction if exxdiv=="ewald"
+    
     if kmf.exxdiv == "ewald":
-        madelung = compute_modified_madelung(kmf, kshift_abs)
+        madelung = compute_modified_madelung(kmf, kshift_abs,nks)
     else:
         log.warn("No madelung-like correction used")
         madelung = 0
-        
+    
+    print('passed Madelung')
     nocc = kmf.cell.tot_electrons() // 2
     E_stagger_M = E_stagger + nocc * madelung
     
@@ -350,6 +352,8 @@ class KHF_stagger(khf.KSCF):
             _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
     def rerun_scf(self):
+        print("Rerunning SCF")
+
         if self.stagger_type == 0:
             kshift_abs = self.cell.get_abs_kpts([self.kshift_rel / n for n in self.nks])
             if self.cell.dimension <=2:
@@ -380,10 +384,10 @@ class KHF_stagger(khf.KSCF):
 
         else:
             self.mf.kernel()
+        print("SCF rerun complete")
 
 
     def kernel(self):
-        
         self.rerun_scf()
         results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,nks=self.nks)
         # if self.stagger_type == 0:
