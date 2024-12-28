@@ -15,15 +15,15 @@
 
 from pyscf.pbc.scf import khf
 from pyscf.pbc import df
+from pyscf.pbc import scf as pbcscf
 import numpy as np
 from pyscf.lib import logger
 from pyscf.pbc.dft import rks
 from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 from pyscf.pbc.dft import numint as pbcnumint
-from pyscf.pbc.scf import khf
 
 
-def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False):
+def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
     from pyscf.pbc import scf
     icell = kmf.cell
     log = logger.Logger(icell.stdout, verbose)
@@ -149,43 +149,46 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             df_type = df.FFTDF
             
     Kmat = None
-        
+    
     if type == 0: # Regular
         # Get absolute kpoint shift
-        nks = get_monkhorst_pack_size(icell, ikpts)
+        # nks = get_monkhorst_pack_size(icell, ikpts)
         kshift_abs = icell.get_abs_kpts([kshift_rel / n for n in nks])
         
-        if icell.dimension <=2:
-            kshift_abs[2] =  0
-            if icell.dimension == 1:
-                kshift_abs[1] = 0
+        # if icell.dimension <=2:
+        #     kshift_abs[2] =  0
+        #     if icell.dimension == 1:
+        #         kshift_abs[1] = 0
                 
-        Nk = np.prod(nks) * 2
-        log.debug("Absolute kpoint shift is: " + str(kshift_abs))
-        kmesh_shifted = ikpts + kshift_abs
+        Nk = np.shape(ikpts)[0]
+        print('Nk',Nk)
+        # log.debug("Absolute kpoint shift is: " + str(kshift_abs))
+        # kmesh_shifted = ikpts + kshift_abs
         
-        # Combine the unshifted and shifted meshes
-        kmesh_combined = np.concatenate((ikpts,kmesh_shifted),axis=0)
-        log.debug(kmesh_combined)
+        # # Combine the unshifted and shifted meshes
+        # kmesh_combined = np.concatenate((ikpts,kmesh_shifted),axis=0)
+        # log.debug(kmesh_combined)
 
-        # Build new KMF object with combined kpoint mesh
-        kmf_combined = scf.KHF(icell, kmesh_combined)
-        kmf_combined.with_df = df_type(icell, kmesh_combined).build() #For 2d,1d, df_type cannot be FFTDF
+        # # Build new KMF object with combined kpoint mesh
+        # kmf_combined = scf.KHF(icell, kmesh_combined)
+        # kmf_combined.with_df = df_type(icell, kmesh_combined).build() #For 2d,1d, df_type cannot be FFTDF
 
-        print(kmf_combined.kernel())
+        # print(kmf_combined.kernel())
         
-        dm_combined = kmf_combined.make_rdm1()
+        dm_combined = kmf.make_rdm1()
         #Get dm at kpoints in unshifted mesh
         dm_unshifted = dm_combined[:Nk//2,:,:]
         #Get dm at kpoints in shifted mesh
         dm_shifted = dm_combined[Nk//2:,:,:]
+        kpts_unshifted = ikpts[:Nk//2,:]
+        kpts_shifted = ikpts[Nk//2:,:]
         #K matrix on shifted mesh with potential defined by dm on unshifted mesh
-        _, Kmat = kmf_combined.get_jk(cell=kmf_combined.cell, dm_kpts= dm_unshifted, kpts=ikpts, kpts_band = kmesh_shifted, with_j=False)
+        _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_unshifted, kpts=kpts_unshifted, kpts_band=kpts_shifted, with_j=False)
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5 
             
     elif type == 1: # Split-SCF
         # Perform kernel with unshifted SCF
-        print(kmf.kernel())
+        # print(kmf.kernel())
         nks = get_monkhorst_pack_size(kmf.cell, kmf.kpts)
         kshift_abs = kmf.cell.get_abs_kpts([kshift_rel / n for n in nks])
         kmesh_shifted = ikpts + kshift_abs
@@ -204,7 +207,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     elif type == 2: # Non-SCF
         # Run SCF; should be one cycle if converged
         nocc = kmf.cell.tot_electrons()//2
-        kmf.kernel()
+        # kmf.kernel()
         dm_un = kmf.make_rdm1()
         
         #  Defining size and making shifted mesh
@@ -226,9 +229,10 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
 
         # Construct the Fock Matrix
         h1e = khf.get_hcore(kmf, cell=kmf.cell, kpts=kmesh_shifted)
+
         _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted,
                     exxdiv='ewald',with_j=False)
-        Veff = kmf.get_veff(cell=kmf.cell, dm_kpts=dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted)
+        Veff = kmf.get_veff(kmf.cell, dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted)
         F_shift = h1e + Veff
         s1e = khf.get_ovlp(kmf, cell=kmf.cell, kpts=kmesh_shifted)
         
@@ -262,6 +266,9 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     }
     if with_vk:
         results_dict["vk"] = Kmat
+    # if type == 0:
+    #     results_dict["dm_combined"] = dm_combined
+    #     results_dict["kpts_combined"] = kmesh_combined
     
     return results_dict
 
@@ -293,11 +300,20 @@ class KHF_stagger(khf.KSCF):
         self.kpts = mf.kpts
         self.df_type = mf.with_df.__class__
         self.mo_coeff = mf.mo_coeff_kpts
-        self.dm_kpts = mf.make_rdm1()
+        if self.stagger_type != 0:
+            self.dm_kpts = mf.make_rdm1()
+        else:
+            self.dm_kpts = None
         self.nks = get_monkhorst_pack_size(self.cell, self.kpts)
         self.Nk = np.prod(self.nks)
         self.with_vk = with_vk
         self.dimension = mf.cell.dimension
+        self.is_rks = isinstance(mf, rks.KohnShamDFT)
+        if self.is_rks:
+            self.xc = mf.xc
+        else:
+            self.xc = None
+        self.log = logger.Logger(self.stdout, self.verbose)
         
     def dump_flags(self):
         log = logger.Logger(self.stdout, self.verbose)
@@ -305,7 +321,7 @@ class KHF_stagger(khf.KSCF):
         log.info('******** %s ********', self.__class__)
         log.info('method = %s', self.__class__.__name__)
 
-        log.info('Staggerd mesh method for exact exchange, type = %s', self.stagger_type)
+        log.info('Staggered mesh method for exact exchange, type = %s', self.stagger_type)
 
         
         log.info('ek (%s) = %.15g', self.stagger_type, self.ek)
@@ -329,20 +345,59 @@ class KHF_stagger(khf.KSCF):
             results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
             self.ek = results["E_stagger_M"] 
         if xc:
-            # Note: X has no exact exchange (e.g. ex_PBE0 = 0.75 * PBEx + 0.25 * 0.0)
+            # Note: X has no exact exchange (i.e. ex_PBE0 = 0.75 * PBEx + 0.25 * 0.0)
             ni = pbcnumint.KNumInt()
-            _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc+','+self.xc, dm_kpts, kpts=self.kpts)
+            _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
+    def rerun_scf(self):
+        if self.stagger_type == 0:
+            kshift_abs = self.cell.get_abs_kpts([self.kshift_rel / n for n in self.nks])
+            if self.cell.dimension <=2:
+                kshift_abs[2] =  0
+                if self.cell.dimension == 1:
+                    kshift_abs[1] = 0
+                    
+            Nk = np.prod(self.nks) * 2 # For unshifted and shifted mesh
+            self.Nk = Nk
+
+            self.log.debug("Absolute kpoint shift is: " + str(kshift_abs))
+            kmesh_shifted = self.kpts + kshift_abs
+            
+            # Combine the unshifted and shifted meshes
+            kmesh_combined = np.concatenate((self.kpts,kmesh_shifted),axis=0)
+            # self.log.debug(kmesh_combined)
+
+            # Build new KMF object with combined kpoint mesh
+            kmf_combined = pbcscf.KHF(self.cell, kmesh_combined)
+            kmf_combined.with_df = self.df_type(self.cell, kmesh_combined).build() #For 2d,1d, df_type cannot be FFTDF
+            print(kmf_combined.kernel())
+            dm_combined = kmf_combined.make_rdm1()
+            
+            # Set Attributes
+            self.dm_kpts = dm_combined
+            self.kpts = kmesh_combined
+            self.mf = kmf_combined
+
+        else:
+            self.mf.kernel()
 
 
     def kernel(self):
-        results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel)
+        
+        self.rerun_scf()
+        results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,nks=self.nks)
+        # if self.stagger_type == 0:
+        #     self.dm_kpts = results["dm_combined"]
+        #     self.kpts = results["kpts_combined"]
+        #     self.Nk *= 2
+            
         self.ek = results["E_stagger_M"] 
         
         if isinstance(self.mf,rks.KohnShamDFT):
             xc = True
             ni = pbcnumint.KNumInt()
             _, _, hyb = ni.rsh_and_hybrid_coeff(self.xc, spin=self.cell.spin)
+            print("hyb",hyb)
         elif isinstance(self.mf,khf.KRHF):
             xc = False
             self.exc = 0.0
