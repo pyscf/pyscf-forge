@@ -17,119 +17,14 @@ from pyscf.pbc.scf import khf
 from pyscf.pbc import df
 import numpy as np
 from pyscf.lib import logger
+from pyscf.pbc.dft import rks
 from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
-
-
-
-def madelung_modified(cell, kpts, shifted, ew_eta=None, anisotropic=False):
-    # Here, the only difference from overleaf is that eta here is defined as 4eta^2 = eta_paper
-    from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
-
-    printstr = "Modified Madelung correction"
-    if anisotropic:
-        printstr += " with anisotropy"
-        assert not isinstance(ew_eta, int)
-        raise NotImplementedError("Anisotropic Madelung correction not correctly implemented yet")
-
-    logger.debug(printstr)
-    # Make ew_eta into array to allow for anisotropy if len==3
-    ew_eta = np.array(ew_eta)
-
-    Nk = get_monkhorst_pack_size(cell, kpts)
-    import copy
-    cell_input = copy.copy(cell)
-    cell_input._atm = np.array([[1, cell._env.size, 0, 0, 0, 0]])
-    cell_input._env = np.append(cell._env, [0., 0., 0.])
-    cell_input.unit = 'B' # ecell.verbose = 0
-    cell_input.a = np.einsum('xi,x->xi', cell.lattice_vectors(), Nk)
-
-    if ew_eta is None:
-        ew_eta, _ = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
-    chargs = cell_input.atom_charges()
-    log_precision = np.log(cell_input.precision / (chargs.sum() * 16 * np.pi ** 2))
-    ke_cutoff = -2 * np.mean(ew_eta) ** 2 * log_precision
-    # Get FFT mesh from cutoff value
-    mesh = cell_input.cutoff_to_mesh(ke_cutoff)
-    
-    # Get grid
-    Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh=mesh)
-    # Get q+G points
-    G_combined = Gv + shifted
-    absG2 = np.einsum('gi,gi->g', G_combined, G_combined)
-
-    if cell_input.dimension ==3:
-        # Calculate |q+G|^2 values of the shifted points
-        qG2 = np.einsum('gi,gi->g', G_combined, G_combined)
-        if anisotropic:
-            denom = -1 / (4 * ew_eta ** 2)
-            exponent = np.einsum('gi,gi,i->g', G_combined, G_combined, denom)
-            exponent[exponent == 0] = -1e200
-            component = 4 * np.pi / qG2 * np.exp(exponent)
-        else:
-            qG2[qG2 == 0] = 1e200
-            component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
-
-        # First term
-        sum_term = weights*np.einsum('i->',component).real
-        # Second Term
-        sub_term = 2*np.mean(ew_eta)/np.sqrt(np.pi)
-        ewovrl = 0.0
-        ewself_2 = 0.0
-        print("Ewald components = %.15g, %.15g, %.15g,%.15g" % (ewovrl/2, sub_term/2,ewself_2/2, sum_term/2))
-        return sub_term - sum_term
-
-    elif cell_input.dimension == 2:  # Truncated Coulomb
-        from scipy.special import erfc, erf
-        # The following 2D ewald summation is taken from:
-        # R. Sundararaman and T. Arias PRB 87, 2013
-        def fn(eta, Gnorm, z):
-            Gnorm_z = Gnorm * z
-            large_idx = Gnorm_z > 20.0
-            ret = np.zeros_like(Gnorm_z)
-            x = Gnorm / 2. / eta + eta * z
-            with np.errstate(over='ignore'):
-                erfcx = erfc(x)
-                ret[~large_idx] = np.exp(Gnorm_z[~large_idx]) * erfcx[~large_idx]
-                ret[large_idx] = np.exp((Gnorm * z - x ** 2)[large_idx]) * erfcx[large_idx]
-            return ret
-
-        def gn(eta, Gnorm, z):
-            return np.pi / Gnorm * (fn(eta, Gnorm, z) + fn(eta, Gnorm, -z))
-
-        def gn0(eta, z):
-            return -2 * np.pi * (z * erf(eta * z) + np.exp(-(eta * z) ** 2) / eta / np.sqrt(np.pi))
-
-        b = cell_input.reciprocal_vectors()
-        inv_area = np.linalg.norm(np.cross(b[0], b[1])) / (2 * np.pi) ** 2
-        # Perform the reciprocal space summation over  all reciprocal vectors
-        # within the x,y plane.
-        planarG2_idx = np.logical_and(Gv[:, 2] == 0, absG2 > 0.0)
-
-        G_combined = G_combined[planarG2_idx]
-        absG2 = absG2[planarG2_idx]
-        absG = absG2 ** (0.5)
-        # Performing the G != 0 summation.
-        coords = np.array([[0,0,0]])
-        rij = coords[:, None, :] - coords[None, :, :] # should be just the zero vector for correction.
-        Gdotr = np.einsum('ijx,gx->ijg', rij, G_combined)
-        ewg = np.einsum('i,j,ijg,ijg->', chargs, chargs, np.cos(Gdotr),
-                        gn(ew_eta, absG, rij[:, :, 2:3]))
-        # Performing the G == 0 summation.
-        # ewg += np.einsum('i,j,ij->', chargs, chargs, gn0(ew_eta, rij[:, :, 2]))
-
-        ewg *= inv_area # * 0.5
-
-        ewg_analytical = 2 * ew_eta / np.sqrt(np.pi)
-        
-        return ewg - ewg_analytical
+from pyscf.pbc.dft import numint as pbcnumint
+from pyscf.pbc.scf import khf
 
 
 def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False):
-    
-    from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
     from pyscf.pbc import scf
-    #To Do: Additional control arguments such as custom shift, scf control (cycles ..etc), ...
-    
     icell = kmf.cell
     log = logger.Logger(icell.stdout, verbose)
     ikpts = kmf.kpts
@@ -252,8 +147,8 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             df_type = df.GDF
         else:
             df_type = df.FFTDF
-    if with_vk:
-        Kmat = None
+            
+    Kmat = None
         
     if type == 0: # Regular
         # Get absolute kpoint shift
@@ -354,7 +249,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     if kmf.exxdiv == "ewald":
         madelung = compute_modified_madelung(kmf, kshift_abs)
     else:
-        log.debug("WARN: No madelung-like correction used")
+        log.warn("No madelung-like correction used")
         madelung = 0
         
     nocc = kmf.cell.tot_electrons() // 2
@@ -390,7 +285,7 @@ class KHF_stagger(khf.KSCF):
         self.cell = mf.cell
         self.stdout = mf.cell.stdout
         self.verbose = mf.cell.verbose
-        self.rsjk = False
+        self.rsjk = mf.rsjk
         self.max_memory = self.cell.max_memory
         self.with_df = mf.with_df
         self.stagger_type= get_stagger_type_id(stagger_type)
@@ -402,6 +297,7 @@ class KHF_stagger(khf.KSCF):
         self.nks = get_monkhorst_pack_size(self.cell, self.kpts)
         self.Nk = np.prod(self.nks)
         self.with_vk = with_vk
+        self.dimension = mf.cell.dimension
         
     def dump_flags(self):
         log = logger.Logger(self.stdout, self.verbose)
@@ -416,10 +312,9 @@ class KHF_stagger(khf.KSCF):
         log.info('etot (%s) = %.15g', self.stagger_type, self.e_tot)
         return self
     
-    def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False):
+    def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False,xc=False):
         Nk = self.Nk
         dm_kpts = self.dm_kpts
-        
         if hcore:
             h1e = self.mf.get_hcore()
             self.ehcore = 1. / Nk * np.einsum('kij,kji->', h1e, dm_kpts).real
@@ -433,13 +328,32 @@ class KHF_stagger(khf.KSCF):
         if k:
             results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
             self.ek = results["E_stagger_M"] 
+        if xc:
+            # Note: X has no exact exchange (e.g. ex_PBE0 = 0.75 * PBEx + 0.25 * 0.0)
+            ni = pbcnumint.KNumInt()
+            _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc+','+self.xc, dm_kpts, kpts=self.kpts)
+            self.exc = exc
+
 
     def kernel(self):
         results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel)
         self.ek = results["E_stagger_M"] 
         
-        self.compute_energy_components(hcore=True,nuc=True,j=True,k=False)
-        self.e_tot = self.ek + self.ehcore + self.enuc + self.ej
+        if isinstance(self.mf,rks.KohnShamDFT):
+            xc = True
+            ni = pbcnumint.KNumInt()
+            _, _, hyb = ni.rsh_and_hybrid_coeff(self.xc, spin=self.cell.spin)
+        elif isinstance(self.mf,khf.KRHF):
+            xc = False
+            self.exc = 0.0
+            hyb = 1.0
+        else: 
+            logger.error("KHF Stagger: Invalid SCF type", self.mf.__class__)
+            raise ValueError("Invalid SCF type")
+        
+        self.compute_energy_components(hcore=True,nuc=True,j=True,k=False,xc=xc)
+        self.e_tot = hyb * self.ek + self.ehcore + self.enuc + self.ej + self.exc
+        
         return self.e_tot
         
         

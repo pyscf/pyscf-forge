@@ -22,7 +22,6 @@ Reference: Staggered Mesh Method for Correlation Energy Calculations of Solids: 
 '''
 
 import unittest
-import numpy as np
 from pyscf.pbc import gto as pbcgto
 from pyscf.pbc import scf as pbcscf
 from pyscf.pbc import df
