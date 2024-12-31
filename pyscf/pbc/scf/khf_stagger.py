@@ -151,28 +151,9 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     
     if type == 0: # Regular
         # Get absolute kpoint shift
-        # nks = get_monkhorst_pack_size(icell, ikpts)
         kshift_abs = icell.get_abs_kpts([kshift_rel / n for n in nks])
-        
-        # if icell.dimension <=2:
-        #     kshift_abs[2] =  0
-        #     if icell.dimension == 1:
-        #         kshift_abs[1] = 0
                 
         Nk = np.shape(ikpts)[0]
-        print('Nk',Nk)
-        # log.debug("Absolute kpoint shift is: " + str(kshift_abs))
-        # kmesh_shifted = ikpts + kshift_abs
-        
-        # # Combine the unshifted and shifted meshes
-        # kmesh_combined = np.concatenate((ikpts,kmesh_shifted),axis=0)
-        # log.debug(kmesh_combined)
-
-        # # Build new KMF object with combined kpoint mesh
-        # kmf_combined = scf.KHF(icell, kmesh_combined)
-        # kmf_combined.with_df = df_type(icell, kmesh_combined).build() #For 2d,1d, df_type cannot be FFTDF
-
-        # print(kmf_combined.kernel())
         
         dm_combined = kmf.make_rdm1()
         #Get dm at kpoints in unshifted mesh
@@ -188,7 +169,6 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
             
     elif type == 1: # Split-SCF
         # Perform kernel with unshifted SCF
-        # print(kmf.kernel())
         nks = get_monkhorst_pack_size(kmf.cell, kmf.kpts)
         kshift_abs = kmf.cell.get_abs_kpts([kshift_rel / n for n in nks])
         kmesh_shifted = ikpts + kshift_abs
@@ -207,7 +187,6 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     elif type == 2: # Non-SCF
         # Run SCF; should be one cycle if converged
         nocc = kmf.cell.tot_electrons()//2
-        # kmf.kernel()
         dm_un = kmf.make_rdm1()
         
         #  Defining size and making shifted mesh
@@ -257,7 +236,6 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         log.warn("No madelung-like correction used")
         madelung = 0
     
-    print('passed Madelung')
     nocc = kmf.cell.tot_electrons() // 2
     E_stagger_M = E_stagger + nocc * madelung
     
@@ -352,8 +330,6 @@ class KHF_stagger(khf.KSCF):
             _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
     def rerun_scf(self):
-        print("Rerunning SCF")
-
         if self.stagger_type == 0:
             kshift_abs = self.cell.get_abs_kpts([self.kshift_rel / n for n in self.nks])
             if self.cell.dimension <=2:
@@ -384,24 +360,17 @@ class KHF_stagger(khf.KSCF):
 
         else:
             self.mf.kernel()
-        print("SCF rerun complete")
 
 
     def kernel(self):
         self.rerun_scf()
         results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,nks=self.nks)
-        # if self.stagger_type == 0:
-        #     self.dm_kpts = results["dm_combined"]
-        #     self.kpts = results["kpts_combined"]
-        #     self.Nk *= 2
-            
         self.ek = results["E_stagger_M"] 
         
         if isinstance(self.mf,rks.KohnShamDFT):
             xc = True
             ni = pbcnumint.KNumInt()
             _, _, hyb = ni.rsh_and_hybrid_coeff(self.xc, spin=self.cell.spin)
-            print("hyb",hyb)
         elif isinstance(self.mf,khf.KRHF):
             xc = False
             self.exc = 0.0

@@ -12,12 +12,9 @@ Reference: The Staggered Mesh Method: Accurate Exact Exchange Toward the
 '''
 
 
-from pyscf.pbc.mp.kmp2_stagger import KMP2_stagger
-from pyscf.pbc import df, gto, scf, mp
+from pyscf.pbc import df, gto, scf
 from pyscf.pbc.scf.khf_stagger import KHF_stagger
-import time
 from pyscf.pbc import dft as pbcdft
-from pyscf.pbc.dft import numint as pbcnumint
 from pyscf import dft
 
 '''
@@ -57,6 +54,11 @@ kmf_stagger = KHF_stagger(kmf,"non-scf")
 kmf_stagger.kernel()
 etot = kmf_stagger.e_tot
 ek_stagger = kmf_stagger.ek
+
+print('Non-SCF Stagger')
+print('Total energy: ', etot)
+print('Exchange energy: ', ek_stagger)
+
 assert((abs(etot - -1.0915433999061728) < 1e-6))
 assert((abs(ek_stagger - -0.5688182610550594) < 1e-6))
 
@@ -68,8 +70,15 @@ kmf_stagger = KHF_stagger(kmf,"split-scf")
 kmf_stagger.kernel()
 etot = kmf_stagger.e_tot
 ek_stagger = kmf_stagger.ek
+
+print('Split-SCF Stagger')
+print('Total energy: ', etot)
+print('Exchange energy: ', ek_stagger)
+
 assert((abs(etot - -1.0980852331458024) < 1e-6))
 assert((abs(ek_stagger -  -0.575360094294689) < 1e-6))
+
+
 
 '''
 KHF Stagger, regular version
@@ -85,8 +94,14 @@ kmf_stagger = KHF_stagger(kmf,"regular")
 kmf_stagger.kernel()
 etot = kmf_stagger.e_tot
 ek_stagger = kmf_stagger.ek
-assert((abs(etot - -1.0911866312312735) < 1e-6))
-assert((abs(ek_stagger - -0.5684614923801602) < 1e-6))
+
+print('Regular Stagger')
+print('Total energy: ', etot)
+print('Exchange energy: ', ek_stagger)
+
+
+assert((abs(etot - -1.0973224854862946 < 1e-6)))
+assert((abs(ek_stagger - -0.5684614923801601) < 1e-6))
 
 
 '''
@@ -95,17 +110,9 @@ KHF Stagger Non-SCF with DFT
 
 nks = [2, 2, 2]
 kpts = cell.make_kpts(nks, with_gamma_point=True)
-# kmf = scf.KRHF(cell, kpts, exxdiv='ewald')
-# kmf.with_df = df.GDF(cell, kpts).build()
-# ehf = kmf.kernel()
 
-# Setup DFT object
 dft.numint.NumInt.libxc = dft.xcfun
 xc = 'PBE0'
-xc_pure = "PBE"
-x = 'PBEx'
-c = 'PBEc'
-
 krks = pbcdft.KRKS(cell, kpts)
 krks.xc = xc
 krks.exxdiv = 'ewald'
@@ -117,26 +124,9 @@ krks_stagger.kernel()
 etot = krks_stagger.e_tot
 ek_stagger = krks_stagger.ek
 
+print('Non-SCF Stagger with DFT')
+print('Total energy: ', etot)
+print('Exchange energy: ', ek_stagger)
 
-
-
-# '''
-# Diamond system
-# '''
-
-# cell = gto.Cell()
-# cell.pseudo = 'gth-pade'
-# cell.basis = 'gth-szv'
-# cell.ke_cutoff = 100
-# cell.atom = '''
-#     C     0.      0.      0.
-#     C     1.26349729, 0.7294805 , 0.51582061
-#     '''
-# cell.a = '''
-#     2.52699457, 0.        , 0.
-#     1.26349729, 2.18844149, 0.
-#     1.26349729, 0.7294805 , 2.06328243
-#     '''
-# cell.unit = 'angstrom'
-# cell.verbose = 4
-# cell.build()
+assert((abs(etot - -1.133718165281441) < 1e-6))
+assert((abs(ek_stagger - -0.5678939393308997) < 1e-6))

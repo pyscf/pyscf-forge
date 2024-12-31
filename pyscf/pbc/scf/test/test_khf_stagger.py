@@ -141,9 +141,9 @@ class KnownValues(unittest.TestCase):
     
     def test_222_h2_gdf_regular(self):
         cell = build_h2_gdf_cell()
-        nk = [1,1,2]
+        nk = [2,2,2]
         etot, ek_stagger = run_khf_gdf(cell,nk,stagger_type='regular',kernel=False)
-        self.assertAlmostEqual(etot, -1.0911866312312735, 7)
+        self.assertAlmostEqual(etot,-1.0973224854862949, 7)
         self.assertAlmostEqual(ek_stagger,-0.5684614923801602, 7)
 
 
