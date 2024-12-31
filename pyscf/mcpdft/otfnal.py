@@ -13,15 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import numpy as np
 import copy
-import re
 from scipy import linalg
 from pyscf import lib, dft
 from pyscf.lib import logger
 from pyscf.dft.gen_grid import Grids
 from pyscf.dft.numint import _NumInt, NumInt
-from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms
+from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff, pdft_eff
 from pyscf.mcpdft.otpd import get_ontop_pair_density
 from pyscf import __config__
 
@@ -34,7 +34,7 @@ FT_C = getattr(__config__, 'mcpdft_otfnal_ftransfnal_C', -85.38149682)
 OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE'}
 
 def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
-    '''Compute the on-top energy - the last term in 
+    '''Compute the on-top energy - the last term in
 
     E_MCPDFT = h_pq l_pq + 1/2 v_pqrs l_pq l_rs + E_ot[rho,Pi]
 
@@ -45,7 +45,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
             active-orbital basis
         casdm2 : ndarray of shape (ncas, ncas, ncas, ncas)
             Contains spin-summed two-body density matrix in an active-
-            orbital basis 
+            orbital basis
         mo_coeff : ndarray of shape (nao, nmo)
             Contains molecular orbital coefficients for active-space
             orbitals. Columns ncore through ncore+ncas give the basis
@@ -79,7 +79,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     t0 = (logger.process_clock (), logger.perf_counter ())
     make_rho = tuple (ni._gen_rho_evaluator (ot.mol, dm1s[i,:,:], hermi) for
         i in range(2))
-    for ao, mask, weight, coords in ni.block_loop (ot.mol, ot.grids, nao,
+    for ao, mask, weight, _ in ni.block_loop (ot.mol, ot.grids, nao,
             dens_deriv, max_memory):
         rho = np.asarray ([m[0] (0, ao, mask, xctype) for m in make_rho])
         t0 = logger.timer (ot, 'untransformed density', *t0)
@@ -117,17 +117,16 @@ class otfnal:
             name of on-top pair-density exchange-correlation functional
     '''
 
-    def __init__ (self, mol, **kwargs):
+    def __init__ (self, mol):
         self.mol = mol
         self.verbose = mol.verbose
-        self.stdout = mol.stdout    
+        self.stdout = mol.stdout
 
     Pi_deriv = 0
 
     def _init_info (self):
         logger.info (self, 'Building %s functional', self.otxc)
-        omega, alpha, hyb = self._numint.rsh_and_hybrid_coeff(self.otxc,
-            spin=self.mol.spin)
+        hyb = self._numint.rsh_and_hybrid_coeff(self.otxc, spin=self.mol.spin)[2]
         if hyb[0] > 0:
             logger.info (self, 'Hybrid functional with %s CASSCF exchange',
                 hyb)
@@ -154,7 +153,7 @@ class otfnal:
             dderiv : integer
                 Order of derivatives to return
 
-        Returns: 
+        Returns:
             eot : ndarray of shape (ngrids)
                 integrand of the on-top exchange-correlation energy
             vot : (array_like (rho), array_like (Pi)) or None
@@ -167,14 +166,19 @@ class otfnal:
                 (rho, Pi, |drho|^2, drho'.dPi, |dPi|) stopping at Pi (3
                 elements) for t-LDA and |drho|^2 (6 elements) for t-GGA.
         '''
-
-        raise RuntimeError("on-top xc functional not defined")
-        return 0
+        raise NotImplementedError("on-top xc functional not defined")
 
     energy_ot = energy_ot
+    get_eff_1body = pdft_eff.get_eff_1body
+    get_eff_2body = pdft_eff.get_eff_2body
+    get_eff_2body_kl = pdft_eff.get_eff_2body_kl
+
     get_veff_1body = pdft_veff.get_veff_1body
     get_veff_2body = pdft_veff.get_veff_2body
     get_veff_2body_kl = pdft_veff.get_veff_2body_kl
+
+    get_feff_1body = pdft_feff.get_feff_1body
+    get_feff_2body = pdft_feff.get_feff_2body
 
     def reset (self, mol=None):
         ''' Discard cached grid data and optionally update the mol '''
@@ -235,7 +239,7 @@ class transfnal (otfnal):
         if nderiv > 4:
             raise NotImplementedError("derivatives above order 1")
 
-        R = np.zeros ((nderiv,ngrids), dtype=Pi.dtype) 
+        R = np.zeros ((nderiv,ngrids), dtype=Pi.dtype)
         R[0,:] = 1
         idx = rho_avg[0] >= (1e-15 / 2)
         # Chain rule!
@@ -243,11 +247,11 @@ class transfnal (otfnal):
             R[ideriv,idx] = Pi[ideriv,idx] / rho_avg[0,idx] / rho_avg[0,idx]
         # Product rule!
         for ideriv in range (1,nderiv):
-            R[ideriv,idx] -= (2 * rho_avg[ideriv,idx] * R[0,idx] 
+            R[ideriv,idx] -= (2 * rho_avg[ideriv,idx] * R[0,idx]
                 / rho_avg[0,idx])
         return R
 
-    def get_rho_translated (self, Pi, rho, _fn_deriv=0, **kwargs):
+    def get_rho_translated (self, Pi, rho, _fn_deriv=0):
         r''' Compute the "translated" alpha and beta densities:
 
         rho_t^a = (rho/2) * (1 + zeta)
@@ -255,14 +259,14 @@ class transfnal (otfnal):
         rho'_t^a = (rho'/2) * (1 + zeta)
         rho'_t^b = (rho'/2) * (1 - zeta)
 
-        See "get_zeta" for the meaning of "zeta" 
-    
+        See "get_zeta" for the meaning of "zeta"
+
         Args:
             Pi : ndarray of shape (*, ngrids)
                 containing on-top pair density [and derivatives]
             rho : ndarray of shape (2, *, ngrids)
                 containing spin density [and derivatives]
-    
+
         Kwargs:
             _fn_deriv : integer
                 Order of functional derivatives of zeta to compute.
@@ -271,12 +275,12 @@ class transfnal (otfnal):
                 when calling from children classes. It changes the
                 return signature and should not normally be touched by
                 users.
-    
-        Returns: 
+
+        Returns:
             rho_t : ndarray of shape (2,*,ngrids)
                 Translated spin density (and derivatives)
         '''
-    
+
         # For nonzero charge & pair density, set alpha dens = beta dens
         # = 1/2 charge dens
         rho_avg = (rho[0,:,:] + rho[1,:,:]) / 2
@@ -288,7 +292,7 @@ class transfnal (otfnal):
         nderiv_R = Pi.shape[0] if _fn_deriv else 1
         R = self.get_ratio (Pi[0:nderiv_R,:], rho_avg[0:nderiv_R,:])
         zeta = self.get_zeta (R, fn_deriv=_fn_deriv)
-    
+
         # Chain rule!
         w = rho_avg * zeta[0:1]
         rho_t[0] += w
@@ -299,7 +303,7 @@ class transfnal (otfnal):
 
     def get_zeta (self, R, fn_deriv=0, _Rmax=1):
         r''' Compute the intermediate zeta used to compute the
-        translated spin densities and its functional derivatives 
+        translated spin densities and its functional derivatives
 
         From the original translation [Li Manni et al., JCTC 10, 3669
         (2014)]:
@@ -317,7 +321,7 @@ class transfnal (otfnal):
                 order of functional derivative (d^n z / dR^n) to return
                 along with the value of zeta
             _Rmax : float
-                maximum value of R for which to compute zeta or its 
+                maximum value of R for which to compute zeta or its
                 derivatives; columns of zeta with R[0]>_Rmax are zero.
                 This is a hook for the ``fully-translated'' child class
                 and should not be touched normally.
@@ -331,8 +335,8 @@ class transfnal (otfnal):
         idx = R < _Rmax
         zeta[0,idx] = np.sqrt (1.0 - R[idx])
         if fn_deriv:
-            zeta[1,idx] = -0.5 / zeta[0,idx] 
-        if fn_deriv > 1: fac = 0.5 / (1.0-R[idx]) 
+            zeta[1,idx] = -0.5 / zeta[0,idx]
+        if fn_deriv > 1: fac = 0.5 / (1.0-R[idx])
         for n in range (1,fn_deriv):
             zeta[n+1,idx] = zeta[n,idx] * (2*n-1) * fac
         return zeta
@@ -365,7 +369,7 @@ class transfnal (otfnal):
         cfnal.otxc = c_code
         return xfnal, cfnal
 
-    def jT_op (self, x, rho, Pi, **kwargs):
+    def jT_op (self, x, rho, Pi):
         r''' Evaluate jTx = (x.j)T where j is the Jacobian of the
         translated densities in terms of the untranslated density and
         pair density
@@ -380,8 +384,8 @@ class transfnal (otfnal):
                 containing on-top pair density [and derivatives]
 
         Returns: ndarray of shape (*,ngrids)
-            Usually, a functional derivative of the on-top pair density 
-            exchange-correlation energy wrt to total density and its 
+            Usually, a functional derivative of the on-top pair density
+            exchange-correlation energy wrt to total density and its
             derivatives. The potential must be spin-symmetric in
             pair-density functional theory.
             2 rows for tLDA and 3 rows for tGGA
@@ -397,7 +401,7 @@ class transfnal (otfnal):
             jTx[:] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
         return jTx
 
-    def d_jT_op (self, x, rho, Pi, **kwargs):
+    def d_jT_op (self, x, rho, Pi):
         r''' Evaluate the x.(nabla j) contribution to the second density
         derivatives of the on-top energy in terms of the untranslated
         density and pair density
@@ -438,7 +442,7 @@ class transfnal (otfnal):
         return f
 
     def eval_ot (self, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
-        __doc__ = otfnal.eval_ot.__doc__
+
         eot, vot, fot = tfnal_derivs.eval_ot (self, rho, Pi, dderiv=dderiv,
             weights=weights, _unpack_vot=_unpack_vot)
         if (self.verbose <= logger.DEBUG) or (dderiv<1) or (weights is None):
@@ -453,7 +457,7 @@ class transfnal (otfnal):
 
         for p in range (20):
             # ~~~ eval_xc reference ~~~
-            rho_t0 = self.get_rho_translated (Pi, rho, weights=weights)
+            rho_t0 = self.get_rho_translated (Pi, rho)
             exc, vxc_p, fxc = self._numint.eval_xc (self.otxc, (rho_t0[0,:,:],
                 rho_t0[1,:,:]), spin=1, relativity=0, deriv=dderiv,
                 verbose=self.verbose)[:3]
@@ -494,7 +498,6 @@ class transfnal (otfnal):
                 vot_u = tfnal_derivs._unpack_sigma_vector (vot, d1, d2)
             drho = rho_tot * r0 / 2**p
             dPi = Pi * r0 / 2**p
-            nst = 2 + int(rho_tot.shape[0]>1) + int(vot[1].shape[0]>1)
             r, P = drho.copy (), dPi.copy ()
             drho[:] = dPi[:] = 0.0
             ndf = 2 + int(nvr>1) + int(nvP>1)
@@ -503,7 +506,7 @@ class transfnal (otfnal):
             if ndf > 2: drho[1:4,2::ndf] = r[1:4,2::ndf]
             if ndf > 3:  dPi[1:4,3::ndf] = P[1:4,3::ndf]
             rho1 = rho+(drho/2) # /2 because rho has one more dimension of size = 2
-                                # that gets summed later
+            # that gets summed later
             Pi1 = Pi + dPi
             # ~~~ ignore numerical instability of unfully-translated fnals ~~~
             if self.otxc[0].lower () == 't':
@@ -511,7 +514,7 @@ class transfnal (otfnal):
                     fn_deriv=0)[0]
                 z1 = self.get_zeta (self.get_ratio (Pi1, rho1.sum(0)/2)[0],
                     fn_deriv=0)[0]
-                idx = (z0==0)|(z1==0)
+                idx = (z0==0) |(z1==0)
                 drho[:,idx] = dPi[:,idx] = 0
                 rho1[:,:,idx] = rho[:,:,idx]
                 Pi1[:,idx] = Pi[:,idx]
@@ -525,6 +528,7 @@ class transfnal (otfnal):
 
         return eot, vot, fot
 
+    eval_ot.__doc__ = otfnal.eval_ot.__doc__
 
 # TODO: test continuity of smoothing function and warn at initialization?
 class ftransfnal (transfnal):
@@ -574,7 +578,7 @@ class ftransfnal (transfnal):
 
     Pi_deriv = transfnal.dens_deriv
 
-    def get_rho_translated (self, Pi, rho, **kwargs):
+    def get_rho_translated (self, Pi, rho):
         r''' Compute the "fully-translated" alpha and beta densities
         and their derivatives. This is the same as "translated" except
 
@@ -582,21 +586,21 @@ class ftransfnal (transfnal):
         rho'_t^b -= zeta' * rho / 2
 
         And the functional form of "zeta" is changed (see "get_zeta")
-    
+
         Args:
             Pi : ndarray of shape (*, ngrids)
                 containing on-top pair density [and derivatives]
             rho : ndarray of shape (2, *, ngrids)
                 containing spin density [and derivatives]
-    
-        Returns: 
+
+        Returns:
             rho_ft : ndarray of shape (2,*,ngrids)
                 Fully-translated spin density (and derivatives)
         '''
         nderiv_R = max (rho.shape[1], Pi.shape[0])
         if nderiv_R == 1: return transfnal.get_rho_translated (self, Pi, rho)
 
-        # Spin density and first term of spin gradient in common with transfnal    
+        # Spin density and first term of spin gradient in common with transfnal
         rho_avg = (rho[0,:,:] + rho[1,:,:]) / 2
         rho_ft, R, zeta = transfnal.get_rho_translated (self, Pi, rho,
             _fn_deriv=1)
@@ -608,9 +612,9 @@ class ftransfnal (transfnal):
 
         return rho_ft
 
-    def get_zeta (self, R, fn_deriv=1, **kwargs):
+    def get_zeta (self, R, fn_deriv=1):
         r''' Compute the intermediate zeta used to compute the translated spin
-        densities and its functional derivatives 
+        densities and its functional derivatives
 
         From the "full" translation [Carlson et al., JCTC 11, 4077 (2015)]:
         zeta = (1-R)^(1/2)                          ; R < R0
@@ -640,10 +644,10 @@ class ftransfnal (transfnal):
         dR = np.stack ([np.power (R[idx] - R1, n)
             for n in range (1,6)], axis=0)
         def _derivs ():
-            yield     A*dR[4] +    B*dR[3] +   C*dR[2]
-            yield   5*A*dR[3] +  4*B*dR[2] + 3*C*dR[1]
-            yield  20*A*dR[2] + 12*B*dR[1] + 6*C*dR[0]
-            yield  60*A*dR[1] + 24*B*dR[0] + 6*C
+            yield A*dR[4] +    B*dR[3] +   C*dR[2]
+            yield 5*A*dR[3] +  4*B*dR[2] + 3*C*dR[1]
+            yield 20*A*dR[2] + 12*B*dR[1] + 6*C*dR[0]
+            yield 60*A*dR[1] + 24*B*dR[0] + 6*C
             yield 120*A*dR[0] + 24*B
             yield 120*A
         for n, row in enumerate (_derivs ()):
@@ -731,20 +735,20 @@ def get_transfnal (mol, otxc):
         raise NotImplementedError (
             'On-top pair-density functional names other than "translated" (t) or '
             '"fully-translated (ft).'
-            )
+        )
     xc_base = OT_HYB_ALIAS.get (xc_base.upper (), xc_base)
     if ',' not in xc_base and _libxc.is_hybrid_or_rsh (xc_base):
         raise NotImplementedError (
-            ('Aliased or built-in translated hybrid or range-separated '
-             'functionals\nother than those listed in otfnal.OT_HYB_ALIAS. '
-             'Build a compound functional\nstring with a comma separating the '
-             'exchange and correlation parts, or use\notfnal.make_hybrid_fnal '
-             'instead.')
+            'Aliased or built-in translated hybrid or range-separated '
+            'functionals\nother than those listed in otfnal.OT_HYB_ALIAS. '
+            'Build a compound functional\nstring with a comma separating the '
+            'exchange and correlation parts, or use\notfnal.make_hybrid_fnal '
+            'instead.'
         )
     ks = dft.RKS (mol)
     ks.xc = xc_base
     return fnal_class (ks)
-    
+
 
 
 class colle_salvetti_corr (otfnal):
@@ -762,7 +766,7 @@ class colle_salvetti_corr (otfnal):
         self.CS_a =_CS_a_DEFAULT
         self.CS_b =_CS_b_DEFAULT
         self.CS_c =_CS_c_DEFAULT
-        self.CS_d =_CS_d_DEFAULT 
+        self.CS_d =_CS_d_DEFAULT
         self._init_info ()
 
     def get_E_ot (self, rho, Pi, weights):
@@ -790,8 +794,8 @@ class colle_salvetti_corr (otfnal):
 
         E_ot  = np.sum (num)
         E_ot *= -4 * a
-        return E_ot      
-                
+        return E_ot
+
 def _hybrid_2c_coeff (ni, xc_code, spin=0):
     ''' Wrapper to the xc_code hybrid coefficient parser to return the
     exchange and correlation components of the hybrid coefficent
@@ -889,7 +893,7 @@ def make_hybrid_fnal (xc_code, hyb, hyb_type = 1):
         Kwargs:
             hyb_type : int or string
                 The type of hybrid functional. Current options are:
-                - 0 or 'translation': Hybrid fnal is 
+                - 0 or 'translation': Hybrid fnal is
                     'hyb*HF + (1-hyb)*x_code, hyb*HF + c_code'.
                     Based on the idea that 'exact exchange' of the
                     translated functional corresponds to exchange plus
@@ -905,7 +909,7 @@ def make_hybrid_fnal (xc_code, hyb, hyb_type = 1):
                     wave function somehow can be meaningfully separated
                     from the correlation energy. Requires len (hyb) == 1.
                 - 3 or 'lambda': as in arXiv:1911.11162v1. Based on
-                    existing 'double-hybrid' functionals. Requires 
+                    existing 'double-hybrid' functionals. Requires
                     len (hyb) == 1.
                 - 4 or 'scaling': Hybrid fnal is
                     'a*HF + (1-a)*x_code, a*HF + (1-a**b)*c_code'
@@ -913,8 +917,8 @@ def make_hybrid_fnal (xc_code, hyb, hyb_type = 1):
                     scaling inequalities proven by Levy and Perdew in
                     PRA 32, 2010 (1985):
                     E_c[rho_a] < a*E_c[rho] if a < 1 and
-                    E_c[rho_a] > a*E_c[rho] if a > 1; 
-                    BUT 
+                    E_c[rho_a] > a*E_c[rho] if a > 1;
+                    BUT
                     E_c[rho_a] ~/~ a^2 E_c[rho], implying that
                     E_c[rho_a] ~ a^b E_c[rho] with b > 1 unknown.
                     Requires len (hyb) == 2.
@@ -982,7 +986,7 @@ t_xc_type.__doc__ = __t_doc__ + str(_NumInt._xc_type.__doc__)
 
 def t_rsh_and_hybrid_coeff(ni, xc_code, spin=0):
     return _NumInt.rsh_and_hybrid_coeff (ni, xc_code[1:], spin=spin)
-t_rsh_and_hybrid_coeff.__doc__ = (__t_doc__ 
+t_rsh_and_hybrid_coeff.__doc__ = (__t_doc__
     + str(_NumInt.rsh_and_hybrid_coeff.__doc__))
 
 def ft_hybrid_coeff(ni, xc_code, spin=0):
@@ -1046,10 +1050,10 @@ def _v_err_report (otfnal, tag, lbls, rho_tot, Pi, e0, v0, v0_packed, f, e1, v1,
         #    for row in tab:
         #        print ("{:20.12e} {:9.2e} {:9.2e} {:9.2e} {:9.2e} {:9.2e}".format
         #           (*row))
-        if ndf > 2: 
+        if ndf > 2:
             xf_df += [xf[0][1:4].T,]
             dv_df += [((v1[0][1:4]-v0[0][1:4])*w).T,]
-        if ndf > 3: 
+        if ndf > 3:
             xf_df += [xf[1][1:4].T,]
             dv_df += [((v1[1][1:4]-v0[1][1:4])*w).T,]
     de_err1 = de - vx
@@ -1064,7 +1068,7 @@ def _v_err_report (otfnal, tag, lbls, rho_tot, Pi, e0, v0, v0_packed, f, e1, v1,
             err_row = dv_row-xf_row
             for ix_col, lbl_col in enumerate (lbls):
                 lib.logger.debug (otfnal, ("%s Hessian debug (H.x_%s)_%s: "
-                    "%e - %e -> %e"), tag, lbl_col, lbl_row, 
+                    "%e - %e -> %e"), tag, lbl_col, lbl_row,
                     linalg.norm (dv_row[ix_col::ndf]),
                     linalg.norm (xf_row[ix_col::ndf]),
                     linalg.norm (err_row[ix_col::ndf]))

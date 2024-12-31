@@ -60,18 +60,34 @@ def make_heff_mcscf (mc, mo_coeff=None, ci=None):
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
 
-    ci = np.asarray(ci)
-    nroots = ci.shape[0]
-
     h1, h0 = mc.get_h1eff (mo_coeff)
     h2 = mc.get_h2eff (mo_coeff)
     h2eff = direct_spin1.absorb_h1e (h1, h2, mc.ncas, mc.nelecas, 0.5)
-    hc_all = [direct_spin1.contract_2e (h2eff, c, mc.ncas, mc.nelecas)
-        for c in ci]
-    heff = np.tensordot (ci, hc_all, axes=((1,2),(1,2)))
-    idx = np.diag_indices_from (heff)
-    heff[idx] += h0
-    return heff
+
+    def construct_ham_slice(solver, slice, nelecas):
+        ci_irrep = ci[slice]
+        if hasattr(solver, "orbsym"):
+            solver.orbsym = mc.fcisolver.orbsym
+
+        hc_all_irrep = [solver.contract_2e(h2eff, c, mc.ncas, nelecas) for c in ci_irrep]
+        heff_irrep = np.tensordot(ci_irrep, hc_all_irrep, axes=((1, 2), (1, 2)))
+        diag_idx = np.diag_indices_from(heff_irrep)
+        heff_irrep[diag_idx] += h0
+        return heff_irrep
+
+    if not isinstance(mc.fcisolver, StateAverageMixFCISolver):
+        return construct_ham_slice(direct_spin1, slice(0, len(ci)), mc.nelecas)
+
+    irrep_slices = []
+    start = 0
+    for solver in mc.fcisolver.fcisolvers:
+        end = start+solver.nroots
+        irrep_slices.append(slice(start, end))
+        start = end
+
+    return [construct_ham_slice(s, irrep, mc.fcisolver._get_nelec(s, mc.nelecas))
+            for s, irrep in zip(mc.fcisolver.fcisolvers, irrep_slices)]
+
 
 def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
         sing_tol=None, nudge_tol=None):
@@ -116,11 +132,9 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
     if sing_tol is None: sing_tol = getattr (mc, 'sing_tol_diabatize', SING_TOL_DIABATIZE)
     if nudge_tol is None: nudge_tol = getattr (mc, 'nudge_tol_diabatize', NUDGE_TOL_DIABATIZE)
     ci = np.array (ci) # copy
-    ci_old = ci.copy ()
     log = lib.logger.new_logger (mc, mc.verbose)
-    nroots = mc.fcisolver.nroots 
+    nroots = mc.fcisolver.nroots
     rows,col = np.tril_indices(nroots,k=-1)
-    npairs = nroots * (nroots - 1) // 2
     u = np.eye (nroots)
     t = np.zeros((nroots,nroots))
     conv = False
@@ -160,9 +174,9 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
         t[np.tril_indices(t.shape[0], k = -1)] = np.dot (Dt, evecs.T)
         t = t - t.T
 
-        if grad_norm < conv_tol and step_norm < conv_tol and neg_def == True:
-                conv = True
-                break
+        if grad_norm < conv_tol and step_norm < conv_tol and neg_def:
+            conv = True
+            break
 
         # I want the states we come from on the rows and the states we
         # are going to on the columns: |f> = |i>.Umat. However, the
@@ -172,7 +186,6 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
         # Flipping the sign of t does the same thing, but don't get
         # confused: this isn't related to the choice of variables!
         u = np.dot (u, linalg.expm (t).T)
-        f_last = f
         f, df, d2f = f_update (u)
 
     try:
@@ -187,17 +200,14 @@ def si_newton (mc, ci=None, objfn=None, max_cyc=None, conv_tol=None,
     if conv:
         log.note ("{} optimization CONVERGED".format (hdr))
     else:
-        log.note (("{} optimization did not converge after {} "
-                   "cycles".format (hdr, it)))
+        log.note ("{} optimization did not converge after {} "
+                   "cycles".format (hdr, it))
 
     return conv, list (ci)
 
-class MultiStateMCPDFTSolver ():
-    pass
-    # tag
 
-class _MSPDFT (MultiStateMCPDFTSolver):
-    '''MS-PDFT 
+class _MSPDFT (mcpdft.MultiStateMCPDFTSolver):
+    '''MS-PDFT
 
     Extra attributes for MS-PDFT:
 
@@ -210,7 +220,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
             Convergence threshold of the diabatization algorithm. Default
             is 1e-8.
         sing_tol_diabatize : float
-            Numerical tolerance for null state-rotation modes and 
+            Numerical tolerance for null state-rotation modes and
             singularities within the diabatization algorithm. Null modes
             (e.g., rotation between E1x and E1y states in a linear
             molecule) are ignored. Singularities (zero Hessian and
@@ -239,7 +249,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         si_pdft : ndarray of shape (nroots, nroots)
             Synonym of si
         e_mcscf : ndarray of shape (nroots)
-            Energies of the MS-SCF adiabatic states
+            Energies of the MC-SCF adiabatic states
         si_mcscf : ndarray of shape (nroots, nroots)
             Expansion coefficients for the MC-SCF adiabats in terms of
             the optimized diabatic states
@@ -255,7 +265,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         self.__dict__.update (mc.__dict__)
         keys = set (('diabatizer', 'diabatize', 'diabatization',
                      'heff_mcscf', 'hdiag_pdft',
-                     'get_heff_offdiag', 'get_heff_pdft', 
+                     'get_heff_offdiag', 'get_heff_pdft',
                      'si', 'si_mcscf', 'si_pdft',
                      'max_cyc_diabatize', 'conv_tol_diabatize',
                      'sing_tol_diabatize', 'nudge_tol_diabatize'))
@@ -269,7 +279,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         self.diabatization = diabatization
         self.si_mcscf = None
         self.si_pdft = None
-        self._keys = set ((self.__dict__.keys ())).union (keys)
+        self._keys = set (self.__dict__.keys ()).union (keys)
 
     @property
     def e_states (self):
@@ -295,7 +305,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
 
         = heff_mcscf - np.diag (heff_mcscf.diagonal ())
         = ( 0     H_10^* ... )
-          ( H_10  0      ... ) 
+          ( H_10  0      ... )
           ( ...   ...    ... )
 
         Returns:
@@ -313,7 +323,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
 
         = get_heff_offdiag () + np.diag (hdiag_pdft)
         = ( EPDFT_0  H_10^*   ... )
-          ( H_10     EPDFT_1  ... ) 
+          ( H_10     EPDFT_1  ... )
           ( ...      ...      ... )
 
         Returns:
@@ -343,7 +353,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         '''
         si_dict = {'MCSCF': self.si_mcscf,
                    'MSPDFT': self.si_pdft}
-        if isinstance (uci, (str,np.string_)):
+        if isinstance (uci, (str,np.bytes_)):
             if uci.upper () in si_dict:
                 uci = si_dict[uci.upper ()]
             else:
@@ -354,7 +364,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
 
     def kernel (self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
                 grids_attr=None, **kwargs):
-        self.otfnal.reset (mol=self.mol) # scanner mode safety 
+        self.otfnal.reset (mol=self.mol) # scanner mode safety
         if ci0 is None and isinstance (getattr (self, 'ci', None), list):
             ci0 = [c.copy () for c in self.ci]
         self.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0)
@@ -362,7 +372,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         self.converged = self.converged and diab_conv
         self.heff_mcscf = self.make_heff_mcscf ()
         e_mcscf, self.si_mcscf = self._eig_si (self.heff_mcscf)
-        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-10:
+        if abs (linalg.norm (self.e_mcscf-e_mcscf)) > 1e-9:
             raise RuntimeError (("Sanity fault: e_mcscf ({}) != "
                                 "self.e_mcscf ({})").format (e_mcscf,
                                 self.e_mcscf))
@@ -372,12 +382,12 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         self.e_tot = np.dot (self.e_states, self.weights)
         self._log_diabats ()
         self._log_adiabats ()
-        return (self.e_tot, self.e_ot, self.e_mcscf, self.e_cas, self.ci, 
+        return (self.e_tot, self.e_ot, self.e_mcscf, self.e_cas, self.ci,
             self.mo_coeff, self.mo_energy)
 
     def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
         # Initialize in an adiabatic basis
-        if ci0 is not None: 
+        if ci0 is not None:
             if mo_coeff is None: mo_coeff = self.mo_coeff
             heff_mcscf = self.make_heff_mcscf (mo_coeff, ci0)
             e, self.si_mcscf = self._eig_si (heff_mcscf)
@@ -412,12 +422,12 @@ class _MSPDFT (MultiStateMCPDFTSolver):
                 CI vectors of the optimized diabatic states
         '''
         if ci is None: ci = self.ci
-        if ci0 is not None: 
+        if ci0 is not None:
             ovlp = np.tensordot (np.asarray (ci).conj (), np.asarray (ci0),
                                  axes=((1,2),(1,2)))
             u, svals, vh = linalg.svd (ovlp)
-            ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh)) 
-        return self._diabatize (self, ci, **kwargs)
+            ci = self.get_ci_basis (ci=ci, uci=np.dot (u,vh))
+        return self._diabatize (self, ci=ci, **kwargs)
 
     def diabatizer (self, mo_coeff=None, ci=None):
         '''Computes the value, gradient vector, and Hessian matrix with
@@ -499,7 +509,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         # Information about the final states
         log = lib.logger.new_logger (self, self.verbose)
         nroots = len (self.e_states)
-        log.note ('%s adiabatic (final) states:', self.__class__.__name__) 
+        log.note ('%s adiabatic (final) states:', self.__class__.__name__)
         if getattr (self.fcisolver, 'spin_square', None):
             ci = np.tensordot (self.si.T, np.asarray (self.ci), axes=1)
             ss = self.fcisolver.states_spin_square (ci, self.ncas,
@@ -523,6 +533,18 @@ class _MSPDFT (MultiStateMCPDFTSolver):
             from pyscf.grad.mspdft import Gradients
         return Gradients (self)
 
+    def nac_method(self):
+        if not isinstance(self, mc1step.CASSCF):
+            raise NotImplementedError("CASCI-based PDFT NACs")
+        elif getattr(self, 'frozen', None) is not None:
+            raise NotImplementedError("PDFT NACs with frozen orbitals")
+        elif isinstance(self, _DFCASSCF):
+            raise NotImplementedError("PDFT NACs with density fitting")
+        else:
+            from pyscf.nac.mspdft import NonAdiabaticCouplings
+
+        return NonAdiabaticCouplings(self)
+
     def dip_moment (self, unit='Debye', origin='Coord_Center', state=None):
         if not isinstance (self, mc1step.CASSCF):
             raise NotImplementedError ("CASCI-based PDFT dipole moments")
@@ -544,7 +566,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         prop.__path__.append (myproppath)
         prop.__path__=list(set(prop.__path__))
         from pyscf.prop.dip_moment.mspdft import ElectricDipole
-        if not isinstance(state, int):
+        if not lib.isinteger (state):
             raise RuntimeError ('Permanent dipole requires a single state')
         dip_obj =  ElectricDipole(self)
         mol_dipole = dip_obj.kernel (state=state, unit=unit, origin=origin)
@@ -571,7 +593,7 @@ class _MSPDFT (MultiStateMCPDFTSolver):
         prop.__path__.append (myproppath)
         prop.__path__=list(set(prop.__path__))
         from pyscf.prop.trans_dip_moment.mspdft import TransitionDipole
-        if not isinstance(state, list) or len(state)!=2:
+        if not hasattr(state, '__len__') or len(state) !=2:
             raise RuntimeError ('Transition dipole requires two states')
         tran_dip_obj = TransitionDipole(self)
         mol_trans_dipole = tran_dip_obj.kernel (state=state, unit=unit, origin=origin)
@@ -600,8 +622,14 @@ def get_diabfns (obj):
     if obj.upper () == 'CMS':
         from pyscf.mcpdft.cmspdft import e_coul as diabatizer
         diabatize = si_newton
+
+    elif obj.upper() == "XMS":
+        from pyscf.mcpdft.xmspdft import safock_energy as diabatizer
+        from pyscf.mcpdft.xmspdft import solve_safock as diabatize
+
     else:
         raise RuntimeError ('MS-PDFT type not supported')
+
     return diabatizer, diabatize
 
 def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
@@ -609,7 +637,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
 
     Args:
         mc : instance of class _PDFT
-    
+
     Kwargs:
         weights : sequence of floats
         diabatization : objective-function type
@@ -619,7 +647,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
         si : instance of class _MSPDFT
     '''
 
-    if isinstance (mc, MultiStateMCPDFTSolver):
+    if isinstance (mc, mcpdft.MultiStateMCPDFTSolver):
         raise RuntimeError ('already a multi-state PDFT solver')
     if isinstance (mc.fcisolver, StateAverageMixFCISolver):
         raise RuntimeError ('state-average mix type')
@@ -635,7 +663,7 @@ def multi_state (mc, weights=(0.5,0.5), diabatization='CMS', **kwargs):
         pass
     MSPDFT.__name__ = diabatization.upper () + base_name
     return MSPDFT (mc, diabatizer, diabatize, diabatization)
-    
+
 
 if __name__ == '__main__':
     # This ^ is a convenient way to debug code that you are working on. The

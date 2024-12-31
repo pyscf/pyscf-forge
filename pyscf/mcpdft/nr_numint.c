@@ -34,48 +34,17 @@
 #include "np_helper/np_helper.h"
 #include "vhf/fblas.h"
 
+// MR Hennefarth 05/26/2023: Removes implicit function warning. Then will give
+// warnings about calling parameters. This function defined in
+// pyscf/lib/libdft.so. No header file to include, hence the need for the
+// extern.
+extern int VXCao_empty_blocks(int8_t*, uint8_t*, int*, int*);
+
 // --------------------------------------------------------------
 // --------------------- end PySCF includes ---------------------
 // --------------------------------------------------------------
 
 #define BOXSIZE         56
-/* 
-MRH 06/10/2022: This function is defined in pyscf/lib/libdft.so
-(dft/nr_numint.c) 
-int VXCao_empty_blocks(int8_t *empty, uint8_t *non0table, int *shls_slice,
-                       int *ao_loc)
-{
-        if (non0table == NULL || shls_slice == NULL || ao_loc == NULL) {
-                return 0;
-        }
-
-        const int sh0 = shls_slice[0];
-        const int sh1 = shls_slice[1];
-
-        int bas_id;
-        int box_id = 0;
-        int bound = BOXSIZE;
-        int has0 = 0;
-        empty[box_id] = 1;
-        for (bas_id = sh0; bas_id < sh1; bas_id++) {
-                if (ao_loc[bas_id] == bound) {
-                        has0 |= empty[box_id];
-                        box_id++;
-                        bound += BOXSIZE;
-                        empty[box_id] = 1;
-                }
-                empty[box_id] &= !non0table[bas_id];
-                if (ao_loc[bas_id+1] > bound) {
-                        has0 |= empty[box_id];
-                        box_id++;
-                        bound += BOXSIZE;
-                        empty[box_id] = !non0table[bas_id];
-                }
-        }
-        return has0;
-}
-// TODO: figure out how to link against the libdft.so definition of this function instead of copying it
-*/
 
 /* vv[n,m] = ao[n,ngrids] * mo[m,ngrids] */
 /* MRH 05/18/2020: dot_ao_ao -> dot_ao_mo requires

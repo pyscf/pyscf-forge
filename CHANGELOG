@@ -1,0 +1,35 @@
+PySCF-Forge 1.0.2 (2024-12-04)
+------------------------------
+* New features
+  - Parity Violating contributions to energy
+  - Particle-particle random phase approximation (ppRPA)
+  - New libxc interface that allows the modification to XC functional parameters
+  - Multi-configuration density-coherence functional methods
+* Improvments
+  - The ECP section in the TREXIO interface.
+  - The treatments of contracted basis functions in the TREXIO interface.
+  - TREXIO converter for PBC systems at Gamma point.
+  - Users can register determinant into trexio format.
+
+
+PySCF-Forge 1.0.1 (2024-10-31)
+------------------------------
+* New features
+  - PySCF-TrexIO interface
+
+
+PySCF-Forge 1.0.0 (2024-05-31)
+------------------------------
+* PyPI wheels with initial features
+  - CMS-PDFT (Compressed Multiconfiguration Pair-Density Functional Theory) energy and analytical nuclear gradients
+  - L-PDFT (Linearized PDFT) energy and analytical nuclear gradients
+  - MC-PDFT energy and analytical nuclear gradients
+  - XMS-PDFT energy
+  - Non-adiabatic couplings between states using CMS-PDFT method
+  - MC-DCFT (Multiconfiguration Density-Coherence Functional Theory) method
+  - MC-PDFT and CMS-PDFT dipole moment
+  - CMS-PDFT transition dipole moment
+  - MC-PDFT energy decomposition analysis
+  - LRDF (Long-Range Density Fitting) for energy and analytical nuclear gradients and Hessian 
+  - Spin-flip TDA using multi-collinear functionals
+  - M3SOSCF (Markovian Multiagent Monte-Carlo second order SCF) method

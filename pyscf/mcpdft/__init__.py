@@ -56,6 +56,10 @@ def CASCIPDFT (mc_or_mf_or_mol, ot, ncas, nelecas, ncore=None, **kwargs):
 CASSCF=CASSCFPDFT
 CASCI=CASCIPDFT
 
+class MultiStateMCPDFTSolver :
+    pass
+    # tag
+
 
 # Monkeypatch for double grad folders
 # TODO: more elegant solution
@@ -69,4 +73,7 @@ mydfgradpath = os.path.join (os.path.join (mypath, 'df'), 'grad')
 from pyscf.df import grad as df_grad
 df_grad.__path__.append (mydfgradpath)
 df_grad.__path__=list(set(df_grad.__path__))
-
+mynacpath = os.path.join(mypath, "nac")
+from pyscf import nac
+nac.__path__.append(mynacpath)
+nac.__path__ = list(set(nac.__path__))

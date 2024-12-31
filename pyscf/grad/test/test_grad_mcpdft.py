@@ -31,8 +31,7 @@
 # trying to test the API here; we need tight convergence and grids
 # to reproduce well when OMP is on.
 import numpy as np
-from pyscf import gto, scf, mcscf, lib, fci, df
-from pyscf.fci.addons import fix_spin_
+from pyscf import gto, scf, mcscf, lib, fci, dft
 from pyscf import mcpdft
 import unittest
 
@@ -55,28 +54,31 @@ def auto_setup (xyz='Li 0 0 0\nH 1.5 0 0'):
     solver_S = fci.solver (mol_nosym, singlet=True).set (spin=0, nroots=2)
     solver_T = fci.solver (mol_nosym, singlet=False).set (spin=2, nroots=3)
     mcp_sa_1 = mcp_ss_nosym.state_average_mix (
-        [solver_S,solver_T], [1.0/5,]*5).run ()
+        [solver_S,solver_T], [1.0/5,]*5).set(ci=None).run ()
     solver_A1 = fci.solver (mol_sym).set (wfnsym='A1', nroots=3)
     solver_E1x = fci.solver (mol_sym).set (wfnsym='E1x', nroots=1, spin=2)
     solver_E1y = fci.solver (mol_sym).set (wfnsym='E1y', nroots=1, spin=2)
     mcp_sa_2 = mcp_ss_sym.state_average_mix (
-        [solver_A1,solver_E1x,solver_E1y], [1.0/5,]*5).run ()
+        [solver_A1,solver_E1x,solver_E1y], [1.0/5,]*5).set(ci=None).run ()
     mcp = [[mcp_ss_nosym, mcp_ss_sym], [mcp_sa_0, mcp_sa_1, mcp_sa_2]]
     nosym = [mol_nosym, mf_nosym, mc_nosym]
     sym = [mol_sym, mf_sym, mc_sym]
     return nosym, sym, mcp
 
 def setUpModule():
-    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp
+    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, original_grids
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     nosym, sym, mcp = auto_setup ()
     mol_nosym, mf_nosym, mc_nosym = nosym
     mol_sym, mf_sym, mc_sym = sym
 
 def tearDownModule():
-    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp
+    global mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, original_grids
     mol_nosym.stdout.close ()
     mol_sym.stdout.close ()
-    del mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
+    del mol_nosym, mf_nosym, mc_nosym, mol_sym, mf_sym, mc_sym, mcp, original_grids
 
 class KnownValues(unittest.TestCase):
 

@@ -60,7 +60,7 @@ def sipdft_HellmanFeynman_dipole (mc, si_bra=None, si_ket=None,
     center = get_guage_origin(mol,origin)
     with mol.with_common_orig(center):
         ao_dip = mol.intor_symmetric('int1e_r', comp=3)
-    elec_term = -np.einsum('xij,ij->x', ao_dip, dm).real
+    elec_term = -np.tensordot(ao_dip, dm).real
     return elec_term
 
 class ElectricDipole (mspdft.Gradients):
@@ -92,14 +92,14 @@ class ElectricDipole (mspdft.Gradients):
             veff1.append (v1)
             veff2.append (v2)
         kwargs['veff1'], kwargs['veff2'] = veff1, veff2
-        kwargs['d2f'] = d2f 
+        kwargs['d2f'] = d2f
 
         conv, Lvec, bvec, Aop, Adiag = self.solve_lagrange (**kwargs)
 
         ham_response = self.get_ham_response (origin=origin, **kwargs)
 
         LdotJnuc = self.get_LdotJnuc (Lvec, origin=origin, **kwargs)
-        
+
         mol_dip = ham_response + LdotJnuc
 
         mol_dip = self.convert_dipole (ham_response, LdotJnuc, mol_dip, unit=unit)
@@ -135,12 +135,12 @@ class ElectricDipole (mspdft.Gradients):
         return total
 
     def get_LdotJnuc (self, Lvec, atmlst=None, verbose=None, mo=None,
-        ci=None, origin='Coord_Center', **kwargs):
+            ci=None, origin='Coord_Center', **kwargs):
         if atmlst is None: atmlst = self.atmlst
         if verbose is None: verbose = self.verbose
         if mo is None: mo = self.base.mo_coeff
         if ci is None: ci = self.base.ci
-        
+
         mc = self.base
 
         ngorb, nci = self.ngorb, self.nci
@@ -169,7 +169,7 @@ class ElectricDipole (mspdft.Gradients):
         dmL_core += dmL_core.T
         dmL_cas += dmL_cas.T
 
-        # CI part 
+        # CI part
         casdm1_transit, _ = mc.fcisolver.trans_rdm12 (Lci, ci, ncas, nelecas)
         casdm1_transit += casdm1_transit.transpose (1,0)
 
@@ -181,6 +181,6 @@ class ElectricDipole (mspdft.Gradients):
         center = get_guage_origin(mol,origin)
         with mol.with_common_orig(center):
             ao_dip = mol.intor_symmetric('int1e_r', comp=3)
-        mol_dip_L = -np.einsum('xij,ji->x', ao_dip, dm).real
+        mol_dip_L = -np.tensordot(ao_dip, dm).real
 
         return mol_dip_L

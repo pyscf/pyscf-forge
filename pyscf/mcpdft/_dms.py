@@ -21,6 +21,14 @@ from pyscf.mcscf.addons import StateAverageFCISolver
 from pyscf.mcscf.addons import StateAverageMixFCISolver
 from scipy import linalg
 
+# DMRG solvers require special handling but dmrgscf is not always installed
+try:
+    from pyscf import dmrgscf
+    DMRGCI = dmrgscf.DMRGCI
+except ImportError:
+    class DMRGCI :
+        pass
+
 def _get_fcisolver (mc, ci, state=0):
     '''Find the appropriate FCI solver, CI vector, and nelecas tuple to
     build single-state reduced density matrices. If state_average or
@@ -32,23 +40,25 @@ def _get_fcisolver (mc, ci, state=0):
     nelecas = mc.nelecas
     nroots = getattr (mc.fcisolver, 'nroots', 1)
     fcisolver = mc.fcisolver
-    if nroots>1:
-        ci = ci[state]
-        if isinstance (mc.fcisolver, StateAverageMixFCISolver):
-            p0 = 0
-            fcisolver = None
-            for s in mc.fcisolver.fcisolvers:
-                p1 = p0 + s.nroots
-                if p0 <= state and state < p1:
-                    fcisolver = s
-                    nelecas = mc.fcisolver._get_nelec (s, nelecas)
-                    break
-                p0 = p1
-            if fcisolver is None:
-                raise RuntimeError ("Can't find FCI solver for state", state)
-        elif isinstance (mc.fcisolver, StateAverageFCISolver):
-            fcisolver = fcisolver._base_class (mc._scf.mol)
-            fcisolver.__dict__.update(mc.fcisolver.__dict__)
+    solver_state_index = state
+    if nroots>1: ci = ci[state]
+    if isinstance (mc.fcisolver, StateAverageMixFCISolver):
+        p0 = 0
+        fcisolver = None
+        for s in mc.fcisolver.fcisolvers:
+            p1 = p0 + s.nroots
+            if p0 <= state and state < p1:
+                fcisolver = s
+                nelecas = mc.fcisolver._get_nelec (s, nelecas)
+                solver_state_index = state - p0
+                break
+            p0 = p1
+        if fcisolver is None:
+            raise RuntimeError ("Can't find FCI solver for state", state)
+    elif isinstance (mc.fcisolver, StateAverageFCISolver):
+        fcisolver = fcisolver.undo_state_average ()
+    if isinstance (fcisolver, DMRGCI):
+        ci = solver_state_index # DMRGCI takes state index in place of ci vector
     return fcisolver, ci, nelecas
 
 def make_one_casdm1s (mc, ci, state=0):
@@ -73,8 +83,14 @@ def make_one_casdm2 (mc, ci, state=0):
     '''
     ncas = mc.ncas
     fcisolver, ci, nelecas = _get_fcisolver (mc, ci, state=state)
-    return fcisolver.make_rdm2 (ci, ncas, nelecas)
-    
+    try:
+        casdm2 = fcisolver.make_rdm2 (ci, ncas, nelecas)
+    except AttributeError:
+        # Hail Mary: maybe the fcisolver class only has make_rdm12
+        # but not make_rdm2 implemented?
+        _, casdm2 = fcisolver.make_rdm12 (ci, ncas, nelecas)
+    return casdm2
+
 
 def dm2_cumulant (dm2, dm1s):
     '''
@@ -138,7 +154,7 @@ def dm2s_cumulant (dm2s, dm1s):
     #cm2 +=    0.5 * np.einsum ('ps,rq->pqrs', dm1, dm1)
     cm2s = [i.copy () for i in dm2s]
     cm2s[0] -= np.multiply.outer (dm1s[0], dm1s[0])
-    cm2s[1] -= np.multiply.outer (dm1s[0], dm1s[1]) 
+    cm2s[1] -= np.multiply.outer (dm1s[0], dm1s[1])
     cm2s[2] -= np.multiply.outer (dm1s[1], dm1s[1])
     cm2s[0] += np.multiply.outer (dm1s[0], dm1s[0]).transpose (0, 3, 2, 1)
     cm2s[2] += np.multiply.outer (dm1s[1], dm1s[1]).transpose (0, 3, 2, 1)
@@ -210,12 +226,10 @@ def make_weighted_casdm1s(mc, ci=None, weights=None):
     '''
     if ci is None: ci = mc.ci
     if weights is None: weights = mc.weights
-    ncas = mc.ncas
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.
-    fcisolver, _, nelecas = _get_fcisolver(mc, ci)
-    casdm1s_all = [fcisolver.make_rdm1s(c, ncas, nelecas) for c in ci]
+    casdm1s_all = [make_one_casdm1s(mc, ci, state) for state in range(len(ci))]
     casdm1s_0 = np.tensordot(weights, casdm1s_all, axes=1)
     return tuple(casdm1s_0)
 
@@ -237,10 +251,8 @@ def make_weighted_casdm2(mc, ci=None, weights=None):
     '''
     if ci is None: ci = mc.ci
     if weights is None: weights = mc.weights
-    ncas = mc.ncas
 
     # There might be a better way to construct all of them, but this should be
     # more cost-effective than what is currently in the _dms file.
-    fcisolver, _, nelecas = _get_fcisolver(mc, ci)
-    casdm2_all = [fcisolver.make_rdm2(c, ncas, nelecas) for c in ci]
+    casdm2_all = [make_one_casdm2(mc, ci, state) for state in range(len(ci))]
     return np.tensordot(weights, casdm2_all, axes=1)

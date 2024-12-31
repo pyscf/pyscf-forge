@@ -13,20 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyscf import lib, mcpdft
-from pyscf.grad import casscf as casscf_grad
+from pyscf import lib
 from pyscf.grad import sacasscf as sacasscf_grad
 from pyscf.grad import mspdft as mspdft_grad
 from pyscf.grad import mcpdft as mcpdft_grad
-from pyscf.df.grad import mcpdft as dfmcdpft_grad
 from pyscf.df.grad import casscf as dfcasscf_grad
 from pyscf.df.grad import sacasscf as dfsacasscf_grad
 from pyscf.df.grad import rhf as dfrhf_grad
 from functools import partial
 
-# I need to resolve the __init__ and get_ham_response members. Otherwise everything should be fine! 
+# I need to resolve the __init__ and get_ham_response members. Otherwise everything should be fine!
 class Gradients (mspdft_grad.Gradients):
-    
+
     def __init__(self, pdft):
         self.auxbasis_response = True
         mspdft_grad.Gradients.__init__(self, pdft)

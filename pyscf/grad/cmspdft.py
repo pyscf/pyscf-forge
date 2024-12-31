@@ -86,24 +86,27 @@ def diab_response (mc_grad, Lis, mo=None, ci=None, eris=None, **kwargs):
 
     # Orbital degree of freedom
     Rorb = np.zeros ((nmo,nmo), dtype=vj[0].dtype)
-    Rorb[:,ncore:nocc] = sum ([np.dot (v, ed) + np.dot (ev, d) 
+    Rorb[:,ncore:nocc] = sum ([np.dot (v, ed) + np.dot (ev, d)
         for v, d, ev, ed in zip (vj, dm1, evj, edm1)])
     Rorb -= Rorb.T
-    
-    # CI degree of freedom 
+
+    # CI degree of freedom
     w = coulomb_tensor (mc, mo_coeff=mo, ci=ci, h2eff=aapa[:,:,ncore:nocc,:])
     const_IJ = -4*np.einsum ('jiik,ik->ij', w, L)
     const_IJ -= 2*np.einsum ('iijk,ik->ij', w, L)
     const_IJ += 2*np.einsum ('jkkk,ik->ij', w, L)
     Rci = np.tensordot (const_IJ, ci_arr, axes=1) # Delta_IJ |J> term
-    def contract (v,c): return mc.fcisolver.contract_1e (v, c, ncas, nelecas)
+
+    def contract (v,c):
+        return mc.fcisolver.contract_1e (v, c, ncas, nelecas)
+
     vj, evj = vj[:,ncore:nocc,:], evj[:,ncore:nocc,:]
     vci = np.stack ([contract (v,c) for v, c in zip (vj, ci)], axis=0)
     Rci -= 2 * np.tensordot (L, vci, axes=1) # -2 |zW_I> term
     for I in range (nroots):
         Rci[I] += 2 * contract (vj[I], Lci[I]) # 2 W^I_I |z_I> term
-        Rci[I] += 2 * contract (evj[I], ci[I]) # 4 W^zI_I |I> z_IJ term 
-                                               # (*2 in def. of evj)
+        Rci[I] += 2 * contract (evj[I], ci[I]) # 4 W^zI_I |I> z_IJ term
+        # (*2 in def. of evj)
 
     return mc_grad.pack_uniq_var (2*Rorb, Rci)
 
@@ -180,7 +183,7 @@ def diab_response_o0 (mc_grad, Lis, mo=None, ci=None, eris=None, **kwargs):
                 return hci
         else:
             def _Hci (h1, h2, ci2):
-                tm1 = np.asarray (mc.fcisolver.states_trans_rdm12 (ci2, ci1, 
+                tm1 = np.asarray (mc.fcisolver.states_trans_rdm12 (ci2, ci1,
                     ncas, nelecas)[0])
                 op1 = h1[None,:,:] + np.tensordot (dm1, h2, axes=2)
                 op2 = np.tensordot (tm1 + tm1.transpose (0,2,1), h2, axes=2)
@@ -200,13 +203,13 @@ def diab_response_o0 (mc_grad, Lis, mo=None, ci=None, eris=None, **kwargs):
 
     # Fake Newton CASSCF!
     with lib.temporary_env (newton_casscf, _pack_ci_get_H=_pack_ci_get_H):
-     with lib.temporary_env (mc.fcisolver, trans_rdm12=trans_rdm12):
-        hx = newton_casscf.gen_g_hop (mc, mo, ci, feris, verbose=0)[2](x)
+        with lib.temporary_env (mc.fcisolver, trans_rdm12=trans_rdm12):
+            hx = newton_casscf.gen_g_hop (mc, mo, ci, feris, verbose=0)[2](x)
     hx *= nroots
     hx_orb, hx_ci = mc_grad.unpack_uniq_var (hx)
     hx_ci = np.asarray (hx_ci)
-    hx_is = np.einsum ('pab,qab->pq', hx_ci, ci_arr.conj ())
-    hx_ci -= np.einsum ('pq,qab->pab', hx_is, ci_arr)
+    hx_is = lib.einsum ('pab,qab->pq', hx_ci, ci_arr.conj ())
+    hx_ci -= np.tensordot(hx_is, ci_arr, axes=1)
 
     return mc_grad.pack_uniq_var (hx_orb, hx_ci)
 
@@ -291,10 +294,10 @@ def diab_grad (mc_grad, Lis, atmlst=None, mo=None, ci=None, eris=None,
     aoslices = mol.aoslice_by_atom()
     for k, ia in enumerate(atmlst):
         shl0, shl1, p0, p1 = aoslices[ia]
-        de_renorm[k] -= np.einsum('xpq,pq->x', s1[:,p0:p1], dme0[p0:p1]) * 2
-        de_direct[k] += np.einsum('xipq,ipq->x', dvj[:,:,p0:p1],
+        de_renorm[k] -= lib.einsum('xpq,pq->x', s1[:,p0:p1], dme0[p0:p1]) * 2
+        de_direct[k] += lib.einsum('xipq,ipq->x', dvj[:,:,p0:p1],
             edm1_ao[:,p0:p1]) * 2
-        de_direct[k] += np.einsum('xipq,ipq->x', devj[:,:,p0:p1],
+        de_direct[k] += lib.einsum('xipq,ipq->x', devj[:,:,p0:p1],
             dm1_ao[:,p0:p1]) * 2
     dvj_aux = dvj_aux[:,:,atmlst,:]
     de_aux = (np.trace (dvj_aux, offset=nroots, axis1=0, axis2=1)
@@ -356,21 +359,21 @@ if __name__ == '__main__':
     ci_arr = np.asarray (mc.ci)
 
     mc_grad = mc.nuc_grad_method ()
-    Lis = math.pi * (np.random.rand ((3)) - 0.5)
+    Lis = math.pi * (np.random.rand (3) - 0.5)
     eris = mc.ao2mo (mc.mo_coeff)
 
     dw_test = diab_response (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci,
         eris=eris)
     dworb_test, dwci_test = mc_grad.unpack_uniq_var (dw_test)
     dwci_test = np.asarray (dwci_test)
-    dwis_test = np.einsum ('pab,qab->pq', dwci_test, ci_arr.conj ())
-    dwci_test -= np.einsum ('pq,qab->pab', dwis_test, ci_arr)
+    dwis_test = lib.einsum ('pab,qab->pq', dwci_test, ci_arr.conj ())
+    dwci_test -= lib.einsum ('pq,qab->pab', dwis_test, ci_arr)
     dw_ref = diab_response_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci,
         eris=eris)
     dworb_ref, dwci_ref = mc_grad.unpack_uniq_var (dw_ref)
     dwci_ref = np.asarray (dwci_ref)
-    dwis_ref = np.einsum ('pab,qab->pq', dwci_ref, ci_arr.conj ())
-    dwci_ref -= np.einsum ('pq,qab->pab', dwis_ref, ci_arr)
+    dwis_ref = lib.einsum ('pab,qab->pq', dwci_ref, ci_arr.conj ())
+    dwci_ref -= lib.einsum ('pq,qab->pab', dwis_ref, ci_arr)
     dh_test = diab_grad (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
     dh_ref = diab_grad_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
 

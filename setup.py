@@ -13,15 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NAME = 'pyscf-forge'
+NAME = 'pyscf_forge'
 AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
-DESCRIPTION  = 'PySCF extension modules'
+DESCRIPTION  = 'Staging ground for PySCF core features'
 SO_EXTENSIONS = {
-    'pyscf.lib.libpdft': ['pyscf/mcpdft/nr_numint.c']
 }
 DEPENDENCIES = ['pyscf', 'numpy']
-VERSION = '1.0.0'
+VERSION = '1.0.2'
 
 #######################################################################
 # Unless not working, nothing below needs to be changed.
@@ -29,24 +28,32 @@ metadata = globals()
 import os
 import sys
 from setuptools import setup, find_namespace_packages, Extension
-from setuptools.command.build_ext import build_ext
+from setuptools.command.build_py import build_py
 
 topdir = os.path.abspath(os.path.join(__file__, '..'))
 modules = find_namespace_packages(include=['pyscf.*'])
-def guess_version():
-    for module in modules:
-        module_path = os.path.join(topdir, *module.split('.'))
-        for version_file in ['__init__.py', '_version.py']:
-            version_file = os.path.join(module_path, version_file)
-            if os.path.exists(version_file):
-                with open(version_file, 'r') as f:
-                    for line in f.readlines():
-                        if line.startswith('__version__'):
-                            delim = '"' if '"' in line else "'"
-                            return line.split(delim)[1]
-    raise ValueError("Version string not found")
-if not metadata.get('VERSION', None):
-    VERSION = guess_version()
+
+def get_platform():
+    from distutils.util import get_platform
+    platform = get_platform()
+    if sys.platform == 'darwin':
+        arch = os.getenv('CMAKE_OSX_ARCHITECTURES')
+        if arch:
+            osname = platform.rsplit('-', 1)[0]
+            if ';' in arch:
+                platform = f'{osname}-universal2'
+            else:
+                platform = f'{osname}-{arch}'
+        elif os.getenv('_PYTHON_HOST_PLATFORM'):
+            # the cibuildwheel environment
+            platform = os.getenv('_PYTHON_HOST_PLATFORM')
+            if platform.endswith('arm64'):
+                os.putenv('CMAKE_OSX_ARCHITECTURES', 'arm64')
+            elif platform.endswith('x86_64'):
+                os.putenv('CMAKE_OSX_ARCHITECTURES', 'x86_64')
+            else:
+                os.putenv('CMAKE_OSX_ARCHITECTURES', 'arm64;x86_64')
+    return platform
 
 pyscf_lib_dir = os.path.join(topdir, 'pyscf', 'lib')
 def make_ext(pkg_name, srcs,
@@ -76,13 +83,13 @@ def make_ext(pkg_name, srcs,
                      runtime_library_dirs = runtime_library_dirs,
                      **kwargs)
 
-class CMakeBuildExt(build_ext):
+class CMakeBuildPy(build_py):
     def run(self):
-        extension = self.extensions[0]
-        #assert extension.name == 'pyscf_lib_placeholder'
-        self.build_cmake(extension)
+        self.plat_name = get_platform()
+        self.build_base = 'build'
+        self.build_lib = os.path.join(self.build_base, 'lib')
+        self.build_temp = os.path.join(self.build_base, f'temp.{self.plat_name}')
 
-    def build_cmake(self, extension):
         self.announce('Configuring extensions', level=3)
         src_dir = os.path.abspath(os.path.join(__file__, '..', 'pyscf', 'lib'))
         cmd = ['cmake', f'-S{src_dir}', f'-B{self.build_temp}']
@@ -94,7 +101,7 @@ class CMakeBuildExt(build_ext):
         self.announce('Building binaries', level=3)
         # Do not use high level parallel compilation. OOM may be triggered
         # when compiling certain functionals in libxc.
-        cmd = ['cmake', '--build', self.build_temp, '-j2']
+        cmd = ['cmake', '--build', self.build_temp, '-j', '4']
         build_args = os.getenv('CMAKE_BUILD_ARGS')
         if build_args:
             cmd.extend(build_args.split(' '))
@@ -102,40 +109,48 @@ class CMakeBuildExt(build_ext):
             self.announce(' '.join(cmd))
         else:
             self.spawn(cmd)
-
-    # To remove the infix string like cpython-37m-x86_64-linux-gnu.so
-    # Python ABI updates since 3.5
-    # https://www.python.org/dev/peps/pep-3149/
-    def get_ext_filename(self, ext_name):
-        ext_path = ext_name.split('.')
-        filename = build_ext.get_ext_filename(self, ext_name)
-        name, ext_suffix = os.path.splitext(filename)
-        return os.path.join(*ext_path) + ext_suffix
-
-# Here to change the order of sub_commands to ['build_py', ..., 'build_ext']
-# C extensions by build_ext are installed in source directory.
-# build_py then copy all .so files into "build_ext.build_lib" directory.
-# We have to ensure build_ext being executed earlier than build_py.
-# A temporary workaround is to modifying the order of sub_commands in build class
-from distutils.command.build import build
-build.sub_commands = ([c for c in build.sub_commands if c[0] == 'build_ext'] +
-                      [c for c in build.sub_commands if c[0] != 'build_ext'])
+        super().run()
 
 settings = {
     'name': metadata.get('NAME', None),
     'version': VERSION,
     'description': metadata.get('DESCRIPTION', None),
+    'long_description': metadata.get('DESCRIPTION', None),
+    'long_description_content_type': 'text/markdown',
     'author': metadata.get('AUTHOR', None),
     'author_email': metadata.get('AUTHOR_EMAIL', None),
     'install_requires': metadata.get('DEPENDENCIES', []),
-    'ext_modules': [
-        Extension('pyscf_lib_placeholder', [])
-    ] + [make_ext(k, v) for k, v in SO_EXTENSIONS.items()],
-    'cmdclass': {'build_ext': CMakeBuildExt},
+    'cmdclass': {'build_py': CMakeBuildPy},
 }
+
+if SO_EXTENSIONS:
+    settings['ext_modules'] = [make_ext(k, v) for k, v in SO_EXTENSIONS.items()]
+else:
+    # build_py will produce plat_name = 'any'. Patch the bdist_wheel to change the
+    # platform tag because the C extensions are platform dependent.
+    # For setuptools<70
+    from wheel.bdist_wheel import bdist_wheel
+    initialize_options_1 = bdist_wheel.initialize_options
+    def initialize_with_default_plat_name(self):
+        initialize_options_1(self)
+        self.plat_name = get_platform()
+        self.plat_name_supplied = True
+    bdist_wheel.initialize_options = initialize_with_default_plat_name
+
+    # For setuptools>=70
+    try:
+        from setuptools.command.bdist_wheel import bdist_wheel
+        initialize_options_2 = bdist_wheel.initialize_options
+        def initialize_with_default_plat_name(self):
+            initialize_options_2(self)
+            self.plat_name = get_platform()
+            self.plat_name_supplied = True
+        bdist_wheel.initialize_options = initialize_with_default_plat_name
+    except ImportError:
+        pass
 
 setup(
     include_package_data=True,
-    packages=modules,
+    packages=modules + ['pyscf.lib'],
     **settings
 )

@@ -15,7 +15,7 @@
 #
 import numpy as np
 from scipy import linalg
-from pyscf import gto, scf, df, mcscf, lib
+from pyscf import gto, scf, df, dft, mcscf, lib
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 #from pyscf.fci import csf_solver
@@ -45,13 +45,22 @@ def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     mc.kernel (mo)
     return mc.nuc_grad_method ()
 
+def setUpModule():
+    global diatomic, original_grids
+    original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
+
 def tearDownModule():
-    global diatomic
-    del diatomic
+    global diatomic, original_grids
+    dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
+    del diatomic, original_grids
+
+# The purpose of these separate test functions is to narrow down an error to specific degrees of
+# freedom. But if the lih_cms2ftpbe and _df cases pass, then almost certainly, they all pass.
 
 class KnownValues(unittest.TestCase):
 
-    def test_grad_h2_cms3ftlda22_sto3g (self):
+    def test_grad_h2_cms3ftlda22_sto3g_slow (self):
         # z_orb:    no
         # z_ci:     no
         # z_is:     no
@@ -63,7 +72,7 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
 
-    def test_grad_h2_cms2ftlda22_sto3g (self):
+    def test_grad_h2_cms2ftlda22_sto3g_slow (self):
         # z_orb:    no
         # z_ci:     yes
         # z_is:     no
@@ -75,7 +84,7 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 6)
 
-    def test_grad_h2_cms3ftlda22_631g (self):
+    def test_grad_h2_cms3ftlda22_631g_slow (self):
         # z_orb:    yes
         # z_ci:     no
         # z_is:     no
@@ -87,7 +96,7 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
 
-    def test_grad_h2_cms2ftlda22_631g (self):
+    def test_grad_h2_cms2ftlda22_631g_slow (self):
         # z_orb:    yes
         # z_ci:     yes
         # z_is:     no
@@ -99,7 +108,7 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
 
-    def test_grad_lih_cms2ftlda44_sto3g (self):
+    def test_grad_lih_cms2ftlda44_sto3g_slow (self):
         # z_orb:    no
         # z_ci:     yes
         # z_is:     yes
@@ -111,7 +120,7 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 6)
 
-    def test_grad_lih_cms3ftlda22_sto3g (self):
+    def test_grad_lih_cms3ftlda22_sto3g_slow (self):
         # z_orb:    yes
         # z_ci:     no
         # z_is:     yes
@@ -123,7 +132,7 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 6)
 
-    def test_grad_lih_cms2ftlda22_sto3g (self):
+    def test_grad_lih_cms2ftlda22_sto3g_slow (self):
         # z_orb:    yes
         # z_ci:     yes
         # z_is:     yes
@@ -147,17 +156,19 @@ class KnownValues(unittest.TestCase):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
 
-#    def test_grad_lih_cms2ftlda22_sto3g_df (self):
-#        # z_orb:    yes
-#        # z_ci:     yes
-#        # z_is:     yes
-#        mc_grad = diatomic ('Li', 'H', 2.5, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2, density_fit=True)
-#        de_ref = [0.1074553399, 0.03956955205] 
-#        # Numerical from this software
-#        for i in range (2):
-#         with self.subTest (state=i):
-#            de = mc_grad.kernel (state=i) [1,0] / BOHR
-#            self.assertAlmostEqual (de, de_ref[i], 5)
+    # MRH 05/05/2023: currently, the only other test which uses DF-MC-PDFT features is
+    # test_grad_h2co, which is slower than this. Therefore I am restoring it.
+    def test_grad_lih_cms2ftlda22_sto3g_df (self):
+        # z_orb:    yes
+        # z_ci:     yes
+        # z_is:     yes
+        mc_grad = diatomic ('Li', 'H', 2.5, 'ftLDA,VWN3', 'STO-3G', 2, 2, 2, density_fit=True)
+        de_ref = [0.1074553399, 0.03956955205] 
+        # Numerical from this software
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_ref[i], 5)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradients of diatomic molecules")

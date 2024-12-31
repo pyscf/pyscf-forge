@@ -14,56 +14,88 @@
 # limitations under the License.
 #
 from pyscf import gto, scf, lib, mcscf
-from pyscf.mcdcft import mcdcft
+from pyscf.mcdcft import mcdcft, dcfnal
 #from pyscf.fci import csf_solver
 import unittest
 import tempfile
 import os
 
-def run(r, xc, ot_name, chkfile):
+def run(r, xc, chkfile):
     r /= 2
-    mol = gto.M(atom=f'H  0 0 {r}; H 0 0 -{r}', basis='cc-pvtz', 
+    mol = gto.M(atom=f'H  0 0 {r}; H 0 0 -{r}', basis='cc-pvtz',
           symmetry=False, verbose=0)
     mf = scf.RHF(mol)
     mf.kernel()
-    mc = mcdcft.CASSCF(mf, xc, 2, 2, ot_name=ot_name, 
-                       grids_level=6)
-    #mc.fcisolver = csf_solver(mol, smult=1)
+    mc = mcdcft.CASSCF(mf, xc, 2, 2, grids_level=6)
     mc.fix_spin_(ss=0)
     mc.chkfile = chkfile
     mc.kernel()
-    mc.dump_mcdcft_chk(chkfile)
     return mc.e_tot
 
-def restart(xc, ot_name, chkfile):
+def run2(r, xc, chkfile):
+    r /= 2
+    mol = gto.M(atom=f'H  0 0 {r}; H 0 0 -{r}', basis='cc-pvtz',
+          symmetry=False, verbose=0)
+    mf = scf.RHF(mol)
+    mf.kernel()
+    xc0 = 'DC24'
+    mc = mcdcft.CASSCF(mf, xc0, 2, 2, grids_level=6)
+    mc.fix_spin_(ss=0)
+    mc.kernel()
+    mc.recalculate_with_xc(xc, load_chk=chkfile)
+    return mc.e_tot
+
+def restart(xc, chkfile):
     mol = lib.chkfile.load_mol(chkfile)
     mol.verbose = 0
     mf = scf.RHF(mol)
-    mc = mcdcft.CASSCF(mf, None, 2, 2, grids_level=6)
+    mc = mcdcft.CASSCF(mf, xc, 2, 2, grids_level=6)
     mc.load_mcdcft_chk(chkfile)
-    mc.recalculate_with_xc(xc, ot_name=ot_name, dump_chk=chkfile)
+    mc.recalculate_with_xc(xc, dump_chk=chkfile)
     return mc.e_tot
 
+cPBE_preset = dict(args=dict(f=dcfnal.f_v1, negative_rho=True), xc_code='PBE')
+cBLYP_preset = dict(args=dict(f=dcfnal.f_v1, negative_rho=True), xc_code='BLYP')
+
 class KnownValues(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        dcfnal.register_dcfnal_('cPBE', cPBE_preset)
+        dcfnal.register_dcfnal_('cBLYP', cBLYP_preset)
+
+    @classmethod
+    def tearDownClass(cls):
+        dcfnal.unregister_dcfnal_('cPBE')
+        dcfnal.unregister_dcfnal_('cBLYP')
 
     def test_cPBE(self):
-        chkfile1 = os.path.join(tmpdir, 'h2_pbe_1.chk')
-        chkfile2 = os.path.join(tmpdir, 'h2_pbe_2.chk')
-        self.assertAlmostEqual(run(8.00, 'PBE', 'cPBE', chkfile1) -
-                               run(0.78, 'PBE', 'cPBE', chkfile2), 0.14898997201251052, 5)
-        self.assertAlmostEqual(restart('BLYP', 'cBLYP', chkfile1) -
-                               restart('BLYP', 'cBLYP', chkfile2), 0.15624825293702616, 5)
+        with tempfile.NamedTemporaryFile() as chkfile1:
+            chkname1 = chkfile1.name
+            with tempfile.NamedTemporaryFile() as chkfile2:
+                chkname2 = chkfile2.name
+                self.assertAlmostEqual(run(8.00, 'cPBE', chkname1) -
+                                       run(0.78, 'cPBE', chkname2), 0.14898997201251052, 5)
+                self.assertAlmostEqual(run2(8.00, 'cPBE', chkname1) -
+                                       run2(0.78, 'cPBE', chkname2), 0.14898997201251052, 5)
+                self.assertAlmostEqual(restart('cBLYP', chkname1) -
+                                       restart('cBLYP', chkname2), 0.15624825293702616, 5)
 
     def test_cBLYP(self):
-        chkfile1 = os.path.join(tmpdir, 'h2_blyp_1.chk')
-        chkfile2 = os.path.join(tmpdir, 'h2_blyp_2.chk')
-        self.assertAlmostEqual(run(8.00, 'BLYP', 'cBLYP', chkfile1) -
-                               run(0.78, 'BLYP', 'cBLYP', chkfile2), 0.15624825293702616, 5)
-        self.assertAlmostEqual(restart('PBE', 'cPBE', chkfile1) -
-                               restart('PBE', 'cPBE', chkfile2), 0.14898997201251052, 5)
-        
+        with tempfile.NamedTemporaryFile() as chkfile1:
+            chkname1 = chkfile1.name
+            with tempfile.NamedTemporaryFile() as chkfile2:
+                chkname2 = chkfile2.name
+                self.assertAlmostEqual(run(8.00, 'cBLYP', chkname1) -
+                                       run(0.78, 'cBLYP', chkname2), 0.15624825293702616, 5)
+                self.assertAlmostEqual(run2(8.00, 'cBLYP', chkname1) -
+                                       run2(0.78, 'cBLYP', chkname2), 0.15624825293702616, 5)
+                self.assertAlmostEqual(restart('cPBE', chkname1) -
+                                       restart('cPBE', chkname2), 0.14898997201251052, 5)
+
+    def test_DC24(self):
+        self.assertAlmostEqual(run(0.78, 'DC24', None), -1.25248849, 5)
+
 if __name__ == "__main__":
     print("Full Tests for MC-DCFT energies of H2 molecule")
-    with tempfile.TemporaryDirectory() as tmpdir:
-        unittest.main()
+    unittest.main()
 
