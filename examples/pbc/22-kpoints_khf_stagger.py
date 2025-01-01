@@ -3,7 +3,7 @@
 '''
 Example script for exact exchange with staggered mesh method.
 
-Author: Stephen Quiton (sjquiton@gmail.com)
+Author: Stephen Quiton (sjquiton@gmail.com), Hamlin Wu ()
 
 Reference: The Staggered Mesh Method: Accurate Exact Exchange Toward the 
            Thermodynamic Limit for Solids, J. Chem. Theory Comput. 2024, 20,

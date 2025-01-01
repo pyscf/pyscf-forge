@@ -14,11 +14,11 @@
 # limitations under the License.
 
 '''
-Test code for
-k-point spin-restricted periodic MP2 calculation using the staggered mesh method
-Author: Xin Xing (xxing@berkeley.edu)
-Reference: Staggered Mesh Method for Correlation Energy Calculations of Solids: Second-Order
-        Møller–Plesset Perturbation Theory, J. Chem. Theory Comput. 2021, 17, 8, 4733-4745
+Test code for staggered mesh method for exact exchange.
+Author: Stephen Quiton (sjquiton@gmail.com)
+Reference: The Staggered Mesh Method: Accurate Exact Exchange Toward the 
+           Thermodynamic Limit for Solids, J. Chem. Theory Comput. 2024, 20,
+           18, 7958-7968
 '''
 
 import unittest

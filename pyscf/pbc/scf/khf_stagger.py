@@ -24,7 +24,25 @@ from pyscf.pbc.dft import numint as pbcnumint
 
 
 def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
-    from pyscf.pbc import scf
+    """ Computes the exchange energy using the staggered mesh method based on J. Chem. Theory Comput. 2024, 20,
+        18, 7958-7968.
+
+    Args:
+        kmf (khf.KSCF): KSCF object (KRKS or KRHF supported). For Non-SCF and Split-SCF, the SCF should be converged
+        type (str, optional): "Regular", "Non-SCF", or "Split-SCF". See examples/pbc/22-kpoints_khf_stagger.py for usage. Defaults to "Non-SCF".
+        df_type (pbc.df.FFTDF or pbc.df.GDF, optional): Density fitting class. Defaults to df.FFTDF if cell.dimension <= 2, df.GDF otherwise.
+        kshift_rel (float, optional): kpt mesh shift in relative coordinates of grid size. kshift_rel = 1.0 is equivalent to kshift_rel = 0.0. Defaults to 0.5.
+        verbose (int, optional): Level of verbosity for debugging. Defaults to logger.NOTE.
+        with_vk (bool, optional): Set True to return exchange matrix. Defaults to False.
+        nks (array-like of size 3, optional): Number of kpoints in each direction of MP Mesh; used only for type="regular." Defaults to None.
+
+    Returns:
+        results (dict): Dictionary containing the following keys:
+            E_stagger_M (float): Staggered mesh exchange energy with Madelung-like correction
+            E_stagger (float): Staggered mesh exchange energy
+            vk (np.array, optional): Exchange matrix if with_vk=True
+    """
+    
     icell = kmf.cell
     log = logger.Logger(icell.stdout, verbose)
     ikpts = kmf.kpts
@@ -174,7 +192,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         kmesh_shifted = ikpts + kshift_abs
         
         #Calculation on shifted mesh
-        kmf_shifted = scf.KHF(icell, kmesh_shifted)
+        kmf_shifted = pbcscf.KHF(icell, kmesh_shifted)
         kmf_shifted.with_df = df_type(icell, ikpts).build()  # For 2d,1d, df_type cannot be FFTDF
         print(kmf_shifted.kernel())
         dm_shifted = kmf_shifted.make_rdm1()
@@ -246,10 +264,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
     }
     if with_vk:
         results_dict["vk"] = Kmat
-    # if type == 0:
-    #     results_dict["dm_combined"] = dm_combined
-    #     results_dict["kpts_combined"] = kmesh_combined
-    
+        
     return results_dict
 
 stagger_type_id = {
@@ -267,7 +282,7 @@ def get_stagger_type_id(stagger_type):
     return stagger_type_id.get(stagger_type.lower())
 
 class KHF_stagger(khf.KSCF):
-    def __init__(self, mf, stagger_type='regular',kshift_rel=0.5, with_vk=False, **kwargs):
+    def __init__(self, mf, stagger_type='non-scf',kshift_rel=0.5, with_vk=False, **kwargs):
         self.mf = mf
         self.cell = mf.cell
         self.stdout = mf.cell.stdout
@@ -325,11 +340,16 @@ class KHF_stagger(khf.KSCF):
             results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
             self.ek = results["E_stagger_M"] 
         if xc:
-            # Note: X has no exact exchange (i.e. ex_PBE0 = 0.75 * PBEx + 0.25 * 0.0)
+            # Note: XC here has no exact exchange, i.e. exc_PBE0 = PBEc + 0.75 * PBEx + 0.25 * HFx, with HFx = 0.0
             ni = pbcnumint.KNumInt()
             _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
     def rerun_scf(self):
+        """This function reruns the SCF calculation with the staggered mesh method. If the SCF is already
+        converged (as it should be with type='Non-SCF'  ='Split-SCF'), this function just iterates one more time. For type='regular',
+        a brand new SCF object is created with the combined shifted and unshifted kpt meshes. 
+        """
+        
         if self.stagger_type == 0:
             kshift_abs = self.cell.get_abs_kpts([self.kshift_rel / n for n in self.nks])
             if self.cell.dimension <=2:
@@ -384,4 +404,46 @@ class KHF_stagger(khf.KSCF):
         
         return self.e_tot
         
-        
+if __name__ == '__main__':
+    from pyscf.pbc import gto
+    '''
+    Hydrogen dimer
+    '''
+    cell = gto.Cell()
+    cell.pseudo = 'gth-pbe'
+    cell.basis = 'gth-szv'
+    cell.ke_cutoff = 100
+    cell.atom = '''
+        H 3.00   3.00   2.10
+        H 3.00   3.00   3.90
+        '''
+    cell.a = '''
+        6.0   0.0   0.0
+        0.0   6.0   0.0
+        0.0   0.0   6.0
+        '''
+    cell.unit = 'B'
+    cell.verbose = 4
+    cell.build()
+
+
+    # HF calcuation to base Non-SCF and Split-SCF staggered mesh calculations on.
+    nks = [2, 2, 2]
+    kpts = cell.make_kpts(nks, with_gamma_point=True)
+    kmf = pbcscf.KRHF(cell, kpts, exxdiv='ewald')
+    kmf.with_df = df.GDF(cell, kpts).build()
+    ehf = kmf.kernel()
+
+    '''
+    KHF Stagger, Non-SCF version
+    Compute densities at shifted mesh non-SCF using F_unshifted. Additional cost 
+    is ~ 1 extra K-build. 
+    '''
+    kmf_stagger = KHF_stagger(kmf,"non-scf")
+    kmf_stagger.kernel()
+    etot = kmf_stagger.e_tot
+    ek_stagger = kmf_stagger.ek
+
+    print('Non-SCF Stagger')
+    print('Total energy: ', etot)
+    print('Exchange energy: ', ek_stagger)
