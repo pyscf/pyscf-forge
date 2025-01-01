@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2022 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2024 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 
 '''
 Test code for staggered mesh method for exact exchange.
-Author: Stephen Quiton (sjquiton@gmail.com)
+Author: Stephen Quiton (sjquiton@gmail.com), Hamlin Wu ()
 Reference: The Staggered Mesh Method: Accurate Exact Exchange Toward the 
            Thermodynamic Limit for Solids, J. Chem. Theory Comput. 2024, 20,
            18, 7958-7968
