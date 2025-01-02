@@ -25,26 +25,26 @@ from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 
 
 def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
-    """ Computes the exchange energy using the staggered mesh method based on 
+    """ Computes the exchange energy using the staggered mesh method based on
         J. Chem. Theory Comput. 2024, 20, 18, 7958-7968.
 
     Args:
-        kmf (khf.KSCF): KSCF object (KRKS or KRHF supported). For Non-SCF and 
+        kmf (khf.KSCF): KSCF object (KRKS or KRHF supported). For Non-SCF and
             Split-SCF, the SCF should be converged.
-        type (str, optional): "Regular", "Non-SCF", or "Split-SCF". See 
-            examples/pbc/22-kpoints_khf_stagger.py for usage. Defaults to 
+        type (str, optional): "Regular", "Non-SCF", or "Split-SCF". See
+            examples/pbc/22-kpoints_khf_stagger.py for usage. Defaults to
             "Non-SCF".
-        df_type (pbc.df.FFTDF or pbc.df.GDF, optional): Density fitting class. 
+        df_type (pbc.df.FFTDF or pbc.df.GDF, optional): Density fitting class.
             Defaults to df.FFTDF if cell.dimension <= 2, df.GDF otherwise.
-        kshift_rel (float, optional): kpt mesh shift in relative coordinates of 
-            grid size. kshift_rel = 1.0 is equivalent to kshift_rel = 0.0. 
+        kshift_rel (float, optional): kpt mesh shift in relative coordinates of
+            grid size. kshift_rel = 1.0 is equivalent to kshift_rel = 0.0.
             Defaults to 0.5.
-        verbose (int, optional): Level of verbosity for debugging. Defaults to 
+        verbose (int, optional): Level of verbosity for debugging. Defaults to
             logger.NOTE.
-        with_vk (bool, optional): Set True to return exchange matrix. Defaults 
+        with_vk (bool, optional): Set True to return exchange matrix. Defaults
             to False.
-        nks (array-like of size 3, optional): Number of kpoints in each 
-            direction of MP Mesh; used only for type="regular." Defaults to 
+        nks (array-like of size 3, optional): Number of kpoints in each
+            direction of MP Mesh; used only for type="regular." Defaults to
             None.
 
     Returns:
@@ -310,11 +310,11 @@ class KHF_stagger(khf.KSCF):
             _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
     def rerun_scf(self):
-        """This function reruns the SCF calculation with the staggered mesh 
-        method. If the SCF is already converged (as it should be with 
-        type='Non-SCF'  ='Split-SCF'), this function just iterates one more 
-        time. For type='regular', a brand new SCF object is created with the 
-        combined shifted and unshifted kpt meshes. 
+        """This function reruns the SCF calculation with the staggered mesh
+        method. If the SCF is already converged (as it should be with
+        type='Non-SCF'  ='Split-SCF'), this function just iterates one more
+        time. For type='regular', a brand new SCF object is created with the
+        combined shifted and unshifted kpt meshes.
         """
 
         if self.stagger_type == 0:
@@ -403,8 +403,8 @@ if __name__ == '__main__':
 
     '''
     KHF Stagger, Non-SCF version
-    Compute densities at shifted mesh non-SCF using F_unshifted. Additional cost 
-    is ~ 1 extra K-build. 
+    Compute densities at shifted mesh non-SCF using F_unshifted. Additional cost
+    is ~ 1 extra K-build.
     '''
     kmf_stagger = KHF_stagger(kmf,"non-scf")
     kmf_stagger.kernel()
