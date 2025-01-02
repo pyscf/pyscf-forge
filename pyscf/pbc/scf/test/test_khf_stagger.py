@@ -15,7 +15,7 @@
 
 '''
 Test code for staggered mesh method for exact exchange.
-Author: Stephen Quiton (sjquiton@gmail.com), Hamlin Wu ()
+Author: Stephen Quiton (sjquiton@gmail.com)
 Reference: The Staggered Mesh Method: Accurate Exact Exchange Toward the 
            Thermodynamic Limit for Solids, J. Chem. Theory Comput. 2024, 20,
            18, 7958-7968

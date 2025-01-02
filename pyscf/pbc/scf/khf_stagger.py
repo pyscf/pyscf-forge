@@ -85,69 +85,18 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         ke_cutoff = -2 * ew_eta ** 2 * log_precision
         # Get FFT mesh from cutoff value
         mesh = cell_input.cutoff_to_mesh(ke_cutoff)
-        # if cell_input.dimension <= 2:
-        #     mesh[2] = 1
-        # if cell_input.dimension == 1:
-        #     mesh[1] = 1
         # Get grid
         Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh = mesh)
         #Get q+G points
         G_combined = Gv + kshift_abs
-        absG2 = np.einsum('gi,gi->g', G_combined, G_combined)
 
-
-        if cell_input.dimension ==3:
-            # Calculate |q+G|^2 values of the shifted points
-            qG2 = np.einsum('gi,gi->g', G_combined, G_combined)
-            qG2[qG2 == 0] = 1e200
-            component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
-            sum_ovrG_term = weights*np.einsum('i->',component).real
-            self_term = 2*ew_eta/np.sqrt(np.pi)
-            return sum_ovrG_term - self_term
-
-        elif cell_input.dimension == 2:  # Truncated Coulomb
-            from scipy.special import erf, erfc
-            # The following 2D ewald summation is taken from:
-            # R. Sundararaman and T. Arias PRB 87, 2013
-            def fn(eta, Gnorm, z):
-                Gnorm_z = Gnorm * z
-                large_idx = Gnorm_z > 20.0
-                ret = np.zeros_like(Gnorm_z)
-                x = Gnorm / 2. / eta + eta * z
-                with np.errstate(over='ignore'):
-                    erfcx = erfc(x)
-                    ret[~large_idx] = np.exp(Gnorm_z[~large_idx]) * erfcx[~large_idx]
-                    ret[large_idx] = np.exp((Gnorm * z - x ** 2)[large_idx]) * erfcx[large_idx]
-                return ret
-
-            def gn(eta, Gnorm, z):
-                return np.pi / Gnorm * (fn(eta, Gnorm, z) + fn(eta, Gnorm, -z))
-
-            def gn0(eta, z):
-                return -2 * np.pi * (z * erf(eta * z) + np.exp(-(eta * z) ** 2) / eta / np.sqrt(np.pi))
-
-            b = cell_input.reciprocal_vectors()
-            inv_area = np.linalg.norm(np.cross(b[0], b[1])) / (2 * np.pi) ** 2
-            # Perform the reciprocal space summation over  all reciprocal vectors
-            # within the x,y plane.
-            planarG2_idx = np.logical_and(Gv[:, 2] == 0, absG2 > 0.0)
-
-            G_combined = G_combined[planarG2_idx]
-            absG2 = absG2[planarG2_idx]
-            absG = absG2 ** (0.5)
-            # Performing the G != 0 summation.
-            coords = np.array([[0,0,0]])
-            rij = coords[:, None, :] - coords[None, :, :] # should be just the zero vector for correction.
-            Gdotr = np.einsum('ijx,gx->ijg', rij, G_combined)
-            ewg = np.einsum('i,j,ijg,ijg->', chargs, chargs, np.cos(Gdotr),
-                            gn(ew_eta, absG, rij[:, :, 2:3]))
-            # Performing the G == 0 summation.
-            # ewg += np.einsum('i,j,ij->', chargs, chargs, gn0(ew_eta, rij[:, :, 2]))
-
-            ewg *= inv_area # * 0.5
-
-            ewg_analytical = 2 * ew_eta / np.sqrt(np.pi)
-            return ewg - ewg_analytical
+        # Calculate |q+G|^2 values of the shifted points
+        qG2 = np.einsum('gi,gi->g', G_combined, G_combined)
+        qG2[qG2 == 0] = 1e200
+        component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
+        sum_ovrG_term = weights*np.einsum('i->',component).real
+        self_term = 2*ew_eta/np.sqrt(np.pi)
+        return sum_ovrG_term - self_term
 
     def compute_modified_madelung(kmf, kshift_abs, nks=None):
         count_iter = 1
