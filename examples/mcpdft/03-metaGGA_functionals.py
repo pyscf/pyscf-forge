@@ -18,16 +18,13 @@ tM06L0 = 't' + mcpdft.hyb('M06L',0.25, hyb_type='average')
 mc = mcpdft.CASCI(mf, tM06L0, 6, 8).run ()
 
 # MC23: meta-hybrid on-top functional [ChemRxiv. 2024; doi:10.26434/chemrxiv-2024-5hc8g-v2]
-# To calculate the MC23 energies, you can define functional as 'tMC23'. 
-
-# Note: It's 'fully-translated' version 'ftMC23' is not defined as of now.
 
 # State-Specific
-mc = mcpdft.CASCI(mf, 'tMC23', 6, 8)
+mc = mcpdft.CASCI(mf, 'MC23', 6, 8)
 mc.kernel()
 
 # State-average
 nroots=2
-mc = mcpdft.CASCI(mf, 'tMC23', 6, 8)
+mc = mcpdft.CASCI(mf, 'MC23', 6, 8)
 mc.fcisolver.nroots=nroots
 mc.kernel()[0]
