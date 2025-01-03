@@ -25,7 +25,7 @@ In this unit-test, test the MCPDFT energies calculated for the LiH
 molecule at the state-specific and state-average (2-states) using
 1. Meta-GGA functional (tM06L)
 2. Hybrid-meta-GGA functional tM06L0
-3. tMC23 Functional
+3. MC23 Functional
 
 Test the MCPDFT energies calculated for the triplet water molecule at the
 4. Meta-GGA functional (M06L)
@@ -114,12 +114,12 @@ def setUpModule():
     global get_lih, lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2,lih_tm06l0
     global get_water_triplet, water_tm06l, water_tmc23
     lih_tm06l = get_lih(1.5, functional='tM06L')
-    lih_tmc23 = get_lih(1.5, functional='tMC23')
+    lih_tmc23 = get_lih(1.5, functional='MC23')
     lih_tm06l_sa2 = get_lih(1.5, stateaverage=True, functional='tM06L')
-    lih_tmc23_sa2 = get_lih(1.5, stateaverage=True, functional='tMC23')
+    lih_tmc23_sa2 = get_lih(1.5, stateaverage=True, functional='MC23')
     lih_tm06l0 = get_lih(1.5, functional='tM06L0')
     water_tm06l = get_water_triplet()
-    water_tmc23 = get_water_triplet(functional='tMC23')
+    water_tmc23 = get_water_triplet(functional='MC23')
 
 def tearDownModule():
     global lih_tm06l, lih_tmc23, lih_tm06l_sa2, lih_tmc23_sa2

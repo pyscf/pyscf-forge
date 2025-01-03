@@ -32,6 +32,7 @@ FT_A = getattr(__config__, 'mcpdft_otfnal_ftransfnal_A', -475.60656009)
 FT_B = getattr(__config__, 'mcpdft_otfnal_ftransfnal_B', -379.47331922)
 FT_C = getattr(__config__, 'mcpdft_otfnal_ftransfnal_C', -85.38149682)
 
+OT_ALIAS = {'MC23': 'tMC23'}
 OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE',
                 'MC23' : 'mc23'} # Note: mc23 is hybrid Meta-GGA OT Functional.
 
@@ -836,6 +837,8 @@ def _sanity_check_ftot(xc_code):
         raise NotImplementedError(msg)
 
 def get_transfnal (mol, otxc):
+    if otxc.upper () in OT_ALIAS:
+        otxc = OT_ALIAS[otxc.upper ()]
     if otxc.upper ().startswith ('T'):
         xc_base = otxc[1:]
         fnal_class = transfnal
