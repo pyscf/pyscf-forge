@@ -230,7 +230,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
 
     return results_dict
 
-stagger_type_id = {
+type_to_id = {
     'regular':  0,
     'standard': 0,
     'split-scf': 1,
@@ -241,8 +241,14 @@ stagger_type_id = {
     'non_scf': 2,
 }
 
+id_to_type = {
+    0: 'regular',
+    1: 'split-scf',
+    2: 'non-scf',
+}
+
 def get_stagger_type_id(stagger_type):
-    return stagger_type_id.get(stagger_type.lower())
+    return type_to_id.get(stagger_type.lower())
 
 class KHF_stagger(khf.KSCF):
     def __init__(self, mf, stagger_type='non-scf',kshift_rel=0.5, with_vk=False, **kwargs):
@@ -279,11 +285,9 @@ class KHF_stagger(khf.KSCF):
         log.info('******** %s ********', self.__class__)
         log.info('method = %s', self.__class__.__name__)
 
-        log.info('Staggered mesh method for exact exchange, type = %s', self.stagger_type)
-
-
-        log.info('Exchange Energy (Stagger, %s) = %.15g', self.stagger_type, self.ek)
-        log.info('Total Energy (Stagger, %s) = %.15g', self.stagger_type, self.e_tot)
+        log.info('Staggered mesh method for exact exchange, type = %s', id_to_type[self.stagger_type])
+        log.info('Exchange Energy (Stagger, %s) = %.15g', id_to_type[self.stagger_type], self.ek)
+        log.info('Total Energy (Stagger, %s) = %.15g', id_to_type[self.stagger_type], self.e_tot)
         return self
 
     def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False,xc=False):
@@ -309,6 +313,7 @@ class KHF_stagger(khf.KSCF):
             ni = pbcnumint.KNumInt()
             _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
+
     def rerun_scf(self):
         """This function reruns the SCF calculation with the staggered mesh
         method. If the SCF is already converged (as it should be with
@@ -347,7 +352,6 @@ class KHF_stagger(khf.KSCF):
 
         else:
             self.mf.kernel()
-
 
     def kernel(self):
         self.rerun_scf()
