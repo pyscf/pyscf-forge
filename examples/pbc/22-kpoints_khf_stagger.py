@@ -35,8 +35,9 @@ cell.unit = "B"
 cell.verbose = 4
 cell.build()
 
-
-# HF calcuation to base Non-SCF and Split-SCF staggered mesh calculations on.
+"""
+For Non-SCF and Split-SCF, need to run a normal kpts SCF calculation first.
+"""
 nks = [2, 2, 2]
 kpts = cell.make_kpts(nks, with_gamma_point=True)
 kmf = scf.KRHF(cell, kpts, exxdiv="ewald")
@@ -45,8 +46,8 @@ ehf = kmf.kernel()
 
 """
 KHF Stagger, Non-SCF version
-Compute densities at shifted mesh non-SCF using F_unshifted. Additional cost
-is ~ 1 extra K-build.
+Compute densities at shifted kpt mesh non-self-consistently using the Fock
+matrix at the unshifted mesh. Additional cost is ~ 1 extra K-build.
 """
 kmf_stagger = KHF_stagger(kmf, "non-scf")
 kmf_stagger.kernel()
@@ -62,7 +63,8 @@ assert abs(ek_stagger - -0.5688182610550594) < 1e-6
 
 """
 KHF Stagger, Split-SCF version
-Converge densities at shifted with SCF. Additional cost is ~ 1 extra SCF kernel.
+Converge densities at shifted kpt mesh self-conistently. Additional cost
+is ~ 1 extra SCF kernel.
 """
 kmf_stagger = KHF_stagger(kmf, "split-scf")
 kmf_stagger.kernel()
@@ -78,8 +80,8 @@ assert abs(ek_stagger - -0.5680002649689386) < 1e-6
 
 """
 KHF Stagger, regular version
-Converge densities with combined unshifted + shifted mesh. Estimated cost is
-4x normal SCF. No need for prior SCF calculation.
+Converge all densities with combined unshifted + shifted mesh. Total estimated
+cost is 4x normal SCF. No need for prior SCF calculation.
 """
 nks = [2, 2, 2]
 kpts = cell.make_kpts(nks, with_gamma_point=True)
