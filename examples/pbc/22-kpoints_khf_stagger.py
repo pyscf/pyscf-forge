@@ -62,7 +62,7 @@ assert abs(ek_stagger - -0.5688182610550594) < 1e-6
 
 """
 KHF Stagger, Split-SCF version
-Converge densities at shifted with SCF. Additional cost is ~ 1x normal SCF.
+Converge densities at shifted with SCF. Additional cost is ~ 1 extra SCF kernel.
 """
 kmf_stagger = KHF_stagger(kmf, "split-scf")
 kmf_stagger.kernel()
@@ -73,13 +73,12 @@ print("Split-SCF Stagger")
 print("Total energy: ", etot)
 print("Exchange energy: ", ek_stagger)
 
-assert abs(etot - -1.0980852331458024) < 1e-6
-assert abs(ek_stagger - -0.575360094294689) < 1e-6
-
+assert abs(etot - -1.0907254038200516) < 1e-6
+assert abs(ek_stagger - -0.5680002649689386) < 1e-6
 
 """
 KHF Stagger, regular version
-Converge densities with combined unshifted + shifted mesh. Additional cost is
+Converge densities with combined unshifted + shifted mesh. Estimated cost is
 4x normal SCF. No need for prior SCF calculation.
 """
 nks = [2, 2, 2]

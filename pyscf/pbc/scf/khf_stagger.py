@@ -49,7 +49,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
 
     Returns:
         results (dict): Dictionary containing the following keys:
-            E_stagger_M (float): Staggered mesh exchange energy with 
+            E_stagger_M (float): Staggered mesh exchange energy with
                 Madelung-like correction.
             E_stagger (float): Staggered mesh exchange energy.
             vk (np.array, optional): Exchange matrix if with_vk=True.
@@ -77,7 +77,6 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         return ecell
 
     def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None):
-        # Here, the only difference from overleaf is that eta here is defined as 4eta^2 = eta_paper
         if ew_eta is None or ew_cut is None:
             ew_eta, ew_cut = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
         chargs = cell_input.atom_charges()
@@ -155,15 +154,16 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
 
         #Calculation on shifted mesh
         kmf_shifted = pbcscf.KHF(icell, kmesh_shifted)
-        kmf_shifted.with_df = df_type(icell, ikpts).build()  # For 2d,1d, df_type cannot be FFTDF
-        print(kmf_shifted.kernel())
+        kmf_shifted.with_df = df_type(icell, kmesh_shifted).build()  # For 2d,1d, df_type cannot be FFTDF
+        kmf_shifted.kernel()
         dm_shifted = kmf_shifted.make_rdm1()
+
         #Get K matrix on shifted kpts, dm from unshifted mesh
-        _, Kmat = kmf_shifted.get_jk(cell = kmf_shifted.cell, dm_kpts = kmf.make_rdm1(),
-                                     kpts = ikpts, kpts_band = kmesh_shifted)
+        _, Kmat = kmf.get_jk(cell = kmf.cell, dm_kpts = kmf.make_rdm1(),
+                                     kpts = ikpts, kpts_band = kmesh_shifted, with_j=False)
         Nk = np.prod(nks)
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
-        E_stagger/=2
+        E_stagger /= 2.
 
     elif type == 2: # Non-SCF
         # Run SCF; should be one cycle if converged
@@ -204,7 +204,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         # Compute the Staggered mesh energy
         Nk = np.prod(nks)
         E_stagger = -1./Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
-        E_stagger/=2
+        E_stagger /= 2.
 
     else:
         raise ValueError("Invalid stagger type", type)
@@ -282,8 +282,8 @@ class KHF_stagger(khf.KSCF):
         log.info('Staggered mesh method for exact exchange, type = %s', self.stagger_type)
 
 
-        log.info('ek (%s) = %.15g', self.stagger_type, self.ek)
-        log.info('etot (%s) = %.15g', self.stagger_type, self.e_tot)
+        log.info('Exchange Energy (Stagger, %s) = %.15g', self.stagger_type, self.ek)
+        log.info('Total Energy (Stagger, %s) = %.15g', self.stagger_type, self.e_tot)
         return self
 
     def compute_energy_components(self,hcore=True,nuc=True,j=True,k=False,xc=False):
@@ -368,7 +368,7 @@ class KHF_stagger(khf.KSCF):
 
         self.compute_energy_components(hcore=True,nuc=True,j=True,k=False,xc=xc)
         self.e_tot = hyb * self.ek + self.ehcore + self.enuc + self.ej + self.exc
-
+        self.dump_flags()
         return self.e_tot
 
 if __name__ == '__main__':
