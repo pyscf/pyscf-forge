@@ -283,12 +283,13 @@ def multi_states_scf(msks, ground_ks=None):
         log.info('%-2d %18.15g AU %12.6g eV', i+1, e_d, (e_d-e_g)*au2ev)
 
     log.info('Single and triple excitation:')
-    log.info('       E(S)                  E(T)                   dEt               dEs')
+    log.info('             E(S)                  E(T)                   dEt               dEs               dSplit')
     for i, (mf_s, mf_t) in enumerate(zip(mfs_s[::2], mfs_t)):
         dEt = (mf_t.e_tot - e_g) * au2ev
         e_split = (mf_s.e_tot - mf_t.e_tot) * au2ev
-        log.info('%-2d %18.15g AU %18.15g AU %15.9g eV %15.9g eV',
-                 i+1, mf_s.e_tot, mf_t.e_tot, dEt, e_split)
+        dEs = dEt + 2 * e_split
+        log.info('%-2d %18.15g AU %18.15g AU %15.9g eV %15.9g eV %15.9g eV',
+                 i+1, mf_s.e_tot, mf_t.e_tot, dEt, dEs, e_split)
     return [ground_ks], mfs_s, mfs_d, mfs_t
 
 class NOCI(lib.StreamObject):
