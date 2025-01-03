@@ -8,7 +8,7 @@ mol = gto.M (
 
 mf = scf.RHF (mol).run ()
 
-# The translation of Meta-GGAs and hybrid-Meta-GGAs [ChemRxiv. 2024; doi:10.26434/chemrxiv-2024-5hc8g-v2]
+# The translation of Meta-GGAs and hybrid-Meta-GGAs [PNAS, 122, 1, 2025, e2419413121; https://doi.org/10.1073/pnas.2419413121]
 
 # Translated-Meta-GGA
 mc = mcpdft.CASCI(mf, 'tM06L', 6, 8).run ()
@@ -17,7 +17,7 @@ mc = mcpdft.CASCI(mf, 'tM06L', 6, 8).run ()
 tM06L0 = 't' + mcpdft.hyb('M06L',0.25, hyb_type='average')
 mc = mcpdft.CASCI(mf, tM06L0, 6, 8).run ()
 
-# MC23: meta-hybrid on-top functional [ChemRxiv. 2024; doi:10.26434/chemrxiv-2024-5hc8g-v2]
+# MC23: meta-hybrid on-top functional [PNAS, 122, 1, 2025, e2419413121; https://doi.org/10.1073/pnas.2419413121]
 
 # State-Specific
 mc = mcpdft.CASCI(mf, 'MC23', 6, 8)
