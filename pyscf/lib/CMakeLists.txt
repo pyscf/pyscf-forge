@@ -96,6 +96,7 @@ configure_file(
 # to find config.h
 link_directories(${PYSCF_SOURCE_DIR}/lib/deps/lib ${PYSCF_SOURCE_DIR}/lib/deps/lib64)
 link_directories(${PYSCF_SOURCE_DIR}/lib)
+link_directories(${XC_DIR}/lib)
 message(STATUS "${PYSCF_SOURCE_DIR}/lib may need to be put in the environment LD_LIBRARY_PATH")
 
 # See also https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling
