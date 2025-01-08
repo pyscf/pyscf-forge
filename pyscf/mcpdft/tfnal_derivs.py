@@ -150,6 +150,7 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         if otfnal.dens_deriv > 0: 
             vxc = vxc + list(xc_grid[1][1].T)
 
+        # vrho, vsigma, vlapl, vtau = xc_grid[1][:4]
         if otfnal.dens_deriv > 1:
             # we might get a None for one of the derivatives..
             if xc_grid[1][2] is None:
@@ -207,7 +208,9 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     #   J[2,nabla rhob] = 2 * nabla rhob
     if len(packed) > 5:
         raise RuntimeError("{} {}".format(len(packed), [p.shape for p in packed[:5]]))
-    ncol1 = 1 + 3 * int((deriv1 is not None) and len(packed) > 2)
+    ncol1 = 1
+    if deriv1 is not None and len(packed) > 2:
+        ncol1 += deriv1.shape[0]
     ncol2 = 1 + 3 * int((deriv2 is not None) and len(packed) > 3)
     ngrid = packed[0].shape[-1]  # Don't assume it's an ndarray
     unp1 = np.empty((ncol1, ngrid), dtype=packed[0].dtype)
@@ -215,14 +218,17 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     unp1[0] = packed[0]
     unp2[0] = packed[1]
     if ncol1 > 1:
-        unp1[1:4] = 2 * deriv1 * packed[2]
+        unp1[1:4] = 2 * deriv1[:3] * packed[2]
+        if ncol1 > 4:
+            unp1[4:] = packed[3:5]
         if ncol2 > 1:
-            unp1[1:4] += deriv2 * packed[3]
-            unp2[1:4] = (2 * deriv2 * packed[4]) + (deriv1 * packed[3])
+            unp1[1:4] += deriv2 * packed[-2]
+            unp2[1:4] = (2 * deriv2 * packed[-1]) + (deriv1[:3] * packed[-2])
     return unp1, unp2
 
 
 def contract_vot(vot, rho, Pi):
+    raise NotImplementedError("meta-GGA Jacobian")
     '''Evalute the product of unpacked vot with perturbed density, pair density, and derivatives.
 
         Args:
