@@ -86,8 +86,9 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
             first functional derivative of Eot wrt (density, pair
             density) and their derivatives. If _unpack_vot = True, shape
             and format is ([a, ngrids], [b, ngrids]) : (vrho, vPi);
-            otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,rho'.Pi',|Pi'|^2]
+            otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,lapl rho,tau,rho'.Pi',|Pi'|^2]
             ftGGA: a=4, b=4, c=5
+            tmGGA: a=6, b=1, c=5 (drop Pi')
             tGGA: a=4, b=1, c=3 (drop Pi')
             *tLDA: a=1, b=1, c=2 (drop rho')
         fot : ndarray of shape (*,ngrids) or None
@@ -119,8 +120,8 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         rho_t[0, 0, idx] = 1e-15
     rho_tot = rho.sum(0)
 
-    if nderiv > 4 and dderiv > 0:
-        raise NotImplementedError("Meta-GGA functional derivatives")
+    if nderiv > 4 and dderiv > 1:
+        raise NotImplementedError("Meta-GGA functional Hessians")
 
     if 1 < nderiv <= 4:
         rho_deriv = rho_tot[1:4, :]
@@ -146,7 +147,21 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     if dderiv > 0:
         # vrho, vsigma = xc_grid[1][:2]
         vxc = list(xc_grid[1][0].T)
-        if otfnal.dens_deriv: vxc = vxc + list(xc_grid[1][1].T)
+        if otfnal.dens_deriv > 0: 
+            vxc = vxc + list(xc_grid[1][1].T)
+
+        if otfnal.dens_deriv > 1:
+            # we might get a None for one of the derivatives..
+            if xc_grid[1][2] is None:
+                vxc = vxc + list(np.zeros_like(xc_grid[1][0].T))
+            else:
+                vxc = vxc + list(xc_grid[1][2].T)
+            
+            if xc_grid[1][3] is None:
+                vxc = vxc + list(np.zeros_like(xc_grid[1][0].T))
+            else:
+                vxc = vxc + list(xc_grid[1][3].T)
+
         vot = otfnal.jT_op(vxc, rho, Pi)
         if _unpack_vot: vot = _unpack_sigma_vector(vot,
                                                    deriv1=rho_deriv, deriv2=Pi_deriv)
@@ -451,6 +466,37 @@ def _tGGA_jT_op(x, rho, Pi, R, zeta):
     sigma_fac = -2 * sigma_fac / rho
     jTx[0, idx] = R * sigma_fac
     jTx[1, idx] = -2 * sigma_fac / rho
+
+    return jTx
+
+def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
+    # output ordering is
+    # ordering: rho, Pi, |rho'|^2, lapla rho, tau
+    ngrid = rho.shape[-1]
+    jTx = np.zeros((5, ngrid), dtype=x[0].dtype)
+    if R.ndim > 1:
+        R = R[0]
+  
+    # ab -> cs coordinate transformation
+    lapl_c = (x[5] + x[6])/2.0
+    lapl_m = (x[5] - x[6])/2.0
+    tau_c = (x[7] + x[8])/2.0 
+    tau_m = (x[7] + x[8])/2.0 
+
+    # easy part
+    jTx[3] = lapl_c + zeta[0] * lapl_m
+    jTx[4] = tau_c + zeta[0] * tau_m
+
+    idx = (rho[0] > 1e-15) 
+     
+    tau_lapl_factor = zeta[1] * (rho[4]*lapl_m + rho[5]*tau_m)
+    rho = rho[0,idx]
+    R = R[idx]
+    
+    tau_lapl_factor = -2*tau_lapl_factor[idx]/rho
+
+    jTx[0, idx] = R*tau_lapl_factor
+    jTx[1, idx] = -2*tau_lapl_factor/rho
 
     return jTx
 

@@ -161,7 +161,7 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         rho_c = make_rho_c(0, ao, mask, xctype)
         t0 = logger.timer(ot, 'untransformed densities (core and total)', *t0)
         Pi = get_ontop_pair_density(ot, rho, ao, cascm2, mo_cas,
-                                    dens_deriv, mask)
+                                    deriv=ot.Pi_deriv, non0tab=mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
         eot, vot = ot.eval_ot(rho, Pi, weights=weight)[:2]
         E_ot += eot.dot(weight)

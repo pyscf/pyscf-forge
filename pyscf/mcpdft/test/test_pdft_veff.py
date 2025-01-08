@@ -112,7 +112,6 @@ class KnownValues(unittest.TestCase):
         np.random.seed(1)
         for mol, mf in zip(('H2', 'LiH'), (h2, lih)):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-                # TODO: debug tN12 and ftN12
                 for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tN12', 'ftN12'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
                     with self.subTest(mol=mol, state=state, fnal=fnal):

@@ -491,9 +491,10 @@ class transfnal (otfnal):
             exchange-correlation energy wrt to total density and its
             derivatives. The potential must be spin-symmetric in
             pair-density functional theory.
-            2 rows for tLDA and 3 rows for tGGA
+            2 rows for tLDA, 3 rows for tGGA, and 5 rows for meta-GGA
         '''
-        ncol = 2 + int(self.dens_deriv>0)
+        # ordering: rho, Pi, |rho'|^2, lapla rho, tau
+        ncol = (2, 3, 5)[self.dens_deriv]
         ngrid = rho.shape[-1]
         jTx = np.zeros ((ncol,ngrid), dtype=x[0].dtype)
         rho = rho.sum (0)
@@ -501,7 +502,10 @@ class transfnal (otfnal):
         zeta = self.get_zeta (R, fn_deriv=1)
         jTx[:2] = tfnal_derivs._gentLDA_jT_op (x, rho, Pi, R, zeta)
         if self.dens_deriv > 0:
-            jTx[:] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
+            jTx[:3] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
+        if self.dens_deriv > 1:
+            jTx[:5] += tfnal_derivs._tmetaGGA_jT_op(x, rho, Pi, R, zeta)
+
         return jTx
 
     def d_jT_op (self, x, rho, Pi):
