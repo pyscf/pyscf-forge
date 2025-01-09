@@ -264,7 +264,6 @@ def get_eff_1body(otfnal, ao, weight, kern, non0tab=None,
     eff = sum([_dot_ao_mo(otfnal.mol, a, v, non0tab=non0tab,
                           shls_slice=shls_slice, ao_loc=ao_loc, hermi=hermi)
                for a, v in zip(ao[0][0:nterm], eff_ao)])
-
     return eff
 
 def get_eff_2body(otfnal, ao, weight, kern, aosym='s4', eff_ao=None):

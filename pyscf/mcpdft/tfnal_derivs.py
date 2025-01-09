@@ -228,7 +228,6 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
 
 
 def contract_vot(vot, rho, Pi):
-    raise NotImplementedError("meta-GGA Jacobian")
     '''Evalute the product of unpacked vot with perturbed density, pair density, and derivatives.
 
         Args:
@@ -486,16 +485,16 @@ def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
     # ab -> cs coordinate transformation
     lapl_c = (x[5] + x[6])/2.0
     lapl_m = (x[5] - x[6])/2.0
+
     tau_c = (x[7] + x[8])/2.0 
-    tau_m = (x[7] + x[8])/2.0 
+    tau_m = (x[7] - x[8])/2.0 
 
     # easy part
     jTx[3] = lapl_c + zeta[0] * lapl_m
     jTx[4] = tau_c + zeta[0] * tau_m
 
-    idx = (rho[0] > 1e-15) 
-     
     tau_lapl_factor = zeta[1] * (rho[4]*lapl_m + rho[5]*tau_m)
+    idx = (rho[0] > 1e-15) 
     rho = rho[0,idx]
     R = R[idx]
     

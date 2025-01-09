@@ -133,14 +133,15 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     # memory block size
     gc.collect()
     remaining_floats = (max_memory - current_memory()[0]) * 1e6 / 8
-    nderiv_rho = (1, 4, 10)[dens_deriv]  # ?? for meta-GGA
+    nderiv_rho = (1, 4, 6)[dens_deriv]
     nderiv_Pi = (1, 4)[ot.Pi_deriv]
+    nderiv_ao = (1,4,10)[dens_deriv]
     ncols = 4 + nderiv_rho * nao  # ao, weight, coords
     ncols += nderiv_rho * 4 + nderiv_Pi  # rho, rho_a, rho_c, Pi
     ncols += 1 + nderiv_rho + nderiv_Pi  # eot, vot
 
     # Asynchronous part
-    nveff1 = nderiv_rho * (nao + 1)  # footprint of get_veff_1body
+    nveff1 = nderiv_ao * (nao + 1)  # footprint of get_veff_1body
     nveff2 = veff2._accumulate_ftpt() * nderiv_Pi
     ncols += np.amax([nveff1, nveff2])  # asynchronous fns
     pdft_blksize = int(remaining_floats / (ncols * BLKSIZE)) * BLKSIZE
@@ -169,8 +170,10 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         t0 = logger.timer(ot, 'effective potential kernel calculation', *t0)
         if ao.ndim == 2: ao = ao[None, :, :]
         # TODO: consistent format req's ao LDA case
+        print("---- starting")
         veff1 += ot.get_eff_1body(ao, weight, kern=vrho, non0tab=mask,
                                    shls_slice=shls_slice, ao_loc=ao_loc, hermi=1)
+        print("---- end")
         t0 = logger.timer(ot, '1-body effective potential calculation', *t0)
         veff2._accumulate(ot, ao, weight, rho_c, rho_a, vPi, mask,
                           shls_slice, ao_loc)
