@@ -21,7 +21,7 @@ from pyscf import mcscf, gto
 from pyscf.lib import logger
 from pyscf.mcscf import mc1step, casci
 
-def _sanity_check__of_mol(mc_or_mf_or_mol):
+def _sanity_check_of_mol(mc_or_mf_or_mol):
     '''
     Sanity check to ensure input is a mol object, not a cell object.
     Raises an error for cell objects.
@@ -43,7 +43,7 @@ def _sanity_check__of_mol(mc_or_mf_or_mol):
 def _MCPDFT (mc_class, mc_or_mf_or_mol, ot, ncas, nelecas, ncore=None, frozen=None,
              **kwargs):
     # Raise an error if mol is a cell object.
-    _sanity_check__of_mol(mc_or_mf_or_mol)
+    _sanity_check_of_mol(mc_or_mf_or_mol)
     if isinstance (mc_or_mf_or_mol, (mc1step.CASSCF, casci.CASCI)):
         mc0 = mc_or_mf_or_mol
         mf_or_mol = mc_or_mf_or_mol._scf
