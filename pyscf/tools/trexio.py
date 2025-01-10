@@ -21,6 +21,7 @@ from pyscf import lib
 from pyscf import gto
 from pyscf import scf
 from pyscf import pbc
+from pyscf import mcscf
 from pyscf import fci
 
 import trexio
@@ -31,6 +32,8 @@ def to_trexio(obj, filename, backend='h5'):
             _mol_to_trexio(obj, tf)
         elif isinstance(obj, scf.hf.SCF):
             _scf_to_trexio(obj, tf)
+        elif isinstance(obj, mcscf.casci.CASCI) or isinstance(obj, mcscf.CASSCF):
+            _mcscf_to_trexio(obj, tf)
         else:
             raise NotImplementedError(f'Conversion function for {obj.__class__}')
 
@@ -249,7 +252,34 @@ def _cc_to_trexio(cc_obj, trexio_file):
     raise NotImplementedError
 
 def _mcscf_to_trexio(cas_obj, trexio_file):
-    raise NotImplementedError
+    mol = cas_obj.mol
+    _mol_to_trexio(mol, trexio_file)
+    mo_energy_cas = cas_obj.mo_energy
+    mo_cas = cas_obj.mo_coeff
+    num_mo = mo_energy_cas.size
+    spin_cas = np.zeros(mo_energy_cas.size, dtype=int)
+    mo_type_cas = 'CAS'
+    trexio.write_mo_type(trexio_file, mo_type_cas)
+    idx = _order_ao_index(mol)
+    trexio.write_mo_num(trexio_file, num_mo)
+    trexio.write_mo_coefficient(trexio_file, mo_cas[idx].T.ravel())
+    trexio.write_mo_energy(trexio_file, mo_energy_cas)
+    trexio.write_mo_spin(trexio_file, spin_cas)
+
+    ncore = cas_obj.ncore
+    ncas = cas_obj.ncas
+    mo_classes = np.array(["Virtual"] * num_mo, dtype=str)  # Initialize all MOs as Virtual
+    mo_classes[:ncore] = "Core"                    
+    mo_classes[ncore:ncore + ncas] = "Active"     
+    trexio.write_mo_class(trexio_file, list(mo_classes))
+
+    occupation = np.zeros(num_mo) 
+    occupation[:ncore] = 2.0
+    rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
+    natural_occ = np.linalg.eigh(rdm1)[0] 
+    occupation[ncore:ncore + ncas] = natural_occ[::-1] 
+    occupation[ncore + ncas:] = 0.0
+    trexio.write_mo_occupation(trexio_file, occupation)
 
 def mol_from_trexio(filename):
     mol = gto.Mole()
@@ -434,10 +464,6 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
     with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
         if trexio.has_determinant(tf):
             trexio.delete_determinant(tf)
-        trexio.write_mo_num(tf, mo_num)
-        trexio.write_electron_up_num(tf, len(a))
-        trexio.write_electron_dn_num(tf, len(b))
-        trexio.write_electron_num(tf, len(a) + len(b))
 
         offset_file = 0
         for i in range(n_chunks):
