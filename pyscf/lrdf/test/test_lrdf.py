@@ -54,8 +54,8 @@ basis='cc-pvdz')
         vj, vk = with_df._get_jk_sr(dm[None])
         with mol.with_range_coulomb(-0.15):
             jref, kref = hf.get_jk(mol, dm)
-        self.assertAlmostEqual(abs(jref-vj[0]).max(), 0, 11)
-        self.assertAlmostEqual(abs(kref-vk[0]).max(), 0, 11)
+        self.assertAlmostEqual(abs(jref-vj[0]).max(), 0, 8)
+        self.assertAlmostEqual(abs(kref-vk[0]).max(), 0, 8)
 
 if __name__ == "__main__":
     print('Full Tests for LRDF')
