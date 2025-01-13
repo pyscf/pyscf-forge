@@ -144,6 +144,19 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(pt.e_corr, -0.26173265, delta=1.0e-6)
 # -0.261732560387
 
+    def test_triplet_o2_sa_casscf_iterative(self):
+        mc = mcscf.CASSCF(mfo2, 6, 8).state_average_([.5,.5],wfnsym='B1g')
+        mc.fix_spin_(ss=2) # triplet state
+        mc.mc2step()
+        pt = dsrg_mrpt2.DSRG_MRPT2(mc, s=1.0, relax='iterate')
+        pt.kernel()
+        e_sa = pt.e_relax_eigval_shifted
+        self.assertAlmostEqual(e_sa[0], -149.9777576166627, delta=1.0e-6)
+        self.assertAlmostEqual(e_sa[1], -149.46392257544233, delta=1.0e-6)
+# -149.977757019742
+# -149.463920553410
+        
+
     def test_singlet_o2_casscf_df(self):
         mc = mcscf.CASSCF(mfo2_df, 6, 8)
         mc.fix_spin_(ss=0) # singlet state

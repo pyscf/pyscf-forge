@@ -100,8 +100,11 @@ def get_SF_cu3(G1, G2, G3):
     L3 += 0.5 * (np.einsum("pt,qu,rs->pqrstu", G1, G1, G1) + np.einsum("pu,qs,rt->pqrstu", G1, G1, G1))
     return L3
 
-def projected_fcisolver(h1, h2, ncas, nelecas, ecore, nroots, ss=0):
-    _fcisolver = fci.direct_spin1.FCISolver()
+def projected_fcisolver(mc, h1, h2, ncas, nelecas, ecore, nroots, ss=0):
+    _fcisolver = fci.direct_spin1_symm.FCISolver(mol=mc.mol) if mc.fcisolver.wfnsym is not None else fci.direct_spin1.FCISolver(mol=mc.mol)
+    _fcisolver.orbsym = mc.fcisolver.orbsym
+    _fcisolver.wfnsym = mc.fcisolver.wfnsym
+    
     _nroots = max(5, nroots*2)
     nss = 0
     while True:
@@ -161,6 +164,8 @@ class DSRG_MRPT2(lib.StreamObject):
         if (getattr(mc, 'with_df', None)):
             self = self.density_fit()
         self.batch = batch
+        # self.wfnsym = mc.fcisolver.wfnsym
+        # self.orbsym = mc.fcisolver.orbsym 
 
         if (isinstance(mc.fcisolver, mcscf.addons.StateAverageFCISolver)):
             if (relax=='none'): 
@@ -804,8 +809,8 @@ class DSRG_MRPT2(lib.StreamObject):
         self.compute_hbar()
         self.deGNO_ints()
 
-        self.relax_eigval, self.ci_vecs = projected_fcisolver(self.hbar1_canon, self.hbar2_canon.swapaxes(1,2), self.mc.ncas, self.mc.nelecas, \
-                                                                ecore=self.relax_e_scalar, nroots=self.state_average_nstates, ss=self.ss)
+        self.relax_eigval, self.ci_vecs = projected_fcisolver(self.mc, self.hbar1_canon, self.hbar2_canon.swapaxes(1,2), self.mc.ncas, self.mc.nelecas, \
+            ecore=self.relax_e_scalar, nroots=self.state_average_nstates, ss=self.ss)
 
         if (self.state_average_nstates == 1):
             self.relax_eigval = [self.relax_eigval]
