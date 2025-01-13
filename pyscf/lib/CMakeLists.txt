@@ -89,13 +89,14 @@ if(NOT PYSCF_SOURCE_DIR)
 endif()
 message(STATUS "Include pyscf source dir: ${PYSCF_SOURCE_DIR}")
 include_directories(${PYSCF_SOURCE_DIR}/lib ${PYSCF_SOURCE_DIR}/lib/deps/include)
-include_directories(${CINT_DIR}/include)
+include_directories(${CMAKE_INSTALL_PREFIX}/include)
 configure_file(
   "${PYSCF_SOURCE_DIR}/lib/config.h.in"
   "${PYSCF_SOURCE_DIR}/lib/config.h")
 # to find config.h
 link_directories(${PYSCF_SOURCE_DIR}/lib/deps/lib ${PYSCF_SOURCE_DIR}/lib/deps/lib64)
 link_directories(${PYSCF_SOURCE_DIR}/lib)
+link_directories(${CMAKE_INSTALL_PREFIX}/lib ${CMAKE_INSTALL_PREFIX}/lib64)
 message(STATUS "${PYSCF_SOURCE_DIR}/lib may need to be put in the environment LD_LIBRARY_PATH")
 
 # See also https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling

@@ -21,11 +21,29 @@ from pyscf import mcscf, gto
 from pyscf.lib import logger
 from pyscf.mcscf import mc1step, casci
 
+def _sanity_check_of_mol(mc_or_mf_or_mol):
+    '''
+    Sanity check to ensure input is a mol object, not a cell object.
+    Raises an error for cell objects.
+    '''
+    from pyscf.pbc import gto as pbcgto
+    if isinstance(mc_or_mf_or_mol, (mc1step.CASSCF, casci.CASCI)):
+        mol = mc_or_mf_or_mol._scf.mol
+    elif isinstance(mc_or_mf_or_mol, gto.Mole):
+        mol = mc_or_mf_or_mol
+    else:
+        mol = mc_or_mf_or_mol.mol
+
+    if isinstance(mol, pbcgto.cell.Cell):
+        raise NotImplementedError("MCPDFT not implemented for PBC")
+
 # NOTE: As of 02/06/2022, initializing PySCF mcscf classes with a symmetry-enabled molecule
 # doesn't work.
 
 def _MCPDFT (mc_class, mc_or_mf_or_mol, ot, ncas, nelecas, ncore=None, frozen=None,
              **kwargs):
+    # Raise an error if mol is a cell object.
+    _sanity_check_of_mol(mc_or_mf_or_mol)
     if isinstance (mc_or_mf_or_mol, (mc1step.CASSCF, casci.CASCI)):
         mc0 = mc_or_mf_or_mol
         mf_or_mol = mc_or_mf_or_mol._scf

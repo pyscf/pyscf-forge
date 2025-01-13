@@ -19,6 +19,7 @@ import copy
 from scipy import linalg
 from pyscf import lib, dft
 from pyscf.lib import logger
+from pyscf.dft2 import libxc
 from pyscf.dft.gen_grid import Grids
 from pyscf.dft.numint import _NumInt, NumInt
 from pyscf.mcpdft import pdft_veff, tfnal_derivs, _libxc, _dms, pdft_feff, pdft_eff
@@ -31,7 +32,94 @@ FT_A = getattr(__config__, 'mcpdft_otfnal_ftransfnal_A', -475.60656009)
 FT_B = getattr(__config__, 'mcpdft_otfnal_ftransfnal_B', -379.47331922)
 FT_C = getattr(__config__, 'mcpdft_otfnal_ftransfnal_C', -85.38149682)
 
-OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE'}
+OT_ALIAS = {'MC23': 'tMC23'}
+OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE',
+                'MC23' : 'mc23'} # Note: mc23 is hybrid Meta-GGA OT Functional.
+
+REG_OT_FUNCTIONALS={}
+
+# ALIAS for the preset on-top functional
+OT_PRESET={
+    # Reparametrized-M06L: rep-M06L
+    # MC23 = { '0.2952*HF + (1-0.2952)*rep-M06L, 0.2952*HF + (1-0.2952)*rep-M06L'}}
+    # XC_ID_MGGA_C_M06_L = 233
+    # XC_ID_MGGA_X_M06_L = 203
+    'MC23':{
+        'xc_base':'M06L',
+        'ext_params':{203: np.array([3.352197, 6.332929e-01, -9.469553e-01, 2.030835e-01,
+                                     2.503819, 8.085354e-01, -3.619144, -5.572321e-01,
+                                     -4.506606, 9.614774e-01, 6.977048, -1.309337, -2.426371,
+                                     -7.896540e-03, 1.364510e-02, -1.714252e-06, -4.698672e-05, 0.0]),
+                        233: np.array([0.06, 0.0031, 0.00515088, 0.00304966, 2.427648, 3.707473,
+                                       -7.943377, -2.521466, 2.658691, 2.932276, -8.832841e-01,
+                                       -1.895247, -2.899644, -5.068570e-01, -2.712838, 9.416102e-02,
+                                       -3.485860e-03, -5.811240e-04, 6.668814e-04, 0.0, 2.669169e-01,
+                                       -7.563289e-02, 7.036292e-02, 3.493904e-04, 6.360837e-04, 0.0, 1e-10])},
+        'hyb':(0.2952,0,0),
+        'facs':(0.7048,0.7048)}
+        }
+
+def register_otfnal(xc_code, preset):
+    '''
+    This function registers the new on-top functional if it hasn't been
+    registered previously.
+    Args:
+        xc_code: str
+            The name of the on-top functional to be registered.
+        preset: dict
+            The dictionary containing the information about the on-top functional
+            to be registered.
+            xc_base: str
+                The name of the underylying KS-functional in the libxc library.
+            ext_params: dict, with LibXC exchange and correlation functional integer ID as key, and
+                an array-like object containing the functional parameters as value.
+            hyb: tuple
+                The hybrid functional parameters.
+            facs: tuple
+                The mixing factors.
+            kwargs: dict
+                The additional keyword arguments.
+    '''
+    libxc_register_code = xc_code.lower ()
+    libxc_base_code = preset['xc_base']
+    ext_params = preset['ext_params']
+    hyb = preset.get('hyb', None)
+    facs = preset.get('facs', None)
+    libxc.register_custom_functional_(libxc_register_code, libxc_base_code,
+                                      ext_params=ext_params, hyb=hyb, facs=facs)
+    REG_OT_FUNCTIONALS[xc_code.upper()] = {'hyb_x':preset.get('hyb',[0])[0],
+                                           'hyb_c':preset.get('hyb',[0])[0]}
+
+def unregister_otfnal(xc_code):
+    '''
+    This function unregisters the on-top functional if it has been registered
+    previously.
+    Args:
+        xc_code: str
+            The name of the on-top functional to be unregistered.
+    '''
+    try:
+        if xc_code.upper() in REG_OT_FUNCTIONALS:
+            libxc_unregister_code = xc_code.lower()
+            libxc.unregister_custom_functional_(libxc_unregister_code)
+            del REG_OT_FUNCTIONALS[xc_code.upper()]
+
+    except Exception as e:
+        raise RuntimeError(f"Failed to unregister functional '{xc_code}': {e}") from e
+
+def _get_registered_ot_functional(xc_code, mol):
+    '''
+    This function returns the on-top functional if it has been registered
+    previously.
+    Args:
+        xc_code: str
+            The name of the on-top functional to be registered.
+    '''
+    if (xc_code.upper() not in REG_OT_FUNCTIONALS) and (xc_code.upper() in OT_PRESET):
+        preset = OT_PRESET[xc_code.upper()]
+        register_otfnal(xc_code, preset)
+        logger.info(mol, 'Registered the on-top functional: %s', xc_code)
+    return xc_code.upper()
 
 def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     '''Compute the on-top energy - the last term in
@@ -68,6 +156,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     ni, xctype = ot._numint, ot.xctype
     if xctype=='HF': return E_ot
     dens_deriv = ot.dens_deriv
+    Pi_deriv = ot.Pi_deriv
 
     nao = mo_coeff.shape[0]
     ncas = casdm2.shape[0]
@@ -84,7 +173,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
         rho = np.asarray ([m[0] (0, ao, mask, xctype) for m in make_rho])
         t0 = logger.timer (ot, 'untransformed density', *t0)
         Pi = get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas,
-            dens_deriv, mask)
+            Pi_deriv, mask)
         t0 = logger.timer (ot, 'on-top pair density calculation', *t0)
         if rho.ndim == 2:
             rho = np.expand_dims (rho, 1)
@@ -205,6 +294,7 @@ class transfnal (otfnal):
         otfnal.__init__(self, ks.mol, **kwargs)
         self.otxc = 't' + ks.xc
         self._numint = copy.copy (ks._numint)
+        self._numint.libxc = libxc
         self.grids = copy.copy (ks.grids)
         self._numint.hybrid_coeff = t_hybrid_coeff.__get__(self._numint)
         self._numint.nlc_coeff = t_nlc_coeff.__get__(self._numint)
@@ -253,11 +343,23 @@ class transfnal (otfnal):
 
     def get_rho_translated (self, Pi, rho, _fn_deriv=0):
         r''' Compute the "translated" alpha and beta densities:
+        For the unrestricted case,
+        rho = [rho^a, rho^b]
+        Here:
+            rho^a will have dim of 1,4 or 6 depends on the functional. For MGGA,
+            rho^a = [rho_u,grad_xu, grad_yu, grad_zu, laplacian_u, tau_u]
+            Similar for rho_b.
+
+        The translation is done as follows:
 
         rho_t^a = (rho/2) * (1 + zeta)
         rho_t^b = (rho/2) * (1 - zeta)
         rho'_t^a = (rho'/2) * (1 + zeta)
         rho'_t^b = (rho'/2) * (1 - zeta)
+        laplacian_t^a = (laplacian/2) * (1 + zeta)
+        laplacian_t^b = (laplacian/2) * (1 - zeta)
+        tau_t^a = (tau/2) * (1 + zeta)
+        tau_t^b = (tau/2) * (1 - zeta)
 
         See "get_zeta" for the meaning of "zeta"
 
@@ -278,7 +380,8 @@ class transfnal (otfnal):
 
         Returns:
             rho_t : ndarray of shape (2,*,ngrids)
-                Translated spin density (and derivatives)
+                Translated spin density (and derivatives) in case of LDA or GGAs
+                Translated spin density, derivatives, and kinetic energy density in case of MGGA
         '''
 
         # For nonzero charge & pair density, set alpha dens = beta dens
@@ -568,6 +671,7 @@ class ftransfnal (transfnal):
         self.C=FT_C
         self.otxc = 'ft' + ks.xc
         self._numint = copy.copy (ks._numint)
+        self._numint.libxc = libxc
         self.grids = copy.copy (ks.grids)
         self._numint.hybrid_coeff = ft_hybrid_coeff.__get__(self._numint)
         self._numint.nlc_coeff = ft_nlc_coeff.__get__(self._numint)
@@ -723,21 +827,39 @@ _CS_b_DEFAULT = 0.132
 _CS_c_DEFAULT = 0.2533
 _CS_d_DEFAULT = 0.349
 
+def _sanity_check_ftot(xc_code):
+    '''
+    This function will check the functional type and will
+    raise the warning for fully-translated MGGAs or custom functionals.
+    '''
+    xc_type = libxc.xc_type(xc_code)
+    if xc_type not in ['LDA', 'GGA']:
+        msg = f"fully-translated {xc_type} on-top functionals are not defined"
+        raise NotImplementedError(msg)
 
 def get_transfnal (mol, otxc):
+    if otxc.upper () in OT_ALIAS:
+        otxc = OT_ALIAS[otxc.upper ()]
     if otxc.upper ().startswith ('T'):
         xc_base = otxc[1:]
         fnal_class = transfnal
     elif otxc.upper ().startswith ('FT'):
         xc_base = otxc[2:]
+        _sanity_check_ftot(xc_base)
         fnal_class = ftransfnal
     else:
         raise NotImplementedError (
             'On-top pair-density functional names other than "translated" (t) or '
             '"fully-translated (ft).'
         )
+    # Try to register the functional with libxc, if not already done
+    xc_base = _get_registered_ot_functional (xc_base, mol)
+
     xc_base = OT_HYB_ALIAS.get (xc_base.upper (), xc_base)
-    if ',' not in xc_base and _libxc.is_hybrid_or_rsh (xc_base):
+
+    if ',' not in xc_base and \
+        (xc_base.upper() not in REG_OT_FUNCTIONALS) and \
+        (_libxc.is_hybrid_or_rsh (xc_base)):
         raise NotImplementedError (
             'Aliased or built-in translated hybrid or range-separated '
             'functionals\nother than those listed in otfnal.OT_HYB_ALIAS. '
@@ -748,8 +870,6 @@ def get_transfnal (mol, otxc):
     ks = dft.RKS (mol)
     ks.xc = xc_base
     return fnal_class (ks)
-
-
 
 class colle_salvetti_corr (otfnal):
 
@@ -801,19 +921,24 @@ def _hybrid_2c_coeff (ni, xc_code, spin=0):
     exchange and correlation components of the hybrid coefficent
     separately '''
 
-    hyb_tot = _NumInt.hybrid_coeff (ni, xc_code, spin=spin)
-    if hyb_tot == 0: return [0, 0]
+    if xc_code.upper() in REG_OT_FUNCTIONALS:
+        hyb_x = REG_OT_FUNCTIONALS[xc_code.upper ()].get('hyb_x', 0)
+        hyb_c = REG_OT_FUNCTIONALS[xc_code.upper ()].get('hyb_c', 0)
+        return [hyb_x, hyb_c]
+    else:
+        hyb_tot = _NumInt.hybrid_coeff (ni, xc_code, spin=spin)
+        if hyb_tot == 0: return [0, 0]
 
-    # For exchange-only functionals, hyb_c = hyb_x
-    x_code, c_code = _libxc.split_x_c_comma (xc_code)
-    x_code = x_code + ','
-    c_code = ',' + c_code
+        # For exchange-only functionals, hyb_c = hyb_x
+        x_code, c_code = _libxc.split_x_c_comma (xc_code)
+        x_code = x_code + ','
+        c_code = ',' + c_code
 
-    # All factors of 'HF' are summed by default. Therefore just run the same
-    # code for the exchange and correlation parts of the string separately
-    hyb_x = _NumInt.hybrid_coeff(ni, x_code, spin=spin) if len (x_code) else 0
-    hyb_c = _NumInt.hybrid_coeff(ni, c_code, spin=spin) if len (c_code) else 0
-    return [hyb_x, hyb_c]
+        # All factors of 'HF' are summed by default. Therefore just run the same
+        # code for the exchange and correlation parts of the string separately
+        hyb_x = _NumInt.hybrid_coeff(ni, x_code, spin=spin) if len (x_code) else 0
+        hyb_c = _NumInt.hybrid_coeff(ni, c_code, spin=spin) if len (c_code) else 0
+        return [hyb_x, hyb_c]
 
 def make_scaled_fnal (xc_code, hyb_x = 0, hyb_c = 0, fnal_x = None,
         fnal_c = None):
