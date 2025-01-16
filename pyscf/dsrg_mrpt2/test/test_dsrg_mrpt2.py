@@ -142,7 +142,7 @@ class KnownValues(unittest.TestCase):
         pt = dsrg_mrpt2.DSRG_MRPT2(mc, s=1.0, relax='iterate')
         pt.kernel()
         self.assertAlmostEqual(pt.e_corr, -0.26173265, delta=1.0e-6)
-# -0.261732560387
+# Forte: -0.261732560387
 
     def test_triplet_o2_sa_casscf_iterative(self):
         mc = mcscf.CASSCF(mfo2, 6, 8).state_average_([.5,.5],wfnsym='B1g')
@@ -153,8 +153,8 @@ class KnownValues(unittest.TestCase):
         e_sa = pt.e_relax_eigval_shifted
         self.assertAlmostEqual(e_sa[0], -149.9777576166627, delta=1.0e-6)
         self.assertAlmostEqual(e_sa[1], -149.46392257544233, delta=1.0e-6)
-# -149.977757019742
-# -149.463920553410
+# Forte: -149.977757019742
+# Forte: -149.463920553410
         
 
     def test_singlet_o2_casscf_df(self):
@@ -164,7 +164,7 @@ class KnownValues(unittest.TestCase):
         pt = dsrg_mrpt2.DSRG_MRPT2(mc, s=0.5, relax='once')
         pt.kernel()
         self.assertAlmostEqual(pt.e_tot, -149.93467822, delta=1.0e-6)
-# -149.934676874344
+# Forte: -149.934676874344
     
     def test_water_sa_casscf(self):
         mc = mcscf.CASSCF(mfh2o, 4, 4).state_average_([.5,.5],wfnsym='A1')
@@ -179,8 +179,8 @@ class KnownValues(unittest.TestCase):
         e_sa = pt.e_relax_eigval_shifted
         self.assertAlmostEqual(e_sa[0], -76.11686746968063, delta=1.0e-6)
         self.assertAlmostEqual(e_sa[1], -75.71394328285785, delta=1.0e-6)
-# -76.116867427126
-# -75.713943178963
+# Forte: -76.116867427126
+# Forte: -75.713943178963
 
     def test_water_cation_doublet_casscf(self):
         mc = mcscf.CASSCF(mfh2op, 4, 3)
@@ -188,7 +188,7 @@ class KnownValues(unittest.TestCase):
         pt = dsrg_mrpt2.DSRG_MRPT2(mc, s=1.0, relax='iterate')
         pt.kernel()
         self.assertAlmostEqual(pt.e_tot, -75.788112389449551, delta=1.0e-6)
-# -75.788112856007814
+# Forte: -75.788112856007814
 
     def test_beh_doublet_casscf(self):
         mc = mcscf.CASSCF(mfbeh, 5, 3)
@@ -197,7 +197,7 @@ class KnownValues(unittest.TestCase):
         pt = dsrg_mrpt2.DSRG_MRPT2(mc, s=1.0, relax='twice')
         pt.kernel()
         self.assertAlmostEqual(pt.e_tot, -15.104778782361588, delta=1.0e-6)
-# -15.104777031629652
+# Forte: -15.104777031629652
 
 if __name__ == "__main__":
     print("Full Tests for DSRG-MRPT2")
