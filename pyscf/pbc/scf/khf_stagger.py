@@ -59,65 +59,6 @@ def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_
     log = logger.Logger(icell.stdout, verbose)
     ikpts = kmf.kpts
 
-    def build_probe_cell(mf, nks=None):
-        import copy
-        # Make unit cell with single probe charge at the origin.
-        if nks is None:
-            nks = get_monkhorst_pack_size(mf.cell, mf.kpts)
-        ecell = copy.copy(mf.cell)
-        ecell._atm = np.array([[1, mf.cell._env.size, 0, 0, 0, 0]])
-        ecell._env = np.append(mf.cell._env, [0., 0., 0.])
-        ecell.unit = 'B'
-
-        # Expand the unit cell to the supercell based on the Monkhorst-Pack grid size
-        ecell.a = np.einsum('xi,x->xi', mf.cell.lattice_vectors(), nks)
-        ecell.mesh = np.asarray(mf.cell.mesh) * nks
-
-        return ecell
-
-    def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None):
-        if ew_eta is None or ew_cut is None:
-            ew_eta, ew_cut = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
-        chargs = cell_input.atom_charges()
-        log_precision = np.log(cell_input.precision / (chargs.sum() * 16 * np.pi ** 2))
-        ke_cutoff = -2 * ew_eta ** 2 * log_precision
-        # Get FFT mesh from cutoff value
-        mesh = cell_input.cutoff_to_mesh(ke_cutoff)
-        # Get grid
-        Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh=mesh)
-        # Get q+G points
-        G_combined = Gv + kshift_abs
-
-        # Calculate |q+G|^2 values of the shifted points
-        qG2 = np.einsum('gi,gi->g', G_combined, G_combined)
-        qG2[qG2 == 0] = 1e200
-        component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
-        sum_ovrG_term = weights*np.einsum('i->',component).real
-        self_term = 2*ew_eta/np.sqrt(np.pi)
-        return sum_ovrG_term - self_term
-
-    def compute_modified_madelung(kmf, kshift_abs, nks=None):
-        count_iter = 1
-        ecell = build_probe_cell(kmf,nks=nks)
-        ew_eta, ew_cut = ecell.get_ewald_params(kmf.cell.precision, kmf.cell.mesh)
-        prev = 0
-        converged_madelung = 0
-        while True and icell.dimension !=1:
-            madelung = modified_madelung(cell_input=ecell, kshift_abs=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
-            log.debug1("Iteration number " + str(count_iter))
-            log.debug1("Madelung:" + str(madelung))
-            log.debug1("Eta:" + str(ew_eta))
-            if count_iter > 1 and abs(madelung - prev) < 1e-8:
-                converged_madelung = madelung
-                break
-            if count_iter > 30:
-                log.debug1("Error. Madelung constant not converged")
-                break
-            ew_eta *= 2
-            count_iter += 1
-            prev = madelung
-        return converged_madelung
-
     if df_type is None:
         if icell.dimension <=2:
             df_type = df.GDF
@@ -210,7 +151,7 @@ def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_
     # Madelung-like correction if exxdiv=="ewald"
 
     if kmf.exxdiv == "ewald":
-        madelung = compute_modified_madelung(kmf, kshift_abs,nks)
+        madelung = KHF_stagger.converge_modified_madelung(kmf, kshift_abs,nks)
     else:
         log.warn("No madelung-like correction used")
         madelung = 0
@@ -353,6 +294,71 @@ class KHF_stagger(khf.KSCF):
 
         else:
             self.mf.kernel()
+
+    @staticmethod
+    def build_probe_cell(mf, nks=None):
+        import copy
+        # Make unit cell with single probe charge at the origin.
+        if nks is None:
+            nks = get_monkhorst_pack_size(mf.cell, mf.kpts)
+        ecell = copy.copy(mf.cell)
+        ecell._atm = np.array([[1, mf.cell._env.size, 0, 0, 0, 0]])
+        ecell._env = np.append(mf.cell._env, [0., 0., 0.])
+        ecell.unit = 'B'
+
+        # Expand the unit cell to the supercell based on the Monkhorst-Pack grid size
+        ecell.a = np.einsum('xi,x->xi', mf.cell.lattice_vectors(), nks)
+        ecell.mesh = np.asarray(mf.cell.mesh) * nks
+
+        return ecell
+
+    @staticmethod
+    def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None):
+        if ew_eta is None or ew_cut is None:
+            ew_eta, ew_cut = cell_input.get_ewald_params(cell_input.precision, cell_input.mesh)
+        chargs = cell_input.atom_charges()
+        log_precision = np.log(cell_input.precision / (chargs.sum() * 16 * np.pi ** 2))
+        ke_cutoff = -2 * ew_eta ** 2 * log_precision
+        # Get FFT mesh from cutoff value
+        mesh = cell_input.cutoff_to_mesh(ke_cutoff)
+        # Get grid
+        Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh=mesh)
+        # Get q+G points
+        G_combined = Gv + kshift_abs
+
+        # Calculate |q+G|^2 values of the shifted points
+        qG2 = np.einsum('gi,gi->g', G_combined, G_combined)
+        qG2[qG2 == 0] = 1e200
+        component = 4 * np.pi / qG2 * np.exp(-qG2 / (4 * ew_eta ** 2))
+        sum_ovrG_term = weights*np.einsum('i->',component).real
+        self_term = 2*ew_eta/np.sqrt(np.pi)
+        return sum_ovrG_term - self_term
+
+    @staticmethod
+    def converge_modified_madelung(kmf, kshift_abs, nks=None, thresh=1e-8, verbose=logger.NOTE):
+        # Converge Modified Madelung Constant by iteratively increasing eta
+        log = logger.Logger(kmf.cell.stdout, verbose)
+        log.debug1("Iteratively converging Modified Madelung Constant with thresh=" + str(thresh))
+        count_iter = 1
+        ecell = KHF_stagger.build_probe_cell(kmf,nks=nks)
+        ew_eta, ew_cut = ecell.get_ewald_params(kmf.cell.precision, kmf.cell.mesh)
+        prev = 0
+        converged_madelung = 0
+        while True and kmf.cell.dimension !=1:
+            madelung = KHF_stagger.modified_madelung(cell_input=ecell, kshift_abs=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
+            log.debug1("Iteration number " + str(count_iter))
+            log.debug1("Madelung:" + str(madelung))
+            log.debug1("Eta:" + str(ew_eta))
+            if count_iter > 1 and abs(madelung - prev) < thresh:
+                converged_madelung = madelung
+                break
+            if count_iter > 30:
+                log.error("Madelung constant not converged")
+                raise ValueError("Madelung constant not converged")
+            ew_eta *= 2
+            count_iter += 1
+            prev = madelung
+        return converged_madelung
 
     def kernel(self):
         self.rerun_scf()
