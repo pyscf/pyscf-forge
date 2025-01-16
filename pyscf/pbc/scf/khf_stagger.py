@@ -24,16 +24,16 @@ from pyscf.pbc.scf import khf
 from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 
 
-def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
+def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
     """ Computes the exchange energy using the staggered mesh method based on
         J. Chem. Theory Comput. 2024, 20, 18, 7958-7968.
 
     Args:
         kmf (khf.KSCF): KSCF object (KRKS or KRHF supported). For Non-SCF and
             Split-SCF, the SCF should be converged.
-        type (str, optional): "Regular", "Non-SCF", or "Split-SCF". See
+        type (int, optional): Regular (0), Split-SCF (1), or Non-SCF (2). See
             examples/pbc/22-kpoints_khf_stagger.py for usage. Defaults to
-            "Non-SCF".
+            Non-SCF.
         df_type (pbc.df.FFTDF or pbc.df.GDF, optional): Density fitting class.
             Defaults to df.FFTDF if cell.dimension <= 2, df.GDF otherwise.
         kshift_rel (float, optional): kpt mesh shift in relative coordinates of
@@ -73,7 +73,6 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         ecell.a = np.einsum('xi,x->xi', mf.cell.lattice_vectors(), nks)
         ecell.mesh = np.asarray(mf.cell.mesh) * nks
 
-        print('build_probe_cell: nks ',nks)
         return ecell
 
     def modified_madelung(cell_input, kshift_abs, ew_eta=None, ew_cut=None):
@@ -85,8 +84,8 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         # Get FFT mesh from cutoff value
         mesh = cell_input.cutoff_to_mesh(ke_cutoff)
         # Get grid
-        Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh = mesh)
-        #Get q+G points
+        Gv, Gvbase, weights = cell_input.get_Gv_weights(mesh=mesh)
+        # Get q+G points
         G_combined = Gv + kshift_abs
 
         # Calculate |q+G|^2 values of the shifted points
@@ -134,17 +133,16 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         Nk = np.shape(ikpts)[0]
 
         dm_combined = kmf.make_rdm1()
-        #Get dm at kpoints in unshifted mesh
+        # Get dm at kpoints in unshifted mesh
         dm_unshifted = dm_combined[:Nk//2,:,:]
-        #Get dm at kpoints in shifted mesh
+        # Get dm at kpoints in shifted mesh
         dm_shifted = dm_combined[Nk//2:,:,:]
         kpts_unshifted = ikpts[:Nk//2,:]
         kpts_shifted = ikpts[Nk//2:,:]
-        #K matrix on shifted mesh with potential defined by dm on unshifted mesh
+        # K matrix on shifted mesh with potential defined by dm on unshifted mesh
         _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_unshifted, kpts=kpts_unshifted,
                              kpts_band=kpts_shifted, with_j=False)
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
-        print('E_stagger regular',E_stagger)
 
     elif type == 1: # Split-SCF
         # Perform kernel with unshifted SCF
@@ -152,15 +150,15 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         kshift_abs = kmf.cell.get_abs_kpts([kshift_rel / n for n in nks])
         kmesh_shifted = ikpts + kshift_abs
 
-        #Calculation on shifted mesh
+        # Calculation on shifted mesh
         kmf_shifted = pbcscf.KHF(icell, kmesh_shifted)
         kmf_shifted.with_df = df_type(icell, kmesh_shifted).build()  # For 2d,1d, df_type cannot be FFTDF
         kmf_shifted.kernel()
         dm_shifted = kmf_shifted.make_rdm1()
 
-        #Get K matrix on shifted kpts, dm from unshifted mesh
-        _, Kmat = kmf.get_jk(cell = kmf.cell, dm_kpts = kmf.make_rdm1(),
-                                     kpts = ikpts, kpts_band = kmesh_shifted, with_j=False)
+        # Get K matrix on shifted kpts, dm from unshifted mesh
+        _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=kmf.make_rdm1(),
+                             kpts=ikpts, kpts_band=kmesh_shifted, with_j=False)
         Nk = np.prod(nks)
         E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
         E_stagger /= 2.
@@ -191,7 +189,7 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
         h1e = khf.get_hcore(kmf, cell=kmf.cell, kpts=kmesh_shifted)
 
         _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted,
-                    exxdiv='ewald',with_j=False)
+                             exxdiv='ewald',with_j=False)
         Veff = kmf.get_veff(kmf.cell, dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted)
         F_shift = h1e + Veff
         s1e = khf.get_ovlp(kmf, cell=kmf.cell, kpts=kmesh_shifted)
@@ -230,8 +228,9 @@ def kernel(kmf, type="Non-SCF", df_type=None, kshift_rel=0.5, verbose=logger.NOT
 
     return results_dict
 
+
 type_to_id = {
-    'regular':  0,
+    'regular': 0,
     'standard': 0,
     'split-scf': 1,
     'splitscf': 1,
@@ -247,8 +246,10 @@ id_to_type = {
     2: 'non-scf',
 }
 
+
 def get_stagger_type_id(stagger_type):
     return type_to_id.get(stagger_type.lower())
+
 
 class KHF_stagger(khf.KSCF):
     def __init__(self, mf, stagger_type='non-scf',kshift_rel=0.5, with_vk=False, **kwargs):
@@ -325,7 +326,7 @@ class KHF_stagger(khf.KSCF):
         if self.stagger_type == 0:
             kshift_abs = self.cell.get_abs_kpts([self.kshift_rel / n for n in self.nks])
             if self.cell.dimension <=2:
-                kshift_abs[2] =  0
+                kshift_abs[2] = 0
                 if self.cell.dimension == 1:
                     kshift_abs[1] = 0
 
@@ -341,8 +342,8 @@ class KHF_stagger(khf.KSCF):
 
             # Build new KMF object with combined kpoint mesh
             kmf_combined = pbcscf.KHF(self.cell, kmesh_combined)
-            kmf_combined.with_df = self.df_type(self.cell, kmesh_combined).build() #For 2d,1d, df_type cannot be FFTDF
-            print(kmf_combined.kernel())
+            kmf_combined.with_df = self.df_type(self.cell, kmesh_combined).build() # For 2d,1d, df_type cannot be FFTDF
+            kmf_combined.kernel()
             dm_combined = kmf_combined.make_rdm1()
 
             # Set Attributes
@@ -375,6 +376,7 @@ class KHF_stagger(khf.KSCF):
         self.dump_flags()
         return self.e_tot
 
+
 if __name__ == '__main__':
     from pyscf.pbc import gto
     '''
@@ -396,7 +398,6 @@ if __name__ == '__main__':
     cell.unit = 'B'
     cell.verbose = 4
     cell.build()
-
 
     # HF calcuation to base Non-SCF and Split-SCF staggered mesh calculations on.
     nks = [2, 2, 2]
