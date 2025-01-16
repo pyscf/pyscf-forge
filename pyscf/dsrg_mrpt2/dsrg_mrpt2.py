@@ -117,6 +117,9 @@ def get_SF_cu3(G1, G2, G3):
     return L3
 
 def projected_fcisolver(mc, h1, h2, ncas, nelecas, ecore, nroots, ss=0):
+    '''
+    Project out states with a given S^2 eigenvalue.
+    '''
     _fcisolver = fci.direct_spin1_symm.FCISolver(mol=mc.mol) if mc.fcisolver.wfnsym is not None else fci.direct_spin1.FCISolver(mol=mc.mol)
     _fcisolver.orbsym = mc.fcisolver.orbsym
     _fcisolver.wfnsym = mc.fcisolver.wfnsym
@@ -308,7 +311,7 @@ class DSRG_MRPT2(lib.StreamObject):
         del _G1_canon, _G2_canon, _G3_canon, _G1_semi_canon, _G2_semi_canon, _G3_semi_canon
         
         if (self.df):
-            # I don't think batching will help here since a N^3 tensor (Bpq_ao) has to be construct explicitly.
+            # Shuhang: I don't think batching will help here since a N^3 tensor (Bpq_ao) has to be construct explicitly.
             # If we want to avoid storing tensors with N^3 elements, DiskDF should be implemented.
             self.semi_coeff = np.einsum("ip,up->iu", self.semicanonicalizer, self.mc.mo_coeff, optimize='optimal') # semicanonical * ao
             self.V = dict.fromkeys(["vvaa", "aacc", "avca", "avac", "vaaa", "aaca", "aaaa"])
@@ -385,14 +388,7 @@ class DSRG_MRPT2(lib.StreamObject):
                                 ctypes.c_int(tensor.shape[1]),
                                 ctypes.c_int(tensor.shape[2]),
                                 ctypes.c_int(tensor.shape[3]),
-            )
-            # a_vals = self.e_orb[block[0]]
-            # b_vals = self.e_orb[block[1]]
-            # i_vals = self.e_orb[block[2]]
-            # j_vals = self.e_orb[block[3]]
-            # denom = np.float64(a_vals[:, np.newaxis, np.newaxis, np.newaxis] + b_vals[np.newaxis, :, np.newaxis, np.newaxis]\
-            #                     - i_vals[np.newaxis, np.newaxis, :, np.newaxis] - j_vals[np.newaxis, np.newaxis, np.newaxis, :])
-            # tensor *= np.float64(1. + np.exp(-self.flow_param * denom**2))         
+            )   
     
     def compute_T1(self):
         # initialize T1 with F + [H0, A]
@@ -471,10 +467,10 @@ class DSRG_MRPT2(lib.StreamObject):
         return E
     
     def H2_T2_C0_T2small(self):
-    #  Note the following blocks should be available in memory.
-    #  V : vvaa, aacc, avca, avac, vaaa, aaca
-    #  T2: aavv, ccaa, caav, acav, aava, caaa
-    #  S : aavv, ccaa, caav, acav, aava, caaa
+        #  Note the following blocks should be available in memory.
+        #  V : vvaa, aacc, avca, avac, vaaa, aaca
+        #  T2: aavv, ccaa, caav, acav, aava, caaa
+        #  S : aavv, ccaa, caav, acav, aava, caaa
         E = 0.0
         # [H2, T2] L1 from aavv
         E += 0.25 * np.einsum("efxu,yvef,uv,xy->", self.V["vvaa"], self.S["aavv"], self.L1, self.L1, optimize='optimal')
@@ -791,22 +787,22 @@ class DSRG_MRPT2(lib.StreamObject):
 
 
     def drsg_mrpt2_iteration(self):
+        # 1. Semicanonicalize orbitals from CASSCF
         self.semi_canonicalize()
-
         if (self.relax_ref):
             self.hbar1 = self.fock[self.active, self.active].copy()
             self.hbar2 = self.V["aaaa"].copy()
-                
+        # 2. Compute regularized amplitudes and dressed integrals
         self.compute_T2()
         self.compute_T1()
         self.renormalize_V()
         self.renormalize_F()
-
+        # 3. Compute energy
         self.e_h1_t1 = self.H1_T1_C0()
         self.e_h1_t2 = self.H1_T2_C0()
         self.e_h2_t1 = self.H2_T1_C0()
         if (self.df):
-            self.e_h2_t2_small = self.H2_T2_C0_T2small()
+            self.e_h2_t2_small = self.H2_T2_C0_T2small() # Blocks with more than two active indices are available in memory
             self.e_h2_t2_cavv = self.E_V_T2_CAVV()
             self.e_h2_t2_ccav = self.E_V_T2_CCAV()
             # [todo]: unified interface for batching: give a list of indices to batch over
@@ -817,12 +813,14 @@ class DSRG_MRPT2(lib.StreamObject):
             self.e_h2_t2 = self.e_h2_t2_small + self.e_h2_t2_cavv + self.e_h2_t2_ccav + self.e_h2_t2_ccvv
         else:
             self.e_h2_t2 = self.H2_T2_C0()
-
-        _e_corr = self.e_h1_t1 + self.e_h1_t2 + self.e_h2_t1 + self.e_h2_t2 # this is the correlation energy wrt the relaxed reference, NOT the original reference
+            
+        # this is the correlation energy wrt the relaxed reference, NOT the original reference
+        _e_corr = self.e_h1_t1 + self.e_h1_t2 + self.e_h2_t1 + self.e_h2_t2
         self.e_tot = self.e_casci + _e_corr
 
     def relax_reference(self):
         self.compute_hbar()
+        # De-normal ordering. Express transformed Hamiltonian using operators normal-ordered with respect to the true vacuum.
         self.deGNO_ints()
 
         self.relax_eigval, self.ci_vecs = projected_fcisolver(self.mc, self.hbar1_canon, self.hbar2_canon.swapaxes(1,2), self.mc.ncas, self.mc.nelecas, \
