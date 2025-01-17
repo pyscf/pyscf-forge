@@ -24,7 +24,7 @@ from pyscf.pbc.scf import khf
 from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 
 
-def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
+def exchange_energy_stagger(kmf, stagger_type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
     """ Computes the exchange energy using the staggered mesh method based on
         J. Chem. Theory Comput. 2024, 20, 18, 7958-7968.
 
@@ -55,9 +55,13 @@ def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_
             vk (np.array, optional): Exchange matrix if with_vk=True.
     """
 
+    if stagger_type not in id_to_type.keys():
+        raise ValueError("Invalid stagger type", stagger_type)
+
     icell = kmf.cell
     log = logger.Logger(icell.stdout, verbose)
-    ikpts = kmf.kpts
+    Nk = np.prod(nks)
+    Nk_combined = 2 * Nk
 
     if df_type is None:
         if icell.dimension <=2:
@@ -67,71 +71,41 @@ def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_
 
     Kmat = None
 
-    if type == 0: # Regular
-        # Get absolute kpoint shift
-        kshift_abs = icell.get_abs_kpts([kshift_rel / n for n in nks])
+    kshift_abs = icell.get_abs_kpts([kshift_rel/n for n in nks])
+    if icell.dimension <=2:
+        kshift_abs[2] = 0
+    elif icell.dimension == 1:
+        kshift_abs[1] = 0
 
-        Nk = np.shape(ikpts)[0]
+    # Prepare the kpoint meshes
+    if stagger_type == 0:
+        kmesh_unshifted = kmf.kpts[:Nk_combined//2,:]
+        kmesh_shifted = kmf.kpts[Nk_combined//2:,:]
+    elif stagger_type == 1 or stagger_type == 2:
+        kmesh_unshifted = kmf.kpts
+        kmesh_shifted = kmf.kpts + kshift_abs
 
+    # Build or find the density matrices on shifted and unshifted_meshes
+    if stagger_type == 0: # Regular
         dm_combined = kmf.make_rdm1()
-        # Get dm at kpoints in unshifted mesh
-        dm_unshifted = dm_combined[:Nk//2,:,:]
-        # Get dm at kpoints in shifted mesh
-        dm_shifted = dm_combined[Nk//2:,:,:]
-        kpts_unshifted = ikpts[:Nk//2,:]
-        kpts_shifted = ikpts[Nk//2:,:]
-        # K matrix on shifted mesh with potential defined by dm on unshifted mesh
-        _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_unshifted, kpts=kpts_unshifted,
-                             kpts_band=kpts_shifted, with_j=False)
-        E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
+        dm_unshifted = dm_combined[:Nk_combined//2,:,:]
+        dm_shifted = dm_combined[Nk_combined//2:,:,:]
 
-    elif type == 1: # Split-SCF
-        # Perform kernel with unshifted SCF
-        nks = get_monkhorst_pack_size(kmf.cell, kmf.kpts)
-        kshift_abs = kmf.cell.get_abs_kpts([kshift_rel / n for n in nks])
-        kmesh_shifted = ikpts + kshift_abs
+    elif stagger_type == 1: # Split-SCF
+        dm_unshifted = kmf.make_rdm1()
 
-        # Calculation on shifted mesh
+        # Run SCF on shifted mesh
         kmf_shifted = pbcscf.KHF(icell, kmesh_shifted)
         kmf_shifted.with_df = df_type(icell, kmesh_shifted).build()  # For 2d,1d, df_type cannot be FFTDF
         kmf_shifted.kernel()
         dm_shifted = kmf_shifted.make_rdm1()
 
-        # Get K matrix on shifted kpts, dm from unshifted mesh
-        _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=kmf.make_rdm1(),
-                             kpts=ikpts, kpts_band=kmesh_shifted, with_j=False)
-        Nk = np.prod(nks)
-        E_stagger = -1. / Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
-        E_stagger /= 2.
-
-    elif type == 2: # Non-SCF
-        # Run SCF; should be one cycle if converged
-        nocc = kmf.cell.tot_electrons()//2
-        dm_un = kmf.make_rdm1()
-
-        #  Defining size and making shifted mesh
-        nks = get_monkhorst_pack_size(kmf.cell, kmf.kpts)
-        kshift_abs = kmf.cell.get_abs_kpts([kshift_rel/n for n in nks])
-        if icell.dimension <=2:
-            kshift_abs[2] = 0
-        elif icell.dimension == 1:
-            kshift_abs[1] = 0
-        kmesh_shifted = kmf.kpts + kshift_abs
-        log.debug1("Original kmesh: ", kmf.kpts)
-        log.debug1("Shifted kmesh:", kmesh_shifted)
-
-        for i in range(0,dm_un.shape[0]):
-            log.debug1("kpt: " + str(kmf.kpts[i]) + "\n")
-            mat = dm_un[i,:,:]
-            for j in mat:
-                log.debug1(' '.join(str(np.real(el)) for el in j))
+    elif stagger_type == 2: # Non-SCF
+        dm_unshifted = kmf.make_rdm1()
 
         # Construct the Fock Matrix
         h1e = khf.get_hcore(kmf, cell=kmf.cell, kpts=kmesh_shifted)
-
-        _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted,
-                             exxdiv='ewald',with_j=False)
-        Veff = kmf.get_veff(kmf.cell, dm_un, kpts=kmf.kpts, kpts_band=kmesh_shifted)
+        Veff = kmf.get_veff(kmf.cell, dm_unshifted, kpts=kmesh_unshifted, kpts_band=kmesh_shifted)
         F_shift = h1e + Veff
         s1e = khf.get_ovlp(kmf, cell=kmf.cell, kpts=kmesh_shifted)
 
@@ -140,16 +114,16 @@ def kernel(kmf, type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_
         mo_occ_shift = kmf.get_occ(mo_energy_kpts=mo_energy_shift, mo_coeff_kpts=mo_coeff_shift)
         dm_shifted = kmf.make_rdm1(mo_coeff_kpts=mo_coeff_shift, mo_occ_kpts=mo_occ_shift)
 
-        # Compute the Staggered mesh energy
-        Nk = np.prod(nks)
-        E_stagger = -1./Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
-        E_stagger /= 2.
+    log.debug1("Original kmesh: ", kmesh_unshifted)
+    log.debug1("Shifted kmesh:", kmesh_shifted)
 
-    else:
-        raise ValueError("Invalid stagger type", type)
+    # Compute the staggered mesh exact exchange energy
+    _, Kmat = kmf.get_jk(cell=kmf.cell, dm_kpts=dm_unshifted,
+                         kpts=kmesh_unshifted, kpts_band=kmesh_shifted, with_j=False)
+    E_stagger = -1./Nk * np.einsum('kij,kji', dm_shifted, Kmat) * 0.5
+    E_stagger /= 2.
 
     # Madelung-like correction if exxdiv=="ewald"
-
     if kmf.exxdiv == "ewald":
         madelung = KHF_stagger.converge_modified_madelung(kmf, kshift_abs,nks)
     else:
@@ -247,8 +221,9 @@ class KHF_stagger(khf.KSCF):
             ej = 1. / Nk * np.einsum('kij,kji', Jo, dm_kpts) * 0.5
             self.ej = ej.real
         if k:
-            results = kernel(self.cell, self.kpts, type=self.stagger_type, df_type=self.df_type, dm_kpts=self.dm_kpts,
-                             mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,with_vk=self.with_vk)
+            results = exchange_energy_stagger(self.cell, self.kpts, stagger_type=self.stagger_type, df_type=self.df_type,
+                                              dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,
+                                              with_vk=self.with_vk)
             self.ek = results["E_stagger_M"]
         if xc:
             # Note: XC here has no exact exchange, i.e. exc_PBE0 = PBEc + 0.75 * PBEx + 0.25 * HFx, with HFx = 0.0
@@ -362,7 +337,7 @@ class KHF_stagger(khf.KSCF):
 
     def kernel(self):
         self.rerun_scf()
-        results = kernel(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,nks=self.nks)
+        results = exchange_energy_stagger(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,nks=self.nks)
         self.ek = results["E_stagger_M"]
 
         if isinstance(self.mf,rks.KohnShamDFT):
