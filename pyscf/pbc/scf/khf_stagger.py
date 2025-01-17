@@ -24,7 +24,8 @@ from pyscf.pbc.scf import khf
 from pyscf.pbc.tools.pbc import get_monkhorst_pack_size
 
 
-def exchange_energy_stagger(kmf, stagger_type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE, with_vk=False, nks=None):
+def exchange_energy_stagger(kmf, stagger_type=2, df_type=None, kshift_rel=0.5, verbose=logger.NOTE,
+                            with_vk=False, nks=None):
     """ Computes the exchange energy using the staggered mesh method based on
         J. Chem. Theory Comput. 2024, 20, 18, 7958-7968.
 
@@ -221,8 +222,9 @@ class KHF_stagger(khf.KSCF):
             ej = 1. / Nk * np.einsum('kij,kji', Jo, dm_kpts) * 0.5
             self.ej = ej.real
         if k:
-            results = exchange_energy_stagger(self.cell, self.kpts, stagger_type=self.stagger_type, df_type=self.df_type,
-                                              dm_kpts=self.dm_kpts, mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,
+            results = exchange_energy_stagger(self.cell, self.kpts, stagger_type=self.stagger_type,
+                                              df_type=self.df_type, dm_kpts=self.dm_kpts,
+                                              mo_coeff_kpts=self.mo_coeff_kpts, kshift_rel=self.kshift_rel,
                                               with_vk=self.with_vk)
             self.ek = results["E_stagger_M"]
         if xc:
@@ -319,7 +321,8 @@ class KHF_stagger(khf.KSCF):
         prev = 0
         converged_madelung = 0
         while True and kmf.cell.dimension !=1:
-            madelung = KHF_stagger.modified_madelung(cell_input=ecell, kshift_abs=kshift_abs, ew_eta=ew_eta, ew_cut=ew_cut)
+            madelung = KHF_stagger.modified_madelung(cell_input=ecell, kshift_abs=kshift_abs, ew_eta=ew_eta,
+                                                     ew_cut=ew_cut)
             log.debug1("Iteration number " + str(count_iter))
             log.debug1("Madelung:" + str(madelung))
             log.debug1("Eta:" + str(ew_eta))
@@ -337,12 +340,14 @@ class KHF_stagger(khf.KSCF):
     def kernel(self, dm0=None, conv_tol=1e-10, conv_tol_grad=None, callback=None, conv_check=True, **kwargs):
         # Rerun SCF if using Regular version, otherwise check if SCF is converged
         if self.stagger_type == 0:
-            self.rerun_scf(conv_tol=conv_tol, conv_tol_grad=conv_tol_grad, dm0=dm0, callback=callback, conv_check=conv_check, **kwargs)
+            self.rerun_scf(conv_tol=conv_tol, conv_tol_grad=conv_tol_grad, dm0=dm0, callback=callback,
+                           conv_check=conv_check, **kwargs)
         else:
             assert self.mf.converged, "Converged KSCF required for Non-SCF and Split-SCF"
 
         # Compute Staggered Mesh Exchange Energy
-        results = exchange_energy_stagger(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,nks=self.nks)
+        results = exchange_energy_stagger(self.mf,self.stagger_type,df_type=self.df_type,kshift_rel=self.kshift_rel,
+                                          nks=self.nks)
         self.ek = results["E_stagger_M"]
 
         # Setup for total energy computation
