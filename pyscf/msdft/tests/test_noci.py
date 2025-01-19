@@ -19,7 +19,7 @@ H   0.5  0.1     -0.2
     occ = mf0.mo_occ.copy()
     occ[0][mf0.nelec[0]-1] = 0
     occ[0][mf0.nelec[0]+1] = 1
-    mf1 = scf.addons.mom_occ(mf1, mf0.mo_coeff, occ).run(max_cycle=1)
+    mf1 = scf.addons.mom_occ(mf1, mf0.mo_coeff, occ).run(max_cycle=1, mo_coeff=None)
     h, s = noci.hf_det_ovlp(ms_ks, [mf0, mf1])
     ref = np.array([[-9.35176786e+01, -6.82503177e-02],
                     [-6.82503177e-02, -9.33368874e+01]])
