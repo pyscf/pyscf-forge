@@ -233,12 +233,9 @@ class KHF_stagger(khf.KSCF):
             _, exc, _  = pbcnumint.nr_rks(ni,self.cell, self.mf.grids, self.xc, dm_kpts, kpts=self.kpts)
             self.exc = exc
 
-    def rerun_scf(self, conv_tol=1e-10, conv_tol_grad=None, dm0=None, callback=None, conv_check=True, **kwargs):
-        """This function reruns the SCF calculation with the staggered mesh
-        method. If the SCF is already converged (as it should be with
-        type='Non-SCF' or 'Split-SCF'), this function just iterates one more
-        time. For type='regular', a brand new SCF object is created with the
-        combined shifted and unshifted kpt meshes.
+    def run_scf_stagger(self, conv_tol=1e-10, conv_tol_grad=None, dm0=None, callback=None, conv_check=True, **kwargs):
+        """Runs the SCF calculation with the combined unshifted and shifted kpt grids.
+        Intended for stagger_type='regular'.
         """
 
         self.log.note("Running SCF for KHF Staggered Mesh (regular)")
@@ -340,7 +337,7 @@ class KHF_stagger(khf.KSCF):
     def kernel(self, dm0=None, conv_tol=1e-10, conv_tol_grad=None, callback=None, conv_check=True, **kwargs):
         # Rerun SCF if using Regular version, otherwise check if SCF is converged
         if self.stagger_type == 0:
-            self.rerun_scf(conv_tol=conv_tol, conv_tol_grad=conv_tol_grad, dm0=dm0, callback=callback,
+            self.run_scf_stagger(conv_tol=conv_tol, conv_tol_grad=conv_tol_grad, dm0=dm0, callback=callback,
                            conv_check=conv_check, **kwargs)
         else:
             assert self.mf.converged, "Converged KSCF required for Non-SCF and Split-SCF"
