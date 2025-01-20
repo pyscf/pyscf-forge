@@ -86,8 +86,6 @@ def run_khf_gdf(cell, nk, stagger_type, kernel=True):
 
 def run_krks_gdf(cell, nk, stagger_type, kernel=True):
     abs_kpts = cell.make_kpts(nk, wrap_around=True)
-
-    dft.numint.NumInt.libxc = dft.xcfun
     krks = pbcdft.KRKS(cell, abs_kpts)
     krks.xc = "PBE0"
     gdf = df.GDF(cell, abs_kpts).build()
