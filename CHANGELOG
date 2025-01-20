@@ -1,3 +1,10 @@
+PySCF-Forge 1.0.3 (2024-01-20)
+------------------------------
+* New features
+  - MC23 functional for MCPDFT
+  - Staggered exact exchange for KRHF
+
+
 PySCF-Forge 1.0.2 (2024-12-04)
 ------------------------------
 * New features
