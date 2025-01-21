@@ -131,3 +131,10 @@ set_target_properties (clib_libxc_itrf2 PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "xc_itrf2")
 
+# Build the DSRG library
+set (DSRG_SOURCE_FILES "../dsrg_mrpt2/dsrg_helper.c")
+add_library (clib_dsrg SHARED ${DSRG_SOURCE_FILES})
+set_target_properties (clib_dsrg PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "dsrg")
