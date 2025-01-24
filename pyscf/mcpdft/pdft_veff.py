@@ -170,10 +170,8 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         t0 = logger.timer(ot, 'effective potential kernel calculation', *t0)
         if ao.ndim == 2: ao = ao[None, :, :]
         # TODO: consistent format req's ao LDA case
-        print("---- starting")
         veff1 += ot.get_eff_1body(ao, weight, kern=vrho, non0tab=mask,
                                    shls_slice=shls_slice, ao_loc=ao_loc, hermi=1)
-        print("---- end")
         t0 = logger.timer(ot, '1-body effective potential calculation', *t0)
         veff2._accumulate(ot, ao, weight, rho_c, rho_a, vPi, mask,
                           shls_slice, ao_loc)

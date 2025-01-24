@@ -154,12 +154,12 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         if otfnal.dens_deriv > 1:
             # we might get a None for one of the derivatives..
             if xc_grid[1][2] is None:
-                vxc = vxc + list(np.zeros_like(xc_grid[1][0].T))
+                vxc = vxc + [None,None] 
             else:
                 vxc = vxc + list(xc_grid[1][2].T)
-            
+
             if xc_grid[1][3] is None:
-                vxc = vxc + list(np.zeros_like(xc_grid[1][0].T))
+                vxc = vxc + [None,None]
             else:
                 vxc = vxc + list(xc_grid[1][3].T)
 
@@ -483,17 +483,24 @@ def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
         R = R[0]
   
     # ab -> cs coordinate transformation
-    lapl_c = (x[5] + x[6])/2.0
-    lapl_m = (x[5] - x[6])/2.0
+    if x[5] is not None and x[6] is not None:
+        xc = (x[5] + x[6])/2.0
+        xm = (x[5] - x[6])/2.0
+        jacobian_idx = 3
+        rho_idx = 4
+        jTx[4] = None
 
-    tau_c = (x[7] + x[8])/2.0 
-    tau_m = (x[7] - x[8])/2.0 
+    elif x[7] is not None and x[8] is not None:
+        xc = (x[7] + x[8])/2.0
+        xm = (x[7] - x[8])/2.0
+        jacobian_idx = 4
+        rho_idx = 5
+        jTx[3] = None
 
     # easy part
-    jTx[3] = lapl_c + zeta[0] * lapl_m
-    jTx[4] = tau_c + zeta[0] * tau_m
+    jTx[jacobian_idx] = xc + zeta[0]*xm
 
-    tau_lapl_factor = zeta[1] * (rho[4]*lapl_m + rho[5]*tau_m)
+    tau_lapl_factor = zeta[1] * rho[rho_idx]*xm 
     idx = (rho[0] > 1e-15) 
     rho = rho[0,idx]
     R = R[idx]

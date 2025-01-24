@@ -84,6 +84,8 @@ def case(kv, mc):
             conv_tab = err_tab[1:ix + 1, :] / err_tab[:ix, :]
         if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.01) and abs(err_tab[-1, 1]) < 1e-3:
             break
+
+    print(err_tab)
     with kv.subTest(q='x'):
         kv.assertAlmostEqual(conv_tab[-1, 0], 0.5, 9)
     with kv.subTest(q='de'):

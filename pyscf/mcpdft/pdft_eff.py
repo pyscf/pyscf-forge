@@ -259,11 +259,34 @@ def get_eff_1body(otfnal, ao, weight, kern, non0tab=None,
     kern *= weight[None, :]
 
     # Zeroth and first derivatives
-    eff_ao = _contract_kern_ao(kern, ao[1])
+    nderiv = kern.shape[0]
+
+    first_pass = min(nderiv, 4)
+    eff_ao = _contract_kern_ao(kern[:first_pass], ao[1][:first_pass])
     nterm = eff_ao.shape[0]
     eff = sum([_dot_ao_mo(otfnal.mol, a, v, non0tab=non0tab,
                           shls_slice=shls_slice, ao_loc=ao_loc, hermi=hermi)
                for a, v in zip(ao[0][0:nterm], eff_ao)])
+
+    if nderiv > 4:
+        # check if we have laplacian...
+        vlapl, vtau = kern[4:]
+
+        if np.isnan(vlapl).all():
+            vtau *= 0.5
+            eff += _tau_dot_ao_mo(
+                otfnal.mol,
+                ao[1],
+                ao[0],
+                vtau,
+                non0tab=non0tab,
+                shls_slice=shls_slice,
+                ao_loc=ao_loc,
+                hermi=hermi,
+            )
+        else:
+            raise NotImplementedError("vlapl derivative term")
+
     return eff
 
 def get_eff_2body(otfnal, ao, weight, kern, aosym='s4', eff_ao=None):
@@ -361,10 +384,11 @@ def _contract_kern_ao(vot, ao, out=None):
     vao = np.ndarray((nderiv, nao, ngrids), dtype=ao.dtype,
                      buffer=out).transpose(0, 2, 1)
     ao = ao.transpose(0, 2, 1)
-    vao[0] = numint._scale_ao(ao[:nderiv], vot, out=vao[0])
+    vao[0] = numint._scale_ao(ao[:nderiv], vot[:nderiv], out=vao[0])
     if nderiv > 1:
         for i in range(1, 4):
             vao[i] = numint._scale_ao(ao[0:1, :, :], vot[i:i + 1, :], out=vao[i])
+
     return vao
 
 
@@ -434,3 +458,39 @@ def _contract_ao1_ao2(ao1, ao2, nderiv, symm=False):
     else:
         prod = prod.transpose(0, 3, 2, 1)
     return prod
+
+
+def _tau_dot_ao_mo(
+    mol, ao, mo, vtau, non0tab=None, shls_slice=None, ao_loc=None, hermi=0
+):
+    vao = numint._scale_ao(ao[1], vtau)
+    eff = _dot_ao_mo(
+        mol,
+        mo[1],
+        vao,
+        non0tab=non0tab,
+        shls_slice=shls_slice,
+        ao_loc=ao_loc,
+        hermi=hermi,
+    )
+    vao = numint._scale_ao(ao[2], vtau)
+    eff += _dot_ao_mo(
+        mol,
+        mo[2],
+        vao,
+        non0tab=non0tab,
+        shls_slice=shls_slice,
+        ao_loc=ao_loc,
+        hermi=hermi,
+    )
+    vao = numint._scale_ao(ao[3], vtau)
+    eff += _dot_ao_mo(
+        mol,
+        mo[3],
+        vao,
+        non0tab=non0tab,
+        shls_slice=shls_slice,
+        ao_loc=ao_loc,
+        hermi=hermi,
+    )
+    return eff
