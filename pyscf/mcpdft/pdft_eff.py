@@ -273,7 +273,7 @@ def get_eff_1body(otfnal, ao, weight, kern, non0tab=None,
         vlapl, vtau = kern[4:]
 
         if np.isnan(vlapl).all():
-            vtau *= 0.25
+            vtau *= 0.5
             eff += _tau_dot_ao_mo(
                 otfnal.mol,
                 ao[1],

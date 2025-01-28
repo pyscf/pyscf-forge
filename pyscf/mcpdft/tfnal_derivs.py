@@ -220,7 +220,7 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     if ncol1 > 1:
         unp1[1:4] = 2 * deriv1[:3] * packed[2]
         if ncol1 > 4:
-            unp1[4:] = packed[3:5]
+            unp1[4:6] = packed[3:5]
         if ncol2 > 1:
             unp1[1:4] += deriv2 * packed[-2]
             unp2[1:4] = (2 * deriv2 * packed[-1]) + (deriv1[:3] * packed[-2])
