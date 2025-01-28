@@ -78,16 +78,12 @@ def case(kv, mc):
         x1_norm = linalg.norm(x1)
         de_test = np.dot(g_all, x1)
         de_ref = seminum(x1)
-        print(f"test: {de_test}")
-        print(f"ref: {de_ref}")
         de_err = abs((de_test - de_ref) / de_ref)
         err_tab = np.append(err_tab, [[x1_norm, de_err]], axis=0)
         if ix > 0:
             conv_tab = err_tab[1:ix + 1, :] / err_tab[:ix, :]
         if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.01) and abs(err_tab[-1, 1]) < 1e-3:
             break
-
-    print(err_tab)
 
     with kv.subTest(q='x'):
         kv.assertAlmostEqual(conv_tab[-1, 0], 0.5, 9)
