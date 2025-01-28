@@ -118,6 +118,7 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         rho_t[1, 0, idx] = 1e-15
         idx = (rho_t[0, 0] < 1e-15) & (rho_t[1, 0] > 1e-15)
         rho_t[0, 0, idx] = 1e-15
+
     rho_tot = rho.sum(0)
 
     if nderiv > 4 and dderiv > 1:
@@ -505,10 +506,10 @@ def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
     rho = rho[0,idx]
     R = R[idx]
     
-    tau_lapl_factor = -2*tau_lapl_factor[idx]/rho
+    tau_lapl_factor = 2*tau_lapl_factor[idx]/rho
 
-    jTx[0, idx] = R*tau_lapl_factor
-    jTx[1, idx] = -2*tau_lapl_factor/rho
+    jTx[0, idx] = -R*tau_lapl_factor
+    jTx[1, idx] = 2*tau_lapl_factor/rho
 
     return jTx
 
