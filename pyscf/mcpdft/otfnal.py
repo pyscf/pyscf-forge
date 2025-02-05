@@ -356,8 +356,6 @@ class transfnal (otfnal):
         rho_t^b = (rho/2) * (1 - zeta)
         rho'_t^a = (rho'/2) * (1 + zeta)
         rho'_t^b = (rho'/2) * (1 - zeta)
-        laplacian_t^a = (laplacian/2) * (1 + zeta)
-        laplacian_t^b = (laplacian/2) * (1 - zeta)
         tau_t^a = (tau/2) * (1 + zeta)
         tau_t^b = (tau/2) * (1 - zeta)
 
