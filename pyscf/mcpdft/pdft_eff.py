@@ -270,22 +270,22 @@ def get_eff_1body(otfnal, ao, weight, kern, non0tab=None,
 
     if nderiv > 4:
         # check if we have laplacian...
-        vlapl, vtau = kern[4:]
+        vtau = kern[4]
 
-        if np.isnan(vlapl).all():
-            vtau *= 0.5
-            eff += _tau_dot_ao_mo(
-                otfnal.mol,
-                ao[1],
-                ao[0],
-                vtau,
-                non0tab=non0tab,
-                shls_slice=shls_slice,
-                ao_loc=ao_loc,
-                hermi=hermi,
-            )
-        else:
-            raise NotImplementedError("vlapl derivative term")
+        vtau *= 0.5
+        eff += _tau_dot_ao_mo(
+            otfnal.mol,
+            ao[1],
+            ao[0],
+            vtau,
+            non0tab=non0tab,
+            shls_slice=shls_slice,
+            ao_loc=ao_loc,
+            hermi=hermi,
+        )
+
+    if nderiv > 5:
+        raise NotImplementedError("laplacian translated meta-GGA functional")
 
     return eff
 

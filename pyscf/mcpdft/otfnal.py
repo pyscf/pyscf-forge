@@ -166,7 +166,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     mo_cas = mo_coeff[:,ncore:][:,:ncas]
 
     t0 = (logger.process_clock (), logger.perf_counter ())
-    make_rho = tuple (ni._gen_rho_evaluator (ot.mol, dm1s[i,:,:], hermi) for
+    make_rho = tuple (ni._gen_rho_evaluator (ot.mol, dm1s[i,:,:], hermi=hermi, with_lapl=False) for
         i in range(2))
     for ao, mask, weight, _ in ni.block_loop (ot.mol, ot.grids, nao,
             dens_deriv, max_memory):

@@ -126,14 +126,14 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
                            mo_occ=dm1s.mo_occ[:, ncore:nocc])
 
     # rho generators
-    make_rho_c = ni._gen_rho_evaluator(ot.mol, dm_core, hermi)[0]
-    make_rho_a = ni._gen_rho_evaluator(ot.mol, dm_cas, hermi)[0]
-    make_rho = ni._gen_rho_evaluator(ot.mol, dm1s, hermi)[0]
+    make_rho_c = ni._gen_rho_evaluator(ot.mol, dm_core, hermi=hermi, with_lapl=False)[0]
+    make_rho_a = ni._gen_rho_evaluator(ot.mol, dm_cas, hermi=hermi, with_lapl=False)[0]
+    make_rho = ni._gen_rho_evaluator(ot.mol, dm1s, hermi=hermi, with_lapl=False)[0]
 
     # memory block size
     gc.collect()
     remaining_floats = (max_memory - current_memory()[0]) * 1e6 / 8
-    nderiv_rho = (1, 4, 6)[dens_deriv]
+    nderiv_rho = (1, 4, 5)[dens_deriv]
     nderiv_Pi = (1, 4)[ot.Pi_deriv]
     nderiv_ao = (1,4,10)[dens_deriv]
     ncols = 4 + nderiv_rho * nao  # ao, weight, coords

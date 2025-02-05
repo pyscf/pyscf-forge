@@ -86,9 +86,9 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
             first functional derivative of Eot wrt (density, pair
             density) and their derivatives. If _unpack_vot = True, shape
             and format is ([a, ngrids], [b, ngrids]) : (vrho, vPi);
-            otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,lapl rho,tau,rho'.Pi',|Pi'|^2]
+            otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,tau,rho'.Pi',|Pi'|^2]
             ftGGA: a=4, b=4, c=5
-            tmGGA: a=6, b=1, c=5 (drop Pi')
+            tmGGA: a=5, b=1, c=4 (drop Pi')
             tGGA: a=4, b=1, c=3 (drop Pi')
             *tLDA: a=1, b=1, c=2 (drop rho')
         fot : ndarray of shape (*,ngrids) or None
@@ -126,8 +126,8 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
 
     if 1 < nderiv <= 4:
         rho_deriv = rho_tot[1:4, :]
-    elif 4 < nderiv <= 6:
-        rho_deriv = rho_tot[1:6, :]
+    elif 4 < nderiv <= 5:
+        rho_deriv = rho_tot[1:5, :]
     else:
         rho_deriv = None
 
@@ -154,15 +154,12 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         # vrho, vsigma, vlapl, vtau = xc_grid[1][:4]
         if otfnal.dens_deriv > 1:
             # we might get a None for one of the derivatives..
-            if xc_grid[1][2] is None:
-                vxc = vxc + [None,None] 
-            else:
-                vxc = vxc + list(xc_grid[1][2].T)
+            # we get None for the laplacian derivative
+            if xc_grid[1][2] is not None:
+                raise NotImplementedError("laplacian translated meta-GGA functionals")
 
-            if xc_grid[1][3] is None:
-                vxc = vxc + [None,None]
-            else:
-                vxc = vxc + list(xc_grid[1][3].T)
+            # Here is the tau term
+            vxc = vxc + list(xc_grid[1][3].T)
 
         vot = otfnal.jT_op(vxc, rho, Pi)
         if _unpack_vot: vot = _unpack_sigma_vector(vot,
@@ -221,7 +218,8 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     if ncol1 > 1:
         unp1[1:4] = 2 * deriv1[:3] * packed[2]
         if ncol1 > 4:
-            unp1[4:6] = packed[3:5]
+            # Deal with the tau term
+            unp1[4:5] = packed[3:4]
         if ncol2 > 1:
             unp1[1:4] += deriv2 * packed[-2]
             unp2[1:4] = (2 * deriv2 * packed[-1]) + (deriv1[:3] * packed[-2])
@@ -477,31 +475,20 @@ def _tGGA_jT_op(x, rho, Pi, R, zeta):
 
 def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
     # output ordering is
-    # ordering: rho, Pi, |rho'|^2, lapla rho, tau
+    # ordering: rho, Pi, |rho'|^2, tau
     ngrid = rho.shape[-1]
     jTx = np.zeros((5, ngrid), dtype=x[0].dtype)
     if R.ndim > 1:
         R = R[0]
   
     # ab -> cs coordinate transformation
-    if x[5] is not None and x[6] is not None:
-        xc = (x[5] + x[6])/2.0
-        xm = (x[5] - x[6])/2.0
-        jacobian_idx = 3
-        rho_idx = 4
-        jTx[4] = None
-
-    elif x[7] is not None and x[8] is not None:
-        xc = (x[7] + x[8])/2.0
-        xm = (x[7] - x[8])/2.0
-        jacobian_idx = 4
-        rho_idx = 5
-        jTx[3] = None
+    xc = (x[5] + x[6])/2.0
+    xm = (x[5] - x[6])/2.0
 
     # easy part
-    jTx[jacobian_idx] = xc + zeta[0]*xm
+    jTx[3] = xc + zeta[0]*xm
 
-    tau_lapl_factor = zeta[1] * rho[rho_idx]*xm 
+    tau_lapl_factor = zeta[1] * rho[4]*xm 
     idx = (rho[0] > 1e-15) 
     rho = rho[0,idx]
     R = R[idx]
