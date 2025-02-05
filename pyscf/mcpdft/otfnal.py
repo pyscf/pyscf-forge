@@ -491,8 +491,8 @@ class transfnal (otfnal):
             pair-density functional theory.
             2 rows for tLDA, 3 rows for tGGA, and 5 rows for meta-GGA
         '''
-        # ordering: rho, Pi, |rho'|^2, lapla rho, tau
-        ncol = (2, 3, 5)[self.dens_deriv]
+        # ordering: rho, Pi, |rho'|^2, tau
+        ncol = (2, 3, 4)[self.dens_deriv]
         ngrid = rho.shape[-1]
         jTx = np.zeros ((ncol,ngrid), dtype=x[0].dtype)
         rho = rho.sum (0)
@@ -502,7 +502,7 @@ class transfnal (otfnal):
         if self.dens_deriv > 0:
             jTx[:3] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
         if self.dens_deriv > 1:
-            jTx[:5] += tfnal_derivs._tmetaGGA_jT_op(x, rho, Pi, R, zeta)
+            jTx[:4] += tfnal_derivs._tmetaGGA_jT_op(x, rho, Pi, R, zeta)
 
         return jTx
 

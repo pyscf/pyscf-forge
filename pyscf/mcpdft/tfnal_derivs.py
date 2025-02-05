@@ -477,7 +477,7 @@ def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
     # output ordering is
     # ordering: rho, Pi, |rho'|^2, tau
     ngrid = rho.shape[-1]
-    jTx = np.zeros((5, ngrid), dtype=x[0].dtype)
+    jTx = np.zeros((4, ngrid), dtype=x[0].dtype)
     if R.ndim > 1:
         R = R[0]
   
