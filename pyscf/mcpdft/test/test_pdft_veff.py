@@ -78,7 +78,6 @@ def case(kv, mc):
         x1_norm = linalg.norm(x1)
         de_test = np.dot(g_all, x1)
         de_ref = seminum(x1)
-        print(de_test, de_ref, de_test/de_ref)
         de_err = abs((de_test - de_ref) / de_ref)
         err_tab = np.append(err_tab, [[x1_norm, de_err]], axis=0)
         if ix > 0:
