@@ -384,7 +384,7 @@ def _contract_kern_ao(vot, ao, out=None):
     vao = np.ndarray((nderiv, nao, ngrids), dtype=ao.dtype,
                      buffer=out).transpose(0, 2, 1)
     ao = ao.transpose(0, 2, 1)
-    vao[0] = numint._scale_ao(ao[:nderiv], vot[:nderiv], out=vao[0])
+    vao[0] = numint._scale_ao(ao[:nderiv], vot, out=vao[0])
     if nderiv > 1:
         for i in range(1, 4):
             vao[i] = numint._scale_ao(ao[0:1, :, :], vot[i:i + 1, :], out=vao[i])

@@ -572,7 +572,7 @@ class transfnal (otfnal):
             if dderiv>1: fxc = tfnal_derivs._pack_fxc_ltri (fxc, self.dens_deriv)
             # ~~~ shift translated rho directly ~~~
             r = rho_t0 * r0 / 2**p
-            drho_t = np.zeros_like (rho_t0)
+            drho_t = np.zeros_like (rho_t0, dtype=rho_t0.dtype)
             ndf = 2 * (1 + int (nvr>1))
             drho_t[0,0,0::ndf] = r[0,0,0::ndf]
             drho_t[1,0,1::ndf] = r[1,0,1::ndf]

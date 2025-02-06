@@ -91,7 +91,7 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
     # First cumulant and derivatives (chain rule! product rule!)
     t0 = (logger.process_clock (), logger.perf_counter ())
     Pi_shape = ((1,4,5)[deriv], rho.shape[-1])
-    Pi = np.zeros(Pi_shape)
+    Pi = np.zeros(Pi_shape, dtype=rho.dtype)
     Pi[0] = rho[0,0] * rho[1,0]
     if deriv > 0:
         assert (rho.shape[1] >= 4), rho.shape

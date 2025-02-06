@@ -132,7 +132,6 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
         rho_deriv = None
 
     Pi_deriv = Pi[1:4, :] if nderiv_Pi > 1 else None
-
     xc_grid = otfnal._numint.eval_xc(otfnal.otxc, (rho_t[0, :, :],
                                                    rho_t[1, :, :]), spin=1, relativity=0, deriv=dderiv,
                                      verbose=otfnal.verbose)[:dderiv + 1]
@@ -160,6 +159,9 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
 
             # Here is the tau term
             vxc = vxc + list(xc_grid[1][3].T)
+
+        for idx, a in enumerate(vxc):
+            print(idx, max(a), min(a))
 
         vot = otfnal.jT_op(vxc, rho, Pi)
         if _unpack_vot: vot = _unpack_sigma_vector(vot,
@@ -316,8 +318,8 @@ def contract_fot(otfnal, fot, rho0, Pi0, rho1, Pi1, unpack=True,
     if Pi1.ndim == 1: Pi1 = Pi1[None, :]
 
     ngrids = fot[0].shape[-1]
-    vrho1 = np.zeros(ngrids, fot[0].dtype)
-    vPi1 = np.zeros(ngrids, fot[2].dtype)
+    vrho1 = np.zeros(ngrids, dtype=fot[0].dtype)
+    vPi1 = np.zeros(ngrids, dtype=fot[2].dtype)
     vrho1, vPi1 = np.zeros_like(rho1), np.zeros_like(Pi1)
 
     # TODO: dspmv implementation
