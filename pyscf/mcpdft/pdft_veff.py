@@ -210,21 +210,23 @@ def lazy_kernel(ot, dm1s, cascm2, mo_cas, max_memory=2000, hermi=1,
     '''
     if veff2_mo is not None:
         raise NotImplementedError('Molecular orbital slices for 2-body part')
-    ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
+    ni, xctype = ot._numint, ot.xctype
+    dens_deriv = ot.dens_deriv
+    Pi_deriv = ot.Pi_deriv
     nao = mo_cas.shape[0]
 
     veff1 = np.zeros_like(dm1s[0])
     veff2 = np.zeros((nao, nao, nao, nao), dtype=veff1.dtype)
 
     t0 = (logger.process_clock(), logger.perf_counter())
-    make_rho = tuple(ni._gen_rho_evaluator(ot.mol, dm1s[i, :, :], hermi)
+    make_rho = tuple(ni._gen_rho_evaluator(ot.mol, dm1s[i, :, :], hermi=hermi, with_lapl=False)
                      for i in range(2))
     for ao, mask, weight, coords in ni.block_loop(ot.mol, ot.grids, nao,
                                                   dens_deriv, max_memory):
         rho = np.asarray([m[0](0, ao, mask, xctype) for m in make_rho])
         t0 = logger.timer(ot, 'untransformed density', *t0)
         Pi = get_ontop_pair_density(ot, rho, ao, cascm2, mo_cas,
-                                    dens_deriv, mask)
+                                    Pi_deriv, mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
         _, vot = ot.eval_ot(rho, Pi, weights=weight)[:2]
         vrho, vPi = vot
