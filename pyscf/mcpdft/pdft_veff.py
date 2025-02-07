@@ -226,14 +226,15 @@ def lazy_kernel(ot, dm1s, cascm2, mo_cas, max_memory=2000, hermi=1,
         rho = np.asarray([m[0](0, ao, mask, xctype) for m in make_rho])
         t0 = logger.timer(ot, 'untransformed density', *t0)
         Pi = get_ontop_pair_density(ot, rho, ao, cascm2, mo_cas,
-                                    Pi_deriv, mask)
+                                    deriv=Pi_deriv, non0tab=mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
         _, vot = ot.eval_ot(rho, Pi, weights=weight)[:2]
         vrho, vPi = vot
-        t0 = logger.timer(ot, 'effective potential kernel calculation', *t0)
-        if ao.ndim == 2: ao = ao[None, :, :]
+        t0 = logger.timer(ot, "effective potential kernel calculation", *t0)
+        if ao.ndim == 2:
+            ao = ao[None, :, :]
         # TODO: consistent format req's ao LDA case
-        veff1 += ot.get_eff_1body(ao, weight, vrho)
+        veff1 += ot.get_eff_1body(ao, weight, kern=vrho, non0tab=mask)
         t0 = logger.timer(ot, '1-body effective potential calculation', *t0)
         veff2 += ot.get_eff_2body(ao, weight, kern=vPi, aosym=1)
         t0 = logger.timer(ot, '2-body effective potential calculation', *t0)

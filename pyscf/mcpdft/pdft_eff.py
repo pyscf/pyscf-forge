@@ -296,9 +296,10 @@ def get_eff_2body(otfnal, ao, weight, kern, aosym='s4', eff_ao=None):
         raise NotImplementedError('fancy orbital subsets and fast evaluation '
                                   'in get_eff_2body')
 
-    if isinstance(aosym, int): aosym = str(aosym)
-    ij_symm = '4' in aosym or '2ij' in aosym
-    kl_symm = '4' in aosym or '2kl' in aosym
+    if isinstance(aosym, int):
+        aosym = str(aosym)
+    ij_symm = "4" in aosym or "2ij" in aosym
+    kl_symm = "4" in aosym or "2kl" in aosym
 
     if eff_ao is None:
         eff_ao = otfnal.get_eff_2body_kl(ao[2], ao[3], weight, kern, symm=kl_symm)
