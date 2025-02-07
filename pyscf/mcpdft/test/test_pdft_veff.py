@@ -109,33 +109,20 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    # def test_de(self):
-        # np.random.seed(1)
-        # for mol, mf in zip(('H2', 'LiH'), (h2, lih)):
-            # for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-                # for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tM06L'):
-                    # mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
-                    # with self.subTest(mol=mol, state=state, fnal=fnal):
-                        # case(self, mc)
-
-    def test_meta(self):
+    def test_de(self):
         np.random.seed(1)
-        mol = gto.M(atom='He 0 0 0', basis='cc-pvtz',
-                           output='/dev/null', verbose=0, 
-                           charge=0, spin=0)
-        mf = scf.RHF(mol).run()
-        mc = mcpdft.CASSCF(mf, 'tBOP', 4, 2, grids_level=1)
-        from mrh.my_pyscf.fci import csf_solver
-        mc.fcisolver = csf_solver(mol=mol, smult=3)
-        mc.run()
+        for mol, mf in zip(('H2', 'LiH'), (h2, lih)):
+            for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tN12', 'ftN12', 'tTPSS'):
+                    mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
+                    with self.subTest(mol=mol, state=state, fnal=fnal):
+                        case(self, mc)
 
-        with self.subTest(test="custom test..."):
-            case(self, mc)
 
     def test_veff_ao2mo(self):
         for mol, mf in zip(('H2', 'LiH'), (h2, lih)):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tN12', 'ftN12'):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tN12', 'ftN12', 'tTPSS'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
                     v1_test, v2_test = mc.get_pdft_veff(jk_pc=True)
                     v1_ref, v2_ref = get_veff_ref(mc)
