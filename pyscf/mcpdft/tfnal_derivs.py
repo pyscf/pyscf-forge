@@ -160,8 +160,25 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
             # Here is the tau term
             vxc = vxc + list(xc_grid[1][3].T)
 
-        for idx, a in enumerate(vxc):
-            print(idx, max(a), min(a))
+
+        symbols = ['rho_a', 'rho_b', 'sigma_aa', 'sigma_ab', 'sigma_bb', 'tau_a', 'tau_b']
+        symbols = symbols[:len(vxc)]
+        
+        buf = "     "
+        for s in symbols:
+            buf += f"{s:>12} "
+        print(buf)
+        buf = "min: "
+        for a in vxc:
+            buf += f"{a.min():>12.4g} "
+        print(buf)
+        buf = "max: "
+        for a in vxc:
+            buf += f"{a.max():>12.4g} "
+        print(buf)
+
+        # for idx, a in enumerate(vxc):
+            # print(idx, min(a), max(a))
 
         vot = otfnal.jT_op(vxc, rho, Pi)
         if _unpack_vot: vot = _unpack_sigma_vector(vot,

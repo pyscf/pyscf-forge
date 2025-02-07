@@ -124,7 +124,7 @@ class KnownValues(unittest.TestCase):
                            output='/dev/null', verbose=0, 
                            charge=0, spin=0)
         mf = scf.RHF(mol).run()
-        mc = mcpdft.CASSCF(mf, 'tM06L', 4, 2, grids_level=1)
+        mc = mcpdft.CASSCF(mf, 'tBOP', 4, 2, grids_level=1)
         from mrh.my_pyscf.fci import csf_solver
         mc.fcisolver = csf_solver(mol=mol, smult=3)
         mc.run()
