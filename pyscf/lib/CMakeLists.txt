@@ -138,3 +138,12 @@ set_target_properties (clib_dsrg PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "dsrg")
+
+# Build the SFNOCI library
+set (SFNOCI_SOURCE_FILES "../sfnoci/SFNOCI_contract.c")
+add_library (clib_sfnoci SHARED ${SFNOCI_SOURCE_FILES})
+set_target_properties (clib_sfnoci PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "sfnoci")
+
