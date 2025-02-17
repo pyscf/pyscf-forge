@@ -333,8 +333,9 @@ class transfnal (otfnal):
         R[0,:] = 1
         idx = rho_avg[0] >= (1e-15 / 2)
         # Chain rule!
-        for ideriv in range (nderiv):
+        for ideriv in range(nderiv):
             R[ideriv,idx] = Pi[ideriv,idx] / rho_avg[0,idx] / rho_avg[0,idx]
+
         # Product rule!
         for ideriv in range (1,nderiv):
             R[ideriv,idx] -= (2 * rho_avg[ideriv,idx] * R[0,idx]
