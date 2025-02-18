@@ -239,7 +239,6 @@ class KnownValues(unittest.TestCase):
 
     def test_chkfile(self):
         for mc, case in zip([water, t_water], ["SA", "SA Mix"]):
-            print(mc.chkfile)
             with self.subTest(case=case):
                 self.assertTrue(h5py.is_hdf5(mc.chkfile))
                 self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/mo_coeff")))
