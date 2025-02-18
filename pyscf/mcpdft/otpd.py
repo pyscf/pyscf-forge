@@ -79,14 +79,14 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
         deriv = 2 : value, d/dx, d/dy, d/dz, d^2/d|r1-r2|^2_(r1=r2)
     '''
     # Fix dimensionality of rho and ao
-    rho_reshape = False 
+    rho_reshape = False
     ao_reshape = False
     if rho.ndim == 2:
         rho_reshape = True
-        rho = rho.reshape (rho.shape[0], 1, rho.shape[1])
+        rho = rho.reshape(rho.shape[0], 1, rho.shape[1])
     if ao.ndim == 2:
         ao_reshape = True
-        ao = ao.reshape (1, ao.shape[0], ao.shape[1])
+        ao = ao.reshape(1, ao.shape[0], ao.shape[1])
 
     # First cumulant and derivatives (chain rule! product rule!)
     t0 = (logger.process_clock (), logger.perf_counter ())

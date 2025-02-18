@@ -147,7 +147,7 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     if dderiv > 0:
         # vrho, vsigma = xc_grid[1][:2]
         vxc = list(xc_grid[1][0].T)
-        if otfnal.dens_deriv > 0: 
+        if otfnal.dens_deriv > 0:
             vxc = vxc + list(xc_grid[1][1].T)
 
         # vrho, vsigma, vlapl, vtau = xc_grid[1][:4]
@@ -472,6 +472,7 @@ def _tGGA_jT_op(x, rho, Pi, R, zeta):
 
     return jTx
 
+
 def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
     # output ordering is
     # ordering: rho, Pi, |rho'|^2, tau
@@ -479,23 +480,23 @@ def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
     jTx = np.zeros((4, ngrid), dtype=x[0].dtype)
     if R.ndim > 1:
         R = R[0]
-  
+
     # ab -> cs coordinate transformation
-    xc = (x[5] + x[6])/2.0
-    xm = (x[5] - x[6])/2.0
+    xc = (x[5] + x[6]) / 2.0
+    xm = (x[5] - x[6]) / 2.0
 
     # easy part
-    jTx[3] = xc + zeta[0]*xm
+    jTx[3] = xc + zeta[0] * xm
 
-    tau_lapl_factor = zeta[1] * rho[4]*xm 
-    idx = (rho[0] > 1e-15) 
-    rho = rho[0,idx]
+    tau_lapl_factor = zeta[1] * rho[4] * xm
+    idx = rho[0] > 1e-15
+    rho = rho[0, idx]
     R = R[idx]
-    
-    tau_lapl_factor = 2*tau_lapl_factor[idx]/rho
 
-    jTx[0, idx] = -R*tau_lapl_factor
-    jTx[1, idx] = 2*tau_lapl_factor/rho
+    tau_lapl_factor = 2 * tau_lapl_factor[idx] / rho
+
+    jTx[0, idx] = -R * tau_lapl_factor
+    jTx[1, idx] = 2 * tau_lapl_factor / rho
 
     return jTx
 
