@@ -32,17 +32,17 @@ References:
     J. Chem. Theory Comput. 2025 
 '''
 
-import sys
-
 import numpy
 from functools import reduce
 from pyscf import lib
 from pyscf.lib import logger
+from pyscf.scf import rohf
 from pyscf import __config__
 from itertools import product
 from pyscf.mcscf.casci import CASBase, CASCI
-from pyscf.fci import spin_op
+from pyscf.fci import cistring
 from pyscf.sfnoci.direct_sfnoci import SFNOCISolver
+from pyscf.sfnoci.direct_sfnoci import group_info_list, str2occ
 #from pyscf.fci import cistring
 #from scipy.linalg import eigh as gen_eig
 #from pyscf.fci import fci_slow
@@ -96,7 +96,7 @@ def kernel(sfnoci, mo_coeff=None, ci0=None, verbose=logger.NOTE):
 
     # 1e
     dmet_act_list = sfnoci.get_active_dm(mo_coeff)
-    h1e, energy_core = sfnoci.get_h1cas(dmet_act_list , mo_list , dmet_core_list)
+    h1e, ecore_list = sfnoci.get_h1cas(dmet_act_list , mo_list , dmet_core_list)
     t1 = log.timer('effective 1e hamiltonians and core energies', *t1)
 
     # 2e
@@ -106,7 +106,7 @@ def kernel(sfnoci, mo_coeff=None, ci0=None, verbose=logger.NOTE):
     # FCI
     max_memory = max(400, sfnoci.max_memory-lib.current_memory()[0])
     e_tot, fcivec = sfnoci.fcisolver.kernel(h1e, eri, ncas, nelecas,
-                                            po_list, group, ov_list, ecore=energy_core,
+                                            po_list, group, ov_list, ecore_list,
                                             ci0=ci0, verbose=log,
                                             max_memory=max_memory)
 
@@ -120,9 +120,9 @@ def kernel(sfnoci, mo_coeff=None, ci0=None, verbose=logger.NOTE):
     log.timer('All SFNOCI process', *t0)
 
     if isinstance(e_tot, (float, numpy.float64)):
-        e_cas = e_tot - energy_core
+        e_cas = e_tot - ecore_list
     else:
-        e_cas = [e - energy_core for e in e_tot] 
+        e_cas = [e - ecore_list for e in e_tot] 
 
     return e_tot, e_cas, fcivec
 
@@ -447,47 +447,246 @@ Keyword argument "init_dm" is replaced by "dm0"''')
 
     return scf_conv, e_tot, mo_energy, mo_coeff, mo_occ
 
-def optimize_mo(mf,mo_energy,mo_coeff,as_list,core_list,nelecas,mode=0,conv_tol = 1e-10, max_cycle = 100, groupA = None, thres = 0.2):
-    n_as = len(as_list)
-    n_ase = nelecas[0] + nelecas[1]
+def StateAverage_FASSCF(sfnoci, target_group, po_list, group, mo_coeff = None, 
+                        ncas = None, nelecas = None, ncore = None, conv_tol=1e-10, conv_tol_grad=None, max_cycle = 100,
+                        dump_chk=True, dm0=None, callback=None, conv_check=True, **kwarg):
+    if mo_coeff is None : mo_coeff = sfnoci.mo_coeff
+    if ncas is None: ncas = sfnoci.ncas
+    if nelecas is None : nelecas = sfnoci.nelecas
+    if ncore is None : ncore = sfnoci.ncore
+    mf = sfnoci._scf
+    assert isinstance(mf, rohf.ROHF), "The SCF class of SF-GNOCI must be ROHF class."
+
+    cput0 = (logger.process_clock(), logger.perf_counter())
+    stringsa = cistring.make_strings(range(ncas),nelecas[0])
+    stringsb = cistring.make_strings(range(ncas),nelecas[1])
+    na = len(stringsa)
+    nb = len(stringsb)
     N = mo_coeff.shape[0]
-    po_list = possible_occ(n_as, n_ase)
-    p = len(po_list)
-    group = None
-    if groupA is None:
-       optimized_mo=numpy.zeros((p,N,N))
-       #SF-NOCI
-       if mode == 0:
-          for i, occ in enumerate(po_list):
-              conv, et, moe, moce, moocc = FASSCF(mf,as_list,core_list,mo_energy,mo_coeff,occ,conv_tol = conv_tol,max_cycle = max_cycle )
-              print(conv, et)
-              optimized_mo[i]=moce
-              print("occuped pattern index:")
-              print(i)
-       #SF-CAS
-       if mode==1:
-          for i, occ in enumerate(po_list):
-              optimized_mo[i]=mo_coeff
-    else :
-        if isinstance(groupA, str):
-            group = grouping_by_lowdin(mf.mol,mo_coeff[:,as_list],po_list, groupA, thres= thres)
-        elif isinstance(groupA, list):
-            group = grouping_by_occ(po_list,groupA)
-        else: NotImplementedError
-        g = len(group)
-        optimized_mo = numpy.zeros((g,N,N))
-        for i in range(0,g):
-            if mode == 0:
-                occ = group_occ(po_list,group[i])
-                conv, et, moe, moce, moocc = FASSCF(mf,as_list,core_list,mo_energy,mo_coeff,occ,conv_tol = conv_tol,max_cycle = max_cycle )
+    as_list = numpy.array(range(ncore, ncore + ncas))
+    asn = len(as_list)
+    as_mo_coeff = mo_coeff[:,as_list]
+    group_info = group_info_list(ncas, nelecas, po_list, group)
+    group_info = group_info.reshape(-1)
+    #print(group_info)
+    #PO_info = SFNOCI.group_info_list(ncas, nelecas, PO, None).reshape[-1]
+    target_conf = numpy.where(group_info == target_group)[0]
+    #occ_list = PO_info[target_conf]
+    
+    
+    mol = mf.mol
+    #mf.max_cycle = max_cycle
+    as_dm_a = numpy.zeros((N,N))
+    as_dm_b = numpy.zeros((N,N))
+    #target_conf = [8]
+    #print(target_conf)
+    for conf in target_conf:
+        stra = conf // nb
+        strb = conf % nb
+        #print(stra, strb)
+        mo_occa = str2occ(stringsa[stra], ncas)
+        mo_occb = str2occ(stringsb[strb], ncas)
+        mo_occ = (mo_occa, mo_occb)
+        #print(mo_occ)
+        dm_a, dm_b = mf.make_rdm1(as_mo_coeff, mo_occ)
+        as_dm_a += dm_a
+        as_dm_b += dm_b
+    as_dm_a = as_dm_a / len(target_conf)
+    as_dm_b = as_dm_b / len(target_conf)
+    if dm0 is None:
+        core_mo_coeff = mo_coeff[:,:ncore]
+        dm0_core = (core_mo_coeff ).dot(core_mo_coeff.conj().T)
+        dm = numpy.asarray((dm0_core  + as_dm_a , dm0_core + as_dm_b))
+        #dm = 2 * dm0_core + AS_dm_a + AS_dm_b
+    else: 
+        dm = dm0
+    
+    h1e = mf.get_hcore(mol)
+    vhf = mf.get_veff(mol, dm)
+    e_tot = mf.energy_tot(dm, h1e, vhf)
+    logger.info(mf, 'init E= %.15g', e_tot)
+
+    scf_conv = False
+    s1e = mf.get_ovlp(mol)
+    cput1 = logger.timer(mf, 'initialize scf', *cput0)
+    
+    for cycle in range(max_cycle):
+        dm_last = dm
+        last_hf_e = e_tot
+       
+        fock = mf.get_fock(h1e, s1e, vhf, dm)
+        mo_basis_fock=(mo_coeff.T.dot(fock)).dot(mo_coeff)
+        I=numpy.identity(N-asn)
+        reduced_mo_basis_fock=mo_basis_fock[numpy.ix_(~numpy.isin(numpy.arange(mo_basis_fock.shape[0]),as_list),~numpy.isin(numpy.arange(mo_basis_fock.shape[1]),as_list))]
+        new_mo_energy, mo_basis_new_mo_coeff=mf.eig(reduced_mo_basis_fock,I)
+        reduced_mo_coeff=numpy.delete(mo_coeff,as_list,axis=1)
+        new_mo_coeff=reduced_mo_coeff.dot(mo_basis_new_mo_coeff)
+        
+ 
+
+        for i in as_list:
+            new_mo_coeff=numpy.insert(new_mo_coeff,i, mo_coeff[:,i],axis=1)
+        mo_coeff=new_mo_coeff
+
+
+        as_fock_energy=lib.einsum('ai,aj,ij->a',numpy.conjugate(mo_coeff.T),mo_coeff.T,fock)
+        for i in as_list:
+            new_mo_energy=numpy.insert(new_mo_energy,i,as_fock_energy[i])
+        mo_energy = new_mo_energy
+
+        core_mo_coeff = mo_coeff[:,:ncore]
+        dm_core = (core_mo_coeff).dot(core_mo_coeff.conj().T)
+        dm =numpy.asarray((dm_core + as_dm_a, dm_core + as_dm_b))
+        #dm = mf.make_rdm1(mo_coeff,mo_occ)
+        vhf = mf.get_veff(mol, dm, dm_last, vhf)
+        e_tot = mf.energy_tot(dm, h1e, vhf)
+
+        fock_last = fock
+        fock = mf.get_fock(h1e, s1e, vhf, dm)
+        norm_ddm = numpy.linalg.norm(dm-dm_last)
+        logger.info(mf, 'cycle= %d E= %.15g  delta_E= %4.3g |ddm|= %4.3g',
+                    cycle+1, e_tot, e_tot-last_hf_e, norm_ddm)
+        if abs(e_tot-last_hf_e) < conv_tol and norm_ddm < numpy.sqrt(conv_tol):
+            scf_conv = True
+
+        cput1 = logger.timer(mf, 'cycle= %d'%(cycle+1), *cput1)
+
+        if scf_conv:
+            break
+
+    if scf_conv and conv_check:
+        # An extra diagonalization, to remove level shift
+        #fock = mf.get_fock(h1e, s1e, vhf, dm)  # = h1e + vhf
+        mo_basis_fock=(mo_coeff.T.dot(fock)).dot(mo_coeff)
+        I=numpy.identity(N-asn)
+        reduced_mo_basis_fock=mo_basis_fock[numpy.ix_(~numpy.isin(numpy.arange(mo_basis_fock.shape[0]),as_list),~numpy.isin(numpy.arange(mo_basis_fock.shape[1]),as_list))]
+
+        new_mo_energy, mo_basis_new_mo_coeff=mf.eig(reduced_mo_basis_fock,I)
+        reduced_mo_coeff=numpy.delete(mo_coeff,as_list,axis=1)
+        new_mo_coeff=reduced_mo_coeff.dot(mo_basis_new_mo_coeff)
+
+
+
+        for i in as_list:
+            new_mo_coeff=numpy.insert(new_mo_coeff,i,mo_coeff[:,i],axis=1)
+
+        mo_coeff=new_mo_coeff
+            
+        AS_fock_energy=lib.einsum('ai,aj,ij->a',numpy.conjugate(mo_coeff.T),mo_coeff.T,fock)
+        for i in as_list:
+            new_mo_energy=numpy.insert(new_mo_energy,i,AS_fock_energy[i])
+        mo_energy=new_mo_energy
+        dm_last = dm
+        core_mo_coeff = mo_coeff[:,:ncore]
+        dm_core = (core_mo_coeff * 2).dot(core_mo_coeff.conj().T)
+        dm = (dm_core / 2 + as_dm_a, dm_core / 2 + as_dm_b)
+        
+        vhf = mf.get_veff(mol, dm,dm_last,vhf)
+        e_tot, last_hf_e = mf.energy_tot(dm, h1e, vhf), e_tot
+        fock = mf.get_fock(h1e, s1e, vhf, dm)
+        norm_ddm = numpy.linalg.norm(dm-dm_last)
+
+        if abs(e_tot-last_hf_e) < conv_tol or norm_ddm < conv_tol_grad:
+            scf_conv = True
+        logger.info(mf, 'Extra cycle  E= %.15g  delta_E= %4.3g |ddm|= %4.3g',
+                    e_tot, e_tot-last_hf_e, norm_ddm)
+    logger.timer(mf, 'scf_cycle', *cput0)
+
+    if scf_conv==False:
+        mo_coeff = sfnoci.mo_coeff
+
+    
+    return scf_conv, e_tot, mo_energy, mo_coeff
+
+# def optimize_mo(mf,mo_energy,mo_coeff,as_list,core_list,nelecas,mode=0,conv_tol = 1e-10, max_cycle = 100, groupA = None, thres = 0.2):
+#     n_as = len(as_list)
+#     n_ase = nelecas[0] + nelecas[1]
+#     N = mo_coeff.shape[0]
+#     po_list = possible_occ(n_as, n_ase)
+#     p = len(po_list)
+#     group = None
+#     if groupA is None:
+#        optimized_mo=numpy.zeros((p,N,N))
+#        #SF-NOCI
+#        if mode == 0:
+#           for i, occ in enumerate(po_list):
+#               conv, et, moe, moce, moocc = FASSCF(mf,as_list,core_list,mo_energy,mo_coeff,occ,conv_tol = conv_tol,max_cycle = max_cycle )
+#               print(conv, et)
+#               optimized_mo[i]=moce
+#               print("occuped pattern index:")
+#               print(i)
+#        #SF-CAS
+#        if mode==1:
+#           for i, occ in enumerate(po_list):
+#               optimized_mo[i]=mo_coeff
+#     else :
+#         if isinstance(groupA, str):
+#             group = grouping_by_lowdin(mf.mol,mo_coeff[:,as_list],po_list, groupA, thres= thres)
+#         elif isinstance(groupA, list):
+#             group = grouping_by_occ(po_list,groupA)
+#         else: NotImplementedError
+#         g = len(group)
+#         optimized_mo = numpy.zeros((g,N,N))
+#         for i in range(0,g):
+#             if mode == 0:
+#                 occ = group_occ(po_list,group[i])
+#                 conv, et, moe, moce, moocc = FASSCF(mf,as_list,core_list,mo_energy,mo_coeff,occ,conv_tol = conv_tol,max_cycle = max_cycle )
+#                 print(conv, et)
+#                 optimized_mo[i]=moce
+#                 print(occ)
+#             if mode == 1:
+#                 optimized_mo[i] = mo_coeff
+#             print("occuped pattern index:")
+#             print(i)
+#     return optimized_mo, po_list, group 
+
+def optimize_mo(sfnoci, mo_coeff = None, ncas = None, nelecas = None, ncore = None, groupA = None, debug = False):
+      if mo_coeff is None : mo_coeff = sfnoci.mo_coeff
+      if ncas is None : ncas = sfnoci.ncas
+      if nelecas is None : nelecas = sfnoci.nelecas
+      if ncore is None : ncore = sfnoci.ncore
+      if groupA is None : groupA = sfnoci._groupA
+      po_list = possible_occ(ncas, nelecas[0] + nelecas[1])
+      N=mo_coeff.shape[0]
+      p = len(po_list)
+      group = None
+      if groupA is None :
+            optimized_mo=numpy.zeros((p,N,N))
+            #SF-CAS
+            if debug:
+                for i, occ in enumerate(po_list):
+                    optimized_mo[i]=mo_coeff
+            #SF-NOCI
+            else:
+               for i, occ in enumerate(po_list):
+                conv, et, moe, moce, moocc = sfnoci.FASSCF(occ, mo_coeff, ncas, ncore, conv_tol= sfnoci.fcisolver.conv_tol , max_cycle= sfnoci.fcisolver.max_cycle)
                 print(conv, et)
                 optimized_mo[i]=moce
-                print(occ)
-            if mode == 1:
+                print("occuped pattern index:")
+                print(i)
+        
+      else:
+          if isinstance(groupA, str):
+            group = grouping_by_lowdin(sfnoci.mol,mo_coeff[:,ncore:ncore+ncas],po_list, groupA, thres= sfnoci._thres)
+          elif isinstance(groupA, list):
+            group = grouping_by_occ(po_list,groupA)
+          else: NotImplementedError
+          g = len(group)
+          optimized_mo = numpy.zeros((g,N,N))
+          for i in range(0,g):
+            #SF-CAS
+            if debug:
                 optimized_mo[i] = mo_coeff
-            print("occuped pattern index:")
-            print(i)
-    return optimized_mo, po_list, group 
+            #SF-GNOCI
+            else:
+                conv, et, moe, moce = StateAverage_FASSCF(sfnoci, i, po_list, group, mo_coeff, ncas, nelecas, ncore, 
+                                                          conv_tol= sfnoci.fcisolver.conv_tol , max_cycle= sfnoci.fcisolver.max_cycle)
+                print(conv, et)
+                optimized_mo[i]=moce
+                print("occuped pattern index:")
+                print(i)
+
+      return optimized_mo, po_list, group 
 
 #def _construct_block_hamiltonian(mol,nelec,n_as,po_list,h1c,eri,ov_list,Kc,group):
 #    stringsa = cistring.make_strings(range(n_as),nelec[0])
@@ -687,16 +886,16 @@ def h1e_for_sfnoci(sfnoci, dmet_act_list=None, mo_list=None, dmet_core_list=None
     if ncas is None : ncas = sfnoci.ncas
     if ncore is None : ncore = sfnoci.ncore
     if mo_list is None:
-        mo_list, po_list, group = self.optimize_mo(self.mo_coeff)
+        mo_list, po_list, group = sfnoci.optimize_mo(sfnoci.mo_coeff)
     if dmet_core_list is None:
-        dmet_core_list, ov_list = self.get_svd_matrices(mo_list, group)
+        dmet_core_list, ov_list = sfnoci.get_svd_matrices(mo_list, group)
     if dmet_act_list is None:
-        dmet_act_list = sfnoci.get_active_dm(self.mo_coeff)
+        dmet_act_list = sfnoci.get_active_dm(sfnoci.mo_coeff)
     p = dmet_core_list.shape[0]           
     mo_cas = mo_list[0][:,ncore:ncore+ncas]
     hcore = sfnoci.get_hcore()
     h1e = numpy.zeros((p,p,ncas,ncas))       
-    energy_core = numpy.zeros(p)
+    ecore_list = numpy.zeros(p)
     energy_nuc = sfnoci.energy_nuc()   
     ha1e = lib.einsum('ai,ab,bj->ij',mo_cas,hcore,mo_cas)      
     
@@ -705,12 +904,12 @@ def h1e_for_sfnoci(sfnoci, dmet_act_list=None, mo_list=None, dmet_core_list=None
             corevhf = sfnoci.get_veff(dm = 2 * dmet_core_list[i,j])
             h1e[i,j] = ha1e + lib.einsum('ijab,ab -> ij', dmet_act_list , corevhf)
             if i==j:
-                 energy_core[i] += lib.einsum('ab,ab -> ', dmet_core_list[i,i],corevhf)
-                 energy_core[i] += energy_nuc
-                 energy_core[i] += 2*lib.einsum('ab,ab->', dmet_core_list[i,i], hcore)   
+                 ecore_list[i] += lib.einsum('ab,ab -> ', dmet_core_list[i,i],corevhf)
+                 ecore_list[i] += energy_nuc
+                 ecore_list[i] += 2*lib.einsum('ab,ab->', dmet_core_list[i,i], hcore)   
     sfnoci.h1e = h1e
-    sfnoci.core_energies = energy_core
-    return h1e, energy_core
+    sfnoci.core_energies = ecore_list
+    return h1e, ecore_list
                          
 def spin_square(sfnoci, rdm1, rdm2ab,rdm2ba):
     M_s = sfnoci.spin/2
@@ -743,7 +942,7 @@ class SFNOCI(CASBase):
       self.stdout = mol.stdout
       self.max_memory = mf.max_memory
       self.ncas = ncas
-      self._groupA = None 
+      self._groupA = groupA 
       if isinstance(nelecas, (int, numpy.integer)):
          raise NotImplementedError 
       else:
@@ -757,7 +956,7 @@ class SFNOCI(CASBase):
       self.fcisolver.max_cycle = getattr(__config__,
                                          'sfnoci_SFNOCI_fcisolver_max_cycle', 100)
       self.fcisolver.conv_tol = getattr(__config__,
-                                        'sfnoci_SFNOCI_fcisolver_conv_tol', 1e-10)
+                                        'sfnoci_SFNOCI_fcisolver_conv_tol', 5e-7)
 
 ################################################## don't modify the following attributes, they are not input options
       self.e_tot = 0       
@@ -818,17 +1017,18 @@ class SFNOCI(CASBase):
 
   def optimize_mo(self, mo_coeff=None, debug=False, groupA=None, conv_tol=1e-10, max_cycle=100):
       if mo_coeff is None : mo_coeff = self.mo_coeff
-      if groupA is None : groupA = self.groupA
+      if groupA is None : groupA = self._groupA
       mode = 0
       if debug : mode = 1 
       mf = self._scf
-      mo_energy = mf.mo_energy
+      #mo_energy = mf.mo_energy
+      nelecas = self.nelecas
       ncore = self.ncore
-      ncas = self.ncas       
-      as_list = numpy.array(range(ncore,ncore + ncas))       
-      core_list = numpy.array(range(0,ncore))
-      mo_list, po_list, group = optimize_mo(self._scf,mo_energy,mo_coeff,as_list,core_list,self.nelecas, mode, conv_tol=conv_tol, max_cycle=max_cycle, groupA=groupA, thres=self.lowdin_thres)
-      self.AS_mo_coeff = mo_list[0][:,as_list]
+      ncas = self.ncas
+      mo_list, po_list, group = optimize_mo(self, mo_coeff, ncas, nelecas, ncore, groupA, debug)       
+    #   as_list = numpy.array(range(ncore,ncore + ncas))       
+    #   core_list = numpy.array(range(0,ncore))
+    #   mo_list, po_list, group = optimize_mo(self._scf,mo_energy,mo_coeff,as_list,core_list,self.nelecas, mode, conv_tol=conv_tol, max_cycle=max_cycle, groupA=groupA, thres=self.lowdin_thres)
       return mo_list, po_list, group
                  
   def get_svd_matrices(self, mo_list=None, po_list_or_group=None):
@@ -979,14 +1179,14 @@ class SFNOCI(CASBase):
 #                           pspace_size= pspace_size, ecore= ecore, verbose=self.verbose, **kwargs)
 #      return e, c
 
-  def make_rdm1s(self, mo_coeff=None, ci=None, ncas=None, nelecas=None, 
+  def make_rdm1s(self, ci, mo_coeff=None, ncas=None, nelecas=None, 
                  ncore=None, dmet_core_list=None, po_list=None, ov_list=None, group=None):
       if ncas is None : ncas = self.ncas
       if nelecas is None : nelecas = self.nelecas
       if ncore is None : ncore = self.ncore
-      if ci is None : ci = self.ci
-      if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
-          ci = ci[:,0]
+      #if ci is None : ci = self.ci
+      #if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
+      #    ci = ci[:,0]
       if mo_coeff is None : mo_coeff = self.mo_coeff  
       if po_list is None or group is None:
           mo_list, po_list, group = self.optimize_mo(mo_coeff)
@@ -998,14 +1198,14 @@ class SFNOCI(CASBase):
                                     ncore, dmet_core_list, po_list, ov_list, group)
       return rdm1a, rdm1b
 
-  def make_rdm1(self, mo_coeff=None, ci=None, ncas=None, nelecas=None,
+  def make_rdm1(self, ci, mo_coeff=None, ncas=None, nelecas=None,
                 ncore=None, dmet_core_list=None, po_list=None, ov_list=None, group=None):
       if ncas is None : ncas = self.ncas
       if nelecas is None : nelecas = self.nelecas
       if ncore is None : ncore = self.ncore
-      if ci is None : ci = self.ci
-      if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
-          ci = ci[:,0]
+      #if ci is None : ci = self.ci
+      #if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
+      #    ci = ci[:,0]
       if mo_coeff is None : mo_coeff = self.mo_coeff  
       if po_list is None or group is None:
           mo_list, po_list, group = self.optimize_mo(mo_coeff)
@@ -1016,14 +1216,14 @@ class SFNOCI(CASBase):
                                      ncore, dmet_core_list, po_list, ov_list, group)
       return rdm
 
-  def make_rdm2s(self, mo_coeff=None, ci=None, ncas=None, nelecas=None,
+  def make_rdm2s(self, ci, mo_coeff=None , ncas=None, nelecas=None,
                  ncore=None, dmet_core_list=None, po_list=None, ov_list=None, group=None):
       if ncas is None : ncas = self.ncas
       if nelecas is None : nelecas = self.nelecas
       if ncore is None : ncore = self.ncore
-      if ci is None : ci = self.ci
-      if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
-          ci = ci[:,0]
+      #if ci is None : ci = self.ci
+      #if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
+      #    ci = ci[:,0]
       if mo_coeff is None : mo_coeff = self.mo_coeff  
       if po_list is None or group is None:
           mo_list, po_list, group = self.optimize_mo(mo_coeff)
@@ -1035,14 +1235,14 @@ class SFNOCI(CASBase):
                                     ncore, dmet_core_list, po_list, ov_list, group)
       return rdm2aa, rdm2ab, rdm2ba, rdm2bb
   
-  def make_rdm2(self, mo_coeff=None, ci=None, ncas=None, nelecas=None,
+  def make_rdm2(self, ci, mo_coeff=None, ncas=None, nelecas=None,
                 ncore=None, dmet_core_list=None, po_list=None, ov_list=None, group=None):
       if ncas is None : ncas = self.ncas
       if nelecas is None : nelecas = self.nelecas
       if ncore is None : ncore = self.ncore
-      if ci is None : ci = self.ci
-      if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
-          ci = ci[:,0]
+      #if ci is None : ci = self.ci
+      #if isinstance(ci, numpy.ndarray) and ci.ndim != 1:
+      #    ci = ci[:,0]
       if mo_coeff is None : mo_coeff = self.mo_coeff  
       if po_list is None or group is None:
           mo_list, po_list, group = self.optimize_mo(mo_coeff)
@@ -1103,14 +1303,12 @@ if  __name__ == '__main__':
     as_list=[3,6,7,10]
     s1e = mol.intor('int1e_ovlp')
     mySFNOCI = SFNOCI(rm,4,(2,2),groupA = 'Li')
-    mySFNOCI.lowdin_thres= 0.2
+    mySFNOCI.lowdin_thres= 0.5
     mySFNOCI.fcisolver.nroots = 4 
     
     from pyscf.mcscf import addons
     mo = addons.sort_mo(mySFNOCI,rm.mo_coeff, as_list,1)
     reei, _, ci = mySFNOCI.kernel(mo)
-    print(reei)
-
     i=1
     while i <= 4:
         x_list.append(i)
@@ -1122,7 +1320,7 @@ if  __name__ == '__main__':
         m=scf.addons.mom_occ(m,mo0,setocc)
         m.scf(dm_ro)
 
-        mySFNOCI = SFNOCI(m,4,(2,2),groupA = 'Li')
+        mySFNOCI = SFNOCI(m,4,(2,2), groupA = 'Li')
         mySFNOCI.spin = 0
         mySFNOCI.fcisolver.nroots = 4 
         mo = addons.sort_mo(mySFNOCI,m.mo_coeff,as_list,1)
