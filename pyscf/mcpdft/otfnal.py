@@ -330,8 +330,8 @@ class transfnal (otfnal):
             raise NotImplementedError("derivatives above order 1")
 
         R = np.zeros ((nderiv,ngrids), dtype=Pi.dtype)
-        R[0,:] = 1
-        idx = rho_avg[0] >= (1e-15 / 2)
+        R[0,:] = FT_R1
+        idx = (rho_avg[0] >= (1e-15 / 2)) & (Pi[0] > 0.0)
         # Chain rule!
         for ideriv in range (nderiv):
             R[ideriv,idx] = Pi[ideriv,idx] / rho_avg[0,idx] / rho_avg[0,idx]
