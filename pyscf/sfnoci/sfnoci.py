@@ -659,7 +659,7 @@ def optimize_mo(sfnoci, mo_coeff = None, ncas = None, nelecas = None, ncore = No
             #SF-NOCI
             else:
                for i, occ in enumerate(po_list):
-                conv, et, moe, moce, moocc = sfnoci.FASSCF(occ, mo_coeff, ncas, ncore, conv_tol= sfnoci.fcisolver.conv_tol , max_cycle= sfnoci.fcisolver.max_cycle)
+                conv, et, moe, moce, moocc = sfnoci.FASSCF(occ, mo_coeff, ncas, ncore, conv_tol= sfnoci._scf.conv_tol , max_cycle= sfnoci._scf.max_cycle)
                 print(conv, et)
                 optimized_mo[i]=moce
                 print("occuped pattern index:")
@@ -680,7 +680,7 @@ def optimize_mo(sfnoci, mo_coeff = None, ncas = None, nelecas = None, ncore = No
             #SF-GNOCI
             else:
                 conv, et, moe, moce = StateAverage_FASSCF(sfnoci, i, po_list, group, mo_coeff, ncas, nelecas, ncore, 
-                                                          conv_tol= sfnoci.fcisolver.conv_tol , max_cycle= sfnoci.fcisolver.max_cycle)
+                                                          conv_tol= sfnoci._scf.conv_tol , max_cycle= sfnoci._scf.max_cycle)
                 print(conv, et)
                 optimized_mo[i]=moce
                 print("occuped pattern index:")
@@ -1305,7 +1305,7 @@ if  __name__ == '__main__':
     mySFNOCI = SFNOCI(rm,4,(2,2),groupA = 'Li')
     mySFNOCI.lowdin_thres= 0.5
     mySFNOCI.fcisolver.nroots = 4 
-    
+
     from pyscf.mcscf import addons
     mo = addons.sort_mo(mySFNOCI,rm.mo_coeff, as_list,1)
     reei, _, ci = mySFNOCI.kernel(mo)
