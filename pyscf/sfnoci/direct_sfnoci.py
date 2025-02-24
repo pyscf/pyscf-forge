@@ -52,42 +52,7 @@ libsf = lib.load_library("libsfnoci")
 
 PENALTY = getattr(__config__, 'sfnoci_SFNOCI_fix_spin_shift', 0.2)
 
-def find_matching_rows(matrix, target_row):
-    matching_rows = numpy.where((matrix == target_row).all(axis=1))[0]
-    return matching_rows
-
-def str2occ(str0,norb):
-    occ=numpy.zeros(norb)
-    for i in range(norb):
-        if str0 & (1<<i):
-            occ[i]=1
-
-    return occ
- 
-def num_to_group(groups,number):
-    for i, group in enumerate(groups):
-        if number in group:
-            return i
-    return None
-
-def group_info_list(ncas, nelecas, PO, group):
-    stringsa = cistring.make_strings(range(0,ncas), nelecas[0])
-    stringsb = cistring.make_strings(range(0,ncas), nelecas[1])
-    na = len(stringsa)
-    nb = len(stringsb)
-    group_info = numpy.zeros((na,nb))
-    for stra, strsa in enumerate(stringsa):
-        for strb, strsb in enumerate(stringsb):
-            occa = str2occ(stringsa[stra],ncas)
-            occb = str2occ(stringsb[strb],ncas)
-            occ = occa + occb
-            p = find_matching_rows(PO,occ)[0]
-            if group is not None:
-                p = num_to_group(group,p)
-            group_info[stra, strb] = p
-    return group_info
-
-def make_hdiag(h1e, eri, ncas, nelecas, po_list, group, ecore_list, opt=None):
+def make_hdiag(h1e, eri, ncas, nelecas, conf_info_list, ecore_list, opt=None):
     if isinstance(nelecas, (int, numpy.integer)):
         nelecb = nelecas//2
         neleca = nelecas - nelecb
@@ -99,16 +64,14 @@ def make_hdiag(h1e, eri, ncas, nelecas, po_list, group, ecore_list, opt=None):
     diagj = numpy.einsum('iijj->ij', eri)
     diagk = numpy.einsum('ijji->ij', eri)
     hdiag = []
-    for aocc in occslista:
-        for bocc in occslistb:
+    for str0a, aocc in enumerate(occslista):
+        for str0b, bocc in enumerate(occslistb):
             occ = numpy.zeros(ncas)
             for i in aocc:
                 occ[i] += 1
             for i in bocc:
                 occ[i] +=1
-            p = find_matching_rows(po_list,occ)
-            if group is not None:
-                p = num_to_group(group, p)
+            p = conf_info_list[str0a, str0b]
             e1 = h1e[p,p,aocc,aocc].sum() + h1e[p,p,bocc,bocc].sum()
             e2 = diagj[aocc][:,aocc].sum() + diagj[aocc][:,bocc].sum() \
                + diagj[bocc][:,aocc].sum() + diagj[bocc][:,bocc].sum() \
@@ -119,7 +82,7 @@ def make_hdiag(h1e, eri, ncas, nelecas, po_list, group, ecore_list, opt=None):
 def absorb_h1e(h1e, eri, ncas, nelecas, fac=1):
     '''Modify 2e Hamiltonian to include effective 1e Hamiltonian contribution
 
-    input : h1e : (ngroup, ngroup, ncas, ncas)
+    input : h1e : (nbath, nbath, ncas, ncas)
             eri   : (ncas, ncas, ncas, ncas)
 
     return : erieff : (ngroup,ngroup,ncas,ncas,ncas,ncas)
@@ -184,7 +147,7 @@ def python_list_to_c_array(python_list):
             group_sizes[i] = group_size  
         return flat_list, group_sizes, num_groups
  
-def contract_H(erieff, civec, ncas, nelecas, po_list, group, ov_list, ecore_list,
+def contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list,
                link_index=None, ts=None, t_nonzero=None):
     '''Compute H|CI>
     '''
@@ -215,45 +178,25 @@ def contract_H(erieff, civec, ncas, nelecas, po_list, group, ov_list, ecore_list
     civec = numpy.asarray(civec, order = 'C')
     cinew = numpy.zeros_like(civec)
     erieff = numpy.asarray(erieff, order = 'C', dtype= numpy.float64)
-    po_list = numpy.asarray(po_list, order = 'C', dtype=numpy.int32)
-    po_nrows = po_list.shape[0]
-    cgroup, group_sizes, num_groups = python_list_to_c_array(group)
+    conf_info_list = numpy.asarray(conf_info_list, order = 'C', dtype = numpy.int32)
     stringsa = cistring.make_strings(range(ncas),neleca)
     stringsb = cistring.make_strings(range(ncas),nelecb)
-    # t2aa = numpy.zeros((ncas,ncas,ncas,ncas,na,na), dtype=numpy.int32)
-    # t2bb = numpy.zeros((ncas,ncas,ncas,ncas,nb,nb),dtype=numpy.int32)
-    # t1a = numpy.zeros((ncas,ncas,na,na),dtype=numpy.int32)
-    # t1b = numpy.zeros((ncas,ncas,nb,nb),dtype=numpy.int32) 
-    # for str0a , taba in enumerate(link_indexa):
-    #       for a1, i1, str1a, signa1 in link_indexa[str0a]:
-    #           t1a[a1,i1,str1a,str0a] += signa1 
-    #           for a2 , i2, str2a, signa2 in link_indexa[str1a]:
-    #               t2aa[a2, i2, a1, i1, str2a, str0a] += signa1 * signa2
-    # for str0b , tabb in enumerate(link_indexb):
-    #       for a1, i1, str1b, signb1 in link_indexb[str0b]:
-    #           t1b[a1,i1,str1b,str0b] += signb1
-    #           for a2 , i2, str2b, signb2 in link_indexb[str1b]:
-    #               t2bb[a2, i2, a1, i1, str2b, str0b] += signb1 * signb2
-    # t1a_nonzero = numpy.array(numpy.array(numpy.nonzero(t1a)).T, order = 'C', dtype = numpy.int32)
-    # t1b_nonzero = numpy.array(numpy.array(numpy.nonzero(t1b)).T, order = 'C', dtype = numpy.int32)
-    # t2aa_nonzero = numpy.array(numpy.array(numpy.nonzero(t2aa)).T, order = 'C', dtype = numpy.int32)
-    # t2bb_nonzero = numpy.array(numpy.array(numpy.nonzero(t2bb)).T, order = 'C', dtype = numpy.int32)
     t1ann = t1a_nonzero.shape[0]
     t1bnn = t1b_nonzero.shape[0]
     t2aann = t2aa_nonzero.shape[0]
     t2bbnn = t2bb_nonzero.shape[0]
     ov_list = numpy.asarray(ov_list, order = 'C', dtype=numpy.float64)
     ecore_list = numpy.asarray(ecore_list, order = 'C', dtype=numpy.float64)
-
+    mo_num = erieff.shape[0]
     libsf.SFNOCIcontract_H_spin1(erieff.ctypes.data_as(ctypes.c_void_p),
          civec.ctypes.data_as(ctypes.c_void_p),
          cinew.ctypes.data_as(ctypes.c_void_p),
          ctypes.c_int(ncas),
          ctypes.c_int(neleca), ctypes.c_int(nelecb),
-         po_list.ctypes.data_as(ctypes.c_void_p),ctypes.c_int(po_nrows),
+         conf_info_list.ctypes.data_as(ctypes.c_void_p),
          ctypes.c_int(na), stringsa.ctypes.data_as(ctypes.c_void_p), 
          ctypes.c_int(nb), stringsb.ctypes.data_as(ctypes.c_void_p),
-         cgroup, group_sizes, ctypes.c_int(num_groups),
+         ctypes.c_int(mo_num),
          t1a.ctypes.data_as(ctypes.c_void_p), 
          t1a_nonzero.ctypes.data_as(ctypes.c_void_p), ctypes.c_int(t1ann),
          t1b.ctypes.data_as(ctypes.c_void_p), 
@@ -265,7 +208,7 @@ def contract_H(erieff, civec, ncas, nelecas, po_list, group, ov_list, ecore_list
          ov_list.ctypes.data_as(ctypes.c_void_p), ecore_list.ctypes.data_as(ctypes.c_void_p))
     return cinew
 
-def contract_H_slow(erieff, civec, ncas, nelecas, PO, group, TSc, energy_core, link_index=None):
+def contract_H_slow(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list, link_index=None):
     '''Compute H|CI>
     '''
     if isinstance(nelecas, (int, numpy.integer)):
@@ -304,58 +247,27 @@ def contract_H_slow(erieff, civec, ncas, nelecas, PO, group, TSc, energy_core, l
     t2bb_nonzero = numpy.array(numpy.nonzero(t2bb)).T
     for aa, ia, str1a, str0a in t1a_nonzero:
         for ab, ib, str1b, str0b in t1b_nonzero:
-            w_occa = str2occ(stringsa[str0a],ncas)
-            w_occb = str2occ(stringsb[str0b],ncas)
-            x_occa = str2occ(stringsa[str1a],ncas)
-            x_occb = str2occ(stringsb[str1b],ncas)
-            x_occ = x_occa + x_occb
-            w_occ = w_occa + w_occb
-            p1 = find_matching_rows(PO,x_occ)[0]
-            p2 = find_matching_rows(PO,w_occ)[0]
-            if group is not None:
-                p1 = num_to_group(group,p1)
-                p2 = num_to_group(group,p2)
-           
+            p1 = conf_info_list[str1a, str1b]
+            p2 = conf_info_list[str0a, str0b]
             cinew[str1a,str1b] += civec[str0a,str0b] * erieff[p1,p2,aa,ia,ab,ib] *t1a[aa,ia,str1a,str0a]* t1b[ab,ib,str1b,str0b] * TSc[p1,p2] *2
     for a1, i1, a2,i2, str1a, str0a in t2aa_nonzero:
         for str0b, stringb in enumerate(stringsb):
-            w_occa = str2occ(stringsa[str0a],ncas)
-            w_occb = str2occ(stringsb[str0b],ncas)
-            x_occa = str2occ(stringsa[str1a],ncas)
-            x_occ = x_occa + w_occb
-            w_occ = w_occa + w_occb
-            p1 = find_matching_rows(PO,x_occ)[0]
-            p2 = find_matching_rows(PO,w_occ)[0]
-            if group is not None:
-                p1 = num_to_group(group,p1)
-                p2 = num_to_group(group,p2)
+            p1 = conf_info_list[str1a, str0b]
+            p2 = conf_info_list[str0a, str0b]
             cinew[str1a,str0b] += civec[str0a,str0b] * erieff[p1,p2,a1,i1,a2,i2] *t2aa[a1,i1,a2,i2,str1a,str0a] * TSc[p1,p2]
     for a1, i1, a2,i2, str1b, str0b in t2bb_nonzero:
         for str0a, stringa in enumerate(stringsa):
-            w_occa = str2occ(stringsa[str0a],ncas)
-            w_occb = str2occ(stringsb[str0b],ncas)
-            x_occb = str2occ(stringsb[str1b],ncas)
-            x_occ = w_occa + x_occb
-            w_occ = w_occa + w_occb
-            p1 = find_matching_rows(PO,x_occ)[0]
-            p2 = find_matching_rows(PO,w_occ)[0]
-            if group is not None:
-                p1 = num_to_group(group,p1)
-                p2 = num_to_group(group,p2)
+            p1 = conf_info_list[str0a, str1b]
+            p2 = conf_info_list[str0a, str0b]
             cinew[str0a,str1b] += civec[str0a,str0b] * erieff[p1,p2,a1,i1,a2,i2]* t2bb[a1,i1,a2,i2,str1b,str0b] * TSc[p1,p2]
     for str0a, stringa in enumerate(stringsa):
         for str0b, stringb in enumerate(stringsb):
-            w_occa = str2occ(stringsa[str0a],ncas)
-            w_occb = str2occ(stringsb[str0b],ncas)
-            w_occ = w_occa + w_occb
-            p = find_matching_rows(PO,w_occ)[0]
-            if group is not None:
-                p = num_to_group(group,p)
-            cinew[str0a,str0b] += energy_core[p] * civec[str0a,str0b]
+            p = conf_info_list[str0a, str0b]
+            cinew[str0a,str0b] += ecore_list[p] * civec[str0a,str0b]
     cinew.reshape(-1)
     return cinew
 
-def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, po_list, group, ov_list, ecore_list,
+def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecore_list,
                   ci0=None, link_index=None, tol=None, lindep=None, 
                   max_cycle=None, max_space=None, nroots=None, 
                   davidson_only=None, pspace_size=None, hop=None,
@@ -363,13 +275,21 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, po_list, group, ov_list, ecor
     '''
     Args:
         h1e: ndarray
-            1-electron Hamiltonian
+            effective 1-electron Hamiltonian defined in SF-NOCI space : (nbath, nbath, N, N)
         eri: ndarray
             2-electron integrals in chemist's notation
-        norb: int
-            Number of orbitals
-        nelec: int or (int, int)
-            Number of electrons of the system
+        ncas: int
+            Number of active orbitals
+        nelecas: (int, int)
+            Number of active electrons of the system
+        conf_info_list : ndarray, (nstringsa, nstringsb)
+            The optimized bath orbitals indices for each configuration.
+        ov_list : ndarray (nbath, nbath)
+            overlap matrix between different baths.
+        ecore_list : ndarray (nbath)
+            1D numpy array of core energies for each bath 
+
+
 
     Kwargs:
         ci0: ndarray
@@ -407,7 +327,7 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, po_list, group, ov_list, ecor
     log = logger.new_logger(sfnoci, verbose)
     nelec = nelecas
     assert (0 <= nelec[0] <= ncas and 0 <= nelec[1] <= ncas)
-    hdiag = sfnoci.make_hdiag(h1e, eri, ncas, nelec, po_list, group, ecore_list).ravel()
+    hdiag = sfnoci.make_hdiag(h1e, eri, ncas, nelec, conf_info_list, ecore_list).ravel()
     num_dets = hdiag.size
     civec_size = num_dets
     precond = sfnoci.make_precond(hdiag)
@@ -427,7 +347,7 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, po_list, group, ov_list, ecor
     if hop is None:
         cpu0 = [logger.process_clock(), logger.perf_counter()]
         def hop(c):
-            hc = sfnoci.contract_H(erieff, c, ncas, nelecas, po_list, group, 
+            hc = sfnoci.contract_H(erieff, c, ncas, nelecas, conf_info_list, 
                                    ov_list, ecore_list,link_index, ts, t_nonzero)
             cpu0[:] = log.timer_debug1('contract_H', *cpu0)
             return hc.ravel()
@@ -454,7 +374,7 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, po_list, group, ov_list, ecor
                        tol_residual=None, **kwargs)
     return e, c
 
-def make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group):
+def make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
     N = mo_coeff.shape[0]
     mo_cas = mo_coeff[:,ncore:ncore+ncas]
     stringsa = cistring.make_strings(range(ncas),nelecas[0])
@@ -467,12 +387,7 @@ def make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_l
     ci = ci.reshape(na,nb)
     for str0a, strsa in enumerate(stringsa):
         for str0b, strsb in enumerate(stringsb):
-            w_occa = str2occ(strsa,ncas)
-            w_occb = str2occ(strsb,ncas)
-            w_occ = w_occa + w_occb
-            p = find_matching_rows(po_list,w_occ)[0]
-            if group is not None: 
-                     p = num_to_group(group,p)
+            p = conf_info_list[str0a, str0b]
             rdm1c += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b]*dmet_core_list[p,p]
   
     rdm1asmoa = numpy.zeros((ncas,ncas))
@@ -480,30 +395,14 @@ def make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_l
     for str0a , taba in enumerate(link_indexa):
         for aa, ia, str1a, signa in link_indexa[str0a]:
             for str0b, strsb in enumerate(stringsb):
-                w_occa = str2occ(stringsa[str0a],ncas)
-                w_occb = str2occ(strsb,ncas)
-                x_occa = str2occ(stringsa[str1a],ncas)
-                x_occ = x_occa + w_occb
-                w_occ = w_occa + w_occb   
-                p1 = find_matching_rows(po_list,x_occ)[0]
-                p2 = find_matching_rows(po_list,w_occ)[0]
-                if group is not None: 
-                     p1 = num_to_group(group,p1)
-                     p2 = num_to_group(group,p2) 
+                p1 = conf_info_list[str1a, str0b]
+                p2 = conf_info_list[str0a, str0b]
                 rdm1asmoa[aa,ia] += signa * numpy.conjugate(ci[str1a,str0b]) * ci[str0a,str0b] * ov_list[p1,p2]
     for str0b, tabb in enumerate(link_indexb):
         for ab, ib, str1b, signb in link_indexb[str0b]:
             for str0a, strsa in enumerate(stringsa):
-                w_occa = str2occ(strsa,ncas)
-                w_occb = str2occ(stringsb[str0b],ncas)
-                x_occb = str2occ(stringsb[str1b],ncas)
-                x_occ = w_occa + x_occb
-                w_occ = w_occa + w_occb  
-                p1 = find_matching_rows(po_list,x_occ)[0]
-                p2 = find_matching_rows(po_list,w_occ)[0] 
-                if group is not None: 
-                     p1 = num_to_group(group,p1)
-                     p2 = num_to_group(group,p2)       
+                p1 = conf_info_list[str0a, str1b]
+                p2 = conf_info_list[str0a, str0b]
                 rdm1asmob[ab,ib] += signb * numpy.conjugate(ci[str0a,str1b]) * ci[str0a,str0b] * ov_list[p1,p2]
     rdm1a = lib.einsum('ia,ab,jb -> ij', numpy.conjugate(mo_cas),rdm1asmoa,mo_cas)
     rdm1b = lib.einsum('ia,ab,jb-> ij', numpy.conjugate(mo_cas),rdm1asmob,mo_cas)
@@ -512,11 +411,11 @@ def make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_l
     
     return rdm1a, rdm1b
 
-def make_rdm1(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group):
-    rdm1a, rdm1b = make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group)
+def make_rdm1(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
+    rdm1a, rdm1b = make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
     return rdm1a + rdm1b
 
-def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, po_list, ov_list, group):
+def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, conf_info_list, ov_list):
     mo_cas = mo_coeff[:,ncore:ncore+ncas]
     N = mo_coeff.shape[0]
     rdm2aa = numpy.zeros((N,N,N,N))
@@ -551,47 +450,24 @@ def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, po_list, ov_
                 t2bb[a2, i2, a1, i1, str2b, str0b] += signb1 * signb2
     for str0a, strs0a in enumerate(stringsa):
         for str0b, strs0b in enumerate(stringsb):
-            w_occa = str2occ(strs0a,ncas)
-            w_occb = str2occ(strs0b,ncas)
-            w_occ = w_occa + w_occb
-            p2 = find_matching_rows(po_list,w_occ)[0]
-            if group is not None: 
-               p2 = num_to_group(group,p2) 
+            p2 = conf_info_list[str0a, str0b]
             rdm2aa += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * (lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]) - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])) 
             rdm2ab += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * lib.einsum('pq,rs -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
             rdm2ba += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * lib.einsum('pq,rs -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
             rdm2bb += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * (lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]) - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))  
             for str1a, strs1a in enumerate(stringsa):
-                x_occa = str2occ(strs1a,ncas)
-                x_occ = x_occa + w_occb
-                p1 = find_matching_rows(po_list,x_occ)[0]
-                if group is not None: 
-                     p1 = num_to_group(group,p1)
+                p1 = conf_info_list[str1a, str0b]
                 rdm2aaac[:,:,:,:] += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*t2aa[:,:,:,:,str1a,str0a]*ov_list[p1,p2]
                 for k in range(ncas):
                     rdm2aaac[:,k,k,:] -= numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*t1a[:,:,str1a,str0a]*ov_list[p1,p2]
             for str1b, strs1b in enumerate(stringsb):
-                x_occb = str2occ(strs1b,ncas)
-                x_occ = w_occa + x_occb
-                p1 = find_matching_rows(po_list,x_occ)[0]
-                if group is not None: 
-                     p1 = num_to_group(group,p1)
+                p1 = conf_info_list[str0a, str1b]
                 rdm2bbac[:,:,:,:] += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]*t2bb[:,:,:,:,str1b,str0b]*ov_list[p1,p2]
                 for k in range(ncas):
                     rdm2bbac[:,k,k,:] -= numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b] * t1b[:,:,str1b,str0b]*ov_list[p1,p2]
             for str1a, strs1a in enumerate(stringsa):
-                for str1b, strs1b in enumerate(stringsb):
-                    w_occa = str2occ(strs0a,ncas)
-                    w_occb = str2occ(strs0b,ncas)
-                    x_occa = str2occ(strs1a,ncas)
-                    x_occb = str2occ(strs1b,ncas)
-                    w_occ = w_occa + w_occb
-                    x_occ = x_occa + x_occb
-                    p1 = find_matching_rows(po_list,x_occ)[0] 
-                    p2 = find_matching_rows(po_list,w_occ)[0]
-                    if group is not None: 
-                       p1 = num_to_group(group,p1)
-                       p2 = num_to_group(group,p2)  
+                for str1b, strs1b in enumerate(stringsb): 
+                    p1 = conf_info_list[str1a, str1b]
                     rdm2abac += numpy.conjugate(ci[str1a,str1b])*ci[str0a,str0b]*lib.einsum('pq,rs-> pqrs',t1a[:,:,str1a,str0a],t1b[:,:,str1b,str0b])*ov_list[p1,p2]
                     rdm2baac += numpy.conjugate(ci[str1a,str1b])*ci[str0a,str0b]*lib.einsum('pq,rs-> pqrs',t1b[:,:,str1b,str0b],t1a[:,:,str1a,str0a])*ov_list[p1,p2]
     
@@ -606,42 +482,26 @@ def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, po_list, ov_
     for str0a, taba in enumerate(link_indexa):
         for str1a in numpy.unique(link_indexa[str0a][:,2]):
             for str0b, strsb in enumerate(stringsb):
-                w_occa = str2occ(stringsa[str0a],ncas)
-                w_occb = str2occ(strsb,ncas)
-                x_occa = str2occ(stringsa[str1a],ncas)
-                x_occ = x_occa + w_occb
-                w_occ = w_occa + w_occb   
-                p1 = find_matching_rows(po_list,x_occ)[0]
-                p2 = find_matching_rows(po_list,w_occ)[0]
-                if group is not None: 
-                     p1 = num_to_group(group,p1)
-                     p2 = num_to_group(group,p2) 
-                rdm2aa += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*(lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])+lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],W[p1,p2,:,:])-lib.einsum('ps,rq->pqrs',t1aao[:,:,str1a,str0a],W[p1,p2,:,:])-lib.einsum('rq,ps->pqrs',t1aao[:,:,str1a,str0a],W[p1,p2,:,:]))*TSc[p1,p2]
+                p1 = conf_info_list[str1a, str0b]
+                p2 = conf_info_list[str0a, str0b]
+                rdm2aa += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*(lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])+lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])-lib.einsum('ps,rq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])-lib.einsum('rq,ps->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
                 rdm2ab += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*(lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
                 rdm2ba += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*(lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
   
     for str0b, tabb in enumerate(link_indexb):
         for str1b in numpy.unique(link_indexb[str0b][:,2]):
             for str0a, strsa, in enumerate(stringsa):
-                w_occa = str2occ(strsa,ncas)
-                w_occb = str2occ(stringsb[str0b],ncas)
-                x_occb = str2occ(stringsb[str1b],ncas)
-                x_occ = w_occa + x_occb
-                w_occ = w_occa + w_occb  
-                p1 = find_matching_rows(po_list,x_occ)[0]
-                p2 = find_matching_rows(po_list,w_occ)[0]
-                if group is not None: 
-                     p1 = num_to_group(group,p1)
-                     p2 = num_to_group(group,p2)  
-                rdm2bb += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]* (lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])+lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],W[p1,p2,:,:])-lib.einsum('ps,rq->pqrs',t1bao[:,:,str1b,str0b],W[p1,p2,:,:])-lib.einsum('rq,ps->pqrs',t1bao[:,:,str1b,str0b],W[p1,p2,:,:]))*TSc[p1,p2]
+                p1 = conf_info_list[str0a, str0b]
+                p2 = conf_info_list[str0a, str1b]
+                rdm2bb += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]* (lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])+lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])-lib.einsum('ps,rq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])-lib.einsum('rq,ps->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
                 rdm2ab += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]* (lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
                 rdm2ba += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]* (lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
     
     return rdm2aa, rdm2ab, rdm2ba, rdm2bb
 
-def make_rdm2(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group):
+def make_rdm2(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
     rdm2aa, rdm2ab, rdm2ba, rdm2bb = \
-        make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,dmet_core_list, po_list, ov_list, group)
+        make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,dmet_core_list, conf_info_list, ov_list)
     return rdm2aa + rdm2ab + rdm2ba + rdm2bb
 
 def fix_spin(fciobj, shift=PENALTY, ss=None, **kwargs):
@@ -696,8 +556,8 @@ def fix_spin_(fciobj, shift=.1, ss=None):
 class SFNOCISolver(FCISolver):
   '''SF-NOCI
   '''
-  def make_hdiag(self, h1e, eri, ncas, nelecas, po_list, group, ecore_list, opt=None):
-      return make_hdiag(h1e, eri, ncas, nelecas, po_list, group, ecore_list, opt)
+  def make_hdiag(self, h1e, eri, ncas, nelecas, conf_info_list, ecore_list, opt=None):
+      return make_hdiag(h1e, eri, ncas, nelecas, conf_info_list, ecore_list, opt)
   
   def make_precond(self, hdiag, level_shift=0):
       return lib.make_diag_precond(hdiag, level_shift)
@@ -705,9 +565,9 @@ class SFNOCISolver(FCISolver):
   def absorb_h1e(self, h1e, eri, ncas, nelecas, fac=1):
       return absorb_h1e(h1e, eri, ncas, nelecas, fac)
 
-  def contract_H(self, erieff, civec, ncas, nelecas, po_list, group, ov_list, 
+  def contract_H(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list, 
                  ecore_list, link_index=None, ts=None, t_nonzero=None):
-      return contract_H(erieff, civec, ncas, nelecas, po_list, group, ov_list, 
+      return contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, 
                         ecore_list ,link_index, ts, t_nonzero)
 
   def get_init_guess(self, ncas, nelecas, nroots, hdiag):
@@ -727,7 +587,7 @@ class SFNOCISolver(FCISolver):
             ci = ci[0]
         return e, ci
 
-  def kernel(self, h1e, eri, norb, nelec, po_list, group, ov_list, ecore_list, ci0=None,
+  def kernel(self, h1e, eri, norb, nelec, conf_info_list, ov_list, ecore_list, ci0=None,
              tol=None, lindep=None, max_cycle=None, max_space=None,
              nroots=None, davidson_only=None, pspace_size=None,
              orbsym=None, wfnsym=None, **kwargs):
@@ -737,12 +597,11 @@ class SFNOCISolver(FCISolver):
       assert self.spin is None or self.spin == 0
       self.norb = norb
       self.nelec = nelec
-      #link_index = fci.direct_spin1._unpack(norb, nelec, None)
       link_indexa = cistring.gen_linkstr_index(range(norb), nelec[0])
       link_indexb = cistring.gen_linkstr_index(range(norb), nelec[1])
       link_index = (link_indexa, link_indexb)
-
-      e, c = kernel_sfnoci(self, h1e, eri, norb, nelec, po_list, group, ov_list, ecore_list, ci0,
+     
+      e, c = kernel_sfnoci(self, h1e, eri, norb, nelec, conf_info_list, ov_list, ecore_list, ci0,
                            link_index, tol, lindep, max_cycle, max_space, nroots,
                            davidson_only, pspace_size, **kwargs)
       self.eci = e
@@ -756,17 +615,17 @@ class SFNOCISolver(FCISolver):
     
       return self.eci, self.ci
 
-  def make_rdm1s(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group):
-      return make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group)
+  def make_rdm1s(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
+      return make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
 
-  def make_rdm1(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group):
-      return make_rdm1(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group)
+  def make_rdm1(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
+      return make_rdm1(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list,conf_info_list, ov_list)
 
-  def make_rdm2s(self, mo_coeff, ci, ncas, nelecas, ncore,dmet_core_list, po_list, ov_list, group):
-      return make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group)
+  def make_rdm2s(self, mo_coeff, ci, ncas, nelecas, ncore,dmet_core_list, conf_info_list, ov_list):
+      return make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
 
-  def make_rdm2(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group):
-      return make_rdm2(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, po_list, ov_list, group)
+  def make_rdm2(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
+      return make_rdm2(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
  
   def contract_ss(self, civec, ncas=None, nelecas=None):
       if ncas is None : ncas = self.ncas
@@ -793,16 +652,7 @@ class SFNOCISolver(FCISolver):
   def spin_square(self, civec, ncas = None, nelecas = None):
       if ncas is None : ncas = self.ncas
       if nelecas is None : nelecas = self.nelecas
-      return spin_op.spin_square0(civec, ncas, nelecas)
-
-#  def S2_list(self, mo_coeff = None, ci = None):
-#      if ci is None: ci = self.ci
-#      cin = ci.shape[1]
-#      S2_list = numpy.zeros(cin) 
-#      for i in range(cin):
-#          civec = ci[:,i]
-#          S2_list[i] = self.spin_square(civec)[0]
-#      return S2_list    
+      return spin_op.spin_square0(civec, ncas, nelecas)  
 
 class SpinPenaltySFNOCISolver:
     __name_mixin__ = 'SpinPenalty'
@@ -825,7 +675,7 @@ class SpinPenaltySFNOCISolver:
     def base_contract_H(self, *args, **kwargs):
         return super().contract_H(*args, **kwargs)
     
-    def contract_H(self, erieff, civec, ncas, nelecas, po_list, group, ov_list, 
+    def contract_H(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list, 
                    ecore_list, link_index=None, ts=None, t_nonzero=None, **kwargs):
         if isinstance(nelecas, (int, numpy.number)):
             sz = (nelecas % 2) * .5
@@ -848,7 +698,7 @@ class SpinPenaltySFNOCISolver:
             ci1 += self.contract_ss(tmp, ncas, nelecas).reshape(civec.shape)
             tmp = None
         ci1 *= self.ss_penalty
-        ci0 = super().contract_H(erieff, civec, ncas, nelecas, po_list, group, ov_list, ecore_list, link_index, ts, t_nonzero, **kwargs)
+        ci0 = super().contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list, link_index, ts, t_nonzero, **kwargs)
         ci1 += ci0.reshape(civec.shape)
         return ci1
  
