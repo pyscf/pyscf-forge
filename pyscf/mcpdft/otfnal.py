@@ -34,7 +34,7 @@ FT_C = getattr(__config__, 'mcpdft_otfnal_ftransfnal_C', -85.38149682)
 
 OT_ALIAS = {'MC23': 'tMC23'}
 OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE',
-                'MC23' : 'mc23'} # Note: mc23 is hybrid Meta-GGA OT Functional.
+                }
 
 REG_OT_FUNCTIONALS={}
 
@@ -80,7 +80,7 @@ def register_otfnal(xc_code, preset):
             kwargs: dict
                 The additional keyword arguments.
     '''
-    libxc_register_code = xc_code.lower ()
+    libxc_register_code = xc_code.upper ()
     libxc_base_code = preset['xc_base']
     ext_params = preset['ext_params']
     hyb = preset.get('hyb', None)
@@ -100,7 +100,7 @@ def unregister_otfnal(xc_code):
     '''
     try:
         if xc_code.upper() in REG_OT_FUNCTIONALS:
-            libxc_unregister_code = xc_code.lower()
+            libxc_unregister_code = xc_code.upper()
             libxc.unregister_custom_functional_(libxc_unregister_code)
             del REG_OT_FUNCTIONALS[xc_code.upper()]
 
