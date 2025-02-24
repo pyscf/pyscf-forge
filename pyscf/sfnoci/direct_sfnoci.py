@@ -289,8 +289,6 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecor
         ecore_list : ndarray (nbath)
             1D numpy array of core energies for each bath 
 
-
-
     Kwargs:
         ci0: ndarray
             Initial guess

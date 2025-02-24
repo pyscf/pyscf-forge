@@ -1021,6 +1021,7 @@ class SFGNOCI(SFNOCI):
 
         group : list 
             The result of grouping.
+            
     '''
     def __init__(self, mf, ncas, nelecas, ncore=None, groupA=None):
         super().__init__(mf, ncas, nelecas, ncore)
