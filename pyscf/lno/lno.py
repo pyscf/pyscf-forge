@@ -175,7 +175,7 @@ def make_las(mlno, eris, orbloc, lno_type, lno_param):
     frzfrag = np.concatenate((
         np.arange(locfragall[0], locfragall[1]),
         np.arange(locfragall[3], locfragall[4]))).astype(int)
-    frag_msg = f'%d/%d Occ | %d/%d Vir | %d/%d MOs' % (
+    frag_msg = '%d/%d Occ | %d/%d Vir | %d/%d MOs' % (
                     norbfragall[1], sum(norbfragall[:2]),
                     norbfragall[2], sum(norbfragall[2:4]),
                     sum(norbfragall[1:3]), sum(norbfragall)
