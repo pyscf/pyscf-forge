@@ -1,5 +1,5 @@
 include MANIFEST.in
-include README.md setup.py CHANGELOG LICENSE
+include README.md setup.py CHANGELOG LICENSE NOTICE
 
 global-exclude *.py[cod]
 prune pyscf/lib/build

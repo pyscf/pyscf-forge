@@ -17,7 +17,7 @@ jobs:
             bash -exc '/opt/python/cp39-cp39/bin/pip install --upgrade pip setuptools && \
             yum install -y epel-release && \
             yum-config-manager --enable epel && \
-            yum install -y openblas-devel gcc && \
+            yum install -y openblas-serial gcc && \
             export src=${GITHUB_WORKSPACE:-/src/pyscf-forge} && \
             export dst=${GITHUB_WORKSPACE:-/src/pyscf-forge}/linux-wheels && \
             mkdir -p /root/wheelhouse $src/linux-wheels && \
@@ -31,15 +31,11 @@ jobs:
         run: |
             ls ${{ github.workspace }}/linux-wheels
       - name: Publish to PyPI
-        # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          #password: ${{ secrets.PYPI_TEST_API_TOKEN }}
-          #repository_url: https://test.pypi.org/legacy/
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: ${{ github.workspace }}/linux-wheels
-          verbose: true
+        run: |
+            pip3 install twine
+            export TWINE_USERNAME=__token__
+            export TWINE_PASSWORD="${{ secrets.PYPI_API_TOKEN }}"
+            twine upload --verbose linux-wheels/*
 
   release-pypi-aarch64:
     runs-on: ubuntu-latest
@@ -58,13 +54,12 @@ jobs:
             bash -exc '/opt/python/cp39-cp39/bin/pip install --upgrade pip setuptools && \
             yum install -y epel-release && \
             yum-config-manager --enable epel && \
-            yum install -y openblas-devel gcc && \
+            yum install -y openblas-serial gcc && \
             export src=${GITHUB_WORKSPACE:-/src/pyscf-forge} && \
             export dst=${GITHUB_WORKSPACE:-/src/pyscf-forge}/linux-wheels && \
             mkdir -p /root/wheelhouse $src/linux-wheels && \
             sed -i "/if basename(fn) not in needed_libs:/s/basename.*libs/1/" /opt/_internal/pipx/venvs/auditwheel/lib/python*/site-packages/auditwheel/wheel_abi.py && \
             sed -i "/if src_path is None/a\                    continue" /opt/_internal/pipx/venvs/auditwheel/lib/python*/site-packages/auditwheel/repair.py && \
-            sed -i "s/numpy/h5py==3.10/" $src/pyproject.toml && \
             export PATH=/opt/python/cp39-cp39/bin:$PATH && \
             /opt/python/cp39-cp39/bin/pip wheel -v --no-deps --no-clean -w /root/wheelhouse $src && \
             export whl=`ls /root/wheelhouse/pyscf_forge-*-linux_*.whl` && \
@@ -73,15 +68,11 @@ jobs:
       run: |
         ls ${{ github.workspace }}/linux-wheels
     - name: Publish to PyPI
-      # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        user: __token__
-        #password: ${{ secrets.PYPI_TEST_API_TOKEN }}
-        #repository_url: https://test.pypi.org/legacy/
-        password: ${{ secrets.PYPI_API_TOKEN }}
-        packages-dir: ${{ github.workspace }}/linux-wheels
-        verbose: true
+      run: |
+          pip3 install twine
+          export TWINE_USERNAME=__token__
+          export TWINE_PASSWORD="${{ secrets.PYPI_API_TOKEN }}"
+          twine upload --verbose linux-wheels/*
 
   release-pypi-sdist:
     runs-on: ubuntu-latest
@@ -95,14 +86,11 @@ jobs:
           ls ${{ github.workspace }}/dist
       - name: Publish to PyPI
         # if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          #password: ${{ secrets.PYPI_TEST_API_TOKEN }}
-          #repository_url: https://test.pypi.org/legacy/
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: ${{ github.workspace }}/dist
-          verbose: true
+        run: |
+            pip3 install twine
+            export TWINE_USERNAME=__token__
+            export TWINE_PASSWORD="${{ secrets.PYPI_API_TOKEN }}"
+            twine upload --verbose dist/*
 
 #  release-pypi-macos-x86:
 #    name: Build wheels for macos
