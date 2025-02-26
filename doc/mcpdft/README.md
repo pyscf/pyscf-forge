@@ -51,7 +51,7 @@ energy calculations for wave functions of various types.
   **2020**, *16*, 2274]
   - Notes:
     1. Translation of 'meta' KS-DFT functionals which depend on the Laplacian
-    are not supported.
+    of the density are not supported.
     1. Range-separated hybrid on-top functionals are not supported.
     1. Translation of functionals defined as global hybrids at the Libxc or
     PySCF level is not supported, except for 'MC23', 'tPBE0' and 'ftPBE0'.
