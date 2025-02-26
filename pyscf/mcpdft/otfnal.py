@@ -331,6 +331,7 @@ class transfnal (otfnal):
 
         R = np.zeros ((nderiv,ngrids), dtype=Pi.dtype)
         R[0,:] = 1
+        R[0, Pi[0] == 0] = 0.0
         idx = rho_avg[0] >= (1e-15 / 2)
         # Chain rule!
         for ideriv in range(nderiv):

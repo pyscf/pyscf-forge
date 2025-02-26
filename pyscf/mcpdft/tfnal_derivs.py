@@ -113,11 +113,19 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     rho_t = otfnal.get_rho_translated(Pi, rho)
     # LDA in libxc has a special numerical problem with zero-valued densities
     # in one spin
-    if nderiv == 1:
+    if nderiv == 0:
         idx = (rho_t[0, 0] > 1e-15) & (rho_t[1, 0] < 1e-15)
         rho_t[1, 0, idx] = 1e-15
         idx = (rho_t[0, 0] < 1e-15) & (rho_t[1, 0] > 1e-15)
         rho_t[0, 0, idx] = 1e-15
+    
+    # mGGA in libxc has special numerical problem with zero-valued densities in
+    # one spin!
+    if nderiv == 5:
+        idx = (rho_t[0, 4] > 1e-15) & (rho_t[1, 4] < 1e-15)
+        rho_t[1, 4, idx] = 1e-15
+        idx = (rho_t[0, 4] < 1e-15) & (rho_t[1, 4] > 1e-15)
+        rho_t[0, 4, idx] = 1e-15
 
     rho_tot = rho.sum(0)
 
