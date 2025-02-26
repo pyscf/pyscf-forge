@@ -53,8 +53,8 @@ mftd2.xy # to get the transition vectors
 #
 # a, b = sftda.TDA_SF(mf).get_ab_sf()
 a, b = sftda.TDDFT_SF(mf).get_ab_sf()
-# List a has two items: (A_abab, A_baba) with A[i,a,j,b].
-# List b has two items: (B_abba, B_baab) with B[i,a,j,b].
+# List a has two items: (A_baba,A_abab) with A[i,a,j,b].
+# List b has two items: (B_baab,B_abba) with B[i,a,j,b].
 
 #
 # 4. spin flip up TDDFT, which can not converged.
