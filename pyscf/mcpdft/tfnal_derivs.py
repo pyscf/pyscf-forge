@@ -436,7 +436,11 @@ def _tGGA_jT_op(x, rho, Pi, R, zeta):
     xmm = (x[2] + x[4] - x[3]) / 4.0
 
     # Gradient-gradient sector
-    jTx[2] = xcc + xcm * zeta[0] + xmm * zeta[0] * zeta[0]
+    idx = (zeta[0]!=1)
+    jTx[2] = x[2]
+    jTx[2,idx] = (xcc + xcm * zeta[0] + xmm * zeta[0] * zeta[0])[idx]
+
+    # Finite-precision safety
 
     # Density-gradient sector
     idx = (rho[0] > 1e-15)

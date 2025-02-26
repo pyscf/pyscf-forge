@@ -756,6 +756,16 @@ class KnownValues(unittest.TestCase):
                 if case=="SA CASSCF":
                     self.assertEqual(lib.fp(mc.e_states), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_states")))
 
+    def test_h2_triplet(self):
+        mol = gto.M (atom='H 0 0 0; H 1 0 0', basis='sto-3g', spin=2)
+        mf = scf.RHF (mol).run ()
+        mc = mcpdft.CASSCF (mf, 'tPBE', 2, 2).run ()
+        # Reference from OpenMolcas v24.10
+        e_ref = -0.74702903
+        self.assertAlmostEqual (mc.e_tot, e_ref, 6)
+
+
+
 if __name__ == "__main__":
     print("Full Tests for MC-PDFT energy API")
     unittest.main()
