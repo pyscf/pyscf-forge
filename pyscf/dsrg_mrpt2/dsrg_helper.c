@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 // !/usr/bin/env python
 //  Copyright 2014-2024 The PySCF Developers. All Rights Reserved.
 
