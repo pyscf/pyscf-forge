@@ -110,8 +110,8 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
     B[i,a,j,b] = (ia||jb)
 
     Spin symmetry is not considered in the returned A, B lists.
-    List A has two items: (A_abab, A_baba).
-    List B has two items: (B_abba, B_baab).
+    List A has two items: (A_baba,A_abab).
+    List B has two items: (B_baab,B_abba).
     '''
     if mo_energy is None: mo_energy = mf.mo_energy
     if mo_coeff is None: mo_coeff = mf.mo_coeff
@@ -456,8 +456,8 @@ class TDA_SF(TDBase):
         return self.e, self.xy
 
     # this function should be moved into uhf.py
-    def get_ab_sf(self, mf=None):
+    def get_ab_sf(self, mf=None, collinear_samples=200):
         if mf is None: mf = self._scf
-        return get_ab_sf(mf)
+        return get_ab_sf(mf, collinear_samples=collinear_samples)
 
 scf.uhf.UHF.TDA_SF = lib.class_as_method(TDA_SF)

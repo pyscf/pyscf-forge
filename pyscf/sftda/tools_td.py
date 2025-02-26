@@ -152,14 +152,10 @@ def transition_analyze(scfobj, tdobj, extd, xy, tdtype='TDA'):
     ss2 = spin_square(scfobj,xy,extype=tdobj.extype,tdtype=tdtype)
     print('<S2> value ' + ': ' +str(ss2) + '.')
 
-    if tdtype=='TDA':
-        if tdobj.extype == 0:
-            x=xy[0][0].flatten()
-        elif tdobj.extype == 1:
-            x=xy[0][1].flatten()
-
-    elif tdtype=='TDDFT':
-        x = xy[0].flatten
+    if tdobj.extype == 0:
+        x=xy[0][0].flatten()
+    elif tdobj.extype == 1:
+        x=xy[0][1].flatten()
 
     norm = x.conj()* x
     idx_u = numpy.argmax(norm)
