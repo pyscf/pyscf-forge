@@ -87,10 +87,10 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
             density) and their derivatives. If _unpack_vot = True, shape
             and format is ([a, ngrids], [b, ngrids]) : (vrho, vPi);
             otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,tau,rho'.Pi',|Pi'|^2]
-            ftGGA: a=4, b=4, c=5
+            ftGGA: a=4, b=4, c=5 (drop tau)
             tmGGA: a=5, b=1, c=4 (drop Pi')
-            tGGA: a=4, b=1, c=3 (drop Pi')
-            *tLDA: a=1, b=1, c=2 (drop rho')
+            tGGA: a=4, b=1, c=3 (drop Pi', tau)
+            *tLDA: a=1, b=1, c=2 (drop rho', tau)
         fot : ndarray of shape (*,ngrids) or None
             second functional derivative of Eot wrt density, pair
             density, and derivatives; first dimension is lower-

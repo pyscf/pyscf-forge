@@ -491,7 +491,7 @@ class transfnal (otfnal):
             exchange-correlation energy wrt to total density and its
             derivatives. The potential must be spin-symmetric in
             pair-density functional theory.
-            2 rows for tLDA, 3 rows for tGGA, and 5 rows for meta-GGA
+            2 rows for tLDA, 3 rows for tGGA, and 4 rows for meta-GGA
         '''
         # ordering: rho, Pi, |rho'|^2, tau
         ncol = (2, 3, 4)[self.dens_deriv]
