@@ -184,7 +184,7 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None, collinear_samples=
         max_memory = max(2000, mf.max_memory*.8-mem_now)
 
         # it should be optimized, which is the disadvantage of mc approach.
-        fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
+        fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ,deriv=2,spin=1)[2]
         p0,p1=0,0 # the two parameters are used for counts the batch of grids.
 
         if xctype == 'LDA':
@@ -446,13 +446,15 @@ class TDA_SF(TDBase):
         nvirb = nmo - noccb
 
         if self.extype==0:
+            y = np.zeros((nocca,nvirb))
             self.xy = [((xi[:noccb*nvira].reshape(noccb,nvira),0),  # X_alpha_beta
-                        (0,0))  # (Y_beta_alpha)
+                        (0,y))  # (Y_beta_alpha)
                         for xi in x1]
 
         elif self.extype==1:
+            y = np.zeros((noccb,nvira))
             self.xy = [((0,xi[:nocca*nvirb].reshape(nocca,nvirb)),  # X_beta_alpha
-                        (0, 0))  # (Y_beta_alpha)
+                        (y, 0))  # (Y_beta_alpha)
                         for xi in x1]
 
         if self.chkfile:
@@ -467,5 +469,9 @@ class TDA_SF(TDBase):
     def get_ab_sf(self, mf=None, collinear_samples=200):
         if mf is None: mf = self._scf
         return get_ab_sf(mf, collinear_samples=collinear_samples)
+    
+    def nuc_grad_method(self):
+        from pyscf.sftda_grad import tduks_sf
+        return tduks_sf.Gradients(self)
 
 scf.uhf.UHF.TDA_SF = lib.class_as_method(TDA_SF)

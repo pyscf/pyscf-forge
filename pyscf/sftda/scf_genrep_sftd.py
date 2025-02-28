@@ -50,8 +50,7 @@ def _gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0, extype=0, coll
         'MultiGridFFTDF' == getattr(mf, 'with_df', None).__class__.__name__):
         raise NotImplementedError("Spin Flip TDDFT doesn't support pbc calculations.")
 
-
-    fxc = cache_xc_kernel_sf(ni,mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
+    fxc = cache_xc_kernel_sf(ni,mol, mf.grids, mf.xc, mo_coeff, mo_occ, deriv=2, spin=1)[2]
     dm0 = None
 
     if max_memory is None:
@@ -106,8 +105,7 @@ def _gen_uhf_tda_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0, collinear_
         'MultiGridFFTDF' == getattr(mf, 'with_df', None).__class__.__name__):
         raise NotImplementedError("Spin Flip TDDFT doesn't support pbc calculations.")
 
-
-    fxc = cache_xc_kernel_sf(ni,mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
+    fxc = cache_xc_kernel_sf(ni,mol, mf.grids, mf.xc, mo_coeff, mo_occ, deriv=2, spin=1)[2]
     dm0 = None
 
     if max_memory is None:
