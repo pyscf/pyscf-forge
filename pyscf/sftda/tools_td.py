@@ -133,3 +133,40 @@ def spin_square(mf,xy,extype=0,tdtype='TDDFT'):
 
     ssI= ss0 + ds2
     return ssI
+
+def transition_analyze(scfobj, tdobj, extd, xy, tdtype='TDA'):
+    nmo = scfobj.mol.nao
+    nocca = scfobj.mo_occ[0].sum()
+    noccb = scfobj.mo_occ[1].sum()
+    nvira = nmo - nocca
+    nvirb = nmo - noccb
+
+    if tdobj.extype==0:
+        nvir = nvira
+
+    elif tdobj.extype== 1:
+        nvir = nvirb
+
+    print('Excited energy '+ ': '+ str(extd*27.21138386) + ' eV.')
+
+    ss2 = spin_square(scfobj,xy,extype=tdobj.extype,tdtype=tdtype)
+    print('<S2> value ' + ': ' +str(ss2) + '.')
+
+    if tdobj.extype == 0:
+        x=xy[0][0].flatten()
+    elif tdobj.extype == 1:
+        x=xy[0][1].flatten()
+
+    norm = x.conj()* x
+    idx_u = numpy.argmax(norm)
+    idx_mo = numpy.argsort(norm)
+    idx_u2 = idx_mo[-2]
+
+    a_i_mo_idx = (idx_u//nvir+1,idx_u%nvir+1)
+    a_i_mo_idx2 =(idx_u2//nvir+1,idx_u2%nvir+1)
+
+    print('The main and second norm:')
+    print(norm[idx_mo[-1]],norm[idx_mo[-2]])
+    print('The main and second norm to orbital pair:')
+    print(a_i_mo_idx,a_i_mo_idx2)
+    print('\n')

@@ -175,14 +175,14 @@ class CasidaTDDFT(TDA_SF):
                 y = z[noccb*nvira:].reshape(nocca,nvirb)
                 norm = lib.norm(x)**2 - lib.norm(y)**2
                 norm = numpy.sqrt(1./norm)
-                return x*norm, y*norm
+                return ((x*norm,0), (0,y*norm))
         elif self.extype==1:
             def norm_xy(z):
                 x = z[:nocca*nvirb].reshape(nocca,nvirb)
                 y = z[nocca*nvirb:].reshape(noccb,nvira)
                 norm = lib.norm(x)**2 - lib.norm(y)**2
                 norm = numpy.sqrt(1./norm)
-                return x*norm, y*norm
+                return ((0,x*norm), (y*norm,0))
 
         self.xy = [norm_xy(z) for z in x1]
 
