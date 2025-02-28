@@ -196,7 +196,7 @@ def casdm1s_to_dm1s (mc, casdm1s, mo_coeff=None, ncore=None, ncas=None):
     # Tags for speeding up rho generators and DF fns
     no_coeff = mo_coeff[:,:ncore+ncas]
     no_coeff = np.stack ([no_coeff, no_coeff], axis=0)
-    no_occ = np.zeros ((2,ncore+ncas))
+    no_occ = np.zeros ((2,ncore+ncas), dtype=no_coeff.dtype)
     no_occ[:,:ncore] = 1.0
     no_cas = no_coeff[:,:,ncore:]
     for i in range (2):
