@@ -95,13 +95,20 @@ def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=N
             lno_param = [
                 [
                     {
-                        'thresh': lno_thresh[i][s] if isinstance(lno_thresh[i], Iterable) else lno_thresh[i],
-                        'pct_occ': lno_pct_occ[i][s] if isinstance(lno_pct_occ[i], Iterable) else lno_pct_occ[i],
-                        'norb': lno_norb[ifrag][i][s] if isinstance(lno_norb[ifrag][i], Iterable) else lno_norb[ifrag][i],
-                    }
-                    for i in [0, 1]
-                ]
-                for s in range(2)
+                        'thresh': (
+                            lno_thresh[i][s] if isinstance(lno_thresh[i], Iterable)
+                            else lno_thresh[i]
+                        ),
+                        'pct_occ': (
+                            lno_pct_occ[i][s] if isinstance(lno_pct_occ[i], Iterable)
+                            else lno_pct_occ[i]
+                        ),
+                        'norb': (
+                            lno_norb[ifrag][i][s] if isinstance(lno_norb[ifrag][i], Iterable)
+                            else lno_norb[ifrag][i]
+                        ),
+                    } for i in [0, 1]
+                ] for s in range(2)
             ]
 
         else:
@@ -464,7 +471,7 @@ class LNO(lib.StreamObject):
                     log.error('Input frag_wghtlist has wrong length (expecting %d; '
                               'got %d).', nfrag, len(frag_wghtlist))
                     raise ValueError
-            except:
+            except Exception:
                 raise ValueError
         else:
             log.error('Input frag_wghtlist has wrong data type (expecting '

@@ -30,7 +30,7 @@ einsum = lib.einsum
 
 def make_las(mlno, eris, orbloc, lno_type, lno_param):
     log = logger.new_logger(mlno)
-    cput1 = (logger.process_clock(), logger.perf_counter())
+    #cput1 = (logger.process_clock(), logger.perf_counter())
 
     s1e = mlno.s1e
 
@@ -39,14 +39,14 @@ def make_las(mlno, eris, orbloc, lno_type, lno_param):
     orbvir = [None,] * 2
     orbvirfrz_core = [None,] * 2
     moeocc = [None,] * 2
-    moevir = [None,] * 2    
+    moevir = [None,] * 2
 
     uocc_loc = [None,] * 2
     uocc_std = [None,] * 2
     uocc_orth = [None,] * 2
-    uvir_loc = [None,] * 2
-    uvir_std = [None,] * 2
-    uvir_orth = [None,] * 2
+    #uvir_loc = [None,] * 2
+    #uvir_std = [None,] * 2
+    #uvir_orth = [None,] * 2
 
     mo_splits = mlno.split_mo_coeff()
     moe_splits = mlno.split_mo_energy()

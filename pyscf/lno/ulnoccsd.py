@@ -36,13 +36,13 @@ def UCCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):
     from pyscf.soscf import newton_ah
     from pyscf import scf
 
-    log = logger.new_logger(mf)
+    #log = logger.new_logger(mf)
 
     if not mf.istype('UHF'):
         mf = scf.addons.convert_to_uhf(mf)
 
     if getattr(mf, 'with_df', None):
-        naux = mf.with_df.get_naoaux()
+        mf.with_df.get_naoaux()
 
     if mo_occ is None:
         mo_occ = mf.mo_occ
@@ -51,12 +51,12 @@ def UCCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):
 
 class MODIFIED_UCCSD(uccsd.UCCSD):
     def ao2mo(self, mo_coeff=None):
-        nmo = self.nmo[0]
-        nao = self.mo_coeff[0].shape[0]
-        nmo_pair = nmo * (nmo+1) // 2
-        nao_pair = nao * (nao+1) // 2
-        mem_incore = 2 * (max(nao_pair**2, nmo**4) + nmo_pair**2) * 8/1e6
-        mem_now = lib.current_memory()[0]
+        #nmo = self.nmo[0]
+        #nao = self.mo_coeff[0].shape[0]
+        #nmo_pair = nmo * (nmo+1) // 2
+        #nao_pair = nao * (nao+1) // 2
+        #mem_incore = 2 * (max(nao_pair**2, nmo**4) + nmo_pair**2) * 8/1e6
+        #mem_now = lib.current_memory()[0]
         if self._scf._eri is not None: #and
             #(mem_incore+mem_now < self.max_memory or self.incore_complete)):
             return _make_eris_incore(self, mo_coeff)
@@ -149,7 +149,7 @@ def _make_eris_incore(mycc, mo_coeff=None):
 
     moa, mob = eris.mo_coeff
     nocca, noccb = eris.nocc
-    nao = moa.shape[0]
+    #nao = moa.shape[0]
     nmoa = moa.shape[1]
     nmob = mob.shape[1]
 
@@ -326,17 +326,17 @@ def impurity_solve(mcc, mo_coeff, uocc_loc, mo_occ, maskact, eris,
     nmo = mo_occ[0].size, mo_occ[1].size
     moidxa, moidxb = maskact
 
-    orbfrzocca = mo_coeff[0][:,~moidxa& occidxa]
-    orbactocca = mo_coeff[0][:, moidxa& occidxa]
-    orbactvira = mo_coeff[0][:, moidxa&~occidxa]
-    orbfrzvira = mo_coeff[0][:,~moidxa&~occidxa]
+    orbfrzocca = mo_coeff[0][:, ~moidxa &  occidxa]
+    orbactocca = mo_coeff[0][:,  moidxa &  occidxa]
+    orbactvira = mo_coeff[0][:,  moidxa & ~occidxa]
+    orbfrzvira = mo_coeff[0][:, ~moidxa & ~occidxa]
     nfrzocca, nactocca, nactvira, nfrzvira = [orb.shape[1]
                                               for orb in [orbfrzocca,orbactocca,
                                                           orbactvira,orbfrzvira]]
-    orbfrzoccb = mo_coeff[1][:,~moidxb& occidxb]
-    orbactoccb = mo_coeff[1][:, moidxb& occidxb]
-    orbactvirb = mo_coeff[1][:, moidxb&~occidxb]
-    orbfrzvirb = mo_coeff[1][:,~moidxb&~occidxb]
+    orbfrzoccb = mo_coeff[1][:, ~moidxb &  occidxb]
+    orbactoccb = mo_coeff[1][:,  moidxb &  occidxb]
+    orbactvirb = mo_coeff[1][:,  moidxb & ~occidxb]
+    orbfrzvirb = mo_coeff[1][:, ~moidxb & ~occidxb]
     nfrzoccb, nactoccb, nactvirb, nfrzvirb = [orb.shape[1]
                                               for orb in [orbfrzoccb,orbactoccb,
                                                           orbactvirb,orbfrzvirb]]
@@ -423,7 +423,6 @@ def fock_from_mo(mymf, s1e=None, force_exxdiv_none=True):
     for s in range(2):
         mo0 = np.dot(s1e, mymf.mo_coeff[s])
         moe0 = mymf.mo_energy[s]
-        nocc0 = np.count_nonzero(mymf.mo_occ[s])
         fock.append(np.dot(mo0 * moe0, mo0.T.conj()))
     return fock
 

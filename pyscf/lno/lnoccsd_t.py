@@ -34,7 +34,7 @@ from pyscf import symm
 from pyscf.lib import logger
 from pyscf.cc.ccsd_t import _sort_eri, _sort_t2_vooo_, _irrep_argsort
 
-libcc = lib.load_library('libcc')
+libcc = lib.load_library('liblno')
 CCsd_t_zcontract_lo = libcc.CCsd_t_zcontract_lo
 CCsd_t_contract_lo  = libcc.CCsd_t_contract_lo
 

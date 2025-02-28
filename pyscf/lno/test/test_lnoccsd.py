@@ -93,8 +93,7 @@ class WaterDimer(unittest.TestCase):
             self.ecano
         ]
         for thresh,ref in zip(threshs,refs):
-            # mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
-            mcc = LNOCCSD(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
             mcc.lno_thresh = [thresh*gamma,thresh]
             mcc.kernel()
             emp2 = mcc.e_corr_pt2
@@ -103,7 +102,7 @@ class WaterDimer(unittest.TestCase):
             # print('[%s],' % (','.join([f'{x:.10f}' for x in [emp2,eccsd,eccsd_t]])))
             self.assertAlmostEqual(emp2, ref[0], 6)
             self.assertAlmostEqual(eccsd, ref[1], 6)
-            # self.assertAlmostEqual(eccsd_t, ref[2], 6)
+            self.assertAlmostEqual(eccsd_t, ref[2], 6)
 
     def test_lno_iao_by_thresh(self):
         mol = self.mol
@@ -127,8 +126,7 @@ class WaterDimer(unittest.TestCase):
             self.ecano
         ]
         for thresh,ref in zip(threshs,refs):
-            # mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
-            mcc = LNOCCSD(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
             mcc.lno_thresh = [thresh*gamma,thresh]
             mcc.kernel()
             emp2 = mcc.e_corr_pt2
@@ -137,7 +135,7 @@ class WaterDimer(unittest.TestCase):
             # print('[%s],' % (','.join([f'{x:.10f}' for x in [emp2,eccsd,eccsd_t]])))
             self.assertAlmostEqual(emp2, ref[0], 6)
             self.assertAlmostEqual(eccsd, ref[1], 6)
-            # self.assertAlmostEqual(eccsd_t, ref[2], 6)
+            self.assertAlmostEqual(eccsd_t, ref[2], 6)
 
 
 
