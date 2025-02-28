@@ -1,5 +1,22 @@
-import numpy as np
+#!/usr/bin/env python
+# Copyright 2014-2021 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Hong-Zhou Ye <hzyechem@gmail.com>
+#
 
+import numpy as np
 
 def autofrag_atom(mol, H2heavy=False):
     ''' Group non-ghost atoms into fragments. Return fragment definitions by
@@ -125,3 +142,53 @@ def autofrag_iao(moliao, frag_type='atom', frag_atmlist=None):
     else:
         raise ValueError('Unknown frag_type %s' % (str(frag_type)))
     return frag_lolist
+
+def _matpow(A, p):
+    e, u = np.linalg.eigh(A)
+    return np.dot(u * e**p, u.T.conj())
+
+def _map_lo_to_frag(mol, orbloc, frag_atmlist, verbose=None):
+    r''' Assign input LOs (assumed orthonormal) to fragments using the Lowdin charge.
+
+    For each IAO 'i', a 1D array, [p_1, p_2, ... p_nfrag], is computed, where
+        p_ifrag = \sum_{mu on fragment i} ( (s1e^{1/2}*orbloc)[mu,i] )**2.
+    '''
+    from pyscf.lib import logger
+    if verbose is None:
+        verbose = mol.verbose
+    log = logger.new_logger(mol, verbose)
+
+    if hasattr(mol, 'pbc_intor'):
+        s1e = mol.pbc_intor('int1e_ovlp')
+    else:
+        s1e = mol.intor('int1e_ovlp')
+    s1e_sqrt = _matpow(s1e, 0.5)
+    plo_ao = np.dot(s1e_sqrt, orbloc)**2.
+    aoslice_by_atom = mol.aoslice_nr_by_atom()
+    aoind_by_frag = [np.concatenate([range(*aoslice_by_atom[atm][-2:])
+                                     for atm in atmlist])
+                     for atmlist in frag_atmlist]
+    plo_frag = np.array([plo_ao[aoind].sum(axis=0)
+                         for aoind in aoind_by_frag]).T
+    lo_frag_map = plo_frag.argmax(axis=1)
+    nlo, nfrag = plo_frag.shape
+    for i in range(nlo):
+        log.debug1('LO %d is assigned to fragment %d with charge %.2f',
+                   i, lo_frag_map[i], plo_frag[i, lo_frag_map[i]])
+        log.debug2('pop by frag:' + ' %.2f'*nfrag, *plo_frag[i])
+
+    frag_lolist = [np.where(lo_frag_map==i)[0] for i in range(nfrag)]
+    return frag_lolist
+
+def map_lo_to_frag(mol, orbloc, frag_atmlist, verbose=None):
+    if isinstance(orbloc, (list, tuple)) and len(orbloc) == 2:
+        frag_lolista = _map_lo_to_frag(mol, orbloc[0], frag_atmlist, verbose=verbose)
+        frag_lolistb = _map_lo_to_frag(mol, orbloc[1], frag_atmlist, verbose=verbose)
+        assert len(frag_lolista) == len(frag_lolistb)
+        frag_lolist = []
+        for a, b in zip(frag_lolista, frag_lolistb):
+            frag_lolist.append([a, b])
+        return frag_lolist
+    else:
+        return _map_lo_to_frag(mol, orbloc, frag_atmlist, verbose=verbose)
+

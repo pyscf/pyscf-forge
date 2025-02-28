@@ -617,8 +617,8 @@ class LNOCCSD(LNO):
 
     def __init__(self, mf, lo_coeff, frag_lolist, lno_type=None, lno_thresh=None, frozen=None):
 
-        LNO.__init__(self, mf, lo_coeff, frag_lolist, lno_type=lno_type,
-                     lno_thresh=lno_thresh, frozen=frozen)
+        super().__init__(mf, lo_coeff, frag_lolist, lno_type=lno_type,
+                         lno_thresh=lno_thresh, frozen=frozen)
 
         self.efrag_cc = None
         self.efrag_pt2 = None
@@ -642,7 +642,7 @@ class LNOCCSD(LNO):
         return self._h1e
 
     def dump_flags(self, verbose=None):
-        LNO.dump_flags(self, verbose=verbose)
+        super().dump_flags(verbose=verbose)
         log = logger.new_logger(self, verbose)
         log.info('_max_las_size_ccsd = %s', self._max_las_size_ccsd)
         log.info('_max_las_size_ccsd_t = %s', self._max_las_size_ccsd_t)
@@ -809,7 +809,7 @@ class LNOCCSD(LNO):
 
 class LNOCCSD_T(LNOCCSD):
     def __init__(self, *args, **kwargs):
-        LNOCCSD.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.ccsd_t = True
 
 

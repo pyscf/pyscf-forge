@@ -29,9 +29,12 @@
 '''
 
 import sys
+import numbers
+from collections.abc import Iterable
+from functools import reduce
+
 import numpy as np
 import h5py
-from functools import reduce
 
 from pyscf import mp
 from pyscf.lib import logger
@@ -87,9 +90,25 @@ def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=N
 # Loop over fragment
     frag_res = [None] * nfrag
     for ifrag,loidx in enumerate(frag_lolist):
-        orbloc = lo_coeff[:,loidx]
-        lno_param = [{'thresh': lno_thresh[i], 'pct_occ': lno_pct_occ[i],
-                      'norb': lno_norb[ifrag][i]} for i in [0,1]]
+        if len(loidx) == 2 and isinstance(loidx[0], Iterable): # Unrestricted
+            orbloc = [lo_coeff[0][:,loidx[0]], lo_coeff[1][:,loidx[1]]]
+            lno_param = [
+                [
+                    {
+                        'thresh': lno_thresh[i][s] if isinstance(lno_thresh[i], Iterable) else lno_thresh[i],
+                        'pct_occ': lno_pct_occ[i][s] if isinstance(lno_pct_occ[i], Iterable) else lno_pct_occ[i],
+                        'norb': lno_norb[ifrag][i][s] if isinstance(lno_norb[ifrag][i], Iterable) else lno_norb[ifrag][i],
+                    }
+                    for i in [0, 1]
+                ]
+                for s in range(2)
+            ]
+
+        else:
+            orbloc = lo_coeff[:,loidx]
+            lno_param = [{'thresh': lno_thresh[i], 'pct_occ': lno_pct_occ[i],
+                          'norb': lno_norb[ifrag][i]} for i in [0,1]]
+
         mo_coeff, frozen, uocc_loc, frag_msg = mlno.make_las(eris, orbloc, lno_type, lno_param)
         cput2 = log.timer('Fragment %d make las'%(ifrag+1), *cput2)
         log.info('Fragment %d/%d  LAS: %s', ifrag+1, nfrag, frag_msg)
@@ -373,7 +392,11 @@ class LNO(lib.StreamObject):
             log.info('frozen orbitals %s', self.frozen)
         log.info('max_memory %d MB (current use %d MB)',
                  self.max_memory, lib.current_memory()[0])
-        log.info('nfrag = %d  nlo = %d', self.nfrag, self.lo_coeff.shape[1])
+        try:
+            nlo = self.lo_coeff.shape[1]
+        except AttributeError:
+            nlo = [self.lo_coeff[0].shape[1], self.lo_coeff[1].shape[1]]
+        log.info('nfrag = %d  nlo = %s', self.nfrag, nlo)
         log.info('frag_lolist = %s', self.frag_lolist)
         log.info('frag_wghtlist = %s', self.frag_wghtlist)
         log.info('lno_type = %s', self.lno_type)
@@ -419,7 +442,7 @@ class LNO(lib.StreamObject):
     #     return [moe[m] for m in masks]
 
     def kernel(self, eris=None):
-        r'''
+        '''The LNO calculation driver.
         '''
         self.dump_flags()
 
@@ -432,14 +455,17 @@ class LNO(lib.StreamObject):
         # frag weights
         if frag_wghtlist is None:
             frag_wghtlist = np.ones(nfrag)
-        elif isinstance(frag_wghtlist, (float,np.float64)):
+        elif isinstance(frag_wghtlist, numbers.Number):
             frag_wghtlist = np.ones(nfrag) * frag_wghtlist
-        elif isinstance(frag_wghtlist, (list,np.ndarray)):
-            if len(frag_wghtlist) != nfrag:
-                log.error('Input frag_wghtlist has wrong length (expecting %d; '
-                          'got %d).', nfrag, len(frag_wghtlist))
+        elif isinstance(frag_wghtlist, Iterable):
+            try:
+                frag_wghtlist = np.asarray(frag_wghtlist).ravel()
+                if len(frag_wghtlist) != nfrag:
+                    log.error('Input frag_wghtlist has wrong length (expecting %d; '
+                              'got %d).', nfrag, len(frag_wghtlist))
+                    raise ValueError
+            except:
                 raise ValueError
-            frag_wghtlist = np.asarray(frag_wghtlist)
         else:
             log.error('Input frag_wghtlist has wrong data type (expecting '
                       'array-like; got %s)', type(frag_wghtlist))
