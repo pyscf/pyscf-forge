@@ -58,7 +58,7 @@ def mcfun_eval_xc_adapter_sf(ni, xc_code):
     return eval_xc_eff
 
 # This function should be a class function in the Numint2c class.
-def cache_xc_kernel_sf(self, mol, grids, xc_code, mo_coeff, mo_occ, deriv=2, 
+def cache_xc_kernel_sf(self, mol, grids, xc_code, mo_coeff, mo_occ, deriv=2,
                        spin=1, max_memory=2000):
     '''Compute the fxc_sf, which can be used in SF-TDDFT/TDA
     '''

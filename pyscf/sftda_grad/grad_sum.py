@@ -16,7 +16,7 @@ def uks_sf_gga_wv1(rho1, fxc_sf,weight):
     return wv_ab*weight, wv_ba*weight
 
 def uks_sf_gga_wv2_p(rho1, kxc_sf,weight):
-    # kxc_sf with a shape (4,4,2,4,ngrid), 4 means I,\nabla_x,y,z, 
+    # kxc_sf with a shape (4,4,2,4,ngrid), 4 means I,\nabla_x,y,z,
     # 0: n, \nabla_x,y,z n;  1: s, \nabla_x,y,z s.
     rho1_ab,rho1_ba = rho1
     ngrid = weight.shape[-1]

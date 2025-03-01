@@ -469,7 +469,7 @@ class TDA_SF(TDBase):
     def get_ab_sf(self, mf=None, collinear_samples=200):
         if mf is None: mf = self._scf
         return get_ab_sf(mf, collinear_samples=collinear_samples)
-    
+
     def nuc_grad_method(self):
         from pyscf.sftda_grad import tduks_sf
         return tduks_sf.Gradients(self)
