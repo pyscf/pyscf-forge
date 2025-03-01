@@ -36,7 +36,7 @@ def grad_elec(td_grad, x_y, atmlst=None, max_memory=2000, verbose=logger.INFO):
         td_grad : sftda.TDA_SF object.
 
     Returns:
-        The gradient of excited states: Ei^{\xi} = E0^{\xi\} + wi^{\xi}
+        The gradient of excited states: Ei^{\\xi} = E0^{\\xi\} + wi^{\\xi}
     '''
     log = logger.new_logger(td_grad, verbose)
     time0 = logger.process_clock(), logger.perf_counter()
