@@ -36,7 +36,7 @@ def grad_elec(td_grad, x_y, atmlst=None, max_memory=2000, verbose=logger.INFO):
         td_grad : sftda.TDA_SF object.
 
     Returns:
-        The gradient of excited states: Ei^{\\xi} = E0^{\\xi\} + wi^{\\xi}
+        The gradient of excited states: Ei^{\\xi} = E0^{\\xi} + wi^{\\xi}
     '''
     log = logger.new_logger(td_grad, verbose)
     time0 = logger.process_clock(), logger.perf_counter()
@@ -434,7 +434,7 @@ def _contract_xc_kernel(td_grad, xc_code, dmvo, dmoo=None, with_vxc=True,
             if with_kxc:
                 # Note the "-"
                 lda_sum_(k1ao_xmy[0][0], ao, s_s_n*2*rho1_ab*(rho1_ab-rho1_ba), mask)
-                lda_sum_(k1ao_xmy[0][1], ao, s_s_n*2*rho1_ba*(rho1_ba-rho1_ab), mask)   
+                lda_sum_(k1ao_xmy[0][1], ao, s_s_n*2*rho1_ba*(rho1_ba-rho1_ab), mask)
                 lda_sum_(k1ao_xmy[1][0], ao, s_s_s*2*rho1_ab*(rho1_ab-rho1_ba), mask)
                 lda_sum_(k1ao_xmy[1][1], ao, s_s_s*2*rho1_ba*(rho1_ba-rho1_ab), mask)
 
