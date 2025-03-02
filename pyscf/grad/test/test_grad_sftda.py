@@ -16,7 +16,6 @@
 import unittest
 from pyscf import gto, dft
 from pyscf import sftda
-from pyscf.sftda_grad import tduks_sf
 try:
     import mcfun
 except ImportError:

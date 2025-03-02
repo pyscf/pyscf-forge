@@ -24,7 +24,7 @@ from pyscf.sftda.scf_genrep_sftd import _gen_uhf_response_sf
 
 class TDA_SF(uhf_sf.TDA_SF):
     def nuc_grad_method(self):
-        from pyscf.sftda_grad import tduks_sf
+        from pyscf.grad import tduks_sf
         return tduks_sf.Gradients(self)
 
 class CasidaTDDFT(TDA_SF):

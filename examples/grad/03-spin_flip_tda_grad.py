@@ -14,12 +14,12 @@ ples are displayed here.
 import numpy as np
 from pyscf import lib, gto, dft
 from pyscf import sftda
-from pyscf.sftda_grad import tduks_sf # this import is necessary.
+from pyscf.grad import tduks_sf # this import is necessary.
 try:
     import mcfun # mcfun>=0.2.5 must be used.
 except ImportError:
     mcfun = None
-    
+
 mol = gto.Mole()
 mol.verbose = 6
 mol.output = None
