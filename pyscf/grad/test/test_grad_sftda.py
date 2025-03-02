@@ -52,6 +52,7 @@ def tearDownModule():
     del mol, pmol, mf_lda, mf_bp86, mf_b3lyp, mf_tpss
 
 class KnownValues(unittest.TestCase):
+    @unittest.skipIf(mcfun is None, "mcfun library not found.")
     def test_tdasfd_anag_lda(self):
         td = sftda.TDA_SF(mf_lda).set(conv_tol=1e-12)
         td.extype = 1
@@ -67,6 +68,7 @@ class KnownValues(unittest.TestCase):
         e2 = td_solver(pmol.set_geom_('O 0 0 2.069; O 0 0 0', unit='B'))
         self.assertAlmostEqual((e1[2]-e2[2])/.002, g1[0,2], 4)
 
+    @unittest.skipIf(mcfun is None, "mcfun library not found.")
     def test_tdasfu_anag_bp86(self):
         td = sftda.TDA_SF(mf_bp86).set(conv_tol=1e-12)
         td.extype = 0
@@ -82,6 +84,7 @@ class KnownValues(unittest.TestCase):
         e2 = td_solver(pmol.set_geom_('O 0 0 2.069; O 0 0 0', unit='B'))
         self.assertAlmostEqual((e1[2]-e2[2])/.002, g1[0,2], 4)
 
+    @unittest.skipIf(mcfun is None, "mcfun library not found.")
     def test_tdasfu_anag_b3lyp(self):
         td = sftda.TDA_SF(mf_b3lyp).set(conv_tol=1e-12)
         td.extype = 1
@@ -97,6 +100,7 @@ class KnownValues(unittest.TestCase):
         e2 = td_solver(pmol.set_geom_('O 0 0 2.069; O 0 0 0', unit='B'))
         self.assertAlmostEqual((e1[3]-e2[3])/.002, g1[0,2], 4)
 
+    @unittest.skipIf(mcfun is None, "mcfun library not found.")
     def test_tdasfu_anag_tpss(self):
         td = sftda.TDA_SF(mf_tpss).set(conv_tol=1e-12)
         td.extype = 0
