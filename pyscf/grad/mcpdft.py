@@ -73,9 +73,14 @@ def xc_response(ot, vot, rho, Pi, weights, moval_occ, aoval, mo_occ, mo_occup, n
     # there doesn't break ao's stride order but I'm not complaining
     vrho = _contract_eff_rho(vPi, rho.sum(0), add_eff_rho=vrho)
 
-    # This generates 
-    tmp_dv = np.stack([ot.get_veff_1body(rho, Pi, [ao_i, moval_occ], weights, kern=vrho) for ao_i in aoval], axis=0)
-    tmp_dv = (tmp_dv * mo_occ[None,:,:] * mo_occup[None, None,:nocc]).sum(2)
+    tmp_dv = np.stack(
+        [
+            ot.get_veff_1body(rho, Pi, [ao_i, moval_occ], weights, kern=vrho)
+            for ao_i in aoval
+        ],
+        axis=0,
+    )
+    tmp_dv = (tmp_dv * mo_occ[None, :, :] * mo_occup[None, None, :nocc]).sum(2)
 
     # Vpuvx * Lpuvx ; remember the stupid slowest->fastest->medium
     # stride order of the ao grid arrays
@@ -242,24 +247,29 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         blksize = max (BLKSIZE, min (blksize, ngrids, BLKSIZE*1200))
         t1 = logger.timer (mc, 'PDFT HlFn quadrature atom {} mask and memory '
             'setup'.format (ia), *t1)
-        for ip0 in range (0, ngrids, blksize):
-            ip1 = min (ngrids, ip0+blksize)
-            mask = gen_grid.make_mask (mol, coords[ip0:ip1])
-            logger.info (mc, ('PDFT gradient atom {} slice {}-{} of {} '
-                'total').format (ia, ip0, ip1, ngrids))
 
-            ao = ot._numint.eval_ao (mol, coords[ip0:ip1],
-                deriv=ao_deriv, non0tab=mask)
-            
+        for ip0 in range(0, ngrids, blksize):
+            ip1 = min(ngrids, ip0 + blksize)
+            mask = gen_grid.make_mask(mol, coords[ip0:ip1])
+            logger.info(
+                mc,
+                ("PDFT gradient atom {} slice {}-{} of {} total").format(
+                    ia, ip0, ip1, ngrids
+                ),
+            )
+
+            ao = ot._numint.eval_ao(mol, coords[ip0:ip1], deriv=ao_deriv, non0tab=mask)
+
             # Need 1st derivs for LDA, 2nd for GGA, etc.
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} ao '
-                'grids').format (ia), *t1)
+            t1 = logger.timer(
+                mc, ("PDFT HlFn quadrature atom {} ao " "grids").format(ia), *t1
+            )
             # Slice down ao so as not to confuse the rho and Pi generators
-            if ot.xctype == 'LDA':
+            if ot.xctype == "LDA":
                 aoval = ao[0]
-            elif ot.xctype == 'GGA':
+            elif ot.xctype == "GGA":
                 aoval = ao[:4]
-            elif ot.xctype == 'MGGA':
+            elif ot.xctype == "MGGA":
                 aoval = ao[:4]
             else:
                 raise ValueError("Unknown xctype: {}".format(ot.xctype))
