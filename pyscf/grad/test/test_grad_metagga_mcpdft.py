@@ -76,7 +76,6 @@ def diatomic(
     if symmetry and (cas_irrep is not None):
         mo = mc.sort_mo_by_irrep(cas_irrep)
 
-    return mc.run(mo)
     mc_grad = mc.run(mo).nuc_grad_method()
     mc_grad.conv_rtol = 1e-12
     return mc_grad
@@ -100,7 +99,6 @@ class KnownValues(unittest.TestCase):
 
     def test_grad_lih_sstm06l22_sto3g(self):
         mc = diatomic("Li", "H", 0.8, "tM06L", "STO-3G", 2, 2, 1, grids_level=1)
-        mc = mc.nuc_grad_method()
         de = mc.kernel()[1, 0] / BOHR
 
         # Numerical from this software
@@ -112,7 +110,6 @@ class KnownValues(unittest.TestCase):
 
     def test_grad_lih_sa2tm06l22_sto3g(self):
         mc = diatomic("Li", "H", 0.8, "tM06L", "STO-3G", 2, 2, 2, grids_level=1)
-        mc = mc.nuc_grad_method()
 
         # Numerical from this software
         # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
