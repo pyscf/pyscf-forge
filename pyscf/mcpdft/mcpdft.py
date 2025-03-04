@@ -552,7 +552,7 @@ class _PDFT:
 
     def get_pdft_veff(self, mo=None, ci=None, state=0, casdm1s=None,
                       casdm2=None, incl_coul=False, paaa_only=False, aaaa_only=False,
-                      jk_pc=False, drop_mcwfn=False, incl_energy=False):
+                      jk_pc=False, drop_mcwfn=False, incl_energy=False, ot=None):
         '''Get the 1- and 2-body MC-PDFT effective potentials for a set
         of mos and ci vectors
 
@@ -588,6 +588,7 @@ class _PDFT:
                 (ie the ``Hartree exchange-correlation'') from the response
             incl_energy : logical
                 If true, includes the on-top potential energy as a 3rd return argument
+            ot : an instance of otfnal class
 
         Returns:
             veff1 : ndarray of shape (nao, nao)
@@ -600,22 +601,47 @@ class _PDFT:
                 On-top energy. Only included if incl_energy is true.
         '''
         t0 = (logger.process_clock(), logger.perf_counter())
-        if mo is None: mo = self.mo_coeff
-        if ci is None: ci = self.ci
-        if casdm1s is None: casdm1s = self.make_one_casdm1s(ci, state=state)
-        if casdm2 is None: casdm2 = self.make_one_casdm2(ci, state=state)
+        if mo is None:
+            mo = self.mo_coeff
+        if ci is None:
+            ci = self.ci
+        if casdm1s is None:
+            casdm1s = self.make_one_casdm1s(ci, state=state)
+        if casdm2 is None:
+            casdm2 = self.make_one_casdm2(ci, state=state)
+        if ot is None: 
+            ot = self.otfnal
+
         ncore, ncas = self.ncore, self.ncas
         dm1s = _dms.casdm1s_to_dm1s(self, casdm1s, mo_coeff=mo,
                                     ncore=ncore, ncas=ncas)
         cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
-        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel(self.otfnal, dm1s,
+        spin = abs(self.nelecas[0] - self.nelecas[1])
+        omega, _, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
+
+        if abs(omega) > 1e-11:
+            raise NotImplementedError("range-separated on-top 1e potentials")
+        if abs(hyb[0] > hyb[1]) > 1e-11:
+            raise NotImplementedError("hybrid functionals with different exchange, correlation components")
+
+        cas_hyb = hyb[0]
+        ot_hyb = 1.0-cas_hyb
+
+        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel(ot, dm1s,
                                                         cascm2, mo, ncore, ncas, max_memory=self.max_memory,
-                                                        paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc,
-                                                        drop_mcwfn=drop_mcwfn)
+                                                        paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc) 
 
         if incl_coul:
-            pdft_veff1 += self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
+            pdft_veff1 += ot_hyb*self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
+
+        if not drop_mcwfn and cas_hyb > 1e-11:
+            # TODO deal with energy_core???
+            # TODO, have eris be a kwarg???
+            eris = self.ao2mo()
+            terms = ["vhf_c", "papa", "ppaa", "j_pc", "k_pc"]
+            for term in terms:
+                setattr(pdft_veff2, term, getattr(pdft_veff2, term) + cas_hyb*getattr(eris, term))
 
         logger.timer(self, 'get_pdft_veff', *t0)
 

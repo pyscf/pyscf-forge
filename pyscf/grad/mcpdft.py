@@ -382,9 +382,9 @@ class Gradients (sacasscf.Gradients):
         omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff (
             otxc, spin=spin)
         hyb_x, hyb_c = hyb
-        if hyb_x or hyb_c:
+        if abs(hyb_x - hyb_c) >1e-11:
             raise NotImplementedError (
-                "{} for hybrid MC-PDFT functionals".format (name)
+                "{} for hybrid MC-PDFT functionals with different exchange, correlation".format (name)
             )
         if omega or alpha:
             raise NotImplementedError (
