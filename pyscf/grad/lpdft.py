@@ -282,7 +282,7 @@ def lpdft_HellmanFeynman_grad(
     if ci is None:
         ci = mc.ci
     if mf_grad is None:
-        mf_grad = mc._scf.nuc_grad_method()
+        mf_grad = mc.get_rhf_base ().nuc_grad_method()
     if mc.frozen is not None:
         raise NotImplementedError
     mol = mc.mol

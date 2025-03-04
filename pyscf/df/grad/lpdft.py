@@ -34,11 +34,7 @@ class Gradients (dfsacasscf_grad.Gradients, lpdft_grad.Gradients):
         with lib.temporary_env (lpdft_grad, lpdft_HellmanFeynman_grad=pfn):
             return lpdft_grad.Gradients.get_ham_response (self, **kwargs)
 
-    def kernel (self, **kwargs):
-        if not ('mf_grad' in kwargs):
-            kwargs['mf_grad'] = dfrhf_grad.Gradients (self.base._scf)
-        return lpdft_grad.Gradients.kernel (self, **kwargs)
-
+    kernel = lpdft_grad.Gradients.kernel
     get_wfn_response = lpdft_grad.Gradients.get_wfn_response
     get_init_guess = lpdft_grad.Gradients.get_init_guess
     get_otp_gradient_response = lpdft_grad.Gradients.get_otp_gradient_response
