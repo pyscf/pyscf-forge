@@ -136,15 +136,10 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if casdm1s is None: casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
     if casdm2 is None: casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     log = logger.new_logger(mc, verbose=verbose)
-    nelecas = mc.nelecas
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff)
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
-    spin = abs(nelecas[0] - nelecas[1])
-    omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
-    if abs(omega) > 1e-11:
-        raise NotImplementedError("range-separated on-top functionals")
-    hyb_x, hyb_c = hyb
+    hyb_x, hyb_c = ot._numint.rsh_and_hybrid_coeff(ot.otxc, mc.mol.spin)[2]
 
     Vnn = mc._scf.energy_nuc()
     h = mc._scf.get_hcore()
@@ -636,12 +631,7 @@ class _PDFT:
             pdft_veff1 += ot_hyb*self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
 
         if not drop_mcwfn and cas_hyb > 1e-11:
-            # TODO deal with energy_core???
-            # TODO, have eris be a kwarg???
-            eris = self.ao2mo()
-            terms = ["vhf_c", "papa", "ppaa", "j_pc", "k_pc"]
-            for term in terms:
-                setattr(pdft_veff2, term, getattr(pdft_veff2, term) + cas_hyb*getattr(eris, term))
+            raise NotImplementedError("adding mcwfn response to pdft_veff2")
 
         logger.timer(self, 'get_pdft_veff', *t0)
 

@@ -17,7 +17,7 @@
 
 import unittest
 
-from pyscf import scf, gto, df, dft
+from pyscf import scf, gto, df, dft, mcscf
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 
@@ -36,7 +36,7 @@ def diatomic(
     symmetry=False,
     cas_irrep=None,
     density_fit=False,
-    grids_level=9,
+    grids_level=9, cas=False
 ):
     """Used for checking diatomic systems to see if the Lagrange Multipliers are working properly."""
     global mols
@@ -55,7 +55,10 @@ def diatomic(
     if density_fit:
         mf = mf.density_fit(auxbasis=df.aug_etb(mol))
 
-    mc = mcpdft.CASSCF(mf.run(), fnal, ncas, nelecas, grids_level=grids_level)
+    if cas:
+        mc = mcscf.CASSCF(mf.run(), ncas, nelecas)
+    else:
+        mc = mcpdft.CASSCF(mf.run(), fnal, ncas, nelecas, grids_level=grids_level)
     if spin is None:
         spin = mol.nelectron % 2
 
@@ -120,6 +123,29 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=state):
                 de = mc.kernel(state=state)[1, 0] / BOHR
                 self.assertAlmostEqual(de, DE_REF[state], 5)
+
+    def test_grad_lih_sstpbe022_sto3g(self):
+        mc = diatomic("Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 1, grids_level=9)
+
+        de_ana = mc.kernel()[1,0]
+
+        mc_scanner = mc.base.as_scanner()
+        print(de_ana)
+
+        import numpy as np
+
+        for i in np.arange(2, 8, 0.1):
+            delta = np.exp(-i)
+            mc_scanner(f"Li 0 0 0; H {0.8+delta} 0 0")
+            e1 = mc_scanner.e_tot
+            mc_scanner(f"Li 0 0 0; H {0.8-delta} 0 0")
+            e2 = mc_scanner.e_tot
+            de_num = (e1-e2)/(2*delta) * BOHR
+
+            err = np.abs(de_num - de_ana)
+
+            print(err)
+
 
 
 if __name__ == "__main__":
