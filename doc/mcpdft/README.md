@@ -64,7 +64,7 @@ energy calculations for wave functions of various types.
   - Analytical nuclear gradients (non-hybrid functionals only) for:
     1. Single-state CASSCF wave function: [*JCTC* **2018**, *14*, 126]
     1. State-averaged CASSCF wave functions: [*JCP* **2020**, *153*, 014106]
-    1. CMS-PDFT (no meta-GGA): [*Mol Phys* **2022**, 120]
+    1. CMS-PDFT: [*Mol Phys* **2022**, 120]
     1. L-PDFT (no meta-GGA): [*JCTC* **2024**, *20*, 3637]
   - Permanent electric dipole moment (non-hybrid functionals only) for:
     1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
