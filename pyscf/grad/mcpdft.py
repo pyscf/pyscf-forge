@@ -434,11 +434,14 @@ class Gradients (sacasscf.Gradients):
             raise NotImplementedError("hybrid on-top functional with different exchange,correlation components")
         cas_hyb = hyb[0]
 
-        if cas_hyb > 1e-11:
+        if cas_hyb > 1e-11:# and len(ci) > 1:
+            # For SS-CASSCF, there are no Lagrange multipliers
+            # This is only needed in SA case
             eris = self.base.ao2mo(mo_coeff=mo)
             terms = ["vhf_c", "papa", "ppaa", "j_pc", "k_pc"]
             for term in terms:
-                setattr(eris, term, getattr(veff2, term) + cas_hyb*getattr(eris, term)[:])
+                setattr(eris, term, getattr(veff2, term) + cas_hyb*getattr(eris, term))
+            veff2.vhf_c
             veff2 = eris
 
 
