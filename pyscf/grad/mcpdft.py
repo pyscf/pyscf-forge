@@ -68,11 +68,19 @@ def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, eris):
 def xc_response(ot, vot, rho, Pi, weights, moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_pack, ndpi, mo_cas):
     vrho, vPi = vot
 
+
     # Vpq + Vpqrs * Drs ; I'm not sure why the list comprehension down
     # there doesn't break ao's stride order but I'm not complaining
     vrho = _contract_eff_rho(vPi, rho.sum(0), add_eff_rho=vrho)
-    tmp_dv = np.stack([ot.get_veff_1body(rho, Pi, [ao_i, moval_occ], weights, kern=vrho) for ao_i in aoval], axis=0)
-    tmp_dv = (tmp_dv * mo_occ[None,:,:] * mo_occup[None, None,:nocc]).sum(2)
+
+    tmp_dv = np.stack(
+        [
+            ot.get_veff_1body(rho, Pi, [ao_i, moval_occ], weights, kern=vrho)
+            for ao_i in aoval
+        ],
+        axis=0,
+    )
+    tmp_dv = (tmp_dv * mo_occ[None, :, :] * mo_occup[None, None, :nocc]).sum(2)
 
     # Vpuvx * Lpuvx ; remember the stupid slowest->fastest->medium
     # stride order of the ao grid arrays
@@ -202,7 +210,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
     twoCDM = _dms.dm2_cumulant (casdm2, casdm1)
     dm1 = tag_array (dm1, mo_coeff=mo_occ, mo_occ=mo_occup[:nocc])
-    make_rho = ot._numint._gen_rho_evaluator (mol, dm1, 1)[0]
+    make_rho = ot._numint._gen_rho_evaluator (mol, dm1, hermi=1, with_lapl=False)[0]
     dvxc = np.zeros ((3,nao))
     idx = np.array ([[1,4,5,6],[2,5,7,8],[3,6,8,9]], dtype=np.int_)
     # For addressing particular ao derivatives
@@ -215,9 +223,13 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     for k, ia in enumerate (atmlst):
         full_atmlst[ia] = k
 
-    ndao = (1, 4)[ot.dens_deriv]
+    # for LDA we need 1 deriv, GGA: 2 deriv
+    # for mGGA with tau, we only need 2 deriv
+    ao_deriv = (1, 2, 2)[ot.dens_deriv]
+    ndao = (1, 4, 10)[ao_deriv]
+    ndrho = (1, 4, 5)[ot.dens_deriv]
     ndpi = (1, 4)[ot.Pi_deriv]
-    ncols = 1.05 * 3 * (ndao * (nao + nocc) + max(ndao * nao, ndpi * ncas * ncas))
+    ncols = 1.05 * 3 * (ndao * (nao + nocc) + max(ndrho * nao, ndpi * ncas * ncas))
 
     for ia, (coords, w0, w1) in enumerate (rks_grad.grids_response_cc (
             ot.grids)):
@@ -235,27 +247,39 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         blksize = max (BLKSIZE, min (blksize, ngrids, BLKSIZE*1200))
         t1 = logger.timer (mc, 'PDFT HlFn quadrature atom {} mask and memory '
             'setup'.format (ia), *t1)
-        for ip0 in range (0, ngrids, blksize):
-            ip1 = min (ngrids, ip0+blksize)
-            mask = gen_grid.make_mask (mol, coords[ip0:ip1])
-            logger.info (mc, ('PDFT gradient atom {} slice {}-{} of {} '
-                'total').format (ia, ip0, ip1, ngrids))
-            ao = ot._numint.eval_ao (mol, coords[ip0:ip1],
-                deriv=ot.dens_deriv+1, non0tab=mask)
+
+        for ip0 in range(0, ngrids, blksize):
+            ip1 = min(ngrids, ip0 + blksize)
+            mask = gen_grid.make_mask(mol, coords[ip0:ip1])
+            logger.info(
+                mc,
+                ("PDFT gradient atom {} slice {}-{} of {} total").format(
+                    ia, ip0, ip1, ngrids
+                ),
+            )
+
+            ao = ot._numint.eval_ao(mol, coords[ip0:ip1], deriv=ao_deriv, non0tab=mask)
+
             # Need 1st derivs for LDA, 2nd for GGA, etc.
-            t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} ao '
-                'grids').format (ia), *t1)
+            t1 = logger.timer(
+                mc, ("PDFT HlFn quadrature atom {} ao " "grids").format(ia), *t1
+            )
             # Slice down ao so as not to confuse the rho and Pi generators
-            if ot.xctype == 'LDA':
+            if ot.xctype == "LDA":
                 aoval = ao[0]
-            if ot.xctype == 'GGA':
+            elif ot.xctype == "GGA":
                 aoval = ao[:4]
+            elif ot.xctype == "MGGA":
+                aoval = ao[:4]
+            else:
+                raise ValueError("Unknown xctype: {}".format(ot.xctype))
+
             rho = make_rho (0, aoval, mask, ot.xctype) / 2.0
             rho = np.stack ((rho,)*2, axis=0)
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} rho '
                 'calc').format (ia), *t1)
             Pi = get_ontop_pair_density (ot, rho, aoval, twoCDM, mo_cas,
-                ot.dens_deriv, mask)
+                ot.Pi_deriv, mask)
             t1 = logger.timer (mc, ('PDFT HlFn quadrature atom {} Pi '
                 'calc').format (ia), *t1)
 
