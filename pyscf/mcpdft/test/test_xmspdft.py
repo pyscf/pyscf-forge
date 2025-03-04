@@ -124,6 +124,9 @@ class KnownValues(unittest.TestCase):
     def test_lih_xms2mc23(self):
         mc = get_lih(1.5)
         e_mcscf_avg = np.dot(mc.e_mcscf, mc.weights)
+        hcoup = abs(mc.heff_mcscf[0,1])
+        ct_mcscf = abs(mc.si_mcscf[0,0])
+        ct_pdft = abs(mc.si_pdft[0,0])
 
         # Reference values from
         # - PySCF        hash 9a0bb6ddded7049bdacdaf4cfe422f7ce826c2c7
@@ -131,13 +134,15 @@ class KnownValues(unittest.TestCase):
 
         E_MCSCF_AVG_EXPECTED = -7.7890218306
         E_STATES_EXPECTED = [-7.85862852, -7.6998051]
-        HEFF_MCSCF_EXPECTED = [[-7.85326169, 0.01996005], [0.01996005, -7.72478198]]
-        SI_MCSCF_EXPECTED = [[-0.98867715, -0.15005828], [0.15005828, -0.98867715]]
+        HCOUP_EXPECTED = 0.01996005
+        CT_MCSCF_EXPECTED = 0.98867715
+        CT_PDFT_EXPECTED = 0.9919416682619435
 
         self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 8)
         self.assertAlmostEqual(lib.fp(mc.e_states), lib.fp(E_STATES_EXPECTED), 8)
-        self.assertAlmostEqual(lib.fp(mc.heff_mcscf), lib.fp(HEFF_MCSCF_EXPECTED), 8)
-        self.assertAlmostEqual(lib.fp(mc.si_mcscf), lib.fp(SI_MCSCF_EXPECTED), 8)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 8)
+        self.assertAlmostEqual(ct_mcscf, CT_MCSCF_EXPECTED, 8)
+        self.assertAlmostEqual(ct_pdft, CT_PDFT_EXPECTED, 8)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import numpy as np
-from pyscf import gto, mcpdft
+from pyscf import gto, mcpdft, lib
 import unittest
 
 degree = np.pi / 180.0
@@ -48,7 +48,7 @@ def numerical_Q(mc):
     return num_Q
 
 
-def get_lih(r):
+def get_lih(r, fnal="ftLDA,VWN3"):
     global mols
     mol = gto.M(
         atom="Li 0 0 0\nH {} 0 0".format(r),
@@ -58,7 +58,7 @@ def get_lih(r):
     )
     mols.append(mol)
     mf = mol.RHF().run()
-    mc = mcpdft.CASSCF(mf, "ftLDA,VWN3", 2, 2, grids_level=1)
+    mc = mcpdft.CASSCF(mf, fnal, 2, 2, grids_level=1)
     mc.fix_spin_(ss=0)
     mc = mc.multi_state([0.5, 0.5], "cms").run(conv_tol=1e-8)
     return mc
@@ -77,7 +77,7 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    def test_lih(self):
+    def test_lih_cms2ftlda22(self):
         # Reference values from OpenMolcas v22.02, tag 177-gc48a1862b
         # Ignoring the PDFT energies and final states because of grid nonsense
         mc = get_lih(1.5)
@@ -142,6 +142,34 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual(dQ_test[0], dQ_ref[0], 9)
             with self.subTest(deriv=2):
                 self.assertAlmostEqual(d2Q_test[0, 0], d2Q_ref[0, 0], 9)
+
+    def test_scanner(self):
+        mc1 = get_lih(1.5)
+        mc2 = get_lih(1.55).as_scanner()
+
+        mc2(mc1.mol)
+        self.assertTrue(mc1.converged)
+        self.assertTrue(mc2.converged)
+        self.assertAlmostEqual(lib.fp(mc1.e_states), lib.fp(mc2.e_states), 6)
+
+    def test_lih_cms2mc2322(self):
+        mc = get_lih(1.5, fnal="MC23")
+        e_mcscf_avg = np.dot(mc.e_mcscf, mc.weights)
+        hcoup = abs(mc.heff_mcscf[0, 1])
+        ct_mcscf = abs(mc.si_mcscf[0, 0])
+        ct_pdft = abs(mc.si_pdft[0, 0])
+
+        HCOUP_EXPECTED = 0.03508667
+        E_MCSCF_AVG_EXPECTED = -7.789021830554006
+        E_STATES_EXPECTED = [-7.93513351, -7.77927879]
+        CT_MCSCF_EXPECTED = 0.9626004825617019
+        CT_PDFT = 0.9728574801328089
+
+        self.assertAlmostEqual(e_mcscf_avg, E_MCSCF_AVG_EXPECTED, 8)
+        self.assertAlmostEqual(lib.fp(mc.e_states), lib.fp(E_STATES_EXPECTED), 8)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 8)
+        self.assertAlmostEqual(ct_mcscf, CT_MCSCF_EXPECTED, 8)
+        self.assertAlmostEqual(ct_pdft, CT_PDFT, 8)
 
 
 if __name__ == "__main__":
