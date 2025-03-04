@@ -538,6 +538,8 @@ class Gradients (sacasscf.Gradients):
         if ('veff1' not in kwargs) or ('veff2' not in kwargs):
             kwargs['veff1'], kwargs['veff2'] = self.base.get_pdft_veff (mo,
                 ci, incl_coul=True, paaa_only=True, state=state)
+        if 'mf_grad' not in kwargs:
+            kwargs['mf_grad'] = self.base.get_rhf_base ().nuc_grad_method ()
         return super().kernel (**kwargs)
 
     def project_Aop (self, Aop, ci, state):

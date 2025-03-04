@@ -463,15 +463,15 @@ class _PDFT:
         self.otfnal.stdout = self.stdout
 
     def get_rhf_base (self):
-        from pyscf.scf.rhf import RHF
+        from pyscf.scf.hf import RHF
         from pyscf.scf.rohf import ROHF
         from pyscf.scf.uhf import UHF
-        scf_cls = mc._scf.__class__
-        if issubclass (scf_cls, ROHF):
-            rhf_cls = lib.drop_class (scf_cls, ROHF)
-        if issubclass (scf_cls, UHF):
-            rhf_cls = lib.replace_class (scf_cls, UHF, RHF)
-        return lib.view (mc._scf, rhf_cls)
+        rhf_cls = self._scf.__class__
+        if issubclass (rhf_cls, ROHF):
+            rhf_cls = lib.replace_class (rhf_cls, ROHF, RHF)
+        if issubclass (rhf_cls, UHF):
+            rhf_cls = lib.replace_class (rhf_cls, UHF, RHF)
+        return lib.view (self._scf, rhf_cls)
 
     @property
     def grids(self):
