@@ -127,6 +127,51 @@ class KnownValues(unittest.TestCase):
                     de = mc_grad.kernel (state=i)[0,0]
                     self.assertAlmostEqual (de, ref_sa[state], 5)
 
+    def test_triplet_mol (self):
+        '''Check that energies & gradients do not depend on if the parent MF is RHF or ROHF'''
+        mc = mcpdft.CASSCF (mf_nosym, 'ftLDA,VWN3', 5, (2,0),
+                            grids_level=1).run (mo_coeff=mcp[1][0].mo_coeff.copy ())
+        mc_grad = mc.nuc_grad_method ()
+        e_ref = mc.e_tot
+        de_ref = mc_grad.kernel ()
+        self.assertTrue (mc.converged)
+        self.assertTrue (mc_grad.converged)
+        mo_coeff = mc.mo_coeff.copy ()
+        mol = mol_nosym.copy ()
+        mol.spin = 2
+        mol.build ()
+        mf = scf.RHF (mol).run ()
+        mc = mcpdft.CASSCF (mf, 'ftLDA,VWN3', 5, (2,0),
+                            grids_level=1).run (mo_coeff=mo_coeff)
+        self.assertTrue (mc.converged)
+        self.assertAlmostEqual (mc.e_tot, e_ref, 6)
+        mc_grad = mc.nuc_grad_method ()
+        self.assertAlmostEqual (lib.fp (mc_grad.kernel ()), lib.fp (de_ref), 6)
+        self.assertTrue (mc_grad.converged)
+
+    def test_triplet_mol_df (self):
+        '''Check that energies & gradients do not depend on if the parent MF is RHF or ROHF
+        Density fitting can cause a weird interaction.'''
+        mc = mcpdft.CASSCF (mf_nosym.density_fit ().run (), 'ftLDA,VWN3', 5, (2,0),
+                            grids_level=1).run (mo_coeff=mcp[1][0].mo_coeff.copy ())
+        mc_grad = mc.nuc_grad_method ()
+        e_ref = mc.e_tot
+        de_ref = mc_grad.kernel ()
+        self.assertTrue (mc.converged)
+        self.assertTrue (mc_grad.converged)
+        mo_coeff = mc.mo_coeff.copy ()
+        mol = mol_nosym.copy ()
+        mol.spin = 2
+        mol.build ()
+        mf = scf.RHF (mol).density_fit ().run ()
+        mc = mcpdft.CASSCF (mf, 'ftLDA,VWN3', 5, (2,0),
+                            grids_level=1).run (mo_coeff=mo_coeff)
+        self.assertTrue (mc.converged)
+        self.assertAlmostEqual (mc.e_tot, e_ref, 6)
+        mc_grad = mc.nuc_grad_method ()
+        self.assertAlmostEqual (lib.fp (mc_grad.kernel ()), lib.fp (de_ref), 6)
+        self.assertTrue (mc_grad.converged)
+
 if __name__ == "__main__":
     print("Full Tests for MC-PDFT gradients API")
     unittest.main()
