@@ -18,7 +18,6 @@ from pyscf.grad import rks as rks_grad
 from pyscf.dft import gen_grid
 from pyscf.lib import logger, pack_tril, current_memory, einsum, tag_array
 from pyscf.grad import sacasscf
-from pyscf.grad import casscf as casscf_grad
 from pyscf.mcscf.casci import cas_natorb
 
 from pyscf.mcpdft.pdft_eff import _contract_eff_rho
@@ -171,7 +170,20 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     if abs(hyb[0] - hyb[1]) > 1e-11:
         raise NotImplementedError("hybrid on-top functionals with different exchange,correlation components")
 
-    ot_hyb = 1.0-hyb[0]
+    cas_hyb = hyb[0]
+    ot_hyb = 1.0-cas_hyb
+
+    if cas_hyb > 1e-11:
+        if auxbasis_response:
+            from pyscf.df.grad import casscf as casscf_grad
+        else:
+            from pyscf.grad import casscf as casscf_grad
+
+        cas_grad = casscf_grad.Gradients(mc)
+
+        de_cas = cas_hyb * cas_grad.grad_elec(
+            mo_coeff=mo_coeff, ci=ci, atmlst=atmlst, verbose=verbose
+        )
 
     # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
     dm_core = 2 * mo_core @ mo_core.T
@@ -366,6 +378,10 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         logger.debug (mc, "MC-PDFT Hellmann-Feynman aux component:\n{}".format
             (de_aux))
 
+    if cas_hyb > 1e-11:
+        de += de_cas
+        logger.debug(mc, "MC-PDFT Hellmann-Feynman CAS component:\n{}".format(de_cas))
+
     t1 = logger.timer (mc, 'PDFT HlFn total', *t0)
 
     return de
@@ -440,7 +456,7 @@ class Gradients (sacasscf.Gradients):
             eris = self.base.ao2mo(mo_coeff=mo)
             terms = ["vhf_c", "papa", "ppaa", "j_pc", "k_pc"]
             for term in terms:
-                setattr(eris, term, getattr(veff2, term) + cas_hyb*getattr(eris, term))
+                setattr(eris, term, getattr(veff2, term) + cas_hyb*getattr(eris, term)[:])
             veff2.vhf_c
             veff2 = eris
 
@@ -489,47 +505,17 @@ class Gradients (sacasscf.Gradients):
         fcasscf.mo_coeff = mo
         fcasscf.ci = ci[state]
 
-        nelecas = self.base.nelecas
-        spin = abs (nelecas[0]-nelecas[1])
-        omega, alpha, hyb = self.base.otfnal._numint.rsh_and_hybrid_coeff(self.base.otxc, spin=spin)
-        if omega or alpha:
-            raise NotImplementedError("range-separated MC-PDFT functionals")
-
-        if abs(hyb[0] - hyb[1]) > 1e-11:
-            raise NotImplementedError(
-                "hybrid on-top functional with different exchange,correlation components"
-            )
-
-        cas_hyb = hyb[0]
-
-        if cas_hyb > 1e-11:
-            fcasscf_grad = casscf_grad.Gradients(fcasscf)
-            return cas_hyb * fcasscf_grad.grad_elec(
-                mo_coeff=mo, ci=ci[state], atmlst=atmlst, verbose=verbose
-            ) + mcpdft_HellmanFeynman_grad(
-                fcasscf,
-                self.base.otfnal,
-                veff1,
-                veff2,
-                mo_coeff=mo,
-                ci=ci[state],
-                atmlst=atmlst,
-                mf_grad=mf_grad,
-                verbose=verbose,
-            )
-
-        else:
-            return mcpdft_HellmanFeynman_grad(
-                fcasscf,
-                self.base.otfnal,
-                veff1,
-                veff2,
-                mo_coeff=mo,
-                ci=ci[state],
-                atmlst=atmlst,
-                mf_grad=mf_grad,
-                verbose=verbose,
-            )
+        return mcpdft_HellmanFeynman_grad(
+            fcasscf,
+            self.base.otfnal,
+            veff1,
+            veff2,
+            mo_coeff=mo,
+            ci=ci[state],
+            atmlst=atmlst,
+            mf_grad=mf_grad,
+            verbose=verbose,
+        )
 
     def get_init_guess (self, bvec, Adiag, Aop, precond):
         '''Initial guess should solve the problem for SA-SA rotations'''
