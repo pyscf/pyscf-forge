@@ -129,23 +129,40 @@ class KnownValues(unittest.TestCase):
 
         # Numerical from this software
         # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
-        # PySCF-forge commit:   5027df09b644c819439046f9bb34b7efee2ac3e0
+        # PySCF-forge commit:   e82ba940654cd0b91f799e889136a316fda34b10
         DE_REF = -1.0641645070
 
         self.assertAlmostEqual(de, DE_REF, 5)
+    
+    def test_grad_lih_sa2mc2322_sto3g(self):
+        mc = diatomic("Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 2, grids_level=1)
+
+        # Numerical from this software
+        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
+        # PySCF-forge commit:   e82ba940654cd0b91f799e889136a316fda34b10
+        DE_REF = [-1.0510225010, -0.8963063432]
+
+        for state in range(2):
+            with self.subTest(state=state):
+                de = mc.kernel(state=state)[1, 0] / BOHR
+                self.assertAlmostEqual(de, DE_REF[state], 5)
 
 
     def test_custom(self):
         df = False
         r = 0.8
-        mc = diatomic("Li", "H", r, "MC23", "STO-3G", 2, 2, 1, grids_level=1, density_fit=df)
+        mc = diatomic("Li", "H", r, "MC23", "STO-3G", 2, 2, 2, grids_level=1, density_fit=df)
 
-        de_ana = mc.kernel(state=0)[1,0]/BOHR
+        de_ana = []
+        for state in range(2):
+            de = mc.kernel(state=state)[1,0]/BOHR
+            de_ana.append(de)
 
+        import numpy as np
+        de_ana = np.array(de_ana)
         mc_scanner = mc.base.as_scanner()
         print(de_ana)
 
-        import numpy as np
 
         deltas = []
         de_num = []
@@ -154,16 +171,19 @@ class KnownValues(unittest.TestCase):
             delta = np.exp(-i)
             deltas.append(delta)
             mc_scanner(f"Li 0 0 0; H {r+delta} 0 0")
-            e1 = mc_scanner.e_tot
+            e1 = np.array(mc_scanner.e_states)
             mc_scanner(f"Li 0 0 0; H {r-delta} 0 0")
-            e2 = mc_scanner.e_tot
+            e2 = np.array(mc_scanner.e_states)
             de = (e1-e2)/(2*delta) 
 
             de_num.append(de)
-            # print(de-de_ana)
+
+        de_num = np.array(de_num).transpose()
 
         print(",".join([f"{d:.10f}" for d in deltas]))
-        print(",".join([f"{d:.10f}" for d in de_num]))
+        for state in range(2):
+            print("State: ", state)
+            print(",".join([f"{d:.10f}" for d in de_num[state]]))
 
 
 if __name__ == "__main__":
