@@ -168,12 +168,21 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     if abs(omega) > 1e-11:
         raise NotImplementedError("range-separated on-top functionals")
     if abs(hyb[0] - hyb[1]) > 1e-11:
-        raise NotImplementedError("hybrid on-top functionals with different exchange,correlation components")
+        raise NotImplementedError(
+            "hybrid on-top functionals with different exchange,correlation components"
+        )
 
     cas_hyb = hyb[0]
-    ot_hyb = 1.0-cas_hyb
+    ot_hyb = 1.0 - cas_hyb
 
     if cas_hyb > 1e-11:
+        # TODO: actually implement this in a more efficient manner
+        # That is, lets not call grad_elec, but lets actually do this our self maybe?
+        # Can then use get_pdft_veff with drop_mcwfn = False to automatically get
+        # Generalized fock matrix terms, but then have to deal explicitly with the
+        # derivative of eri terms and auxbasis stuff. Also, get_pdft_veff with
+        # drop_mcwfn=False means the get_wfn_response doesn't have to add the
+        # eris to the veff2 since it should just include it already
         if auxbasis_response:
             from pyscf.df.grad import casscf as casscf_grad
         else:
