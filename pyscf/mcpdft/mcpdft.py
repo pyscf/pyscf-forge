@@ -672,6 +672,8 @@ class _PDFT:
     def nuc_grad_method(self):
         return self._state_average_nuc_grad_method(state=None)
 
+    Gradients=nuc_grad_method
+
     def dip_moment(self, unit='Debye', origin='Coord_Center', state=0):
         if not isinstance(self, mc1step.CASSCF):
             raise NotImplementedError("CASCI-based PDFT dipole moments")
