@@ -266,6 +266,37 @@ class KnownValues(unittest.TestCase):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
 
+    def test_rohf_sanity (self):
+        n_states = 2
+        mc_grad = diatomic(
+            "Li", "H", 1.4, "ftpbe", "6-31g", 4, 2, n_states, density_fit=False, spin=2
+        )
+
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        NUM_REF = [-0.06264161, -0.05843108]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 4)
+
+    def test_dfrohf_sanity (self):
+        n_states = 2
+        mc_grad = diatomic(
+            "Li", "H", 1.4, "ftpbe", "6-31g", 4, 2, n_states, density_fit=True, spin=2
+        )
+
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        NUM_REF = [-0.06263842, -0.05846438]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 4)
+
+
 
 if __name__ == "__main__":
     print("Full Tests for L-PDFT gradients API")

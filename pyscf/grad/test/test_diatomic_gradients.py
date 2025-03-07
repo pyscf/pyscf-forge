@@ -189,22 +189,22 @@ class KnownValues(unittest.TestCase):
     def test_rohf_sanity (self):
         mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
                             cas_irrep={'A1': 4}, spin=2)
-        de_ref = [-0.03980907646529936,-0.0241802481920494] 
-        # Stability checking only
+        de_ref = [-0.039806,-0.024193] 
+        # Numerical from this software
         for i in range (2):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            self.assertAlmostEqual (de, de_ref[i], 4)
 
     def test_dfrohf_sanity (self):
         mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
                             density_fit=True, cas_irrep={'A1': 4}, spin=2)
-        de_ref = [-0.03972386686433475,-0.02412562061211657] 
-        # Stability checking only
+        de_ref = [-0.039721,-0.024139] 
+        # Numerical from this software
         for i in range (2):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            self.assertAlmostEqual (de, de_ref[i], 4)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradients of diatomic molecules")
