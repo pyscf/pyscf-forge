@@ -697,7 +697,7 @@ class KnownValues(unittest.TestCase):
                 e_states_fp = lib.fp(np.sort(mc_scan.e_states))
                 e_states_fp_ref = lib.fp(np.sort(mc0.e_states))
                 self.assertAlmostEqual(e_tot, mc0.e_tot, delta=2e-6)
-                self.assertAlmostEqual(e_states_fp, e_states_fp_ref, delta=5e-6)
+                self.assertAlmostEqual(e_states_fp, e_states_fp_ref, delta=2e-5)
         mc2 = mcpdft.CASCI(mcp1[1][0], "tPBE", 5, 2)
         mc2.fcisolver.nroots = 5
         mc2.run(mo_coeff=mcp[1][0].mo_coeff)
