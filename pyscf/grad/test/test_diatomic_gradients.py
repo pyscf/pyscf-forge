@@ -191,6 +191,8 @@ class KnownValues(unittest.TestCase):
                             cas_irrep={'A1': 4}, spin=2)
         de_ref = [-0.039806,-0.024193] 
         # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
         for i in range (2):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
@@ -201,6 +203,8 @@ class KnownValues(unittest.TestCase):
                             density_fit=True, cas_irrep={'A1': 4}, spin=2)
         de_ref = [-0.039721,-0.024139] 
         # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
         for i in range (2):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
