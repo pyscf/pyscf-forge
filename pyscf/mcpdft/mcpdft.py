@@ -462,6 +462,18 @@ class _PDFT:
         self.otfnal.verbose = self.verbose
         self.otfnal.stdout = self.stdout
 
+    def get_rhf_base (self):
+        from pyscf.scf.hf import RHF
+        from pyscf.scf.rohf import ROHF
+        from pyscf.scf.hf_symm import SymAdaptedRHF
+        from pyscf.scf.hf_symm import SymAdaptedROHF
+        rhf_cls = self._scf.__class__
+        if issubclass (rhf_cls, SymAdaptedROHF):
+            rhf_cls = lib.replace_class (rhf_cls, SymAdaptedROHF, SymAdaptedRHF)
+        if issubclass (rhf_cls, ROHF):
+            rhf_cls = lib.replace_class (rhf_cls, ROHF, RHF)
+        return lib.view (self._scf, rhf_cls)
+
     @property
     def grids(self):
         return self.otfnal.grids

@@ -16,6 +16,7 @@
 from pyscf import gto, scf, df, dft
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
+from pyscf.fci.addons import _unpack_nelec
 import unittest
 
 def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
@@ -34,7 +35,8 @@ def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     #if spin is not None: smult = spin+1
     #else: smult = (mol.nelectron % 2) + 1
     #mc.fcisolver = csf_solver (mol, smult=smult)
-    if spin is None: spin = mol.nelectron%2
+    neleca, nelecb = _unpack_nelec (nelecas, spin=spin)
+    spin = neleca-nelecb
     ss=spin*(spin+2)*0.25
     mc = mc.multi_state ([1.0/float(nstates),]*nstates, 'cms')
     mc.fix_spin_(ss=ss, shift=1)
@@ -185,6 +187,38 @@ class KnownValues(unittest.TestCase):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
+
+    def test_rohf_sanity (self):
+        mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
+                            cas_irrep={'A1': 4}, spin=2)
+        mc_grad_ref = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, (2,0), 2,
+                            symmetry=True, cas_irrep={'A1': 4})
+        de_num_ref = [-0.039806,-0.024193] 
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_num_ref[i], 4)
+            de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_ref, 6)
+
+    def test_dfrohf_sanity (self):
+        mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
+                            density_fit=True, cas_irrep={'A1': 4}, spin=2)
+        mc_grad_ref = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, (2,0), 2,
+                                symmetry=True, density_fit=True, cas_irrep={'A1': 4})
+        de_num_ref = [-0.039721,-0.024139] 
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_num_ref[i], 4)
+            de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_ref, 6)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradients of diatomic molecules")

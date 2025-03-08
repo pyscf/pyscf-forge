@@ -139,9 +139,10 @@ class KnownValues(unittest.TestCase):
             si_diag = si * si
             de_diag = np.stack ([mc_grad.get_ham_response (state=i, ci=ci) for i in (0,1)], axis=0)
             de_ref -= np.einsum ('sac,sr->rac', de_diag, si_diag)
+            mf_grad = mc._scf.nuc_grad_method ()
             for r in (0,1):
                 de_test = mspdft_heff_HellmanFeynman (mc_grad, ci=ci, state=r,
-                    si_bra=si[:,r], si_ket=si[:,r], eris=eris)
+                    si_bra=si[:,r], si_ket=si[:,r], eris=eris, mf_grad=mf_grad)
                 with self.subTest (symm=stype, solver=atype, eri=itype, root=r):
                     self.assertAlmostEqual (lib.fp (de_test), lib.fp (de_ref[r]), 8)
 

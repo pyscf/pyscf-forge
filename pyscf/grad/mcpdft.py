@@ -146,7 +146,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     used for the energy response terms. '''
     if mo_coeff is None: mo_coeff = mc.mo_coeff
     if ci is None: ci = mc.ci
-    if mf_grad is None: mf_grad = mc._scf.nuc_grad_method()
+    if mf_grad is None: mf_grad = mc.get_rhf_base ().nuc_grad_method()
     if mc.frozen is not None:
         raise NotImplementedError
     if max_memory is None: max_memory = mc.max_memory
@@ -538,6 +538,8 @@ class Gradients (sacasscf.Gradients):
         if ('veff1' not in kwargs) or ('veff2' not in kwargs):
             kwargs['veff1'], kwargs['veff2'] = self.base.get_pdft_veff (mo,
                 ci, incl_coul=True, paaa_only=True, state=state)
+        if 'mf_grad' not in kwargs:
+            kwargs['mf_grad'] = self.base.get_rhf_base ().nuc_grad_method ()
         return super().kernel (**kwargs)
 
     def project_Aop (self, Aop, ci, state):

@@ -107,9 +107,10 @@ class KnownValues(unittest.TestCase):
             else: continue #mc_grad = dfsacasscf.Gradients (mc)
             # TODO: proper DF functionality
             eris = mc.ao2mo (mc.mo_coeff)
+            mf_grad = mc._scf.nuc_grad_method ()
             with self.subTest (symm=stype, solver=atype, eri=itype):
-                dh_test = diab_grad (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
-                dh_ref = diab_grad_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
+                dh_test = diab_grad (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris, mf_grad=mf_grad)
+                dh_ref = diab_grad_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris, mf_grad=mf_grad)
                 self.assertAlmostEqual (lib.fp (dh_test), lib.fp (dh_ref), 8)
 
 if __name__ == "__main__":
