@@ -138,7 +138,7 @@ def mspdft_heff_HellmanFeynman (mc_grad, atmlst=None, mo=None, ci=None,
     if si_bra is None: si_bra = si[:,bra]
     if si_ket is None: si_ket = si[:,ket]
     if eris is None: eris = mc.ao2mo (mo)
-    if mf_grad is None: mf_grad = mc._scf.nuc_grad_method ()
+    if mf_grad is None: mf_grad = mc.get_rhf_base ().nuc_grad_method ()
     if verbose is None: verbose = mc_grad.verbose
     ncore = mc.ncore
     log = logger.new_logger (mc_grad, verbose)
@@ -429,7 +429,7 @@ class Gradients (mcpdft_grad.Gradients):
         ket, bra = _unpack_state (state)
         if si_bra is None: si_bra = si[:,bra]
         if si_ket is None: si_ket = si[:,ket]
-        if mf_grad is None: mf_grad = self.base._scf.nuc_grad_method ()
+        if mf_grad is None: mf_grad = self.base.get_rhf_base ().nuc_grad_method ()
         if verbose is None: verbose = self.verbose
         si_diag = si_bra * si_ket
         log = logger.new_logger (self, verbose)

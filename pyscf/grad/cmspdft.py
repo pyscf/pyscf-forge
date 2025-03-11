@@ -237,7 +237,7 @@ def diab_grad (mc_grad, Lis, atmlst=None, mo=None, ci=None, eris=None,
         eris : object of class ERIS (CASSCF or CASCI)
             Contains (true) ERIs in the MO basis
         mf_grad: object of class Gradients (RHF)
-            Defaults to mc_grad.base._scf.nuc_grad_method ()
+            Defaults to mc_grad.base.get_rhf_base ().nuc_grad_method ()
 
     Returns:
         de : ndarray of shape (len (atmlst), 3)
@@ -251,7 +251,7 @@ def diab_grad (mc_grad, Lis, atmlst=None, mo=None, ci=None, eris=None,
     moH = mo.conj ().T
     mo_cas = mo[:,ncore:nocc]
     moH_cas = moH[ncore:nocc,:]
-    if mf_grad is None: mf_grad = mc._scf.nuc_grad_method()
+    if mf_grad is None: mf_grad = mc.get_rhf_base ().nuc_grad_method()
     if atmlst is None: atmlst = list (range(mol.natm))
 
     # CI vector shift
@@ -318,7 +318,7 @@ def diab_grad_o0 (mc_grad, Lis, atmlst=None, mo=None, ci=None, eris=None,
     ''' Monkeypatch version of diab_grad '''
     mc = mc_grad.base
     ncas, nelecas, nroots = mc.ncas, mc.nelecas, mc_grad.nroots
-    if mf_grad is None: mf_grad = mc._scf.nuc_grad_method()
+    if mf_grad is None: mf_grad = mc.get_rhf_base ().nuc_grad_method()
 
     # CI vector shift
     L = np.zeros ((nroots, nroots), dtype=Lis.dtype)

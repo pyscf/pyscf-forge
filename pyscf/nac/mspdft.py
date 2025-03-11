@@ -108,7 +108,7 @@ class NonAdiabaticCouplings (mspdft_grad.Gradients):
         if si is None: si = self.base.si
         if si_bra is None: si_bra = si[:,bra]
         if si_ket is None: si_ket = si[:,ket]
-        if mf_grad is None: mf_grad = self.base._scf.nuc_grad_method ()
+        if mf_grad is None: mf_grad = self.base.get_rhf_base ().nuc_grad_method ()
         if atmlst is None: atmlst = self.atmlst
         nac = nac_model (self, mo_coeff=mo_coeff, ci=ci, si_bra=si_bra,
                          si_ket=si_ket, mf_grad=mf_grad, atmlst=atmlst)

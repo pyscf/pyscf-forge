@@ -50,7 +50,7 @@ def mcfun_eval_xc_adapter_sf(ni, xc_code):
     fn_eval_xc = functools.partial(__mcfun_fn_eval_xc, ni, xc_code, xctype)
     nproc = lib.num_threads()
 
-    def eval_xc_eff(xc_code, rho, deriv=1, omega=None, xctype=None,
+    def eval_xc_eff(xc_code, rho, deriv, omega=None, xctype=None,
                 verbose=None):
         return mcfun.eval_xc_eff_sf(
             fn_eval_xc, rho, deriv,
@@ -58,7 +58,8 @@ def mcfun_eval_xc_adapter_sf(ni, xc_code):
     return eval_xc_eff
 
 # This function should be a class function in the Numint2c class.
-def cache_xc_kernel_sf(self, mol, grids, xc_code, mo_coeff, mo_occ, spin=1,max_memory=2000):
+def cache_xc_kernel_sf(self, mol, grids, xc_code, mo_coeff, mo_occ, deriv=2,
+                       spin=1, max_memory=2000):
     '''Compute the fxc_sf, which can be used in SF-TDDFT/TDA
     '''
     xctype = self._xc_type(xc_code)
@@ -88,5 +89,5 @@ def cache_xc_kernel_sf(self, mol, grids, xc_code, mo_coeff, mo_occ, spin=1,max_m
     rho_tmz[0] += rho_ab[0]+rho_ab[1]
     rho_tmz[1] += rho_ab[0]-rho_ab[1]
     eval_xc = mcfun_eval_xc_adapter_sf(self,xc_code)
-    fxc_sf = eval_xc(xc_code, rho_tmz, deriv=2, xctype=xctype)
+    fxc_sf = eval_xc(xc_code, rho_tmz, deriv=deriv, xctype=xctype)
     return fxc_sf

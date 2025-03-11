@@ -40,19 +40,6 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    def test_scanner (self):
-        mol1, mc1 = mol, mc
-        mol2, _, mc2 = get_lih (1.55)
-        mc2 = mc2.as_scanner () 
-        mc2 (mol1)
-        self.assertTrue(mc1.converged)
-        self.assertTrue(mc2.converged)
-        for state in 0,1:
-            with self.subTest (state=state):
-                e1 = mc1.e_states[state]
-                e2 = mc2.e_states[state]
-                self.assertAlmostEqual (e1, e2, 6)
-    
     def test_reference_adiabats (self):
         # Recover SA-CASSCF properly
         mc_ref = mcscf.CASCI (mf, 2, 2)

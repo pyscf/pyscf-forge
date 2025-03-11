@@ -86,10 +86,11 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
             first functional derivative of Eot wrt (density, pair
             density) and their derivatives. If _unpack_vot = True, shape
             and format is ([a, ngrids], [b, ngrids]) : (vrho, vPi);
-            otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,rho'.Pi',|Pi'|^2]
-            ftGGA: a=4, b=4, c=5
-            tGGA: a=4, b=1, c=3 (drop Pi')
-            *tLDA: a=1, b=1, c=2 (drop rho')
+            otherwise, [c, ngrids] : [rho,Pi,|rho'|^2,tau,rho'.Pi',|Pi'|^2]
+            ftGGA: a=4, b=4, c=5 (drop tau)
+            tmGGA: a=5, b=1, c=4 (drop Pi')
+            tGGA: a=4, b=1, c=3 (drop Pi', tau)
+            *tLDA: a=1, b=1, c=2 (drop rho', tau)
         fot : ndarray of shape (*,ngrids) or None
             second functional derivative of Eot wrt density, pair
             density, and derivatives; first dimension is lower-
@@ -112,25 +113,33 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     rho_t = otfnal.get_rho_translated(Pi, rho)
     # LDA in libxc has a special numerical problem with zero-valued densities
     # in one spin
-    if nderiv == 1:
+    if nderiv == 0:
         idx = (rho_t[0, 0] > 1e-15) & (rho_t[1, 0] < 1e-15)
         rho_t[1, 0, idx] = 1e-15
         idx = (rho_t[0, 0] < 1e-15) & (rho_t[1, 0] > 1e-15)
         rho_t[0, 0, idx] = 1e-15
+
+    # mGGA in libxc has special numerical problem with zero-valued densities in
+    # one spin!
+    if nderiv == 5:
+        idx = (rho_t[0, 4] > 1e-15) & (rho_t[1, 4] < 1e-15)
+        rho_t[1, 4, idx] = 1e-15
+        idx = (rho_t[0, 4] < 1e-15) & (rho_t[1, 4] > 1e-15)
+        rho_t[0, 4, idx] = 1e-15
+
     rho_tot = rho.sum(0)
 
-    if nderiv > 4 and dderiv > 0:
-        raise NotImplementedError("Meta-GGA functional derivatives")
+    if nderiv > 4 and dderiv > 1:
+        raise NotImplementedError("Meta-GGA functional Hessians")
 
     if 1 < nderiv <= 4:
         rho_deriv = rho_tot[1:4, :]
-    elif 4 < nderiv <= 6:
-        rho_deriv = rho_tot[1:6, :]
+    elif 4 < nderiv <= 5:
+        rho_deriv = rho_tot[1:5, :]
     else:
         rho_deriv = None
 
     Pi_deriv = Pi[1:4, :] if nderiv_Pi > 1 else None
-
     xc_grid = otfnal._numint.eval_xc(otfnal.otxc, (rho_t[0, :, :],
                                                    rho_t[1, :, :]), spin=1, relativity=0, deriv=dderiv,
                                      verbose=otfnal.verbose)[:dderiv + 1]
@@ -146,7 +155,19 @@ def eval_ot(otfnal, rho, Pi, dderiv=1, weights=None, _unpack_vot=True):
     if dderiv > 0:
         # vrho, vsigma = xc_grid[1][:2]
         vxc = list(xc_grid[1][0].T)
-        if otfnal.dens_deriv: vxc = vxc + list(xc_grid[1][1].T)
+        if otfnal.dens_deriv > 0:
+            vxc = vxc + list(xc_grid[1][1].T)
+
+        # vrho, vsigma, vlapl, vtau = xc_grid[1][:4]
+        if otfnal.dens_deriv > 1:
+            # we might get a None for one of the derivatives..
+            # we get None for the laplacian derivative
+            if xc_grid[1][2] is not None:
+                raise NotImplementedError("laplacian translated meta-GGA functionals")
+
+            # Here is the tau term
+            vxc = vxc + list(xc_grid[1][3].T)
+
         vot = otfnal.jT_op(vxc, rho, Pi)
         if _unpack_vot: vot = _unpack_sigma_vector(vot,
                                                    deriv1=rho_deriv, deriv2=Pi_deriv)
@@ -192,7 +213,9 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     #   J[2,nabla rhob] = 2 * nabla rhob
     if len(packed) > 5:
         raise RuntimeError("{} {}".format(len(packed), [p.shape for p in packed[:5]]))
-    ncol1 = 1 + 3 * int((deriv1 is not None) and len(packed) > 2)
+    ncol1 = 1
+    if deriv1 is not None and len(packed) > 2:
+        ncol1 += deriv1.shape[0]
     ncol2 = 1 + 3 * int((deriv2 is not None) and len(packed) > 3)
     ngrid = packed[0].shape[-1]  # Don't assume it's an ndarray
     unp1 = np.empty((ncol1, ngrid), dtype=packed[0].dtype)
@@ -200,10 +223,13 @@ def _unpack_sigma_vector(packed, deriv1=None, deriv2=None):
     unp1[0] = packed[0]
     unp2[0] = packed[1]
     if ncol1 > 1:
-        unp1[1:4] = 2 * deriv1 * packed[2]
+        unp1[1:4] = 2 * deriv1[:3] * packed[2]
+        if ncol1 > 4:
+            # Deal with the tau term
+            unp1[4:5] = packed[3:4]
         if ncol2 > 1:
-            unp1[1:4] += deriv2 * packed[3]
-            unp2[1:4] = (2 * deriv2 * packed[4]) + (deriv1 * packed[3])
+            unp1[1:4] += deriv2 * packed[-2]
+            unp2[1:4] = (2 * deriv2 * packed[-1]) + (deriv1[:3] * packed[-2])
     return unp1, unp2
 
 
@@ -297,8 +323,8 @@ def contract_fot(otfnal, fot, rho0, Pi0, rho1, Pi1, unpack=True,
     if Pi1.ndim == 1: Pi1 = Pi1[None, :]
 
     ngrids = fot[0].shape[-1]
-    vrho1 = np.zeros(ngrids, fot[0].dtype)
-    vPi1 = np.zeros(ngrids, fot[2].dtype)
+    vrho1 = np.zeros(ngrids, dtype=fot[0].dtype)
+    vPi1 = np.zeros(ngrids, dtype=fot[2].dtype)
     vrho1, vPi1 = np.zeros_like(rho1), np.zeros_like(Pi1)
 
     # TODO: dspmv implementation
@@ -436,7 +462,11 @@ def _tGGA_jT_op(x, rho, Pi, R, zeta):
     xmm = (x[2] + x[4] - x[3]) / 4.0
 
     # Gradient-gradient sector
-    jTx[2] = xcc + xcm * zeta[0] + xmm * zeta[0] * zeta[0]
+    idx = (zeta[0]!=1)
+    jTx[2] = x[2]
+    jTx[2,idx] = (xcc + xcm * zeta[0] + xmm * zeta[0] * zeta[0])[idx]
+
+    # Finite-precision safety
 
     # Density-gradient sector
     idx = (rho[0] > 1e-15)
@@ -447,6 +477,34 @@ def _tGGA_jT_op(x, rho, Pi, R, zeta):
     sigma_fac = -2 * sigma_fac / rho
     jTx[0, idx] = R * sigma_fac
     jTx[1, idx] = -2 * sigma_fac / rho
+
+    return jTx
+
+
+def _tmetaGGA_jT_op(x, rho, Pi, R, zeta):
+    # output ordering is
+    # ordering: rho, Pi, |rho'|^2, tau
+    ngrid = rho.shape[-1]
+    jTx = np.zeros((4, ngrid), dtype=x[0].dtype)
+    if R.ndim > 1:
+        R = R[0]
+
+    # ab -> cs coordinate transformation
+    xc = (x[5] + x[6]) / 2.0
+    xm = (x[5] - x[6]) / 2.0
+
+    # easy part
+    jTx[3] = xc + zeta[0] * xm
+
+    tau_lapl_factor = zeta[1] * rho[4] * xm
+    idx = rho[0] > 1e-15
+    rho = rho[0, idx]
+    R = R[idx]
+
+    tau_lapl_factor = 2 * tau_lapl_factor[idx] / rho
+
+    jTx[0, idx] = -R * tau_lapl_factor
+    jTx[1, idx] = 2 * tau_lapl_factor / rho
 
     return jTx
 

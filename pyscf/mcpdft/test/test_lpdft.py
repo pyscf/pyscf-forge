@@ -90,18 +90,19 @@ def get_water_triplet(functional='tPBE', basis="6-31G"):
 
 
 def setUpModule():
-    global lih, lih_4, lih_tpbe, lih_tpbe0, water, t_water, original_grids
+    global lih, lih_4, lih_tpbe, lih_tpbe0, lih_mc23, water, t_water, original_grids
     original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     lih = get_lih(1.5)
     lih_4 = get_lih(1.5, n_states=4, basis="6-31G")
     lih_tpbe = get_lih(1.5, functional="tPBE")
     lih_tpbe0 = get_lih(1.5, functional="tPBE0")
+    lih_mc23 = get_lih(1.5, functional="MC23")
     water = get_water()
     t_water = get_water_triplet()
 
 def tearDownModule():
-    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water, original_grids
+    global lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water, original_grids, lih_mc23
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
     lih.mol.stdout.close()
     lih_4.mol.stdout.close()
@@ -109,7 +110,7 @@ def tearDownModule():
     lih_tpbe.mol.stdout.close()
     water.mol.stdout.close()
     t_water.mol.stdout.close()
-    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water, original_grids
+    del lih, lih_4, lih_tpbe0, lih_tpbe, t_water, water, original_grids, lih_mc23
 
 class KnownValues(unittest.TestCase):
 
@@ -183,6 +184,24 @@ class KnownValues(unittest.TestCase):
         self.assertListAlmostEqual(lih_tpbe0.e_states, e_hlpdft, 9)
         self.assertListAlmostEqual(hlpdft_ham.flatten(), lih_tpbe0.lpdft_ham.flatten(), 9)
 
+    def test_lih_mc23_adiabat(self):
+        e_mcscf_mc23_avg = np.dot(lih_mc23.e_mcscf, lih_mc23.weights)
+        hcoup = abs(lih_mc23.lpdft_ham[1,0])
+        hdiag = lih_mc23.get_lpdft_diag()
+        
+        # Reference values from 
+        #     - PySCF       commit 9a0bb6ddded7049bdacdaf4cfe422f7ce826c2c7
+        #     - PySCF-forge commit eb0ad96f632994d2d1846009ecce047193682526
+        E_MCSCF_AVG_EXPECTED = -7.78902182
+        E_MC23_EXPECTED = [-7.94539408, -7.80094952]
+        HCOUP_EXPECTED = 0.01285147
+        HDIAG_EXPECTED = [-7.94424147, -7.80210214]
+
+        self.assertAlmostEqual(e_mcscf_mc23_avg, E_MCSCF_AVG_EXPECTED, 7)
+        self.assertAlmostEqual(hcoup, HCOUP_EXPECTED, 7)
+        self.assertAlmostEqual(lib.fp(hdiag), lib.fp(HDIAG_EXPECTED), 7)
+        self.assertAlmostEqual(lib.fp(lih_mc23.e_states), lib.fp(E_MC23_EXPECTED), 7)
+
     def test_water_spatial_samix(self):
         e_mcscf_avg = np.dot(water.e_mcscf, water.weights)
         hdiag = water.get_lpdft_diag()
@@ -220,7 +239,6 @@ class KnownValues(unittest.TestCase):
 
     def test_chkfile(self):
         for mc, case in zip([water, t_water], ["SA", "SA Mix"]):
-            print(mc.chkfile)
             with self.subTest(case=case):
                 self.assertTrue(h5py.is_hdf5(mc.chkfile))
                 self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/mo_coeff")))

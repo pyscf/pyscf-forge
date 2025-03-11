@@ -84,6 +84,7 @@ def case(kv, mc):
             conv_tab = err_tab[1:ix + 1, :] / err_tab[:ix, :]
         if ix > 1 and np.all(np.abs(conv_tab[-3:, -1] - 0.5) < 0.01) and abs(err_tab[-1, 1]) < 1e-3:
             break
+
     with kv.subTest(q='x'):
         kv.assertAlmostEqual(conv_tab[-1, 0], 0.5, 9)
     with kv.subTest(q='de'):
@@ -112,15 +113,16 @@ class KnownValues(unittest.TestCase):
         np.random.seed(1)
         for mol, mf in zip(('H2', 'LiH'), (h2, lih)):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tN12', 'ftN12', 'tM06L'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
                     with self.subTest(mol=mol, state=state, fnal=fnal):
                         case(self, mc)
 
+
     def test_veff_ao2mo(self):
         for mol, mf in zip(('H2', 'LiH'), (h2, lih)):
             for state, nel in zip(('Singlet', 'Triplet'), (2, (2, 0))):
-                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE'):
+                for fnal in ('tLDA,VWN3', 'ftLDA,VWN3', 'tPBE', 'ftPBE', 'tN12', 'ftN12', 'tM06L'):
                     mc = mcpdft.CASSCF(mf, fnal, 2, nel, grids_level=1).run()
                     v1_test, v2_test = mc.get_pdft_veff(jk_pc=True)
                     v1_ref, v2_ref = get_veff_ref(mc)

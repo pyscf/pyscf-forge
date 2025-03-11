@@ -34,7 +34,7 @@ FT_C = getattr(__config__, 'mcpdft_otfnal_ftransfnal_C', -85.38149682)
 
 OT_ALIAS = {'MC23': 'tMC23'}
 OT_HYB_ALIAS = {'PBE0' : '0.25*HF + 0.75*PBE, 0.25*HF + 0.75*PBE',
-                'MC23' : 'mc23'} # Note: mc23 is hybrid Meta-GGA OT Functional.
+                }
 
 REG_OT_FUNCTIONALS={}
 
@@ -80,7 +80,7 @@ def register_otfnal(xc_code, preset):
             kwargs: dict
                 The additional keyword arguments.
     '''
-    libxc_register_code = xc_code.lower ()
+    libxc_register_code = xc_code.upper ()
     libxc_base_code = preset['xc_base']
     ext_params = preset['ext_params']
     hyb = preset.get('hyb', None)
@@ -100,7 +100,7 @@ def unregister_otfnal(xc_code):
     '''
     try:
         if xc_code.upper() in REG_OT_FUNCTIONALS:
-            libxc_unregister_code = xc_code.lower()
+            libxc_unregister_code = xc_code.upper()
             libxc.unregister_custom_functional_(libxc_unregister_code)
             del REG_OT_FUNCTIONALS[xc_code.upper()]
 
@@ -166,7 +166,7 @@ def energy_ot (ot, casdm1s, casdm2, mo_coeff, ncore, max_memory=2000, hermi=1):
     mo_cas = mo_coeff[:,ncore:][:,:ncas]
 
     t0 = (logger.process_clock (), logger.perf_counter ())
-    make_rho = tuple (ni._gen_rho_evaluator (ot.mol, dm1s[i,:,:], hermi) for
+    make_rho = tuple (ni._gen_rho_evaluator (ot.mol, dm1s[i,:,:], hermi=hermi, with_lapl=False) for
         i in range(2))
     for ao, mask, weight, _ in ni.block_loop (ot.mol, ot.grids, nao,
             dens_deriv, max_memory):
@@ -331,10 +331,12 @@ class transfnal (otfnal):
 
         R = np.zeros ((nderiv,ngrids), dtype=Pi.dtype)
         R[0,:] = 1
+        R[0, Pi[0] == 0] = 0.0
         idx = rho_avg[0] >= (1e-15 / 2)
         # Chain rule!
-        for ideriv in range (nderiv):
+        for ideriv in range(nderiv):
             R[ideriv,idx] = Pi[ideriv,idx] / rho_avg[0,idx] / rho_avg[0,idx]
+
         # Product rule!
         for ideriv in range (1,nderiv):
             R[ideriv,idx] -= (2 * rho_avg[ideriv,idx] * R[0,idx]
@@ -356,8 +358,6 @@ class transfnal (otfnal):
         rho_t^b = (rho/2) * (1 - zeta)
         rho'_t^a = (rho'/2) * (1 + zeta)
         rho'_t^b = (rho'/2) * (1 - zeta)
-        laplacian_t^a = (laplacian/2) * (1 + zeta)
-        laplacian_t^b = (laplacian/2) * (1 - zeta)
         tau_t^a = (tau/2) * (1 + zeta)
         tau_t^b = (tau/2) * (1 - zeta)
 
@@ -491,9 +491,10 @@ class transfnal (otfnal):
             exchange-correlation energy wrt to total density and its
             derivatives. The potential must be spin-symmetric in
             pair-density functional theory.
-            2 rows for tLDA and 3 rows for tGGA
+            2 rows for tLDA, 3 rows for tGGA, and 4 rows for meta-GGA
         '''
-        ncol = 2 + int(self.dens_deriv>0)
+        # ordering: rho, Pi, |rho'|^2, tau
+        ncol = (2, 3, 4)[self.dens_deriv]
         ngrid = rho.shape[-1]
         jTx = np.zeros ((ncol,ngrid), dtype=x[0].dtype)
         rho = rho.sum (0)
@@ -501,7 +502,10 @@ class transfnal (otfnal):
         zeta = self.get_zeta (R, fn_deriv=1)
         jTx[:2] = tfnal_derivs._gentLDA_jT_op (x, rho, Pi, R, zeta)
         if self.dens_deriv > 0:
-            jTx[:] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
+            jTx[:3] += tfnal_derivs._tGGA_jT_op (x, rho, Pi, R, zeta)
+        if self.dens_deriv > 1:
+            jTx[:4] += tfnal_derivs._tmetaGGA_jT_op(x, rho, Pi, R, zeta)
+
         return jTx
 
     def d_jT_op (self, x, rho, Pi):
@@ -570,7 +574,7 @@ class transfnal (otfnal):
             if dderiv>1: fxc = tfnal_derivs._pack_fxc_ltri (fxc, self.dens_deriv)
             # ~~~ shift translated rho directly ~~~
             r = rho_t0 * r0 / 2**p
-            drho_t = np.zeros_like (rho_t0)
+            drho_t = np.zeros_like (rho_t0, dtype=rho_t0.dtype)
             ndf = 2 * (1 + int (nvr>1))
             drho_t[0,0,0::ndf] = r[0,0,0::ndf]
             drho_t[1,0,1::ndf] = r[1,0,1::ndf]

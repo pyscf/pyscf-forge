@@ -13,28 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import numpy as np
-from scipy import linalg
-from pyscf import gto, scf, df, dft, mcscf, lib
+from pyscf import gto, scf, df, dft
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
-#from pyscf.fci import csf_solver
-from pyscf.grad.cmspdft import diab_response, diab_grad, diab_response_o0, diab_grad_o0
-from pyscf.grad import mspdft as mspdft_grad
-import unittest, math
+from pyscf.fci.addons import _unpack_nelec
+import unittest
 
 def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
               charge=None, spin=None, symmetry=False, cas_irrep=None,
-              density_fit=False):
+              density_fit=False, grids_level=9):
+    global mols
     xyz = '{:s} 0.0 0.0 0.0; {:s} {:.3f} 0.0 0.0'.format (atom1, atom2, r)
     mol = gto.M (atom=xyz, basis=basis, charge=charge, spin=spin, symmetry=symmetry, verbose=0, output='/dev/null')
+    mols.append(mol)
     mf = scf.RHF (mol)
-    if density_fit: mf = mf.density_fit (auxbasis = df.aug_etb (mol))
-    mc = mcpdft.CASSCF (mf.run (), fnal, ncas, nelecas, grids_level=9)
+
+    if density_fit: 
+        mf = mf.density_fit (auxbasis = df.aug_etb (mol))
+
+    mc = mcpdft.CASSCF (mf.run (), fnal, ncas, nelecas, grids_level=grids_level)
     #if spin is not None: smult = spin+1
     #else: smult = (mol.nelectron % 2) + 1
     #mc.fcisolver = csf_solver (mol, smult=smult)
-    if spin is None: spin = mol.nelectron%2
+    neleca, nelecb = _unpack_nelec (nelecas, spin=spin)
+    spin = neleca-nelecb
     ss=spin*(spin+2)*0.25
     mc = mc.multi_state ([1.0/float(nstates),]*nstates, 'cms')
     mc.fix_spin_(ss=ss, shift=1)
@@ -46,14 +48,16 @@ def diatomic (atom1, atom2, r, fnal, basis, ncas, nelecas, nstates,
     return mc.nuc_grad_method ()
 
 def setUpModule():
-    global diatomic, original_grids
+    global mols, diatomic, original_grids
+    mols = []
     original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
 
 def tearDownModule():
-    global diatomic, original_grids
+    global mols, diatomic, original_grids
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = original_grids
-    del diatomic, original_grids
+    [m.stdout.close() for m in mols]
+    del diatomic, original_grids, mols
 
 # The purpose of these separate test functions is to narrow down an error to specific degrees of
 # freedom. But if the lih_cms2ftpbe and _df cases pass, then almost certainly, they all pass.
@@ -155,6 +159,20 @@ class KnownValues(unittest.TestCase):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
+    
+    def test_grad_lih_cms2tm06l22_sto3g (self):
+        # z_orb:    yes
+        # z_ci:     yes
+        # z_is:     yes
+        mc_grad = diatomic ('Li', 'H', 0.8, 'tM06L', 'STO-3G', 2, 2, 2, grids_level=1)
+        de_ref = [-1.03428938, -0.88278628]
+
+        # Numerical from this software
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0]/BOHR
+        
+            self.assertAlmostEqual (de, de_ref[i], 5)
 
     # MRH 05/05/2023: currently, the only other test which uses DF-MC-PDFT features is
     # test_grad_h2co, which is slower than this. Therefore I am restoring it.
@@ -169,6 +187,38 @@ class KnownValues(unittest.TestCase):
          with self.subTest (state=i):
             de = mc_grad.kernel (state=i) [1,0] / BOHR
             self.assertAlmostEqual (de, de_ref[i], 5)
+
+    def test_rohf_sanity (self):
+        mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
+                            cas_irrep={'A1': 4}, spin=2)
+        mc_grad_ref = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, (2,0), 2,
+                            symmetry=True, cas_irrep={'A1': 4})
+        de_num_ref = [-0.039806,-0.024193] 
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_num_ref[i], 4)
+            de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_ref, 6)
+
+    def test_dfrohf_sanity (self):
+        mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
+                            density_fit=True, cas_irrep={'A1': 4}, spin=2)
+        mc_grad_ref = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, (2,0), 2,
+                                symmetry=True, density_fit=True, cas_irrep={'A1': 4})
+        de_num_ref = [-0.039721,-0.024139] 
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        for i in range (2):
+         with self.subTest (state=i):
+            de = mc_grad.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_num_ref[i], 4)
+            de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
+            self.assertAlmostEqual (de, de_ref, 6)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradients of diatomic molecules")

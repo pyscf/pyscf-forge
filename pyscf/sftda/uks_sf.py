@@ -24,8 +24,8 @@ from pyscf.sftda.scf_genrep_sftd import _gen_uhf_response_sf
 
 class TDA_SF(uhf_sf.TDA_SF):
     def nuc_grad_method(self):
-        from pyscf.grad import tduks
-        return tduks.Gradients(self)
+        from pyscf.grad import tduks_sf
+        return tduks_sf.Gradients(self)
 
 class CasidaTDDFT(TDA_SF):
     '''Solve the Casida TDDFT formula
@@ -175,14 +175,14 @@ class CasidaTDDFT(TDA_SF):
                 y = z[noccb*nvira:].reshape(nocca,nvirb)
                 norm = lib.norm(x)**2 - lib.norm(y)**2
                 norm = numpy.sqrt(1./norm)
-                return x*norm, y*norm
+                return ((x*norm,0), (0,y*norm))
         elif self.extype==1:
             def norm_xy(z):
                 x = z[:nocca*nvirb].reshape(nocca,nvirb)
                 y = z[nocca*nvirb:].reshape(noccb,nvira)
                 norm = lib.norm(x)**2 - lib.norm(y)**2
                 norm = numpy.sqrt(1./norm)
-                return x*norm, y*norm
+                return ((0,x*norm), (y*norm,0))
 
         self.xy = [norm_xy(z) for z in x1]
 
@@ -209,5 +209,6 @@ def tddft(mf):
     return CasidaTDDFT(mf)
 
 from pyscf import dft
+dft.uks.UKS.TDA_SF   = lib.class_as_method(TDA_SF)
 dft.uks.UKS.TDDFT_SF = lib.class_as_method(TDDFT_SF)
 dft.uks.UKS.TDDFT_SF = tddft

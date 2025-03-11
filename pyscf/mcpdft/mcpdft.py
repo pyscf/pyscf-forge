@@ -462,6 +462,18 @@ class _PDFT:
         self.otfnal.verbose = self.verbose
         self.otfnal.stdout = self.stdout
 
+    def get_rhf_base (self):
+        from pyscf.scf.hf import RHF
+        from pyscf.scf.rohf import ROHF
+        from pyscf.scf.hf_symm import SymAdaptedRHF
+        from pyscf.scf.hf_symm import SymAdaptedROHF
+        rhf_cls = self._scf.__class__
+        if issubclass (rhf_cls, SymAdaptedROHF):
+            rhf_cls = lib.replace_class (rhf_cls, SymAdaptedROHF, SymAdaptedRHF)
+        if issubclass (rhf_cls, ROHF):
+            rhf_cls = lib.replace_class (rhf_cls, ROHF, RHF)
+        return lib.view (self._scf, rhf_cls)
+
     @property
     def grids(self):
         return self.otfnal.grids
@@ -671,6 +683,8 @@ class _PDFT:
 
     def nuc_grad_method(self):
         return self._state_average_nuc_grad_method(state=None)
+
+    Gradients=nuc_grad_method
 
     def dip_moment(self, unit='Debye', origin='Coord_Center', state=0):
         if not isinstance(self, mc1step.CASSCF):
