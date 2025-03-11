@@ -1211,8 +1211,6 @@ if  __name__ == '__main__':
     s1e = mol.intor('int1e_ovlp')
     mySFNOCI = SFGNOCI(rm,4,(2,2),groupA = 'Li')
     mySFNOCI.lowdin_thres= 0.5
-    mySFNOCI = SFNOCI(rm, 4, (2,2))
-    mySFNOCI.fcisolver.nroots = 4 
 
     from pyscf.mcscf import addons
     mo = addons.sort_mo(mySFNOCI,rm.mo_coeff, as_list,1)
