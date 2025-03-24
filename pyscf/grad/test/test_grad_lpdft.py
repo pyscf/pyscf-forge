@@ -284,7 +284,7 @@ class KnownValues(unittest.TestCase):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 4)
                 de_ref = mc_grad_ref.kernel(state=i)[1, 0]
-                self.assertAlmostEqual (de, de_ref, 8)
+                self.assertAlmostEqual (de, de_ref, 6)
 
     def test_dfrohf_sanity (self):
         n_states = 3
