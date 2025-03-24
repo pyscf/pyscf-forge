@@ -40,8 +40,8 @@ for (int i = 0; i <t1a_nonzero_size; i++){
         + aa * ncas * ncas * ncas 
         + ia * ncas *ncas 
         + ab * ncas + ib] 
-        * t1a[aa * ncas * na * na + ia * na * na  + str1a * na  + str0a]
-        * t1b[ab * ncas * nb * nb + ib * nb * nb + str1b * nb + str0b]
+        * t1a[aa * ncas * (size_t)na * (size_t)na + ia * (size_t)na * (size_t)na  + str1a * na  + str0a]
+        * t1b[ab * ncas * (size_t)nb * (size_t)nb + ib * (size_t)nb * (size_t)nb + str1b * nb + str0b]
         * TSc[p1 * num + p2] * 2.0;
     }
 }
@@ -63,7 +63,7 @@ for (int i =0; i <t2aa_nonzero_size; i++){
         + i1 * ncas  * ncas 
         + a2 * ncas 
         + i2]
-        * t2aa[a1 * ncas * ncas * ncas * na * na + i1* ncas * ncas * na * na + a2 * ncas* na * na + i2* na * na + str1a * na + str0a]
+        * t2aa[a1 * ncas * ncas * ncas * (size_t)na * (size_t)na + i1* ncas * ncas * (size_t)na * (size_t)na + a2 * ncas* (size_t)na * (size_t)na + i2* (size_t)na * (size_t)na + str1a * na + str0a]
         * TSc[p1 * num + p2];
     }
 }
@@ -86,7 +86,7 @@ for (int i =0; i <t2bb_nonzero_size; i++){
         + i1 * ncas  * ncas 
         + a2 * ncas 
         + i2]
-        * t2bb[a1 * ncas * ncas * ncas * nb * nb + i1* ncas * ncas * nb * nb + a2 * ncas* nb * nb + i2* nb * nb + str1b * nb + str0b]
+        * t2bb[a1 * ncas * ncas * ncas * (size_t)nb * (size_t)nb + i1* ncas * ncas * (size_t)nb * (size_t)nb + a2 * ncas* (size_t)nb * (size_t)nb + i2* (size_t)nb * (size_t)nb + str1b * nb + str0b]
         * TSc[p1 * num + p2];
     }
 }

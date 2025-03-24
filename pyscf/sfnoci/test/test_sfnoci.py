@@ -24,7 +24,6 @@ def setUpModule():
 
 def tearDownModule():
     global mol, mo0, setocc, ro_occ
-    mol.stdout.close()
     del mol, mo0, setocc, ro_occ
 
 class KnownValues(unittest.TestCase):
