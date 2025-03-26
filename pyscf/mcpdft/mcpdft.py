@@ -604,7 +604,7 @@ class _PDFT:
             casdm1s = self.make_one_casdm1s(ci, state=state)
         if casdm2 is None:
             casdm2 = self.make_one_casdm2(ci, state=state)
-        if ot is None: 
+        if ot is None:
             ot = self.otfnal
 
         ncore, ncas = self.ncore, self.ncas
@@ -623,9 +623,18 @@ class _PDFT:
         cas_hyb = hyb[0]
         ot_hyb = 1.0-cas_hyb
 
-        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel(ot, dm1s,
-                                                        cascm2, mo, ncore, ncas, max_memory=self.max_memory,
-                                                        paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc) 
+        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel(
+            ot,
+            dm1s,
+            cascm2,
+            mo,
+            ncore,
+            ncas,
+            max_memory=self.max_memory,
+            paaa_only=paaa_only,
+            aaaa_only=aaaa_only,
+            jk_pc=jk_pc,
+        )
 
         if incl_coul:
             pdft_veff1 += ot_hyb*self._scf.get_j(self.mol, dm1s[0] + dm1s[1])

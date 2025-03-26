@@ -594,20 +594,26 @@ class Gradients (sacasscf.Gradients):
         '''Cache the effective Hamiltonian terms so you don't have to
         calculate them twice
         '''
-        state = kwargs['state'] if 'state' in kwargs else self.state
+
+        state = kwargs["state"] if "state" in kwargs else self.state
         if state is None:
-            raise NotImplementedError ('Gradient of PDFT state-average energy')
-        self.state = state # Not the best code hygiene maybe
-        mo = kwargs['mo'] if 'mo' in kwargs else self.base.mo_coeff
-        ci = kwargs['ci'] if 'ci' in kwargs else self.base.ci
-        if isinstance (ci, np.ndarray): ci = [ci] # hack hack hack...
-        kwargs['ci'] = ci
-        if ('veff1' not in kwargs) or ('veff2' not in kwargs):
-            kwargs['veff1'], kwargs['veff2'] = self.base.get_pdft_veff (mo,
-                ci, incl_coul=True, paaa_only=True, state=state, drop_mcwfn=True)
-        
-        if 'mf_grad' not in kwargs:
-            kwargs['mf_grad'] = self.base.get_rhf_base ().nuc_grad_method ()
+            raise NotImplementedError("Gradient of PDFT state-average energy")
+
+        self.state = state  # Not the best code hygiene maybe
+        mo = kwargs["mo"] if "mo" in kwargs else self.base.mo_coeff
+        ci = kwargs["ci"] if "ci" in kwargs else self.base.ci
+        if isinstance(ci, np.ndarray):
+            ci = [ci]  # hack hack hack...
+
+        kwargs["ci"] = ci
+        if ("veff1" not in kwargs) or ("veff2" not in kwargs):
+            kwargs["veff1"], kwargs["veff2"] = self.base.get_pdft_veff(
+                mo, ci, incl_coul=True, paaa_only=True, state=state, drop_mcwfn=True
+            )
+
+        if "mf_grad" not in kwargs:
+            kwargs["mf_grad"] = self.base.get_rhf_base().nuc_grad_method()
+
         return super().kernel (**kwargs)
 
     def project_Aop (self, Aop, ci, state):
