@@ -17,11 +17,12 @@
 
 import unittest
 
-from pyscf import scf, gto, df, dft, mcscf
+from pyscf import scf, gto, df, dft
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 
 from mrh.my_pyscf.fci import csf_solver
+
 
 def diatomic(
     atom1,
@@ -37,7 +38,7 @@ def diatomic(
     symmetry=False,
     cas_irrep=None,
     density_fit=False,
-    grids_level=9
+    grids_level=9,
 ):
     """Used for checking diatomic systems to see if the Lagrange Multipliers are working properly."""
     global mols
@@ -62,7 +63,7 @@ def diatomic(
 
     # ss = spin * (spin + 2) * 0.25
     # mc.fix_spin_(ss=ss, shift=2)
-    mc.fcisolver = csf_solver(mol, smult=spin+1)
+    mc.fcisolver = csf_solver(mol, smult=spin + 1)
 
     if nstates > 1:
         mc = mc.state_average(
@@ -133,7 +134,7 @@ class KnownValues(unittest.TestCase):
         DE_REF = -1.0641645070
 
         self.assertAlmostEqual(de, DE_REF, 5)
-    
+
     def test_grad_lih_sa2mc2322_sto3g(self):
         mc = diatomic("Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 2, grids_level=1)
 
@@ -147,43 +148,20 @@ class KnownValues(unittest.TestCase):
                 de = mc.kernel(state=state)[1, 0] / BOHR
                 self.assertAlmostEqual(de, DE_REF[state], 5)
 
+    def test_grad_lih_sa2mc2322_sto3g_df(self):
+        mc = diatomic(
+            "Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 2, grids_level=1, density_fit=df
+        )
 
-    def test_custom(self):
-        df = False
-        r = 0.8
-        mc = diatomic("Li", "H", r, "MC23", "STO-3G", 2, 2, 2, grids_level=1, density_fit=df)
+        # Numerical from this software
+        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
+        # PySCF-forge commit:   ee6ac742fbc79d170bc4b63ef2b2c4b49478c53a
+        DE_REF = [-1.0510303416, -0.8963992331]
 
-        de_ana = []
         for state in range(2):
-            de = mc.kernel(state=state)[1,0]/BOHR
-            de_ana.append(de)
-
-        import numpy as np
-        de_ana = np.array(de_ana)
-        mc_scanner = mc.base.as_scanner()
-        print(de_ana)
-
-
-        deltas = []
-        de_num = []
-
-        for i in np.arange(2, 8, 0.1):
-            delta = np.exp(-i)
-            deltas.append(delta)
-            mc_scanner(f"Li 0 0 0; H {r+delta} 0 0")
-            e1 = np.array(mc_scanner.e_states)
-            mc_scanner(f"Li 0 0 0; H {r-delta} 0 0")
-            e2 = np.array(mc_scanner.e_states)
-            de = (e1-e2)/(2*delta) 
-
-            de_num.append(de)
-
-        de_num = np.array(de_num).transpose()
-
-        print(",".join([f"{d:.10f}" for d in deltas]))
-        for state in range(2):
-            print("State: ", state)
-            print(",".join([f"{d:.10f}" for d in de_num[state]]))
+            with self.subTest(state=state):
+                de = mc.kernel(state=state)[1, 0] / BOHR
+                self.assertAlmostEqual(de, DE_REF[state], 5)
 
 
 if __name__ == "__main__":
