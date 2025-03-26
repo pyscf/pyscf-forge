@@ -21,9 +21,6 @@ from pyscf import scf, gto, df, dft
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 
-from mrh.my_pyscf.fci import csf_solver
-
-
 def diatomic(
     atom1,
     atom2,
@@ -61,9 +58,8 @@ def diatomic(
     if spin is None:
         spin = mol.nelectron % 2
 
-    # ss = spin * (spin + 2) * 0.25
-    # mc.fix_spin_(ss=ss, shift=2)
-    mc.fcisolver = csf_solver(mol, smult=spin + 1)
+    ss = spin * (spin + 2) * 0.25
+    mc.fix_spin_(ss=ss, shift=2)
 
     if nstates > 1:
         mc = mc.state_average(
