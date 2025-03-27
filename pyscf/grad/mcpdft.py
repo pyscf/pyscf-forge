@@ -64,7 +64,6 @@ def gfock_sym(mc, mo_coeff, casdm1, casdm2, h1e, eris):
 
     return gfock
 
-
 def xc_response(ot, vot, rho, Pi, weights, moval_occ, aoval, mo_occ, mo_occup, ncore, nocc, casdm2_pack, ndpi, mo_cas):
     vrho, vPi = vot
 
@@ -164,11 +163,43 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
 
     casdm1, casdm2 = mc.fcisolver.make_rdm12(ci, ncas, nelecas)
 
+    spin = abs(nelecas[0] - nelecas[1])
+    omega, _, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
+    if abs(omega) > 1e-11:
+        raise NotImplementedError("range-separated on-top functionals")
+    if abs(hyb[0] - hyb[1]) > 1e-11:
+        raise NotImplementedError(
+            "hybrid on-top functionals with different exchange,correlation components"
+        )
+
+    cas_hyb = hyb[0]
+    ot_hyb = 1.0 - cas_hyb
+
+    if cas_hyb > 1e-11:
+        # TODO: actually implement this in a more efficient manner
+        # That is, lets not call grad_elec, but lets actually do this our self maybe?
+        # Can then use get_pdft_veff with drop_mcwfn = False to automatically get
+        # Generalized fock matrix terms, but then have to deal explicitly with the
+        # derivative of eri terms and auxbasis stuff. Also, get_pdft_veff with
+        # drop_mcwfn=False means the get_wfn_response doesn't have to add the
+        # eris to the veff2 since it should just include it already
+        if auxbasis_response:
+            from pyscf.df.grad import casscf as casscf_grad
+        else:
+            from pyscf.grad import casscf as casscf_grad
+
+        cas_grad = casscf_grad.Gradients(mc)
+
+        de_cas = cas_hyb * cas_grad.grad_elec(
+            mo_coeff=mo_coeff, ci=ci, atmlst=atmlst, verbose=verbose
+        )
+
     # gfock = Generalized Fock, Adv. Chem. Phys., 69, 63
     dm_core = 2 * mo_core @ mo_core.T
     dm_cas = mo_cas @ casdm1 @ mo_cas.T
 
-    gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, mc.get_hcore() + veff1, veff2)
+    gfock = gfock_sym(mc, mo_coeff, casdm1, casdm2, ot_hyb*mc.get_hcore() + veff1, veff2)
+
     dme0 = mo_coeff @ (0.5*(gfock+gfock.T)) @ mo_coeff.T
     del gfock
 
@@ -190,7 +221,7 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
     # MRH: vhf1c and vhf1a should be the TRUE vj_c and vj_a (no vk!)
     vj = mf_grad.get_jk (dm=dm1)[0]
     if auxbasis_response:
-        de_aux += np.squeeze (vj.aux[:,:,atmlst,:])
+        de_aux += ot_hyb*np.squeeze (vj.aux[:,:,atmlst,:])
 
     # MRH: Now I have to compute the gradient of the on-top energy
     # This involves derivatives of the orbitals that construct rho and Pi and
@@ -330,6 +361,9 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
 
     de_hcore, de_coul, de_xc, de_nuc, de_renorm = sum_terms(mf_grad, mol, atmlst, dm1, dme0, coul_term,
                                                                         dvxc)
+    # Deal with hybridization
+    de_hcore *= ot_hyb
+    de_coul *= ot_hyb
 
     logger.debug (mc, "MC-PDFT Hellmann-Feynman nuclear:\n{}".format (de_nuc))
     logger.debug (mc, "MC-PDFT Hellmann-Feynman hcore component:\n{}".format (
@@ -352,6 +386,10 @@ def mcpdft_HellmanFeynman_grad (mc, ot, veff1, veff2, mo_coeff=None, ci=None,
         de += de_aux
         logger.debug (mc, "MC-PDFT Hellmann-Feynman aux component:\n{}".format
             (de_aux))
+
+    if cas_hyb > 1e-11:
+        de += de_cas
+        logger.debug(mc, "MC-PDFT Hellmann-Feynman CAS component:\n{}".format(de_cas))
 
     t1 = logger.timer (mc, 'PDFT HlFn total', *t0)
 
@@ -382,9 +420,9 @@ class Gradients (sacasscf.Gradients):
         omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff (
             otxc, spin=spin)
         hyb_x, hyb_c = hyb
-        if hyb_x or hyb_c:
+        if abs(hyb_x - hyb_c) >1e-11:
             raise NotImplementedError (
-                "{} for hybrid MC-PDFT functionals".format (name)
+                "{} for hybrid MC-PDFT functionals with different exchange, correlation".format (name)
             )
         if omega or alpha:
             raise NotImplementedError (
@@ -400,7 +438,7 @@ class Gradients (sacasscf.Gradients):
         if nlag is None: nlag = self.nlag
         if (veff1 is None) or (veff2 is None):
             veff1, veff2 = self.base.get_pdft_veff (mo, ci[state],
-                incl_coul=True, paaa_only=True)
+                incl_coul=True, paaa_only=True, drop_mcwfn=True)
 
         log = logger.new_logger(self, verbose)
 
@@ -411,6 +449,26 @@ class Gradients (sacasscf.Gradients):
         def my_hcore ():
             return self.base.get_hcore () + veff1
         fcasscf.get_hcore = my_hcore
+
+        nelecas = self.base.nelecas
+        spin = abs (nelecas[0]-nelecas[1])
+        omega, alpha, hyb = self.base.otfnal._numint.rsh_and_hybrid_coeff(self.base.otxc, spin=spin)
+        if omega or alpha:
+            raise NotImplementedError("range-separated MC-PDFT functionals")
+        if abs(hyb[0] - hyb[1]) > 1e-11:
+            raise NotImplementedError("hybrid on-top functional with different exchange,correlation components")
+        cas_hyb = hyb[0]
+
+        if cas_hyb > 1e-11:# and len(ci) > 1:
+            # For SS-CASSCF, there are no Lagrange multipliers
+            # This is only needed in SA case
+            eris = self.base.ao2mo(mo_coeff=mo)
+            terms = ["vhf_c", "papa", "ppaa", "j_pc", "k_pc"]
+            for term in terms:
+                setattr(eris, term, getattr(veff2, term) + cas_hyb*getattr(eris, term)[:])
+            veff2.vhf_c
+            veff2 = eris
+
 
         g_all_state = newton_casscf.gen_g_hop (fcasscf, mo, ci[state], veff2, verbose)[0]
 
@@ -455,9 +513,18 @@ class Gradients (sacasscf.Gradients):
         fcasscf = self.make_fcasscf (state)
         fcasscf.mo_coeff = mo
         fcasscf.ci = ci[state]
-        return mcpdft_HellmanFeynman_grad (fcasscf, self.base.otfnal, veff1,
-            veff2, mo_coeff=mo, ci=ci[state], atmlst=atmlst, mf_grad=mf_grad,
-            verbose=verbose)
+
+        return mcpdft_HellmanFeynman_grad(
+            fcasscf,
+            self.base.otfnal,
+            veff1,
+            veff2,
+            mo_coeff=mo,
+            ci=ci[state],
+            atmlst=atmlst,
+            mf_grad=mf_grad,
+            verbose=verbose,
+        )
 
     def get_init_guess (self, bvec, Adiag, Aop, precond):
         '''Initial guess should solve the problem for SA-SA rotations'''
@@ -527,19 +594,26 @@ class Gradients (sacasscf.Gradients):
         '''Cache the effective Hamiltonian terms so you don't have to
         calculate them twice
         '''
-        state = kwargs['state'] if 'state' in kwargs else self.state
+
+        state = kwargs["state"] if "state" in kwargs else self.state
         if state is None:
-            raise NotImplementedError ('Gradient of PDFT state-average energy')
-        self.state = state # Not the best code hygiene maybe
-        mo = kwargs['mo'] if 'mo' in kwargs else self.base.mo_coeff
-        ci = kwargs['ci'] if 'ci' in kwargs else self.base.ci
-        if isinstance (ci, np.ndarray): ci = [ci] # hack hack hack...
-        kwargs['ci'] = ci
-        if ('veff1' not in kwargs) or ('veff2' not in kwargs):
-            kwargs['veff1'], kwargs['veff2'] = self.base.get_pdft_veff (mo,
-                ci, incl_coul=True, paaa_only=True, state=state)
-        if 'mf_grad' not in kwargs:
-            kwargs['mf_grad'] = self.base.get_rhf_base ().nuc_grad_method ()
+            raise NotImplementedError("Gradient of PDFT state-average energy")
+
+        self.state = state  # Not the best code hygiene maybe
+        mo = kwargs["mo"] if "mo" in kwargs else self.base.mo_coeff
+        ci = kwargs["ci"] if "ci" in kwargs else self.base.ci
+        if isinstance(ci, np.ndarray):
+            ci = [ci]  # hack hack hack...
+
+        kwargs["ci"] = ci
+        if ("veff1" not in kwargs) or ("veff2" not in kwargs):
+            kwargs["veff1"], kwargs["veff2"] = self.base.get_pdft_veff(
+                mo, ci, incl_coul=True, paaa_only=True, state=state, drop_mcwfn=True
+            )
+
+        if "mf_grad" not in kwargs:
+            kwargs["mf_grad"] = self.base.get_rhf_base().nuc_grad_method()
+
         return super().kernel (**kwargs)
 
     def project_Aop (self, Aop, ci, state):

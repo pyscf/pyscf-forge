@@ -61,11 +61,13 @@ energy calculations for wave functions of various types.
 - Additional properties
   - Decomposition of total electronic energy into core, Coulomb, on-top
   components
-  - Analytical nuclear gradients (non-hybrid functionals only) for:
-    1. Single-state CASSCF wave function: [*JCTC* **2018**, *14*, 126]
-    1. State-averaged CASSCF wave functions: [*JCP* **2020**, *153*, 014106]
-    1. CMS-PDFT: [*Mol Phys* **2022**, 120]
-    1. L-PDFT (no meta-GGA): [*JCTC* **2024**, *20*, 3637]
+  - Analytical nuclear gradients for:
+    - non-hybrid functionals only
+        1. CMS-PDFT: [*Mol Phys* **2022**, 120]
+        1. L-PDFT (no meta-GGA): [*JCTC* **2024**, *20*, 3637]
+    - hybrid and non-hybrid functionals:
+        1. Single-state CASSCF wave function: [*JCTC* **2018**, *14*, 126]
+        1. State-averaged CASSCF wave functions: [*JCP* **2020**, *153*, 014106]
   - Permanent electric dipole moment (non-hybrid functionals only) for:
     1. Single-state CASSCF wave function: [*JCTC* **2021**, *17*, 7586]
     1. State-averaged CASSCF wave functions

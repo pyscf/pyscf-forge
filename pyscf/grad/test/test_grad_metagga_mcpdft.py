@@ -21,7 +21,6 @@ from pyscf import scf, gto, df, dft
 from pyscf.data.nist import BOHR
 from pyscf import mcpdft
 
-
 def diatomic(
     atom1,
     atom2,
@@ -115,6 +114,45 @@ class KnownValues(unittest.TestCase):
         # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
         # PySCF-forge commit:   4015363355dc691a80bc94d4b2b094318b213e36
         DE_REF = [-1.0351271000, -0.8919881992]
+
+        for state in range(2):
+            with self.subTest(state=state):
+                de = mc.kernel(state=state)[1, 0] / BOHR
+                self.assertAlmostEqual(de, DE_REF[state], 5)
+
+    def test_grad_lih_ssmc2322_sto3g(self):
+        mc = diatomic("Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 1, grids_level=1)
+        de = mc.kernel()[1, 0] / BOHR
+
+        # Numerical from this software
+        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
+        # PySCF-forge commit:   e82ba940654cd0b91f799e889136a316fda34b10
+        DE_REF = -1.0641645070
+
+        self.assertAlmostEqual(de, DE_REF, 5)
+
+    def test_grad_lih_sa2mc2322_sto3g(self):
+        mc = diatomic("Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 2, grids_level=1)
+
+        # Numerical from this software
+        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
+        # PySCF-forge commit:   e82ba940654cd0b91f799e889136a316fda34b10
+        DE_REF = [-1.0510225010, -0.8963063432]
+
+        for state in range(2):
+            with self.subTest(state=state):
+                de = mc.kernel(state=state)[1, 0] / BOHR
+                self.assertAlmostEqual(de, DE_REF[state], 5)
+
+    def test_grad_lih_sa2mc2322_sto3g_df(self):
+        mc = diatomic(
+            "Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 2, grids_level=1, density_fit=df
+        )
+
+        # Numerical from this software
+        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
+        # PySCF-forge commit:   ee6ac742fbc79d170bc4b63ef2b2c4b49478c53a
+        DE_REF = [-1.0510303416, -0.8963992331]
 
         for state in range(2):
             with self.subTest(state=state):
