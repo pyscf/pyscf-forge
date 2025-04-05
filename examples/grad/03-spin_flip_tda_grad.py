@@ -8,7 +8,7 @@ spin flip down.
 Note: pyscf.sftda_grad is implemented under the spin-flip TDDFT framework,
 that can deal with both spin-flip TDA and TDDFT results. However, the Davi-
 dson solver to spin-flip TDDFT hasn't been implemented, and no direct exam-
-ples are displayed here. 
+ples are displayed here.
 '''
 
 import numpy as np
