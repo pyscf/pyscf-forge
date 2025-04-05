@@ -37,7 +37,7 @@ xy = mftd1.xy
 tools_td.transition_analyze(mf, mftd1, e[0], xy[0], tdtype='TDA')
 
 
-mftd2 = sftda.uks_sf.TDA_SF(mf)
+mftd2 = sftda.uks_sf.TDDFT_SF(mf)
 mftd2.nstates = 5
 mftd2.extype = 1
 mftd2.collinear_samples=200
@@ -50,7 +50,7 @@ xy = mftd2.xy
 # 2. Print tansition analyze for the first spin-flip down excited state.
 #
 for i in range(5):
-    tools_td.transition_analyze(mf, mftd2, e[i], xy[i], tdtype='TDA')
+    tools_td.transition_analyze(mf, mftd2, e[i], xy[i], tdtype='TDDFT')
 
 
 #
