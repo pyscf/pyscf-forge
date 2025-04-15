@@ -441,24 +441,30 @@ def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, conf_info_li
     for str0a, strs0a in enumerate(stringsa):
         for str0b, strs0b in enumerate(stringsb):
             p2 = conf_info_list[str0a, str0b]
-            rdm2aa += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] \
-                        * (lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]) - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))
+            rdm2aa += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * (
+                lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
+                - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))
             rdm2ab += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] \
                         * lib.einsum('pq,rs -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
             rdm2ba += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] \
                         * lib.einsum('pq,rs -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
-            rdm2bb += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] \
-                        * (lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]) - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))
+            rdm2bb += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * (
+                lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
+                - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))
             for str1a, strs1a in enumerate(stringsa):
                 p1 = conf_info_list[str1a, str0b]
-                rdm2aaac[:,:,:,:] += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*t2aa[:,:,:,:,str1a,str0a]*ov_list[p1,p2]
+                rdm2aaac[:,:,:,:] += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
+                    *t2aa[:,:,:,:,str1a,str0a]*ov_list[p1,p2]
                 for k in range(ncas):
-                    rdm2aaac[:,k,k,:] -= numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]*t1a[:,:,str1a,str0a]*ov_list[p1,p2]
+                    rdm2aaac[:,k,k,:] -= numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
+                        *t1a[:,:,str1a,str0a]*ov_list[p1,p2]
             for str1b, strs1b in enumerate(stringsb):
                 p1 = conf_info_list[str0a, str1b]
-                rdm2bbac[:,:,:,:] += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]*t2bb[:,:,:,:,str1b,str0b]*ov_list[p1,p2]
+                rdm2bbac[:,:,:,:] += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
+                    *t2bb[:,:,:,:,str1b,str0b]*ov_list[p1,p2]
                 for k in range(ncas):
-                    rdm2bbac[:,k,k,:] -= numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b] * t1b[:,:,str1b,str0b]*ov_list[p1,p2]
+                    rdm2bbac[:,k,k,:] -= numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b] \
+                        * t1b[:,:,str1b,str0b]*ov_list[p1,p2]
             for str1a, strs1a in enumerate(stringsa):
                 for str1b, strs1b in enumerate(stringsb):
                     p1 = conf_info_list[str1a, str1b]
@@ -480,10 +486,12 @@ def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, conf_info_li
             for str0b, strsb in enumerate(stringsb):
                 p1 = conf_info_list[str1a, str0b]
                 p2 = conf_info_list[str0a, str0b]
-                rdm2aa += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
-                            *(lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])+lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])\
-                              -lib.einsum('ps,rq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])-lib.einsum('rq,ps->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))\
-                                *ov_list[p1,p2]
+                rdm2aa += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b] *(
+                    lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])
+                    + lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])
+                    - lib.einsum('ps,rq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])
+                    - lib.einsum('rq,ps->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))\
+                        *ov_list[p1,p2]
                 rdm2ab += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
                     *(lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
                 rdm2ba += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
@@ -494,8 +502,12 @@ def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, conf_info_li
             for str0a, strsa, in enumerate(stringsa):
                 p1 = conf_info_list[str0a, str0b]
                 p2 = conf_info_list[str0a, str1b]
-                rdm2bb += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
-                    * (lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])+lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])-lib.einsum('ps,rq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])-lib.einsum('rq,ps->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
+                rdm2bb += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b] * (
+                    lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])
+                    + lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])
+                    - lib.einsum('ps,rq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])
+                    - lib.einsum('rq,ps->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))\
+                        *ov_list[p1,p2]
                 rdm2ab += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
                     * (lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
                 rdm2ba += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
@@ -637,7 +649,7 @@ class SFNOCISolver(FCISolver):
         return spin_op.contract_ss(civec,ncas,nelecas)
 
     def fix_spin_(self, shift=PENALTY, ss = None):
-        '''Use level shift to control FCI solver spin.
+        r'''Use level shift to control FCI solver spin.
 
         .. math::
 

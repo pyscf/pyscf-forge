@@ -621,7 +621,8 @@ def optimize_mo(sfnoci, mo_coeff = None, ncas = None, nelecas = None, ncore = No
         else:
             for i, occ in enumerate(po_list):
                 conv, et, moe, moce, moocc = sfnoci.FASSCF(occ, mo_coeff, ncas, ncore,
-                                                           conv_tol= sfnoci._scf.conv_tol , max_cycle= sfnoci._scf.max_cycle)
+                                                           conv_tol= sfnoci._scf.conv_tol,
+                                                           max_cycle= sfnoci._scf.max_cycle)
                 print(conv, et)
                 optimized_mo[i]=moce
                 print("occuped pattern index:")
@@ -644,7 +645,8 @@ def optimize_mo(sfnoci, mo_coeff = None, ncas = None, nelecas = None, ncore = No
             else:
                 conv, et, moe, moce = StateAverage_FASSCF(sfnoci, i, po_list, group, mo_coeff,
                                                           ncas, nelecas, ncore,
-                                                          conv_tol= sfnoci._scf.conv_tol , max_cycle= sfnoci._scf.max_cycle)
+                                                          conv_tol= sfnoci._scf.conv_tol,
+                                                          max_cycle= sfnoci._scf.max_cycle)
                 print(conv, et)
                 optimized_mo[i]=moce
                 print("occuped pattern index:")
@@ -843,9 +845,7 @@ class SFNOCI(CASBase):
             mo_list, po_list, _ = self.optimize_mo(self.mo_coeff)
             po_list_or_group = po_list
         ncore = self.ncore
-        ncas = self.ncas 
         s1e = self._scf.get_ovlp(self.mol)
-        #as_list = numpy.array(range(ncore,ncore+ncas))
         core_list = numpy.array(range(0,ncore))
         N = mo_list.shape[1]
         p = len(po_list_or_group)
