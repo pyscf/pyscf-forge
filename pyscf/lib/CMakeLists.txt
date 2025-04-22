@@ -68,7 +68,7 @@ endif (MKL)
 #link_directories ($ENV{LD_LIBRARY_PATH})
 
 find_package(BLAS REQUIRED)
-#find_package (LAPACK REQUIRED)
+find_package (LAPACK REQUIRED)
 
 # OpenMP
 option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
@@ -138,3 +138,15 @@ set_target_properties (clib_dsrg PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "dsrg")
+
+# Build the CSFstring shared library
+set (CSF_SOURCE_FILES "csfstring.c")
+add_library (clib_csf SHARED ${CSF_SOURCE_FILES})
+target_link_libraries (clib_csf ${LAPACK_LIBRARIES})
+set_target_properties (clib_csf PROPERTIES
+    LINKER_LANGUAGE C
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "csf")
+
+
