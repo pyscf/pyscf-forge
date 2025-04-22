@@ -140,7 +140,7 @@ set_target_properties (clib_dsrg PROPERTIES
     OUTPUT_NAME "dsrg")
 
 # Build the CSFstring shared library
-set (CSF_SOURCE_FILES "csfstring.c")
+set (CSF_SOURCE_FILES "csf/csfstring.c")
 add_library (clib_csf SHARED ${CSF_SOURCE_FILES})
 target_link_libraries (clib_csf ${LAPACK_LIBRARIES})
 set_target_properties (clib_csf PROPERTIES
