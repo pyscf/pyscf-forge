@@ -6,8 +6,8 @@ from pyscf.fci import direct_spin1_symm, cistring, direct_uhf
 from pyscf.lib.numpy_helper import tag_array
 from pyscf.fci.direct_spin1 import _unpack_nelec, _get_init_guess, kernel_ms1
 from pyscf.fci.direct_spin1_symm import _gen_strs_irrep, _id_wfnsym
-from mrh.my_pyscf.fci.csfstring import CSFTransformer
-from mrh.my_pyscf.fci.csf import kernel, pspace, get_init_guess, make_hdiag_csf, make_hdiag_det, unpack_h1e_cs, CSFFCISolver
+from pyscf.csf_fci.csfstring import CSFTransformer
+from pyscf.csf_fci.csf import kernel, pspace, get_init_guess, make_hdiag_csf, make_hdiag_det, unpack_h1e_cs, CSFFCISolver
 '''
     MRH 03/24/2019
     IMPORTANT: this solver will interpret a two-component one-body Hamiltonian as [h1e_charge, h1e_spin] where

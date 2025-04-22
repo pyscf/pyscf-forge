@@ -25,8 +25,8 @@ from pyscf import fci
 from pyscf import lib
 from pyscf.fci import fci_slow
 from pyscf.fci.spin_op import spin_square0
-from mrh.my_pyscf.fci import csf_solver
-from mrh.my_pyscf.fci.csfstring import CSFTransformer
+from pyscf.csf_fci import csf_solver
+from pyscf.csf_fci.csfstring import CSFTransformer
 
 def setUpModule():
     global mol, m, h1e, g2e, sol, h2mat

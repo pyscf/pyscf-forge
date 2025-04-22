@@ -1,17 +1,15 @@
 import numpy as np
 import sys, os, time
 import ctypes
-from mrh.my_pyscf.fci import csdstring
+from pyscf.csf_fci import csdstring
 from pyscf.fci import cistring
 from pyscf.fci.spin_op import spin_square0
 from pyscf import lib
 from pyscf.lib import numpy_helper
 from scipy import special, linalg
-from mrh.util.io import prettyprint_ndarray
 from functools import reduce
-from mrh.lib.helper import load_library
 from pyscf.fci.direct_spin1_symm import _gen_strs_irrep
-libcsf = load_library ('libcsf')
+libcsf = lib.load_library ('libcsf')
 
 class ImpossibleCIvecError (RuntimeError):
     def __init__(self, message, ndet=None, ncsf=None, norb=None, neleca=None, nelecb=None):

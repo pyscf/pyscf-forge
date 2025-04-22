@@ -1,11 +1,10 @@
 from pyscf.fci import cistring
-from pyscf.lib import logger
+from pyscf.lib import logger, load_library
 from scipy import special
 import numpy as np
 import ctypes
 import time
 import os
-from mrh.lib.helper import load_library
 libcsf = load_library ('libcsf')
 
 # "CSD" means configuration-spin-determinant because I don't know what "split-GUGA" means

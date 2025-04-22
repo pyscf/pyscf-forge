@@ -1,5 +1,5 @@
 from pyscf import gto, fci, scf, lib, ao2mo
-from mrh.my_pyscf.fci import csf_solver
+from pyscf.csf_fci import csf_solver
 
 mol = gto.M (atom='H 0 0 0; F 0 0 1.1', basis='sto3g', output='csf_fci.log',
              verbose=lib.logger.INFO)
