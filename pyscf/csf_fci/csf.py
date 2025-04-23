@@ -81,7 +81,7 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
     npair_econf_size = npair_dconf_size * npair_sconf_size
     max_npair = min (neleca, nelecb)
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
-    ndeta_all = cistring.num_strings(norb, neleca)
+    #ndeta_all = cistring.num_strings(norb, neleca)
     ndetb_all = cistring.num_strings(norb, nelecb)
     hdiag_csf = np.ascontiguousarray (np.zeros (ncsf_all, dtype=np.float64))
     hdiag_csf_check = np.ones (ncsf_all, dtype=np.bool_)
@@ -160,7 +160,7 @@ def make_hdiag_csf_slower (h1e, eri, norb, nelec, transformer, hdiag_det=None, m
     npair_econf_size = npair_dconf_size * npair_sconf_size
     max_npair = min (neleca, nelecb)
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
-    ndeta_all = cistring.num_strings(norb, neleca)
+    #ndeta_all = cistring.num_strings(norb, neleca)
     ndetb_all = cistring.num_strings(norb, nelecb)
     hdiag_csf = np.ascontiguousarray (np.zeros (ncsf_all, dtype=np.float64))
     hdiag_csf_check = np.ones (ncsf_all, dtype=np.bool_)
@@ -199,7 +199,7 @@ def make_hdiag_csf_slower (h1e, eri, norb, nelec, transformer, hdiag_det=None, m
             assert (len (addr) == ndet)
             stra = det_stra[iconf]
             strb = det_strb[iconf]
-            t2, w2 = lib.logger.process_clock (), lib.logger.perf_counter ()
+            #t2, w2 = lib.logger.process_clock (), lib.logger.perf_counter ()
             libfci.FCIpspace_h0tril(hdiag_conf[iconf].ctypes.data_as(ctypes.c_void_p),
                 h1e.ctypes.data_as(ctypes.c_void_p),
                 eri.ctypes.data_as(ctypes.c_void_p),
@@ -519,7 +519,7 @@ class CSFFCISolver: # parent class
     def contract_2e(self, eri, fcivec, norb, nelec, link_index=None, **kwargs):
         hc = super().contract_2e(eri, fcivec, norb, nelec, link_index, **kwargs)
         if hasattr (eri, 'h1e_s'):
-           hc += direct_uhf.contract_1e ([eri.h1e_s, -eri.h1e_s], fcivec, norb, nelec, link_index)
+            hc += direct_uhf.contract_1e ([eri.h1e_s, -eri.h1e_s], fcivec, norb, nelec, link_index)
         return hc
 
     def pspace (self, h1e, eri, norb, nelec, hdiag_det=None, hdiag_csf=None, npsp=200, **kwargs):

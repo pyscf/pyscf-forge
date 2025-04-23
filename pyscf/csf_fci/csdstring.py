@@ -20,7 +20,7 @@ def check_csd_mask_size (norb, neleca, nelecb):
     ndetb = special.binom (norb, nelecb)
     mask_size = ndeta * ndetb
     mask_size_lim_gd = 2**32 / 1e9
-    
+
     assert (mask_size / 1e9 <= mask_size_lim_gd), \
         '{:.2f} billion determinants; more than {:.2f} billion not supported'.format (mask_size / 1e9, mask_size_lim_gd)
     return mask_size
@@ -130,7 +130,7 @@ def csdaddrs2ddaddrs (norb, neleca, nelecb, csdaddrs):
         ddaddrs is returned in the format of a contiguous 2d ndarray with shape (naddrs,2), where naddrs is the length
         of csdaddrs
     '''
-    t_start = logger.perf_counter ()
+    #t_start = logger.perf_counter ()
     csdaddrs = np.asarray (csdaddrs)
     if not csdaddrs.flags['C_CONTIGUOUS']:
         csdaddrs = np.ravel (csdaddrs, order='C')
@@ -162,7 +162,7 @@ def csdstrs2csdaddrs (norb, neleca, nelecb, csdstrs):
         dconf_addr = cistring.strs2addr (norb, npair, csdstrs[1,idx])
         sconf_addr = cistring.strs2addr (norb - npair, nspins, csdstrs[2,idx])
         spins_addr = cistring.strs2addr (nspins, nup, csdstrs[3,idx])
-        
+
         csdaddrs[idx] = np.asarray ([offset + (dconf * sconf_size * spins_size)
                                             + (sconf * spins_size)
                                             + spins for dconf, sconf, spins in zip (
@@ -188,11 +188,7 @@ def csdaddrs2csdstrs (norb, neleca, nelecb, csdaddrs):
         if len (idx) == 1:
             if not idx[0]:
                 continue
-        try:
-            dconf_addr = (csdaddrs[idx] - offset) // (sconf_size * spins_size)
-        except:
-            print (idx)
-            assert (False)
+        dconf_addr = (csdaddrs[idx] - offset) // (sconf_size * spins_size)
         dconf_rem  = (csdaddrs[idx] - offset)  % (sconf_size * spins_size)
         sconf_addr = dconf_rem // spins_size
         spins_addr = dconf_rem  % spins_size
@@ -264,7 +260,7 @@ def get_csdaddrs_shape (norb, neleca, nelecb):
     for nspin in nspins:
         assert ((nspin + neleca - nelecb) % 2 == 0)
 
-    npair_dconf_size = np.asarray ([int (round (special.binom (norb, npair))) 
+    npair_dconf_size = np.asarray ([int (round (special.binom (norb, npair)))
                                     for npair in range (min_npair, nless+1)], dtype=np.int32)
     npair_sconf_size = np.asarray ([int (round (special.binom (nfreeorb, nspin)))
                                     for nfreeorb, nspin in zip (nfreeorbs, nspins)], dtype=np.int32)

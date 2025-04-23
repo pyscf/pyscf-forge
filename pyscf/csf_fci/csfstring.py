@@ -231,7 +231,7 @@ def unpack_sym_ci (ci, idx, vec_on_cols=False):
         return ci
     elif ci.ndim == 2:
         if vec_on_cols:
-                ci = ci.T
+            ci = ci.T
         assert (ci.shape[1] == sym_len), '{} {}'.format (ci.shape, sym_len)
         dummy = np.zeros ((ci.shape[0], tot_len), dtype=ci.dtype)
         dummy[:,idx] = ci
@@ -592,7 +592,7 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
             continue
         if not project:
             csf_addrs[:] = False
-            csf_addrs_ipair = csf_addrs[csf_offset:][:nconf*ncsf].reshape (nconf, ncsf) # Note: this is a view, i.e., a pointer
+            csf_addrs_ipair = csf_addrs[csf_offset:][:nconf*ncsf].reshape (nconf, ncsf) # Note: this is a view
 
         t_ref = lib.logger.perf_counter ()
         if csd_mask is None:
