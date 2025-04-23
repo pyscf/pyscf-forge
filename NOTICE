@@ -1,4 +1,4 @@
-The MC-PDFT module within this package was developed by:
+Features within PySCF-Forge were developed by:
 
 (in chronological order of first commit)
 Qiming Sun
@@ -14,3 +14,4 @@ Shirong Wang
 Jiachen Li <lijiachen.duke@gmail.com>
 Jincheng Yu <pimetamon@gmail.com>
 Peng Bao
+Seunghoon Lee (Seoul National University)
