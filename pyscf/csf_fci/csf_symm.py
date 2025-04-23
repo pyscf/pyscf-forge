@@ -7,23 +7,25 @@ from pyscf.lib.numpy_helper import tag_array
 from pyscf.fci.direct_spin1 import _unpack_nelec, _get_init_guess, kernel_ms1
 from pyscf.fci.direct_spin1_symm import _gen_strs_irrep, _id_wfnsym
 from pyscf.csf_fci.csfstring import CSFTransformer
-from pyscf.csf_fci.csf import kernel, pspace, get_init_guess, make_hdiag_csf, make_hdiag_det, unpack_h1e_cs, CSFFCISolver
+from pyscf.csf_fci.csf import kernel, pspace, get_init_guess, make_hdiag_csf, make_hdiag_det, unpack_h1e_cs
+from pyscf.csf_fci.csf import CSFFCISolver
 '''
     MRH 03/24/2019
     IMPORTANT: this solver will interpret a two-component one-body Hamiltonian as [h1e_charge, h1e_spin] where
     h1e_charge = h^p_q (a'_p,up a_q,up + a'_p,down a_q,down)
     h1e_spin   = h^p_q (a'_p,up a_q,up - a'_p,down a_q,down)
-    This is to preserve interoperability with the members of direct_spin1_symm, since there is no direct_uhf_symm in pyscf yet.
-    Only with an explicitly CSF-based solver can such potentials be included in a calculation that retains S^2 symmetry.
-    Multicomponent two-body integrals are currently not available (so this feature is only for use with, e.g., ROHF-CASSCF with 
-    with some SOMOs outside of the active space or LASSCF with multiple nonsinglet fragments, not UHF-CASSCF).
+    This is to preserve interoperability with the members of direct_spin1_symm, since there is no direct_uhf_symm in
+    pyscf yet. Only with an explicitly CSF-based solver can such potentials be included in a calculation that retains
+    S^2 symmetry. Multicomponent two-body integrals are currently not available (so this feature is only for use with,
+    e.g., ROHF-CASSCF with with some SOMOs outside of the active space or LASSCF with multiple nonsinglet fragments,
+    not UHF-CASSCF).
 '''
 
 
 class FCISolver (CSFFCISolver, direct_spin1_symm.FCISolver):
-    r''' get_init_guess uses csfstring.py and csdstring.py to construct a spin-symmetry-adapted initial guess, and the Davidson algorithm is carried
-    out in the CSF basis. However, the ci attribute is put in the determinant basis at the end of it all, and "ci0" is also assumed
-    to be in the determinant basis.
+    r''' get_init_guess uses csfstring.py and csdstring.py to construct a spin-symmetry-adapted initial guess, and the
+    Davidson algorithm is carried out in the CSF basis. However, the ci attribute is put in the determinant basis at the
+    end of it all, and "ci0" is also assumed to be in the determinant basis.
 
     ...However, I want to also do point-group symmetry better than direct_spin1_symm...
     '''
@@ -84,7 +86,7 @@ class FCISolver (CSFFCISolver, direct_spin1_symm.FCISolver):
         self.nelec = nelec
         self.check_transformer_cache ()
         return get_init_guess (norb, nelec, nroots, hdiag_csf, self.transformer)
-           
+
 
     def check_transformer_cache (self):
         assert (isinstance (self.smult, (int, np.number)))

@@ -19,7 +19,7 @@ class ImpossibleCIvecError (RuntimeError):
         self.norb = norb
         self.neleca = neleca
         self.nelecb = nelecb
-        
+
     def __str__(self):
         return self.message
 
@@ -41,7 +41,7 @@ class CSFTransformer (lib.StreamObject):
 
     def vec_det2csf (self, civec, order='C', normalize=True, return_norm=False):
         vec_on_cols = (order.upper () == 'F')
-        civec, norm = transform_civec_det2csf (civec, self._norb, self._neleca, 
+        civec, norm = transform_civec_det2csf (civec, self._norb, self._neleca,
             self._nelecb, self._smult, csd_mask=self.csd_mask, do_normalize=normalize,
             vec_on_cols=vec_on_cols)
         civec = self.pack_csf (civec, order=order)
@@ -50,7 +50,7 @@ class CSFTransformer (lib.StreamObject):
 
     def vec_csf2det (self, civec, order='C', normalize=True, return_norm=False):
         vec_on_cols = (order.upper () == 'F')
-        civec, norm = transform_civec_csf2det (self.unpack_csf (civec), self._norb, self._neleca, 
+        civec, norm = transform_civec_csf2det (self.unpack_csf (civec), self._norb, self._neleca,
             self._nelecb, self._smult, csd_mask=self.csd_mask, do_normalize=normalize,
             vec_on_cols=vec_on_cols)
         if return_norm: return civec, norm
@@ -64,7 +64,7 @@ class CSFTransformer (lib.StreamObject):
 
     def mat_det2csf_confspace (self, mat, confs):
         mat, csf_addr = transform_opmat_det2csf_pspace (mat, confs, self._norb, self._neleca,
-            self._nelecb, self._smult, self.csd_mask, self.econf_det_mask, self.econf_csf_mask) 
+            self._nelecb, self._smult, self.csd_mask, self.econf_det_mask, self.econf_csf_mask)
         return mat, csf_addr
 
     def pack_csf (self, csfvec, order='C'):
@@ -117,7 +117,6 @@ class CSFTransformer (lib.StreamObject):
         if isdet:
             csfvec = self.vec_det2csf (csfvec, order=order, normalize=normalize)
         csfvec = self.unpack_csf (csfvec, order=order) # Don't let symmetry scramble CSF indexing
-        nelec = self._neleca + self._nelecb
         csfvec = np.asarray (csfvec)
         if csfvec.ndim == 1:
             nvec = 1
@@ -156,7 +155,7 @@ class CSFTransformer (lib.StreamObject):
     @norb.setter
     def norb (self, x):
         self._update_spin_cache (x, self._neleca, self._nelecb, self._smult)
-        return self._norb        
+        return self._norb
 
     @property
     def neleca (self):
@@ -164,7 +163,7 @@ class CSFTransformer (lib.StreamObject):
     @neleca.setter
     def neleca (self, x):
         self._update_spin_cache (self._norb, x, self._nelecb, self._smult)
-        return self._neleca        
+        return self._neleca
 
     @property
     def nelecb (self):
@@ -172,7 +171,7 @@ class CSFTransformer (lib.StreamObject):
     @nelecb.setter
     def nelecb (self, x):
         self._update_spin_cache (self._norb, self._neleca, x, self._smult)
-        return self._nelecb        
+        return self._nelecb
 
     @property
     def smult (self):
@@ -180,7 +179,7 @@ class CSFTransformer (lib.StreamObject):
     @smult.setter
     def smult (self, x):
         self._update_spin_cache (self._norb, self._neleca, self._nelecb, x)
-        return self._smult        
+        return self._smult
 
     @property
     def orbsym (self):
@@ -248,7 +247,6 @@ def unpack_sym_ci (ci, idx, vec_on_cols=False):
 def pack_sym_ci (ci, idx, vec_on_cols=False):
     if idx is None: return ci
     tot_len = idx.size
-    sym_len = np.count_nonzero (idx)
     if isinstance (ci, list) or isinstance (ci, tuple):
         assert (ci[0].size == tot_len), '{} {}'.format (ci[0].size, tot_len)
         dummy = np.asarray (ci)[:,idx]
@@ -267,13 +265,13 @@ def pack_sym_ci (ci, idx, vec_on_cols=False):
         return dummy
     else:
         assert (ci.ndim == 1)
-        try: 
+        try:
             ci=ci[idx]
         except Exception as e:
             print (ci.shape, idx.shape)
             raise (e)
         return ci
-        
+
 
 def make_confsym (norb, neleca, nelecb, econf_det_mask, orbsym):
     strsa = cistring.gen_strings4orblist(range(norb), neleca)
@@ -296,7 +294,7 @@ def check_spinstate_norm (detarr, norb, neleca, nelecb, smult, csd_mask=None):
 
 
 def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
-    ''' Project the total spin = s [= (smult-1) / 2] component of a CI vector using CSFs 
+    ''' Project the total spin = s [= (smult-1) / 2] component of a CI vector using CSFs
 
     Args
     detarr: 2d ndarray of shape (ndeta,ndetb)
@@ -318,13 +316,14 @@ def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
     ndet = ndeta*ndetb
     assert (detarr.shape == tuple((ndeta,ndetb)) or detarr.shape == tuple((ndet,))), '{} {}'.format (detarr.shape, ndet)
     detarr = np.ravel (detarr, order='C')
-        
-    detarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False, csd_mask=csd_mask, project=True)
+
+    detarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False,
+                                           csd_mask=csd_mask, project=True)
     try:
         detnorm = linalg.norm (detarr)
     except Exception as ex:
         assert (detarr.shape == tuple((1,))), "{} {}".format (detarr.shape, ex)
-        detnorm = detarr[0];
+        detnorm = detarr[0]
     '''
     if np.isclose (detnorm, 0):
         raise RuntimeWarning (('CI vector projected into CSF space (norb, na, nb, s = {}, {}, {}, {})'
@@ -354,7 +353,7 @@ def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
         Normalized CI vector in terms of CSFs, with zero-norm vectors dropped
     csfnorm: ndarray of (maximum) length nvec, floats
     '''
- 
+
     ndeta = special.comb (norb, neleca, exact=True)
     ndetb = special.comb (norb, nelecb, exact=True)
     ndet = ndeta*ndetb
@@ -376,10 +375,11 @@ def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
         detarr = np.ascontiguousarray (detarr.T)
     else:
         detarr = np.ascontiguousarray (detarr.reshape (nvec, ndet))
-     
 
-    # Driver needs an ndarray of explicit shape (*, ndet)        
-    csfarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False, csd_mask=csd_mask, project=False)
+
+    # Driver needs an ndarray of explicit shape (*, ndet)
+    csfarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False,
+                                           csd_mask=csd_mask, project=False)
     if csfarr.size == 0:
         assert (False)
         return np.zeros (0, dtype=detarr.dtype), 0.0
@@ -420,7 +420,7 @@ def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None,
         (i.e., an eigenvector matrix) (requires 2d ndarray for detarr)
     do_normalize: bool
         If false, do NOT normalize the vector (i.e., if it is a matrix-vector product
-        
+
 
     Returns
     detarr: same data type as csfarr. Last dimension is of length ndeta*ndetb
@@ -430,7 +430,7 @@ def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None,
     if np.asarray (csfarr).size == 0:
         return np.zeros (0, dtype=csfarr.dtype), 0.0
 
-    ndeta = special.comb (norb, neleca, exact=True) 
+    ndeta = special.comb (norb, neleca, exact=True)
     ndetb = special.comb (norb, nelecb, exact=True)
     ndet = ndeta*ndetb
     ncsf = count_all_csfs (norb, neleca, nelecb, smult)
@@ -453,7 +453,8 @@ def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None,
     else:
         csfarr = np.ascontiguousarray (csfarr.reshape (nvec, ncsf))
 
-    detarr = _transform_detcsf_vec_or_mat (csfarr, norb, neleca, nelecb, smult, reverse=True, op_matrix=False, csd_mask=csd_mask, project=False)
+    detarr = _transform_detcsf_vec_or_mat (csfarr, norb, neleca, nelecb, smult, reverse=True, op_matrix=False,
+                                           csd_mask=csd_mask, project=False)
 
     # Manipulate detarr back into the original shape
     detnorm = linalg.norm (detarr, axis=1)
@@ -492,12 +493,15 @@ def transform_opmat_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None)
     ndeta = special.comb (norb, neleca, exact=True)
     ndetb = special.comb (norb, nelecb, exact=True)
     ndet = ndeta*ndetb
-    assert (detarr.shape == tuple((ndet,ndet)) or detarr.shape == tuple((ndet**2,))), "{} {} (({},{}),{})".format (detarr.shape, ndet, neleca, nelecb, norb)
-    csfarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=True, csd_mask=csd_mask, project=False)
+    assert (detarr.shape == tuple((ndet,ndet)) or detarr.shape == tuple((ndet**2,))), "{} {} (({},{}),{})".format (
+        detarr.shape, ndet, neleca, nelecb, norb)
+    csfarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=True,
+                                           csd_mask=csd_mask, project=False)
     return csfarr
 
-def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False, csd_mask=None, project=False):
-    ''' Wrapper to manipulate array into correct shape and transform both dimensions if an operator matrix 
+def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False, csd_mask=None,
+                                  project=False):
+    ''' Wrapper to manipulate array into correct shape and transform both dimensions if an operator matrix
 
     Args
     arr: ndarray of shape (nrow, ncol)
@@ -520,7 +524,7 @@ def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=Fals
     arr: ndarray of shape (nrow, ncol)
     '''
 
-    ndeta = special.comb (norb, neleca, exact=True) 
+    ndeta = special.comb (norb, neleca, exact=True)
     ndetb = special.comb (norb, nelecb, exact=True)
     ndet_all = ndeta*ndetb
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
@@ -549,18 +553,17 @@ def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=Fals
 
     return arr
 
-    
+
 def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_mask=None, project=False):
     ''' Must take an array of shape (*, ndet) or (*, ncsf) '''
-    t_start = lib.logger.perf_counter ()
+    #t_start = lib.logger.perf_counter ()
     time_umat = 0
     time_mult = 0
     time_getdet = 0
     size_umat = 0
-    s = (smult - 1) / 2
-    ms = (neleca - nelecb) / 2
 
-    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = csdstring.get_csdaddrs_shape (norb, neleca, nelecb)
+    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = csdstring.get_csdaddrs_shape (
+        norb, neleca, nelecb)
     _, npair_csf_offset, _, _, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
     nrow = inparr.shape[0]
     ndeta_all = special.comb (norb, neleca, exact=True)
@@ -569,7 +572,7 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
 
     ncol_out = ndet_all if (reverse or project) else ncsf_all
-    ncol_in = ndet_all if ((not reverse) or project) else ncsf_all
+    #ncol_in = ndet_all if ((not reverse) or project) else ncsf_all
     if not project:
         outarr = np.ascontiguousarray (np.zeros ((nrow, ncol_out), dtype=np.float64))
         csf_addrs = np.zeros (ncsf_all, dtype=np.bool_)
@@ -601,13 +604,14 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
         time_getdet += lib.logger.perf_counter () - t_ref
 
         if (ncsf == 0):
-            inparr[:,det_addrs] = 0 
+            inparr[:,det_addrs] = 0
             continue
 
         t_ref = lib.logger.perf_counter ()
         umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult))
         size_umat = max (size_umat, umat.nbytes)
-        ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save memory when there are too many csfs
+        ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save
+        #                 memory when there are too many csfs
         assert (umat.shape[0] == ndet)
         assert (umat.shape[1] == ncsf_blk)
         if project:
@@ -617,27 +621,32 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
         if not project:
             csf_addrs_ipair[:,:ncsf_blk] = True # Note: edits csf_addrs
 
-        # The elements of csf_addrs and det_addrs are addresses for the flattened vectors and matrices (inparr.flat and outarr.flat)
-        # Passing them unflattened as indices of the flattened arrays should result in a 3-dimensional array if I understand numpy's indexing rules correctly
+        # The elements of csf_addrs and det_addrs are addresses for the flattened vectors and matrices (inparr.flat and
+        # outarr.flat)
+        # Passing them unflattened as indices of the flattened arrays should result in a 3-dimensional array if I
+        # understand numpy's indexing rules correctly
         # For the lvalues, I think it's necessary to flatten csf_addrs and det_addrs to avoid an exception
-        # Hopefully this is parallel under the hood, and hopefully the OpenMP reduction epsilon doesn't ruin the spin eigenvectors
+        # Hopefully this is parallel under the hood, and hopefully the OpenMP reduction epsilon doesn't ruin the spin
+        # eigenvectors
         t_ref = lib.logger.perf_counter ()
         if project:
             inparr[:,det_addrs] = np.tensordot (inparr[:,det_addrs], Pmat, axes=1)
         elif not reverse:
             outarr[:,csf_addrs] = np.tensordot (inparr[:,det_addrs], umat, axes=1).reshape (nrow, ncsf_blk*nconf)
         else:
-            outarr[:,det_addrs] = np.tensordot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk), umat, axes=((2,),(1,)))
+            outarr[:,det_addrs] = np.tensordot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk), umat,
+                                                axes=((2,),(1,)))
         time_mult += lib.logger.perf_counter () - t_ref
 
     if project:
         outarr = inparr
     else:
         outarr = outarr.reshape (nrow, ncol_out)
-    d = ['determinants','csfs']
     '''
+    d = ['determinants','csfs']
     print (('Transforming {} into {} summary: {:.2f} seconds to get determinants,'
-            ' {:.2f} seconds to build umat, {:.2f} seconds matrix-vector multiplication,            ' {:.2f} MB largest umat').format (d[reverse], d[~reverse], time_getdet, time_umat,
+            ' {:.2f} seconds to build umat, {:.2f} seconds matrix-vector multiplication,
+            ' {:.2f} MB largest umat').format (d[reverse], d[~reverse], time_getdet, time_umat,
             ' {:.2f} MB largest umat').format (d[reverse], d[~reverse], time_getdet, time_umat,
             time_mult, size_umat / 1e6))
     print ('Total time spend in _transform_det2csf: {:.2f} seconds'.format (lib.logger.perf_counter () - t_start))
@@ -675,9 +684,10 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             CI vector element addresses in CSF basis
     '''
 
-    nconf_all = econfs.size 
-    # I basically need to invert econf_det_mask and econf_csf_mask. I can't use argsort for this because their elements aren't unique
-    # csf_addrs needs to be sorted because I don't want to make a second reduced_csd_mask index for the csf-basis version (see below);
+    # I basically need to invert econf_det_mask and econf_csf_mask. I can't use argsort for this because their elements
+    # aren't unique
+    # csf_addrs needs to be sorted because I don't want to make a second reduced_csd_mask index for the csf-basis
+    # version (see below);
     # just return the damn thing in the canonical order!
     det_addrs = np.concatenate ([np.nonzero (econf_det_mask == conf)[0] for conf in econfs])
     csf_addrs = np.sort (np.concatenate ([np.nonzero (econf_csf_mask == conf)[0] for conf in econfs]))
@@ -687,14 +697,17 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
     #   I need to generate a mask array to address the elements of "op"
     #   in the "canonical" ordering (ipair, doubly-occupied string, singly-occupied string, and spin configuration)
     #   that I developed in csd string but spanning only those configurations that are included in econfs.
-    #   The next line should accomplish this. np.argsort (mask) inverts a given mask index array (assuming its elements are unique).
+    #   The next line should accomplish this. np.argsort (mask) inverts a given mask index array (assuming its elements
+    #   are unique).
     #   So for instance, np.argsort (csd_mask)[det_addrs] gives you csd addresses.
-    #   Then np.argsort (np.argsort (csd_mask)[det_addrs])[csd_addrs] inverts it twice, and gives you determinant addresses,
-    #   but if det_addrs doesn't span the whole space, then csd_addrs can't either. In other words, the csd indices are compressed
-    #   and correspond to the elements of op.
+    #   Then np.argsort (np.argsort (csd_mask)[det_addrs])[csd_addrs] inverts it twice, and gives you determinant
+    #   addresses, but if det_addrs doesn't span the whole space, then csd_addrs can't either. In other words, the csd
+    #   indices are compressed and correspond to the elements of op.
     reduced_csd_mask = np.argsort (np.argsort (csd_mask)[det_addrs])
-    assert (op.shape == (ndet_all, ndet_all)), "operator matrix shape problem ({} for det_addrs of size {})".format (op.shape, det_addrs.size)
-    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = csdstring.get_csdaddrs_shape (norb, neleca, nelecb)
+    assert (op.shape == (ndet_all, ndet_all)), "operator matrix shape problem ({} for det_addrs of size {})".format (
+        op.shape, det_addrs.size)
+    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = csdstring.get_csdaddrs_shape (
+        norb, neleca, nelecb)
     _, npair_csf_offset, _, _, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
     npair_econf_size = npair_dconf_size * npair_sconf_size
     max_npair = min (neleca, nelecb)
@@ -733,20 +746,23 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             det_offset += nconf*ndet
             csf_offset += nconf*ncsf
 
-        assert (det_offset <= ndet_all), "{} {}".format (det_offset, ndet_all) # Can be less because npair < min_npair corresponds to some dets that are skipped
+        assert (det_offset <= ndet_all), "{} {}".format (det_offset, ndet_all) # Can be less because npair < min_npair
+        #                                                                        corresponds to some dets that are
+        #                                                                        skipped
         assert (csf_offset == ncsf_all), "{} {}".format (csf_offset, ncsf_all)
         return outmat
 
     op = ax_b (op).conj ().T
     op = ax_b (op).conj ().T
     return op, csf_addrs
-            
+
 
 
 def make_econf_csf_mask (norb, neleca, nelecb, smult):
     ''' Make a mask index matching csfs to electron configurations '''
-    
-    min_npair, npair_offset, npair_dconf_size, npair_sconf_size, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
+
+    min_npair, npair_offset, npair_dconf_size, npair_sconf_size, npair_csf_size = get_csfvec_shape (
+        norb, neleca, nelecb, smult)
     ncsf = count_all_csfs (norb, neleca, nelecb, smult)
     mask = np.empty (ncsf, dtype=np.uint32)
     npair_conf_size = npair_dconf_size * npair_sconf_size
@@ -758,7 +774,7 @@ def make_econf_csf_mask (norb, neleca, nelecb, smult):
         iconf += npair_conf_size[ipair]
         mask[npair_offset[ipair]:][:npair_size[ipair]] = np.repeat (irange, npair_csf_size[ipair])
     return mask
-    
+
 def csf_gentable (nspin, smult):
     ''' Example of a genealogical coupling table for 8 spins and s = 1 (triplet), counting from the final state
         back to the null state:
@@ -773,21 +789,21 @@ def csf_gentable (nspin, smult):
 
         Top left (0,0) is the null state (nspin = 0, s = 0).
         Position (3,5) (1/2 nspin - s, 1/2 nspin + s) is the target state (nspin=8, s=1).
-        Numbers count paths from that position to the target state, moving only down or to the right; gen(0,0)=gen(0,1) is the total number of CSFs with this spin state
-        for any electron configuration with 8 unpaired electrons.
+        Numbers count paths from that position to the target state, moving only down or to the right; gen(0,0)=gen(0,1)
+        is the total number of CSFs with this spin state for any electron configuration with 8 unpaired electrons.
         Moving left corresponds to bit=1; moving down corresponds to bit=0.
-        Vertical lines are not defined (s<0) but stored as zero [so array has shape=(1/2 nspin - s + 1 , 1/2 nspin + s + 1)].
-        Dots are not stored but are defined as zero.
-        Rotate 45 degrees counter clockwise and nspins is on the horizontal from left to right, and spin is on the vertical from bottom to top.
-        To compute the address from a string, sum the numbers which appear above and to the right of every coordinate reached
-        from above. For example, the string 01101101 turns down in the second, fifth, and eighth places (counting from right to left) so its
-        address is 19 (0,2 [0+2=2]) + 3 (1,4 [1+4=5]) + 0 (2,6[2+6=8]) = 22.
-        To compute the string from the address, find the largest number on each row that's less than the address, subtract it,
-        set every unassignd bit up to that column to 1, set the bit in that column to 0, go down a row, reset the column index to zero, and repeat.
-        For example, address 15 is 10 (0,3) + 3 (1,4) + 2 (2,4), so the string is 11001011
-        so the string is 1100101, again indexing the bits from right to left.
+        Vertical lines are not defined (s<0) but stored as zero [so array has shape=(1/2 nspin - s + 1 ,
+        1/2 nspin + s + 1)]. Dots are not stored but are defined as zero.
+        Rotate 45 degrees counter clockwise and nspins is on the horizontal from left to right, and spin is on the
+        vertical from bottom to top. To compute the address from a string, sum the numbers which appear above and to the
+        right of every coordinate reached from above. For example, the string 01101101 turns down in the second, fifth,
+        and eighth places (counting from right to left) so its address is 19 (0,2 [0+2=2]) + 3 (1,4 [1+4=5]) + 0
+        (2,6[2+6=8]) = 22. To compute the string from the address, find the largest number on each row that's less than
+        the address, subtract it, set every unassignd bit up to that column to 1, set the bit in that column to 0, go
+        down a row, reset the column index to zero, and repeat. For example, address 15 is 10 (0,3) + 3 (1,4) + 2 (2,4),
+        so the string is 11001011 again indexing the bits from right to left.
     '''
-        
+
     assert ((smult - 1) % 2 == nspin % 2), "{} {}".format (smult, nspin)
     if smult > nspin+1:
         return np.zeros ((1,1), dtype=np.int32)
@@ -809,11 +825,12 @@ def count_csfs (nspin, smult):
 
 def count_all_csfs (norb, neleca, nelecb, smult):
     a,b,c = get_csfvec_shape (norb, neleca, nelecb, smult)[-3:]
-    return np.sum (a*b*c) 
+    return np.sum (a*b*c)
 
 def get_csfvec_shape (norb, neleca, nelecb, smult):
     ''' For a system of neleca + nelecb electrons with MS = (neleca - nelecb) occupying norb orbitals,
-        get shape information about the irregular CI vector array in terms of csfs (number of pairs, pair config, unpair config, coupling string)
+        get shape information about the irregular CI vector array in terms of csfs (number of pairs, pair config,
+        unpair config, coupling string)
 
         Args:
         norb, neleca, nelecb are integers
@@ -821,11 +838,13 @@ def get_csfvec_shape (norb, neleca, nelecb, smult):
         Returns:
         min_npair, integer, the lowest possible number of electron pairs
         npair_offset, 1d ndarray of integers
-            npair_offset[i] points to the first determinant of a csdaddrs-sorted CI vector with i+min_npair electron pairs
+            npair_offset[i] points to the first determinant of a csdaddrs-sorted CI vector with i+min_npair electron
+            pairs
         npair_dconf_size, 1d ndarray of integers
             npair_dconf_size[i] = number of pair configurations with i+min_npair electron pairs
         npair_sconf_size, 1d ndarray of integers
-            npair_sconf_size[i] = number of unpaired electron configurations for a system of neleca+nelecb electrons with npair paired
+            npair_sconf_size[i] = number of unpaired electron configurations for a system of neleca+nelecb electrons
+            with npair paired
         npair_csf_size, 1d ndarray of integers
             npair_csf_size[i] = number of coupling vectors leading to spin = s for neleca+nelecb - 2*npair spins
     '''
@@ -846,15 +865,17 @@ def get_csfvec_shape (norb, neleca, nelecb, smult):
             nspins[0]+1, neleca, nelecb, norb), norb=norb, neleca=neleca, nelecb=nelecb,
             smult=smult)
     nfreeorbs = [norb - npair for npair in range (min_npair, nless+1)]
-    nas = [(nspin + neleca - nelecb) // 2 for nspin in nspins]
     for nspin in nspins:
         assert ((nspin + neleca - nelecb) % 2 == 0)
 
-    npair_dconf_size = np.asarray ([special.comb (norb, npair, exact=True) for npair in range (min_npair, nless+1)], dtype=np.int32)
-    npair_sconf_size = np.asarray ([special.comb (nfreeorb, nspin, exact=True) for nfreeorb, nspin in zip (nfreeorbs, nspins)], dtype=np.int32)
+    npair_dconf_size = np.asarray ([special.comb (norb, npair, exact=True) for npair in range (min_npair, nless+1)],
+                                   dtype=np.int32)
+    npair_sconf_size = np.asarray ([special.comb (nfreeorb, nspin, exact=True)
+                                    for nfreeorb, nspin in zip (nfreeorbs, nspins)], dtype=np.int32)
     npair_csf_size = np.asarray ([count_csfs (nspin, smult) for nspin in nspins]).astype (np.int32)
 
-    npair_sizes = np.asarray ([0] + [i * j * k for i,j,k in zip (npair_dconf_size, npair_sconf_size, npair_csf_size)], dtype=np.int32)
+    npair_sizes = np.asarray ([0] + [i * j * k for i,j,k in zip (npair_dconf_size, npair_sconf_size, npair_csf_size)],
+                              dtype=np.int32)
     npair_offset = np.asarray ([np.sum (npair_sizes[:i+1]) for i in range (len (npair_sizes))], dtype=np.int32)
     ndeta, ndetb = (special.comb (norb, n, exact=True) for n in (neleca, nelecb))
     assert (npair_offset[-1] <= ndeta*ndetb), "{} determinants and {} csfs".format (ndeta*ndetb, npair_offset[-1])
@@ -874,19 +895,21 @@ def get_spin_evecs (nspin, neleca, nelecb, smult):
     ndet = special.comb (nspin, na, exact=True)
     ncsf = count_csfs (nspin, smult)
 
-    t_start = lib.logger.perf_counter ()
+    #t_start = lib.logger.perf_counter ()
     spinstrs = cistring.addrs2str (nspin, na, list (range (ndet)))
-    assert (len (spinstrs) == ndet), "should have {} spin strings; have {} (nspin={}, ms={}".format (ndet, len (spinstrs), nspin, ms)
+    assert (len (spinstrs) == ndet), "should have {} spin strings; have {} (nspin={}, ms={}".format (
+        ndet, len (spinstrs), nspin, ms)
 
-    t_start = lib.logger.perf_counter ()
+    #t_start = lib.logger.perf_counter ()
     scstrs = addrs2str (nspin, smult, list (range (ncsf)))
-    assert (len (scstrs) == ncsf), "should have {} coupling strings; have {} (nspin={}, s={})".format (ncsf, len (scstrs), nspin, s)
+    assert (len (scstrs) == ncsf), "should have {} coupling strings; have {} (nspin={}, s={})".format (
+        ncsf, len (scstrs), nspin, s)
 
     umat = np.ones ((ndet, ncsf), dtype=np.float64)
     twoS = smult-1
     twoMS = neleca - nelecb
-    
-    t_start = lib.logger.perf_counter ()
+
+    #t_start = lib.logger.perf_counter ()
     libcsf.FCICSFmakecsf (umat.ctypes.data_as (ctypes.c_void_p),
                         spinstrs.ctypes.data_as (ctypes.c_void_p),
                         scstrs.ctypes.data_as (ctypes.c_void_p),
@@ -916,7 +939,7 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
         twoS = smult - 1
         twoMS = int (round (2 * ms))
 
-        t_start = lib.logger.perf_counter ()    
+        t_start = lib.logger.perf_counter ()
         libcsf.FCICSFmakeS2mat (S2mat.ctypes.data_as (ctypes.c_void_p),
                              spinstrs.ctypes.data_as (ctypes.c_void_p),
                              ctypes.c_int (ndet),
@@ -932,7 +955,7 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     print ("MEMORY: {} MB for {}-spin csfs with s={}, ms={}".format (umat.nbytes / 1e6,
         nspin, (smult-1)/2, ms))
     assert (umat.shape == tuple((ndet, ncsf))), "umat shape should be ({},{}); is {}".format (ndet, ncsf, umat.shape)
-    
+
     s = (smult-1)/2
     t_start = lib.logger.perf_counter ()
     isorth = np.allclose (np.dot (umat.T, umat), np.eye (umat.shape[1]))
@@ -944,7 +967,7 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     passed = isorth and diagsS2
     print ("TIME: {} seconds to analyze umat for {} spins with s={}, ms={}".format (
         lib.logger.perf_counter() - t_start, nspin, s, ms))
-    
+
 
     print (('For a system of {} spins with total spin {} and spin projection {}'
             ', {} CSFs found from {} determinants by Clebsch-Gordan algorithm').format (
@@ -959,7 +982,8 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     return umat, S2mat
 
 def get_scstrs (nspin, smult):
-    ''' This is not a great way to do this, but I seriously can't think of any straightforward way to put the coupling strings in order... '''
+    ''' This is not a great way to do this, but I seriously can't think of any straightforward way to put the coupling
+    strings in order... '''
     if (smult >= nspin):
         return np.ones ((0), dtype=np.int64)
     elif (nspin == 0):
@@ -990,7 +1014,7 @@ def addrs2str (nspin, smult, addrs):
                             ctypes.c_int (nstr),
                             gentable.ctypes.data_as (ctypes.c_void_p),
                             ctypes.c_int (nspin),
-                            ctypes.c_int (twoS));
+                            ctypes.c_int (twoS))
 
     return strs
 
@@ -1006,7 +1030,7 @@ def strs2addr (nspin, smult, strs):
                             ctypes.c_int (nstr),
                             gentable.ctypes.data_as (ctypes.c_void_p),
                             ctypes.c_int (nspin),
-                            ctypes.c_int (twoS));
+                            ctypes.c_int (twoS))
     return addrs
 
 
@@ -1022,13 +1046,13 @@ def check_tot_umat_size (norb, neleca, nelecb, smult):
     ''' Calculate the number of elements of the unitary matrix between all possible determinants
     and CSFs of a given spin state for (neleca, nelecb) electrons in norb orbitals '''
     min_npair = max (0, neleca + nelecb - norb)
-    return sum ([check_umat_size (norb, neleca, nelecb, npair, smult) for npair in range (min_npair, min (neleca, nelecb)+1)])
+    return sum ([check_umat_size (norb, neleca, nelecb, npair, smult)
+                 for npair in range (min_npair, min (neleca, nelecb)+1)])
 
 def check_umat_size (norb, neleca, nelecb, npair, smult):
     ''' Calculate the number of elements of the unitary matrix between determinants with npair electron pairs
     and CSFs of a given spin state for (neleca, nelecb) electrons in norb orbitals '''
     nspin = neleca + nelecb - 2*npair
-    ms = (neleca - nelecb) / 2
     na = (nspin + neleca - nelecb) // 2
     ndet = special.binom (nspin, na)
     ncsf = count_csfs (nspin, smult)
@@ -1042,12 +1066,12 @@ if __name__ == '__main__':
         for s in np.arange ((nspin%2)/2, (nspin/2)+0.1, 1):
             smult = int (round (2*s+1))
             ncsf = count_csfs (nspin, smult)
-            print ("Supposedly {} csfs of {} spins with overall smult = {}".format (ncsf, nspin, smult));
+            print ("Supposedly {} csfs of {} spins with overall smult = {}".format (ncsf, nspin, smult))
             rand_addrs = np.random.randint (0, high=ncsf, size=min (ncsf, 5), dtype=np.int32)
             rand_strs = addrs2str (nspin, smult, rand_addrs)
             rand_addrs_2 = strs2addr (nspin, smult, rand_strs)
             assert (np.all (rand_addrs == rand_addrs_2))
-    
+
     for nspin in range (15):
         for ms in np.arange (-(nspin/2), (nspin/2)+0.1, 1):
             evals = []
@@ -1064,7 +1088,8 @@ if __name__ == '__main__':
             t_start = lib.logger.perf_counter ()
             evals = np.concatenate (evals)
             evecs = np.concatenate (evecs, axis=-1)
-            print ('Is the final CSF vector matrix square with correct dimension? {} vs {}'.format (evecs.shape, S2mat.shape))
+            print ('Is the final CSF vector matrix square with correct dimension? {} vs {}'.format (
+                evecs.shape, S2mat.shape))
             issquare = np.all (evecs.shape == S2mat.shape)
             if not issquare:
                 print ("{} spins, {} projected spin overall: FAILED".format (nspin, ms))
@@ -1077,15 +1102,18 @@ if __name__ == '__main__':
             diagsS2 = diagerr < 1e-8
             print ("TIME: {} seconds to analyze umat for {} spins with ms={} and all s".format (
                 lib.logger.perf_counter() - t_start, nspin, ms))
-            print ("Is the final CSF vector matrix unitary? {}".format (("NO (err = {})".format (ovlperr), "Yes")[isorthnorm]))
+            print ("Is the final CSF vector matrix unitary? {}".format (
+                ("NO (err = {})".format (ovlperr), "Yes")[isorthnorm]))
             print (('Does the final CSF vector matrix correctly diagonalize S2?'
                     ' {}').format (('NO (err = {})'.format (diagerr), 'Yes')[diagsS2]))
-            print ("{} spins, {} projected spin overall: {}".format (nspin, ms, ("FAILED", "Passed")[isorthnorm and diagsS2]))
+            print ("{} spins, {} projected spin overall: {}".format (
+                nspin, ms, ("FAILED", "Passed")[isorthnorm and diagsS2]))
             sys.stdout.flush ()
-    
+
 
 def unpack_csfaddrs (norb, neleca, nelecb, smult, addrs):
-    min_npair, npair_csf_offset, npair_dconf_size, npair_sconf_size, npair_spincpl_size = get_csfvec_shape (norb, neleca, nelecb, smult)
+    min_npair, npair_csf_offset, npair_dconf_size, npair_sconf_size, npair_spincpl_size = get_csfvec_shape (
+        norb, neleca, nelecb, smult)
     npair = np.empty (len (addrs), dtype=np.int32)
     domo_addrs = np.empty (len (addrs), dtype=np.int64)
     somo_addrs = np.empty (len (addrs), dtype=np.int64)
@@ -1142,4 +1170,4 @@ def _printable_csfstring (norb, neleca, nelecb, smult, domo_str, somo_str, spinc
         strs.append (''.join ([m for m in mystr]))
     return strs
 
- 
+

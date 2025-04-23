@@ -6,7 +6,7 @@ from pyscf import lib, ao2mo, __config__
 from pyscf.fci import direct_spin1, cistring, direct_uhf
 from pyscf.fci.direct_spin1 import _unpack, _unpack_nelec, _get_init_guess, kernel_ms1
 from pyscf.lib.numpy_helper import tag_array
-from pyscf.csf_fci.csdstring import get_csdaddrs_shape 
+from pyscf.csf_fci.csdstring import get_csdaddrs_shape
 from pyscf.csf_fci.csfstring import count_all_csfs, get_spin_evecs
 from pyscf.csf_fci.csfstring import get_csfvec_shape
 from pyscf.csf_fci.csfstring import CSFTransformer
@@ -15,10 +15,11 @@ from pyscf.csf_fci.csfstring import CSFTransformer
     IMPORTANT: this solver will interpret a two-component one-body Hamiltonian as [h1e_charge, h1e_spin] where
     h1e_charge = h^p_q (a'_p,up a_q,up + a'_p,down a_q,down)
     h1e_spin   = h^p_q (a'_p,up a_q,up - a'_p,down a_q,down)
-    This is to preserve interoperability with the members of direct_spin1_symm, since there is no direct_uhf_symm in pyscf yet.
-    Only with an explicitly CSF-based solver can such potentials be included in a calculation that retains S^2 symmetry.
-    Multicomponent two-body integrals are currently not available (so this feature is only for use with, e.g., ROHF-CASSCF with 
-    with some SOMOs outside of the active space or LASSCF with multiple nonsinglet fragments, not UHF-CASSCF).
+    This is to preserve interoperability with the members of direct_spin1_symm, since there is no direct_uhf_symm in
+    pyscf yet. Only with an explicitly CSF-based solver can such potentials be included in a calculation that retains
+    S^2 symmetry. Multicomponent two-body integrals are currently not available (so this feature is only for use with,
+    e.g., ROHF-CASSCF with with some SOMOs outside of the active space or LASSCF with multiple nonsinglet fragments,
+    not UHF-CASSCF).
 '''
 
 libfci = lib.load_library('libfci')
@@ -48,13 +49,16 @@ def unpack_1RDM_cs (dm):
 
 
 def get_init_guess(norb, nelec, nroots, hdiag_csf, transformer):
-    ''' The existing _get_init_guess function will work in the csf basis if I pass it with na, nb = ncsf, 1. This might change in future PySCF versions though. 
+    ''' The existing _get_init_guess function will work in the csf basis if I pass it with na, nb = ncsf, 1.
+    This might change in future PySCF versions though.
 
-    ...For point-group symmetry, I pass the direct_spin1.py version of _get_init_guess with na, nb = ncsf_sym, 1 and hdiag_csf including only csfs of the right point-group symmetry.
+    ...For point-group symmetry, I pass the direct_spin1.py version of _get_init_guess with na, nb = ncsf_sym, 1 and
+    hdiag_csf including only csfs of the right point-group symmetry.
     This should clean up the symmetry-breaking "noise" in direct_spin1_symm.py! '''
     neleca, nelecb = _unpack_nelec (nelec)
     ncsf_sym = transformer.ncsf
-    assert (ncsf_sym >= nroots), "Can't find {} roots among only {} CSFs of symmetry {}".format (nroots, ncsf_sym, transformer.wfnsym)
+    assert (ncsf_sym >= nroots), "Can't find {} roots among only {} CSFs of symmetry {}".format (
+        nroots, ncsf_sym, transformer.wfnsym)
     hdiag_csf = transformer.pack_csf (hdiag_csf)
     ci = _get_init_guess (ncsf_sym, 1, nroots, hdiag_csf, nelec)
     return transformer.vec_csf2det (ci)
@@ -71,14 +75,14 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
     eri = ao2mo.restore(1, eri, norb)
     tlib = wlib = 0
     neleca, nelecb = _unpack_nelec (nelec)
-    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (norb, neleca, nelecb)
+    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (
+        norb, neleca, nelecb)
     _, npair_csf_offset, _, _, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
     npair_econf_size = npair_dconf_size * npair_sconf_size
     max_npair = min (neleca, nelecb)
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
     ndeta_all = cistring.num_strings(norb, neleca)
     ndetb_all = cistring.num_strings(norb, nelecb)
-    ndet_all = ndeta_all * ndetb_all
     hdiag_csf = np.ascontiguousarray (np.zeros (ncsf_all, dtype=np.float64))
     hdiag_csf_check = np.ones (ncsf_all, dtype=np.bool_)
     for npair in range (min_npair, max_npair+1):
@@ -144,20 +148,20 @@ def make_hdiag_csf_slower (h1e, eri, norb, nelec, transformer, hdiag_det=None, m
     ''' This is tricky because I need the diagonal blocks for each configuration in order to get
     the correct csf hdiag values, not just the diagonal elements for each determinant. '''
     smult = transformer.smult
-    t0, w0 = lib.logger.process_clock (), lib.logger.perf_counter ()
-    tstr = tlib = tloop = wstr = wlib = wloop = 0
+    #t0, w0 = lib.logger.process_clock (), lib.logger.perf_counter ()
+    #tstr = tlib = tloop = wstr = wlib = wloop = 0
     if hdiag_det is None:
         hdiag_det = make_hdiag_det (None, h1e, eri, norb, nelec)
     eri = ao2mo.restore(1, eri, norb)
     neleca, nelecb = _unpack_nelec (nelec)
-    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (norb, neleca, nelecb)
+    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (
+        norb, neleca, nelecb)
     _, npair_csf_offset, _, _, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
     npair_econf_size = npair_dconf_size * npair_sconf_size
     max_npair = min (neleca, nelecb)
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
     ndeta_all = cistring.num_strings(norb, neleca)
     ndetb_all = cistring.num_strings(norb, nelecb)
-    ndet_all = ndeta_all * ndetb_all
     hdiag_csf = np.ascontiguousarray (np.zeros (ncsf_all, dtype=np.float64))
     hdiag_csf_check = np.ones (ncsf_all, dtype=np.bool_)
     for npair in range (min_npair, max_npair+1):
@@ -180,18 +184,16 @@ def make_hdiag_csf_slower (h1e, eri, norb, nelec, transformer, hdiag_det=None, m
             continue
         umat = get_spin_evecs (nspin, neleca, nelecb, smult)
         det_addra, det_addrb = divmod (det_addr, ndetb_all)
-        t1, w1 = lib.logger.process_clock (), lib.logger.perf_counter ()
+        #t1, w1 = lib.logger.process_clock (), lib.logger.perf_counter ()
         det_stra = cistring.addrs2str (norb, neleca, det_addra).reshape (nconf, ndet, order='C')
         det_strb = cistring.addrs2str (norb, nelecb, det_addrb).reshape (nconf, ndet, order='C')
-        tstr += lib.logger.process_clock () - t1
-        wstr += lib.logger.perf_counter () - w1
+        #tstr += lib.logger.process_clock () - t1
+        #wstr += lib.logger.perf_counter () - w1
         det_addr = det_addr.reshape (nconf, ndet, order='C')
         diag_idx = np.diag_indices (ndet)
-        triu_idx = np.triu_indices (ndet)   
-        ipair_check = 0
         # It looks like the library call below is, itself, usually responsible for about 50% of the
         # clock and wall time that this function consumes.
-        t1, w1 = lib.logger.process_clock (), lib.logger.perf_counter ()
+        #t1, w1 = lib.logger.process_clock (), lib.logger.perf_counter ()
         for iconf in range (nconf):
             addr = det_addr[iconf]
             assert (len (addr) == ndet)
@@ -204,21 +206,21 @@ def make_hdiag_csf_slower (h1e, eri, norb, nelec, transformer, hdiag_det=None, m
                 stra.ctypes.data_as(ctypes.c_void_p),
                 strb.ctypes.data_as(ctypes.c_void_p),
                 ctypes.c_int(norb), ctypes.c_int(ndet))
-            tlib += lib.logger.process_clock () - t2
-            wlib += lib.logger.perf_counter () - w2
+            #tlib += lib.logger.process_clock () - t2
+            #wlib += lib.logger.perf_counter () - w2
             #hdiag_conf[iconf][diag_idx] = hdiag_det[addr]
             #hdiag_conf[iconf] = lib.hermi_triu(hdiag_conf[iconf])
         for iconf in range (nconf): hdiag_conf[iconf] = lib.hermi_triu (hdiag_conf[iconf])
         for iconf in range (nconf): hdiag_conf[iconf][diag_idx] = hdiag_det[det_addr[iconf]]
-        tloop += lib.logger.process_clock () - t1
-        wloop += lib.logger.perf_counter () - w1
+        #tloop += lib.logger.process_clock () - t1
+        #wloop += lib.logger.perf_counter () - w1
 
         hdiag_conf = np.tensordot (hdiag_conf, umat, axes=1)
         hdiag_conf = (hdiag_conf * umat[np.newaxis,:,:]).sum (1)
         hdiag_csf[csf_offset:][:nconf*ncsf] = hdiag_conf.ravel (order='C')
         hdiag_csf_check[csf_offset:][:nconf*ncsf] = False
     assert (np.count_nonzero (hdiag_csf_check) == 0), np.count_nonzero (hdiag_csf_check)
-    #print ("Total time in hdiag_csf: {}, {}".format (lib.logger.process_clock () - t0, lib.logger.perf_counter () - w0))
+    #print ("Total time in hdiag_csf: {}, {}".format (lib.logger.process_clock ()-t0, lib.logger.perf_counter ()-w0))
     #print ("    Loop: {}, {}".format (tloop, wloop))
     #print ("    Library: {}, {}".format (tlib, wlib))
     #print ("    Cistring: {}, {}".format (tstr, wstr))
@@ -229,14 +231,16 @@ def _debug_g2e (fci, g2e, eri, norb):
     g2e_ninf = np.count_nonzero (np.isinf (g2e))
     g2e_nnan = np.count_nonzero (np.isnan (g2e))
     if (g2e_ninf == 0) and (g2e_nnan == 0): return
-    lib.logger.note (fci, 'ERROR: g2e has {} infs and {} nans (norb = {}; shape = {})'.format (g2e_ninf, g2e_nnan, norb, g2e.shape))
+    lib.logger.note (fci, 'ERROR: g2e has {} infs and {} nans (norb = {}; shape = {})'.format (
+        g2e_ninf, g2e_nnan, norb, g2e.shape))
     lib.logger.note (fci, 'type (eri) = {}'.format (type (eri)))
     lib.logger.note (fci, 'eri.shape = {}'.format (eri.shape))
     lib.logger.note (fci, 'eri.dtype = {}'.format (eri.dtype))
     eri_ninf = np.count_nonzero (np.isinf (eri))
     eri_nnan = np.count_nonzero (np.isnan (eri))
     lib.logger.note (fci, 'eri has {} infs and {} nans'.format (eri_ninf, eri_nnan))
-    raise ValueError ('g2e has {} infs and {} nans (norb = {}; shape = {})'.format (g2e_ninf, g2e_nnan, norb, g2e.shape))
+    raise ValueError ('g2e has {} infs and {} nans (norb = {}; shape = {})'.format (
+        g2e_ninf, g2e_nnan, norb, g2e.shape))
     return
 
 def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=None, npsp=200, max_memory=None):
@@ -271,7 +275,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
         except AttributeError:
             csf_addr = csf_addr[np.argsort(hdiag_csf[csf_addr])[:npsp]]
 
-    # To build 
+    # To build
     econf_addr = np.unique (transformer.econf_csf_mask[csf_addr])
     det_addr = np.concatenate ([np.nonzero (transformer.econf_det_mask == conf)[0]
         for conf in econf_addr])
@@ -326,6 +330,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
             np.count_nonzero (np.isinf (g2e)), np.count_nonzero (np.isnan (g2e)),
             norb, npsp_det))
         evals_before = np.zeros (npsp_det)
+        raise (e) from None
 
     h0, csf_addr = transformer.mat_det2csf_confspace (h0, econf_addr)
     t0 = lib.logger.timer_debug1 (fci, "csf.pspace: transform pspace Hamiltonian into CSF basis", *t0)
@@ -337,7 +342,8 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
         idx = [np.argmin (np.abs (evals_before - ev)) for ev in evals_after]
         resid = evals_after - evals_before[idx]
         lib.logger.debug1 (fci, "csf.pspace: best h0 eigenvalue matching differences after transformation: %s", resid)
-        lib.logger.debug1 (fci, "csf.pspace: if the transformation of h0 worked the following number will be zero: %s", np.max (np.abs(resid)))
+        lib.logger.debug1 (fci, "csf.pspace: if the transformation of h0 worked the following number will be zero: %s",
+                           np.max (np.abs(resid)))
 
     # We got extra CSFs from building the configurations most of the time.
     if csf_addr.size > npsp:
@@ -362,7 +368,8 @@ def kernel(fci, h1e, eri, norb, nelec, smult=None, idx_sym=None, ci0=None,
         verbose = kwargs['verbose']
         kwargs.pop ('verbose')
     else: verbose = lib.logger.Logger (stdout=fci.stdout, verbose=fci.verbose)
-    if (isinstance (verbose, lib.logger.Logger) and verbose.verbose >= lib.logger.WARN) or (isinstance (verbose, int) and verbose >= lib.logger.WARN):
+    if ((isinstance (verbose, lib.logger.Logger) and verbose.verbose >= lib.logger.WARN)
+        or (isinstance (verbose, int) and verbose >= lib.logger.WARN)):
         fci.check_sanity()
     if nroots is None: nroots = fci.nroots
     if pspace_size is None: pspace_size = fci.pspace_size
@@ -389,7 +396,8 @@ def kernel(fci, h1e, eri, norb, nelec, smult=None, idx_sym=None, ci0=None,
     nb = link_indexb.shape[0]
 
     t0 = lib.logger.timer_debug1 (fci, "csf.kernel: throat-clearing", *t0)
-    addr, h0 = fci.pspace(h1e, eri, norb, nelec, idx_sym=idx_sym, hdiag_det=hdiag_det, hdiag_csf=hdiag_csf, npsp=max(pspace_size,nroots))
+    addr, h0 = fci.pspace(h1e, eri, norb, nelec, idx_sym=idx_sym, hdiag_det=hdiag_det, hdiag_csf=hdiag_csf,
+                          npsp=max(pspace_size,nroots))
     lib.logger.debug1 (fci, 'csf.kernel: error of hdiag_csf: %s', np.amax (np.abs (hdiag_csf[addr]-np.diag (h0))))
     t0 = lib.logger.timer_debug1 (fci, "csf.kernel: make pspace", *t0)
     if pspace_size > 0:
@@ -440,8 +448,8 @@ def kernel(fci, h1e, eri, norb, nelec, smult=None, idx_sym=None, ci0=None,
         if hasattr(fci, 'get_init_guess'):
             def ci0 ():
                 return transformer.vec_det2csf (fci.get_init_guess(norb, nelec, nroots, hdiag_csf))
-                
-                    
+
+
         else:
             def ci0():  # lazy initialization to reduce memory footprint
                 x0 = []
@@ -469,7 +477,7 @@ def kernel(fci, h1e, eri, norb, nelec, smult=None, idx_sym=None, ci0=None,
     tol_residual = getattr(fci, 'conv_tol_residual', None)
 
     #with lib.with_omp_threads(fci.threads):
-        #e, c = lib.davidson(hop, ci0, precond, tol=fci.conv_tol, lindep=fci.lindep)
+    #    e, c = lib.davidson(hop, ci0, precond, tol=fci.conv_tol, lindep=fci.lindep)
     e, c = fci.eig(hop, ci0, precond, tol=tol, lindep=lindep,
                        max_cycle=max_cycle, max_space=max_space, nroots=nroots,
                        max_memory=max_memory, verbose=verbose, follow_state=True,
@@ -511,7 +519,7 @@ class CSFFCISolver: # parent class
     def contract_2e(self, eri, fcivec, norb, nelec, link_index=None, **kwargs):
         hc = super().contract_2e(eri, fcivec, norb, nelec, link_index, **kwargs)
         if hasattr (eri, 'h1e_s'):
-           hc += direct_uhf.contract_1e ([eri.h1e_s, -eri.h1e_s], fcivec, norb, nelec, link_index)  
+           hc += direct_uhf.contract_1e ([eri.h1e_s, -eri.h1e_s], fcivec, norb, nelec, link_index)
         return hc
 
     def pspace (self, h1e, eri, norb, nelec, hdiag_det=None, hdiag_csf=None, npsp=200, **kwargs):
@@ -541,9 +549,9 @@ class CSFFCISolver: # parent class
         return self.log_transformer_cache (10, **kwargs)
 
 class FCISolver (CSFFCISolver, direct_spin1.FCISolver):
-    r''' get_init_guess uses csfstring.py and csdstring.py to construct a spin-symmetry-adapted initial guess, and the Davidson algorithm is carried
-    out in the CSF basis. However, the ci attribute is put in the determinant basis at the end of it all, and "ci0" is also assumed
-    to be in the determinant basis.'''
+    r''' get_init_guess uses csfstring.py and csdstring.py to construct a spin-symmetry-adapted initial guess, and the
+    Davidson algorithm is carried out in the CSF basis. However, the ci attribute is put in the determinant basis at the
+    end of it all, and "ci0" is also assumed to be in the determinant basis.'''
 
     def get_init_guess(self, norb, nelec, nroots, hdiag_csf, **kwargs):
         self.norb = norb
