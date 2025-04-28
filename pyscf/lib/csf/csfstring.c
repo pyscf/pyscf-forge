@@ -7,7 +7,7 @@
 //#include <stdio.h>
 #include <omp.h>
 //#include "config.h"
-#include "vhf/fblas.h"
+//#include "vhf/fblas.h"
 //#include "fci.h"
 
 void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, int nstr, int norb, int neleca, int nelecb)
