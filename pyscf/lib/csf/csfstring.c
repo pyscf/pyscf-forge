@@ -135,7 +135,7 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
 
             if (sup){ track2S++; } else { track2S--; }
         } 
-        if (!numerator){ umat[idetcoup] = 0.0; } else {
+        if (numerator == 0) { umat[idetcoup] = 0.0; } else {
             umat[idetcoup] = sgn * sqrt ((double) numerator / denominator);
         }
     }

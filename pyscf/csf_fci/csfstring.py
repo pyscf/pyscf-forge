@@ -191,11 +191,11 @@ class CSFTransformer (lib.StreamObject):
 
     @property
     def ndeta (self):
-        return special.comb (self._norb, self._neleca, exact=True)
+        return int (special.comb (self._norb, self._neleca, exact=True))
 
     @property
     def ndetb (self):
-        return special.comb (self._norb, self._nelecb, exact=True)
+        return int (special.comb (self._norb, self._nelecb, exact=True))
 
     @property
     def ndet (self):
@@ -311,8 +311,8 @@ def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
     #detarr = transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=csd_mask)
     #detarr = transform_civec_csf2det (detarr, norb, neleca, nelecb, smult, csd_mask=csd_mask)
     #return detarr
-    ndeta = special.comb (norb, neleca, exact=True)
-    ndetb = special.comb (norb, nelecb, exact=True)
+    ndeta = int (special.comb (norb, neleca, exact=True))
+    ndetb = int (special.comb (norb, nelecb, exact=True))
     ndet = ndeta*ndetb
     assert (detarr.shape == tuple((ndeta,ndetb)) or detarr.shape == tuple((ndet,))), '{} {}'.format (detarr.shape, ndet)
     detarr = np.ravel (detarr, order='C')
@@ -354,8 +354,8 @@ def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
     csfnorm: ndarray of (maximum) length nvec, floats
     '''
 
-    ndeta = special.comb (norb, neleca, exact=True)
-    ndetb = special.comb (norb, nelecb, exact=True)
+    ndeta = int (special.comb (norb, neleca, exact=True))
+    ndetb = int (special.comb (norb, nelecb, exact=True))
     ndet = ndeta*ndetb
     is_list = isinstance (detarr, list)
     is_tuple = isinstance (detarr, tuple)
@@ -430,8 +430,8 @@ def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None,
     if np.asarray (csfarr).size == 0:
         return np.zeros (0, dtype=csfarr.dtype), 0.0
 
-    ndeta = special.comb (norb, neleca, exact=True)
-    ndetb = special.comb (norb, nelecb, exact=True)
+    ndeta = int (special.comb (norb, neleca, exact=True))
+    ndetb = int (special.comb (norb, nelecb, exact=True))
     ndet = ndeta*ndetb
     ncsf = count_all_csfs (norb, neleca, nelecb, smult)
     is_list = isinstance (csfarr, list)
@@ -490,8 +490,8 @@ def transform_opmat_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None)
         Operator matrix in terms of csfs
     '''
 
-    ndeta = special.comb (norb, neleca, exact=True)
-    ndetb = special.comb (norb, nelecb, exact=True)
+    ndeta = int (special.comb (norb, neleca, exact=True))
+    ndetb = int (special.comb (norb, nelecb, exact=True))
     ndet = ndeta*ndetb
     assert (detarr.shape == tuple((ndet,ndet)) or detarr.shape == tuple((ndet**2,))), "{} {} (({},{}),{})".format (
         detarr.shape, ndet, neleca, nelecb, norb)
@@ -524,8 +524,8 @@ def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=Fals
     arr: ndarray of shape (nrow, ncol)
     '''
 
-    ndeta = special.comb (norb, neleca, exact=True)
-    ndetb = special.comb (norb, nelecb, exact=True)
+    ndeta = int (special.comb (norb, neleca, exact=True))
+    ndetb = int (special.comb (norb, nelecb, exact=True))
     ndet_all = ndeta*ndetb
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
 
@@ -566,8 +566,8 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
         norb, neleca, nelecb)
     _, npair_csf_offset, _, _, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
     nrow = inparr.shape[0]
-    ndeta_all = special.comb (norb, neleca, exact=True)
-    ndetb_all = special.comb (norb, nelecb, exact=True)
+    ndeta_all = int (special.comb (norb, neleca, exact=True))
+    ndetb_all = int (special.comb (norb, nelecb, exact=True))
     ndet_all = ndeta_all * ndetb_all
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
 
@@ -868,21 +868,23 @@ def get_csfvec_shape (norb, neleca, nelecb, smult):
     for nspin in nspins:
         assert ((nspin + neleca - nelecb) % 2 == 0)
 
-    npair_dconf_size = np.asarray ([special.comb (norb, npair, exact=True) for npair in range (min_npair, nless+1)],
-                                   dtype=np.int32)
-    npair_sconf_size = np.asarray ([special.comb (nfreeorb, nspin, exact=True)
+    npair_dconf_size = np.asarray ([int (special.comb (norb, npair, exact=True))
+                                    for npair in range (min_npair, nless+1)], dtype=np.int32)
+    npair_sconf_size = np.asarray ([int (special.comb (nfreeorb, nspin, exact=True))
                                     for nfreeorb, nspin in zip (nfreeorbs, nspins)], dtype=np.int32)
     npair_csf_size = np.asarray ([count_csfs (nspin, smult) for nspin in nspins]).astype (np.int32)
 
     npair_sizes = np.asarray ([0] + [i * j * k for i,j,k in zip (npair_dconf_size, npair_sconf_size, npair_csf_size)],
                               dtype=np.int32)
     npair_offset = np.asarray ([np.sum (npair_sizes[:i+1]) for i in range (len (npair_sizes))], dtype=np.int32)
-    ndeta, ndetb = (special.comb (norb, n, exact=True) for n in (neleca, nelecb))
+    ndeta, ndetb = (int (special.comb (norb, n, exact=True)) for n in (neleca, nelecb))
     assert (npair_offset[-1] <= ndeta*ndetb), "{} determinants and {} csfs".format (ndeta*ndetb, npair_offset[-1])
 
     return min_npair, npair_offset[:-1], npair_dconf_size, npair_sconf_size, npair_csf_size
 
 def get_spin_evecs (nspin, neleca, nelecb, smult):
+    if nspin > 16:
+        raise NotImplementedError ('overflow safety for > 16 singly-occupied orbitals')
     ms = (neleca - nelecb) / 2
     s = (smult - 1) / 2
     #assert (neleca >= nelecb)
@@ -892,7 +894,7 @@ def get_spin_evecs (nspin, neleca, nelecb, smult):
     assert (abs (neleca - nelecb) % 2 == nspin % 2)
 
     na = (nspin + neleca - nelecb) // 2
-    ndet = special.comb (nspin, na, exact=True)
+    ndet = int (special.comb (nspin, na, exact=True))
     ncsf = count_csfs (nspin, smult)
 
     #t_start = lib.logger.perf_counter ()
@@ -929,7 +931,7 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     assert (nspin >= neleca + nelecb)
 
     na = (nspin + neleca - nelecb) // 2
-    ndet = special.comb (nspin, na, exact=True)
+    ndet = int (special.comb (nspin, na, exact=True))
     ncsf = count_csfs (nspin, smult)
 
     spinstrs = cistring.addrs2str (nspin, na, list (range (ndet)))
