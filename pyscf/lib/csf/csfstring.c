@@ -50,7 +50,6 @@ void FCICSFcsdstrs2ddstrs (uint64_t * ddstrs, uint64_t * csdstrs, int nstr, int 
     int i, iorb, isorb, ispin;
     uint64_t * astrs = ddstrs;
     uint64_t * bstrs = & ddstrs[nstr];
-    uint64_t * npairs = csdstrs;
     uint64_t * dconf_strs = & csdstrs[nstr];
     uint64_t * sconf_strs = & csdstrs[2*nstr];
     uint64_t * spins_strs = & csdstrs[3*nstr];
@@ -299,7 +298,7 @@ void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * a
 #pragma omp parallel default(shared)
 {
 
-    unsigned int idetconf, iconf, idet_lt, idetx, idety, iorb, nexc;
+    unsigned int idetconf, iconf, idetx, idety, iorb, nexc;
     uint64_t exc_str, somo_str, big_idx1, big_idx2, hdiag_idx_lt, hdiag_idx_ut;
     unsigned int exc[2];
     int sgn, esgn;
