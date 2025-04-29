@@ -923,7 +923,7 @@ def get_spin_evecs (nspin, neleca, nelecb, smult):
 
     return umat
 
-def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
+def _test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     s = (smult - 1) / 2
     ms = (neleca - nelecb) / 2
     assert (ms <= s)
@@ -938,7 +938,6 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
 
     if S2mat is None:
         S2mat = np.zeros ((ndet, ndet), dtype=np.float64)
-        twoS = smult - 1
         twoMS = int (round (2 * ms))
 
         t_start = lib.logger.perf_counter ()
@@ -946,7 +945,6 @@ def test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
                              spinstrs.ctypes.data_as (ctypes.c_void_p),
                              ctypes.c_int (ndet),
                              ctypes.c_int (nspin),
-                             ctypes.c_int (twoS),
                              ctypes.c_int (twoMS))
         print ("TIME: {} seconds to make S2mat for {} spins with s={}, ms={}".format (
             lib.logger.perf_counter() - t_start, nspin, (smult-1)/2, ms))
@@ -1083,7 +1081,7 @@ if __name__ == '__main__':
                 smult = int (round (2*s+1))
                 neleca = int (round (nspin/2 + ms))
                 nelecb = int (round (nspin/2 - ms))
-                umat, S2mat = test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=S2mat)
+                umat, S2mat = _test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=S2mat)
                 evecs.append (umat)
                 evals.append (s*(s+1)*np.ones (umat.shape[1]))
             print ("COLLECTIVE RESULTS:")

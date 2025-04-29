@@ -132,6 +132,6 @@ class KnownValues(unittest.TestCase):
             self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
-    print("Full Tests for spin1")
+    print("Full Tests for csf_fci solver")
     unittest.main()
 

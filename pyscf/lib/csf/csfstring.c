@@ -143,7 +143,7 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
 }
 
 
-void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, int ndet, int nspin, int twoS, int twoMS)
+void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, int ndet, int nspin, int twoMS)
 {
 
     int nflip, iflip, idet, jdet, osgn, sgn;
