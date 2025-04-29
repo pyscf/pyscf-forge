@@ -35,7 +35,7 @@ from pyscf.csf_fci.csfstring import CSFTransformer
 
 def setUpModule():
     global mol, m, h1e, g2e, h2mat
-    global norb, nelec, neleci, nel, orbsym
+    global norb, nelec, neleci, nel, orbsym, sol
     mol = gto.Mole()
     mol.verbose = 0
     mol.output = None#"out_h2o"
@@ -95,9 +95,11 @@ def setUpModule():
             h2mat_csf[-1][:,i] = t.vec_det2csf (mat[:,i], normalize=False)
     h2mat = h2mat_csf
 
+    sol = csf_solver (mol, smult=1).set (orbsym=orbsym)
+
 def tearDownModule():
-    global mol, m, h1e, g2e, h2mat, norb, nelec, neleci, nel, orbsym
-    del mol, m, h1e, g2e, h2mat, norb, nelec, neleci, nel, orbsym
+    global mol, m, h1e, g2e, h2mat, norb, nelec, neleci, nel, orbsym, sol
+    del mol, m, h1e, g2e, h2mat, norb, nelec, neleci, nel, orbsym, sol
 
 class KnownValues(unittest.TestCase):
 
@@ -109,17 +111,15 @@ class KnownValues(unittest.TestCase):
           with self.subTest (smult=smult):
             ne = nel[smult % 2]
             w = wfnsym[smult-1]
-            sol = csf_solver (mol, smult=smult).set (orbsym=orbsym, wfnsym=w)
-            e, ci = sol.kernel (h1e, g2e, norb, ne)
+            e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult, wfnsym=w)
             ss, smulttest = spin_square0 (ci, norb, ne)
             self.assertAlmostEqual (smulttest, smult, 8)
             self.assertAlmostEqual (e, refs[smult-1], 8)
+        sol.davidson_only = True
         for smult in range (1,6):
           with self.subTest ("davidson only", smult=smult):
             ne = nel[smult % 2]
             w = wfnsym[smult-1]
-            sol = csf_solver (mol, smult=smult).set (orbsym=orbsym, wfnsym=w)
-            sol.davidson_only = True
             e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult, wfnsym=w)
             ss, smulttest = spin_square0 (ci, norb, ne)
             self.assertAlmostEqual (smulttest, smult, 8)
@@ -131,7 +131,7 @@ class KnownValues(unittest.TestCase):
           with self.subTest (smult=smult):
             ne = nel[smult % 2]
             w = wfnsym[smult-1]
-            sol = csf_solver (mol, smult=smult).set (orbsym=orbsym, wfnsym=w)
+            sol.wfnsym = w
             hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
             hdiag_ref = h2mat[smult-1].diagonal ()
             self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
@@ -142,7 +142,7 @@ class KnownValues(unittest.TestCase):
           with self.subTest (smult=smult):
             ne = nel[smult % 2]
             w = wfnsym[smult-1]
-            sol = csf_solver (mol, smult=smult).set (orbsym=orbsym, wfnsym=w)
+            sol.wfnsym = w
             addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
             h0_ref = h2mat[smult-1][addr,:][:,addr]
             self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)

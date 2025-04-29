@@ -87,8 +87,8 @@ def setUpModule():
     h2mat = h2mat_csf
 
 def tearDownModule():
-    global mol, m, h1e, g2e, sol, h2mat
-    del mol, m, h1e, g2e, sol, h2mat
+    global mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci
+    del mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci
 
 class KnownValues(unittest.TestCase):
 

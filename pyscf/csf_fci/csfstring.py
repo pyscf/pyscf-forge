@@ -108,7 +108,7 @@ class CSFTransformer (lib.StreamObject):
             self._nelecb = nelecb
             self._smult = smult
             if self._orbsym is not None:
-                self.confsym = make_confsym (self.norb, self.neleca, self.nelecb, self.econf_det_mask, orbsym)
+                self.confsym = make_confsym (self.norb, self.neleca, self.nelecb, self.econf_det_mask, self._orbsym)
 
     def _update_symm_cache (self, orbsym):
         if (orbsym is not None) and (self._orbsym is None or np.any (orbsym != self._orbsym)):
