@@ -1,13 +1,13 @@
 from pyscf import gto, fci, scf, lib, ao2mo
 from pyscf.csf_fci import csf_solver
 
-mol = gto.M (atom='H 0 0 0; F 0 0 1.1', basis='sto3g', output='csf_fci.log',
+mol = gto.M (atom='H 0 0 0; F 0 0 1.1', basis='sto3g', output='01-csf_fci.log',
              verbose=lib.logger.INFO)
 mf = scf.RHF (mol).run ()
 
 h0 = mf.energy_nuc ()
-h1 = mf.get_hcore ()
-h2 = ao2mo.restore (1, mf._eri, mol.nao_nr ())
+h1 = mf.mo_coeff.conj ().T @ mf.get_hcore () @ mf.mo_coeff
+h2 = ao2mo.restore (1, ao2mo.full (mf._eri, mf.mo_coeff), mol.nao_nr ())
 
 cisolver = csf_solver (mol, smult=1)
 
