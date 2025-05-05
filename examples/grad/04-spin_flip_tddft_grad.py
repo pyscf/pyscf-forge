@@ -1,7 +1,7 @@
 '''
 For spin-flip TDDFT gradient, you can obtain and create a spin-flip TDDFT
-object use sftda.uhf_df.get_ab_sf() function. And transfrom the excited 
-energy \omega and transition vector x,y into the correct form. Then use
+object use sftda.uhf_df.get_ab_sf() function. And transfrom the excited
+energy omega and transition vector x,y into the correct form. Then use
 the gradient module.
 '''
 import numpy as np
@@ -27,7 +27,21 @@ mf = dft.UKS(mol)
 mf.xc = 'svwn' # blyp, b3lyp, tpss
 mf.kernel()
 
-# use get_ab_sf() to get response Matrix
+mftd1 = sftda.TDDFT_SF(mf)
+mftd1.nstates = 5 # the number of excited states
+mftd1.extype = 1  # 1 for spin flip down excited energies
+mftd1.collinear_samples=200
+mftd1.kernel()
+
+# print(mftd1.e)
+
+mftdg1 = mftd1.Gradients()
+g1 = mftdg1.kernel(state=2)
+
+print(g1)
+
+
+# If use get_ab_sf() to get response Matrix:
 a, b = sftda.TDDFT_SF(mf).get_ab_sf()
 A_baba, A_abab = a
 B_baab, B_abba = b

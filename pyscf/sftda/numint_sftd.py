@@ -29,8 +29,6 @@ def nr_uks_fxc_sf(ni, mol, grids, xc_code, dm0, dms, relativity=0, hermi=0,rho0=
         dtype = dms.dtype
     else:
         dtype = numpy.result_type(*dms)
-    if hermi != 1 and dtype != numpy.double:
-        raise NotImplementedError('complex density matrix')
 
     xctype = ni._xc_type(xc_code)
 

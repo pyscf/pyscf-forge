@@ -22,8 +22,6 @@ try:
 except ImportError:
     mcfun = None
 
-# ToDo: Add the SF-TDDFT tests.
-
 def diagonalize(a, b, nroots=4,extype=0):
     a_b2a, a_a2b = a
     b_b2a, b_a2b = b
@@ -257,5 +255,5 @@ class KnownValues(unittest.TestCase):
         self.assertTrue(isinstance(sftda.TDA_SF(ks), sftda.uhf_sf.TDA_SF))
 
 if __name__ == "__main__":
-    print("Full Tests for SF-TD-UKS")
+    print("Full Tests for SF-TDA")
     unittest.main()

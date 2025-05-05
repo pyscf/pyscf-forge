@@ -29,7 +29,4 @@ def TDA_SF(mf):
     return mf.TDA_SF()
 
 def TDDFT_SF(mf):
-    print('Warning!!! SF-TDDFT ruining in the slow divergence, ' + \
-          'you can choose get_ab_sf() to construct the full matrix ' + \
-          'to obtain the excited energies.')
     return mf.TDDFT_SF()

@@ -7,8 +7,6 @@ Test the spin_square calculation tool in sftda.tools_td.py.
 from pyscf import gto,dft,sftda,tdscf
 from pyscf.sftda import tools_td
 
-# ToDo : add the spin flip TDDFT parts.
-
 mol = gto.Mole()
 mol.verbose = 3
 mol.output = None
@@ -49,21 +47,43 @@ ssI = tools_td.spin_square(mf,mftd2.xy[0],extype=1,tdtype='TDA')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
-# 3. <S^2> for spin conserving TDA.
+# 3. <S^2> for spin flip up TDDFT
 #
-mftd3 = tdscf.TDA(mf)
+mftd3 = sftda.TDDFT_SF(mf)
+mftd3.extype=0
 mftd3.nstates = 5
 mftd3.kernel()
 
-ssI = tools_td.spin_square(mf,mftd3.xy[0],extype=2,tdtype='TDA')
+ssI = tools_td.spin_square(mf,mftd3.xy[0],extype=0,tdtype='TDDFT')
 print('The spin square of the first excited state is : ' + str(ssI))
 
 #
-# 4. <S^2> for spin conserving TDDFT.
+# 4. <S^2> for spin flip down TDDFT
 #
-mftd4 = tdscf.TDDFT(mf)
+mftd4 = sftda.TDDFT_SF(mf)
+mftd4.extype=1
 mftd4.nstates = 5
 mftd4.kernel()
 
-ssI = tools_td.spin_square(mf,mftd4.xy[0],extype=2,tdtype='TDDFT')
+ssI = tools_td.spin_square(mf,mftd4.xy[0],extype=1,tdtype='TDDFT')
+print('The spin square of the first excited state is : ' + str(ssI))
+
+#
+# 5. <S^2> for spin conserving TDA.
+#
+mftd5 = tdscf.TDA(mf)
+mftd5.nstates = 5
+mftd5.kernel()
+
+ssI = tools_td.spin_square(mf,mftd5.xy[0],extype=2,tdtype='TDA')
+print('The spin square of the first excited state is : ' + str(ssI))
+
+#
+# 6. <S^2> for spin conserving TDDFT.
+#
+mftd6 = tdscf.TDDFT(mf)
+mftd6.nstates = 5
+mftd6.kernel()
+
+ssI = tools_td.spin_square(mf,mftd6.xy[0],extype=2,tdtype='TDDFT')
 print('The spin square of the first excited state is : ' + str(ssI))
