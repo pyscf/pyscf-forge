@@ -153,26 +153,30 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     # (vj_a + vj_b) * (dm_a + dm_b)
     E_j = np.tensordot(vj, dm1) / 2
     # (vk_a * dm_a) + (vk_b * dm_b) Mind the difference!
-    if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
-        E_x = -(np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
-        E_x /= 2.0
-    else:
-        E_x = 0
     log.debug('CAS energy decomposition:')
     log.debug('Vnn = %s', Vnn)
     log.debug('Te + Vne = %s', Te_Vne)
     log.debug('E_j = %s', E_j)
-    log.debug('E_x = %s', E_x)
+
+    if abs(hyb_x-hyb_c) < 1e-10:
+        log.warn("exchange and correlation hybridization differ")
+        log.warn("Your energy surfaces may have discontinuities, see https://github.com/pyscf/pyscf-forge/issues/128")
+
+    # Note: this is not the true exchange energy, but just the HF-like exchange
+    E_x = 0.0
+    if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
+        E_x = -(np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
+        E_x /= 2.0
+        log.debug('E_x = %s', E_x)
+
+    # This is not correlation, but the 2-body cumulant tensored with the eri's:
+    # g_pqrs * l_pqrs / 2
     E_c = 0
     if log.verbose >= logger.DEBUG or abs(hyb_c) > 1e-10:
-        # g_pqrs * l_pqrs / 2
-        # if log.verbose >= logger.DEBUG:
         aeri = ao2mo.restore(1, mc.get_h2eff(mo_coeff), mc.ncas)
         E_c = np.tensordot(aeri, cascm2, axes=4) / 2
         log.debug('E_c = %s', E_c)
-    if abs(hyb_x) > 1e-10 or abs(hyb_c) > 1e-10:
-        log.debug(('Adding %s * %s CAS exchange, %s * %s CAS correlation to '
-                   'E_ot'), hyb_x, E_x, hyb_c, E_c)
+
     e_mcwfn = Vnn + Te_Vne + E_j + (hyb_x * E_x) + (hyb_c * E_c)
     return e_mcwfn
 
