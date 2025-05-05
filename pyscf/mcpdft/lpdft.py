@@ -183,8 +183,11 @@ def transformed_h1e_for_cas(
     mo_cas = mo_coeff[:, ncore:nocc]
 
     # h_pq + V_pq + J_pq all in AO integrals
-    hcore_eff = mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb)
-    energy_core = mc.get_lpdft_hconst(E_ot, casdm1s_0, casdm2_0, hyb)
+    hcore_eff = mc.get_lpdft_hcore_only(casdm1s_0, hyb=hyb, mo_coeff=mo_coeff,
+                                        ncore=ncore, ncas=ncas)
+    energy_core = mc.get_lpdft_hconst(E_ot, casdm1s_0, casdm2_0, hyb,
+                                      mo_coeff=mo_coeff, ncore=ncore,
+                                      ncas=ncas)
 
     if mo_core.size != 0:
         core_dm = np.dot(mo_core, mo_core.conj().T) * 2
@@ -266,14 +269,16 @@ def make_lpdft_ham_(mc, mo_coeff=None, ci=None, ot=None):
 
     mc.veff1, mc.veff2, E_ot = mc.get_pdft_veff(
         mo=mo_coeff,
+        ci=ci,
         casdm1s=casdm1s_0,
         casdm2=casdm2_0,
         drop_mcwfn=True,
         incl_energy=True,
+        ot=ot
     )
 
     # This is all standard procedure for generating the hamiltonian in PySCF
-    h1, h0 = mc.get_h1lpdft(E_ot, casdm1s_0, casdm2_0, hyb=1.0 - cas_hyb)
+    h1, h0 = mc.get_h1lpdft(E_ot, casdm1s_0, casdm2_0, hyb=1.0 - cas_hyb, mo_coeff=mo_coeff)
     h2 = mc.get_h2lpdft()
     h2eff = direct_spin1.absorb_h1e(h1, h2, ncas, mc.nelecas, 0.5)
 
@@ -507,18 +512,19 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
     def _eig_si(self, ham):
         return linalg.eigh(ham)
 
-    def get_lpdft_hcore_only(self, casdm1s_0, hyb=1.0):
+    def get_lpdft_hcore_only(self, casdm1s_0, hyb=1.0, mo_coeff=None, ncore=None, ncas=None):
         """
         Returns the lpdft hcore AO integrals weighted by the
         hybridization factor. Excludes the MC-SCF (wfn) component.
         """
 
-        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s=casdm1s_0)
+        dm1s = _dms.casdm1s_to_dm1s(self, casdm1s=casdm1s_0, mo_coeff=mo_coeff,
+                                    ncore=ncore, ncas=ncas)
         dm1 = dm1s[0] + dm1s[1]
         v_j = self._scf.get_j(dm=dm1)
         return hyb * self.get_hcore() + self.veff1 + hyb * v_j
 
-    def get_lpdft_hcore(self, casdm1s_0=None):
+    def get_lpdft_hcore(self, casdm1s_0=None, mo_coeff=None, ncore=None, ncas=None):
         """
         Returns the full lpdft hcore AO integrals. Includes the MC-SCF
         (wfn) component for hybrid functionals.
@@ -533,7 +539,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         hyb = 1.0 - cas_hyb[0]
 
         return cas_hyb[0] * self.get_hcore() + self.get_lpdft_hcore_only(
-            casdm1s_0, hyb=hyb
+            casdm1s_0, hyb=hyb, mo_coeff=mo_coeff, ncore=ncore, ncas=ncas
         )
 
     def nuc_grad_method(self, state=None):
