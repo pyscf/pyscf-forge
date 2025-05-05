@@ -68,7 +68,7 @@ endif (MKL)
 #link_directories ($ENV{LD_LIBRARY_PATH})
 
 find_package(BLAS REQUIRED)
-#find_package (LAPACK REQUIRED)
+find_package (LAPACK REQUIRED)
 
 # OpenMP
 option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
