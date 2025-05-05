@@ -1,0 +1,3 @@
+class Constants:
+    sgn_int1e_ipovlp=-1  ## I believe that mol.intor('int1e_ipovlp'..) gives -<\mu|\nabla|\nu> rather than <\mu|\nabla|\nu> ...
+                         ## 2021.08.04 : see pyscf_work/DATA/pbc_int1e_ipovlp where I printed out my own <\mu|\nabla|\nu> and int1e_ipovlp ..

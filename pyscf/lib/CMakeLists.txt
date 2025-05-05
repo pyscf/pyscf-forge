@@ -151,3 +151,16 @@ set_target_properties (clib_csf PROPERTIES
 
 add_subdirectory(sfnoci)
 
+# RT-TDDFT
+add_custom_target(make_libpp01 ALL
+    COMMAND make
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/rttddft/libpp01
+    COMMENT "Building libpp01.so using existing Makefile"
+)
+
+add_custom_command(TARGET make_libpp01 POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E echo "Moving .so files to parent directory"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/rttddft/libpp01/*.so
+            ${CMAKE_SOURCE_DIR}/
+)
