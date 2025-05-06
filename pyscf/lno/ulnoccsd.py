@@ -427,6 +427,9 @@ def fock_from_mo(mymf, s1e=None, force_exxdiv_none=True):
     return fock
 
 class ULNOCCSD(ULNO, LNOCCSD):
+
+    get_frozen_mask = get_frozen_mask
+
     def _precompute(self):
         log = logger.new_logger(self)
         mf = self._scf
@@ -476,7 +479,7 @@ if __name__ == '__main__':
     mf = scf.UHF(mol).density_fit()
     mf.kernel()
 
-    frozen = 0
+    frozen = 2
     # canonical
     mmp = mp.UMP2(mf, frozen=frozen)
     mmp.kernel()
@@ -496,8 +499,8 @@ if __name__ == '__main__':
     # LNO
     lno_type = ['1h'] * 2
     lno_thresh = [1e-4] * 2
-    oa = [[[i],[]] for i in range(mol.nelectron//2)]
-    ob = [[[],[i]] for i in range(mol.nelectron//2)]
+    oa = [[[i],[]] for i in range(orbloca.shape[1])]
+    ob = [[[],[i]] for i in range(orblocb.shape[1])]
     frag_lolist = oa + ob
 
     mlno = ULNOCCSD_T(mf, orbloc, frag_lolist, lno_type=lno_type, lno_thresh=lno_thresh, frozen=frozen)

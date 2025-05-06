@@ -14,78 +14,101 @@
 # limitations under the License.
 #
 
-import pytest
+import unittest
 import numpy as np
-from pyscf import gto, lo, scf
+from pyscf import gto, scf, mp, cc, lo
+from pyscf.cc.uccsd_t import kernel as CCSD_T
 from pyscf.lno import tools
 from pyscf.lno.ulnoccsd import ULNOCCSD_T
 
-@pytest.fixture
-def h2o2():
-    # S22-2: water dimer
-    atom = '''
+
+class WaterDimer(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        mol = gto.Mole()
+        mol.verbose = 4
+        mol.output = '/dev/null'
+        mol.atom = '''
         O   -1.485163346097   -0.114724564047    0.000000000000
         H   -1.868415346097    0.762298435953    0.000000000000
         H   -0.533833346097    0.040507435953    0.000000000000
         O    1.416468653903    0.111264435953    0.000000000000
         H    1.746241653903   -0.373945564047   -0.758561000000
         H    1.746241653903   -0.373945564047    0.758561000000
-    '''
-    basis = 'cc-pvdz'
-    mol = gto.M(atom=atom, basis=basis, spin=0, verbose=0, max_memory=8000)
-    yield mol
+        '''
+        mol.basis = 'cc-pvdz'
+        mol.build()
+        mf = scf.UHF(mol).density_fit().run()
 
-def test_ulnoccsd_1o(h2o2):
-    mol = h2o2
-    mf = scf.UHF(mol).density_fit()
-    mf.kernel()
+        # canonical
+        frozen = 2
+        mymp = mp.MP2(mf, frozen=frozen)
+        mymp.kernel(with_t2=False)
+        efull_mp2 = mymp.e_corr
 
-    frozen = 0
-    # PM
-    orbocca = mf.mo_coeff[0][:,frozen:np.count_nonzero(mf.mo_occ[0])]
-    orbloca = lo.PipekMezey(mol, orbocca).kernel()
-    orboccb = mf.mo_coeff[1][:,frozen:np.count_nonzero(mf.mo_occ[1])]
-    orblocb = lo.PipekMezey(mol, orboccb).kernel()
-    orbloc = [orbloca, orblocb]
+        mycc = cc.CCSD(mf, frozen=frozen)
+        eris = mycc.ao2mo()
+        mycc.kernel(eris=eris)
+        efull_ccsd = mycc.e_corr
 
-    lno_type = ['1h'] * 2
-    lno_thresh = [1e-4] * 2
-    oa = [[[i],[]] for i in range(mol.nelectron//2)]
-    ob = [[[],[i]] for i in range(mol.nelectron//2)]
-    frag_lolist = oa + ob
+        efull_t = CCSD_T(mycc, eris=eris, verbose=mycc.verbose)
+        efull_ccsd_t = efull_ccsd + efull_t
 
-    mlno = ULNOCCSD_T(mf, orbloc, frag_lolist, lno_type=lno_type, lno_thresh=lno_thresh, frozen=frozen)
-    mlno.lo_proj_thresh_active = None
-    mlno.kernel()
-    ecc = mlno.e_corr_ccsd
-    ecc_t = mlno.e_corr_ccsd_t
+        cls.mol = mol
+        cls.mf = mf
+        cls.frozen = frozen
+        cls.ecano = [efull_mp2, efull_ccsd, efull_ccsd_t]
+    @classmethod
+    def tearDownClass(cls):
+        cls.mol.stdout.close()
+        del cls.mol, cls.mf, cls.ecano, cls.frozen
 
-    assert abs(ecc - -0.3942038878) < 1e-5
-    assert abs(ecc_t - -0.3956640879) < 1e-5
+    def test_ulno_pm_by_thresh(self):
+        mol = self.mol
+        mf = self.mf
+        frozen = self.frozen
 
-def test_ulnoccsd_frag(h2o2):
-    mol = h2o2
-    mf = scf.UHF(mol).density_fit()
-    mf.kernel()
+        # PM localization
+        orbocc = list()
+        lo_coeff = list()
+        for s in range(2):
+            orbocc.append(mf.mo_coeff[s][:,frozen:np.count_nonzero(mf.mo_occ[s])])
+            mlo = lo.PipekMezey(mol, orbocc[s])
+            lo_coeff_s = mlo.kernel()
+            while True: # always performing jacobi sweep to avoid trapping in local minimum/saddle point
+                lo_coeff1_s = mlo.stability_jacobi()[1]
+                if lo_coeff1_s is lo_coeff_s:
+                    break
+                mlo = lo.PipekMezey(mf.mol, lo_coeff1_s).set(verbose=4)
+                mlo.init_guess = None
+                lo_coeff_s = mlo.kernel()
+            lo_coeff.append(lo_coeff_s)
 
-    frozen = 0
-    # PM
-    orbocca = mf.mo_coeff[0][:,frozen:np.count_nonzero(mf.mo_occ[0])]
-    orbloca = lo.PipekMezey(mol, orbocca).kernel()
-    orboccb = mf.mo_coeff[1][:,frozen:np.count_nonzero(mf.mo_occ[1])]
-    orblocb = lo.PipekMezey(mol, orboccb).kernel()
-    orbloc = [orbloca, orblocb]
+        # Fragment list: for PM, every orbital corresponds to a fragment
+        oa = [[[i],[]] for i in range(orbocc[0].shape[1])]
+        ob = [[[],[i]] for i in range(orbocc[1].shape[1])]
+        frag_lolist = oa + ob
 
-    lno_type = ['1h'] * 2
-    lno_thresh = [1e-4] * 2
-    frag_atmlist = tools.autofrag_atom(mol, True)
-    frag_lolist = tools.map_lo_to_frag(mol, orbloc, frag_atmlist)
+        gamma = 10
+        threshs = [1e-5,1e-6,1e-100]
+        refs = [
+            [-0.3995407761,-0.4185382023,-0.4231105742],
+            [-0.4052089997,-0.4238689186,-0.4300854290],
+            self.ecano
+        ]
+        for thresh,ref in zip(threshs,refs):
+            mcc = ULNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc.lno_thresh = [thresh*gamma,thresh]
+            mcc.kernel()
+            emp2 = mcc.e_corr_pt2
+            eccsd = mcc.e_corr_ccsd
+            eccsd_t = mcc.e_corr_ccsd_t
+            # print('[%s],' % (','.join([f'{x:.10f}' for x in [emp2,eccsd,eccsd_t]])))
+            self.assertAlmostEqual(emp2, ref[0], 6)
+            self.assertAlmostEqual(eccsd, ref[1], 6)
+            self.assertAlmostEqual(eccsd_t, ref[2], 6)
 
-    mlno = ULNOCCSD_T(mf, orbloc, frag_lolist, lno_type=lno_type, lno_thresh=lno_thresh, frozen=frozen)
-    mlno.lo_proj_thresh_active = None
-    mlno.kernel()
-    ecc = mlno.e_corr_ccsd
-    ecc_t = mlno.e_corr_ccsd_t
 
-    assert abs(ecc - -0.42647563905653474) < 1e-5
-    assert abs(ecc_t - -0.4325496978856983) < 1e-5
+if __name__ == "__main__":
+    print("Full Tests for LNO-CCSD and LNO-CCSD(T)")
+    unittest.main()
