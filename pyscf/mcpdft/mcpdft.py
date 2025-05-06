@@ -158,7 +158,7 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     log.debug('Te + Vne = %s', Te_Vne)
     log.debug('E_j = %s', E_j)
 
-    if abs(hyb_x-hyb_c) < 1e-10:
+    if abs(hyb_x - hyb_c) > 1e-10:
         log.warn("exchange and correlation hybridization differ")
         log.warn("Your energy surfaces may have discontinuities, see https://github.com/pyscf/pyscf-forge/issues/128")
 
