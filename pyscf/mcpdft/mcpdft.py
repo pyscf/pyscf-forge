@@ -167,15 +167,17 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
         E_x = -(np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
         E_x /= 2.0
-        log.debug('E_x = %s', E_x)
+        log.debug("E_x = %s", E_x)
+        log.debug("Adding (%s) * E_x = %s", hyb_x, hyb_x * E_x)
 
     # This is not correlation, but the 2-body cumulant tensored with the eri's:
     # g_pqrs * l_pqrs / 2
-    E_c = 0
+    E_c = 0.0
     if log.verbose >= logger.DEBUG or abs(hyb_c) > 1e-10:
         aeri = ao2mo.restore(1, mc.get_h2eff(mo_coeff), mc.ncas)
         E_c = np.tensordot(aeri, cascm2, axes=4) / 2
-        log.debug('E_c = %s', E_c)
+        log.debug("E_c = %s", E_c)
+        log.debug("Adding (%s) * E_c = %s", hyb_c, hyb_c * E_c)
 
     e_mcwfn = Vnn + Te_Vne + E_j + (hyb_x * E_x) + (hyb_c * E_c)
     return e_mcwfn
