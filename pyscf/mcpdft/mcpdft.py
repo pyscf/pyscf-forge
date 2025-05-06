@@ -147,12 +147,13 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
         vj, vk = mc._scf.get_jk(dm=dm1s)
         vj = vj[0] + vj[1]
+
     else:
         vj = mc._scf.get_j(dm=dm1)
+
     Te_Vne = np.tensordot(h, dm1)
     # (vj_a + vj_b) * (dm_a + dm_b)
     E_j = np.tensordot(vj, dm1) / 2
-    # (vk_a * dm_a) + (vk_b * dm_b) Mind the difference!
     log.debug('CAS energy decomposition:')
     log.debug('Vnn = %s', Vnn)
     log.debug('Te + Vne = %s', Te_Vne)
@@ -160,11 +161,12 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
 
     if abs(hyb_x - hyb_c) > 1e-10:
         log.warn("exchange and correlation hybridization differ")
-        log.warn("Your energy surfaces may have discontinuities, see https://github.com/pyscf/pyscf-forge/issues/128")
+        log.warn("may lead to unphysical results, see https://github.com/pyscf/pyscf-forge/issues/128")
 
     # Note: this is not the true exchange energy, but just the HF-like exchange
     E_x = 0.0
     if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
+        # (vk_a * dm_a) + (vk_b * dm_b)
         E_x = -(np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
         E_x /= 2.0
         log.debug("E_x = %s", E_x)
