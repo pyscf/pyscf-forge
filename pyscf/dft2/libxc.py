@@ -30,7 +30,7 @@
 
 '''
 XC functional, the interface to libxc
-(http://www.tddft.org/programs/octopus/wiki/index.php/Libxc)
+(https://libxc.gitlab.io)
 '''
 
 import sys
@@ -460,7 +460,7 @@ def parse_xc(description):
                                 x_id = possible_xc.pop()
                             sys.stderr.write('XC parser takes %s\n' % x_id)
                             sys.stderr.write('You can add prefix to %s for a '
-                                             'specific functional (e.g. X_%s, '
+                                             'specific functional (e.g. GGA_X_%s, '
                                              'HYB_MGGA_X_%s)\n'
                                              % (key, key, key))
                         else:
