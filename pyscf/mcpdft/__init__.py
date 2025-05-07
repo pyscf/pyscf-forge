@@ -14,6 +14,20 @@
 # limitations under the License.
 #
 # Lahh dee dah
+'''
+Multi-configuration pair-density functional theory
+==================================================
+
+Simple usage::
+
+    >>> from pyscf import gto, scf, mcpdft
+    >>> mol = gto.M(atom='N 0 0 0; N 0 0 1', basis='def2-tzvp')
+    >>> mf = scf.RHF(mol).run ()
+    >>> mc = mcpdft.CASSCF (mf, 'tPBE', 6, 6)
+    >>> mc.run()
+'''
+
+
 import copy
 from pyscf.mcpdft.mcpdft import get_mcpdft_child_class
 from pyscf.mcpdft.otfnal import make_hybrid_fnal as hyb
