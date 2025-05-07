@@ -22,6 +22,7 @@ from pyscf import lib
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
 from pyscf.mcscf import mc1step, newton_casscf
+from pyscf.csf_fci.csf import CSFFCISolver
 from pyscf.grad import rhf as rhf_grad
 from pyscf.grad import casscf as casscf_grad
 from pyscf.grad import sacasscf as sacasscf_grad
@@ -31,13 +32,6 @@ from itertools import product
 CONV_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_conv_tol_diabatize', 1e-8)
 SING_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_sing_tol_diabatize', 1e-8)
 SING_STEP_TOL = getattr(__config__, 'grad_mspdft_sing_step_tol', 2*math.pi)
-
-try:
-    from mrh.my_pyscf.fci.csf import CSFFCISolver
-except ModuleNotFoundError:
-    # dummy
-    class CSFFCISolver :
-        pass
 
 def _unpack_state (state):
     if hasattr (state, '__len__'): return state[0], state[1]

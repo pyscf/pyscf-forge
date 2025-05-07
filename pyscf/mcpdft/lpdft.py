@@ -737,8 +737,8 @@ def linear_multi_state_mix(mc, fcisolvers, weights=(0.5, 0.5), **kwargs):
 
 if __name__ == "__main__":
     from pyscf import gto, scf
-    from mrh.my_pyscf import mcpdft
-    from mrh.my_pyscf.fci import csf_solver
+    from pyscf import mcpdft
+    from pyscf.csf_fci import csf_solver
 
     mol = gto.M(
         atom="""H 0 0 0
