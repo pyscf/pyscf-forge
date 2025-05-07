@@ -289,7 +289,13 @@ def rsh_coeff(xc_code):
 
 def _rsh_coeff(xc_objs, hyb, facs, check_omega=True):
     hyb, alpha, omega = hyb
-    beta = hyb - alpha
+    if omega == 0:
+        # SR and LR Coulomb share the same coefficients
+        # Note: this change breaks compatibility with pyscf-2.7
+        assert hyb == alpha
+        beta = 0.
+    else:
+        beta = hyb - alpha
     rsh_pars = [omega, alpha, beta]
     rsh_tmp = (ctypes.c_double*3)()
     for fac, xc in zip(facs, xc_objs):
@@ -515,8 +521,6 @@ def parse_xc(description):
             # dftd3 cannot be used in a custom xc description
             assert '-d3' not in token
             parse_token(token, 'compound XC', search_xc_alias=True)
-    if hyb[2] == 0: # No omega is assigned. LR_HF is 0 for normal Coulomb operator
-        hyb[1] = 0
     return tuple(hyb), tuple(remove_dup(fn_facs))
 
 def eval_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
