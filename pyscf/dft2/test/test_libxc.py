@@ -80,6 +80,7 @@ class KnownValues(unittest.TestCase):
         self.assertTrue(numpy.allclose(hyb, (.08, .08, 0)))
         self.assertTrue(numpy.allclose(fn_facs,
                                        ((433, 0.6), (1, 0.032), (106, 0.288), (132, 0.324), (7, 0.076))))
+        rsh = dft.libxc.rsh_coeff('0.6*CAM_B3LYP+0.4*B3P86V5')
         rsh1 = dft.libxc.rsh_coeff('CAM_B3LYP')
         hyb = dft.libxc.hybrid_coeff('B3P86V5')
         self.assertTrue(numpy.allclose(rsh, (0.33, 0.6*rsh1[1]+.4*hyb, 0.6*rsh1[2])))
@@ -321,7 +322,7 @@ class KnownValues(unittest.TestCase):
             kxc = None  # 3rd order functional derivative
             return exc, vxc, fxc, kxc
 
-        mf = dft.RKS(mol)
+        mf = dft1.RKS(mol)
         ni = dft.libxc.define_xc(mf._numint, eval_mgga_xc, 'MGGA')
         numpy.random.seed(1)
         rho = numpy.random.random((5,10))

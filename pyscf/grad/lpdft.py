@@ -391,7 +391,7 @@ class Gradients(sacasscf.Gradients):
         hyb_x, hyb_c = hyb
         if hyb_x or hyb_c:
             raise NotImplementedError("{} for hybrid MC-PDFT functionals".format(name))
-        if omega or alpha:
+        if omega:
             raise NotImplementedError(
                 "{} for range-separated MC-PDFT functionals".format(name)
             )
