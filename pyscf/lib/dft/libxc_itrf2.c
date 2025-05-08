@@ -1100,8 +1100,8 @@ void LIBXC_xc_func_set_params(const int nfn, xc_func_type *fn_obj, const double 
                 // set the range-separated parameter
                 if (omega[i] != 0) {
                         // skip if func is not a RSH functional
-                        if ( xc_func_find_ext_params_name(&func, "_omega") >= 0 ) {
-                                xc_func_set_ext_params_name(&func, "_omega", omega[i]);
+                        if ( xc_func_find_ext_params_name(func, "_omega") >= 0 ) {
+                                xc_func_set_ext_params_name(func, "_omega", omega[i]);
                         }
                         // Recursively set the sub-functionals if they are RSH
                         // functionals
