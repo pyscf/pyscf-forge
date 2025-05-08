@@ -17,6 +17,7 @@
 import unittest
 import numpy as np
 from pyscf import __config__
+setattr(__config__, 'lnocc_DEBUG_BLKSIZE', True)    # debug outcore mode
 from pyscf import gto, scf, mp, cc, lo
 from pyscf.cc.ccsd_t import kernel as CCSD_T
 from pyscf.lno import LNOCCSD, LNOCCSD_T
@@ -94,6 +95,21 @@ class WaterDimer(unittest.TestCase):
         ]
         for thresh,ref in zip(threshs,refs):
             mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc.lno_thresh = [thresh*gamma,thresh]
+            mcc.kernel()
+            emp2 = mcc.e_corr_pt2
+            eccsd = mcc.e_corr_ccsd
+            eccsd_t = mcc.e_corr_ccsd_t
+            # print('[%s],' % (','.join([f'{x:.10f}' for x in [emp2,eccsd,eccsd_t]])))
+            self.assertAlmostEqual(emp2, ref[0], 6)
+            self.assertAlmostEqual(eccsd, ref[1], 6)
+            self.assertAlmostEqual(eccsd_t, ref[2], 6)
+
+
+        # force outcore ao2mo for generating ovL
+        for thresh,ref in zip(threshs,refs):
+            mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc.force_outcore_ao2mo = True
             mcc.lno_thresh = [thresh*gamma,thresh]
             mcc.kernel()
             emp2 = mcc.e_corr_pt2

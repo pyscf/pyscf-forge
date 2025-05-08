@@ -688,7 +688,7 @@ def _init_mp_df_eris(with_df, occ_coeff, vir_coeff, max_memory, ovL=None, log=No
                 yield Lpq
                 Lpq = None
         def ao2mo_df(Lpq, mo, ijslice, out):
-            return _ao2mo.nr_e2(Lpq, mo, ijslice, aosym='s2', out=buf)
+            return _ao2mo.nr_e2(Lpq, mo, ijslice, aosym='s2', out=out)
     else:
         def loop_df(blksize):
             kpti_kptj = [with_df.kpts[0]]*2
@@ -701,7 +701,7 @@ def _init_mp_df_eris(with_df, occ_coeff, vir_coeff, max_memory, ovL=None, log=No
                 yield Lpq
                 Lpq = None
         def ao2mo_df(Lpq, mo, ijslice, out):
-            return _ao2mo.r_e2(Lpq, mo, ijslice, [], None, aosym='s1', out=buf)
+            return _ao2mo.r_e2(Lpq, mo, ijslice, [], None, aosym='s1', out=out)
 
     if isinstance(ovL, np.ndarray):
         # incore: batching aux (OV + Nao_pair) * [X] = M
