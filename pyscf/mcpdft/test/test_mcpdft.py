@@ -740,19 +740,19 @@ class KnownValues(unittest.TestCase):
                 case = "SA CASSCF"
             else:
                 case = "SS"
-            
+
             with self.subTest(case=case):
                 self.assertTrue(h5py.is_hdf5(mc.chkfile))
                 self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/mo_coeff")))
                 self.assertEqual(mc.e_tot, lib.chkfile.load(mc.chkfile, "pdft/e_tot"))
                 self.assertEqual(lib.fp(mc.e_ot), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_ot")))
                 self.assertEqual(lib.fp(mc.e_mcscf), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_mcscf")))
-                
+
                 # Requires PySCF version > 2.6.2 which is not currently available on pip
                 # for state, (c_ref, c) in enumerate(zip(mc.ci, lib.chkfile.load(mc.chkfile, "pdft/ci"))):
                     # with self.subTest(state=state):
                         # self.assertEqual(lib.fp(c_ref), lib.fp(c))
-                
+
                 if case=="SA CASSCF":
                     self.assertEqual(lib.fp(mc.e_states), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_states")))
 

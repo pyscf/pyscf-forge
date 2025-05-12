@@ -81,70 +81,70 @@ class KnownValues(unittest.TestCase):
 
     def test_offdiag_response_sanity (self):
         for mcs, stype in zip (get_mc_list (), ('nosymm','symm')):
-         for mca, atype in zip (mcs, ('nomix','mix')):
-          if 'no' not in atype:
-            continue
-            # TODO: redesign this test case. MS-PDFT "_mix" is undefined except
-            # for L-PDFT and XMS-PDFT, whose gradients aren't implemented yet
-          for mc, itype in zip (mca, ('conv', 'DF')):
-            ci_arr = np.asarray (mc.ci)
-            if itype == 'conv': mc_grad = mc.nuc_grad_method ()
-            else: continue #mc_grad = dfsacasscf.Gradients (mc)
-            # TODO: proper DF functionality
-            ngorb = mc_grad.ngorb
-            dw_ref = np.stack ([mc_grad.get_wfn_response (state=i) for i in (0,1)], axis=0)
-            dworb_ref, dwci_ref = dw_ref[:,:ngorb], dw_ref[:,ngorb:]
-            with self.subTest (symm=stype, solver=atype, eri=itype, check='energy convergence'):
-                self.assertTrue (mc.converged)
-            with self.subTest (symm=stype, solver=atype, eri=itype, check='ref CI d.f. zero'):
-                self.assertLessEqual (linalg.norm (dwci_ref), 1e-4)
-            ham_si = np.diag (mc.e_states)
-            ham_si = si @ ham_si @ si.T
-            eris = mc.ao2mo (mc.mo_coeff)
-            ci = list (np.tensordot (si, ci_arr, axes=1))
-            ci_arr = np.asarray (ci)
-            si_diag = si * si
-            dw_diag = np.stack ([mc_grad.get_wfn_response (state=i, ci=ci) for i in (0,1)], axis=0)
-            dworb_diag, dwci_ref = dw_diag[:,:ngorb], dw_diag[:,ngorb:]
-            dworb_ref -= np.einsum ('sc,sr->rc', dworb_diag, si_diag)
-            dwci_ref = -np.einsum ('rpab,qab->rpq', dwci_ref.reshape (2,2,20,20), ci_arr)
-            dwci_ref -= dwci_ref.transpose (0,2,1)
-            dwci_ref = np.einsum ('spq,sr->rpq', dwci_ref, si_diag)
-            dwci_ref = dwci_ref[:,1,0]
-            for r in (0,1):
-                dworb_test, dwci_test = mspdft_heff_response (mc_grad, ci=ci, state=r, eris=eris,
-                    si_bra=si[:,r], si_ket=si[:,r], heff_mcscf=ham_si)
-                dworb_test = mc.pack_uniq_var (dworb_test)
-                with self.subTest (symm=stype, solver=atype, eri=itype, root=r, check='orb'):
-                    self.assertAlmostEqual (lib.fp (dworb_test), lib.fp (dworb_ref[r]), 8)
-                with self.subTest (symm=stype, solver=atype, eri=itype, root=r, check='CI'):
-                    self.assertAlmostEqual (lib.fp (dwci_test), lib.fp (dwci_ref[r]), 8)
+            for mca, atype in zip (mcs, ('nomix','mix')):
+                if 'no' not in atype:
+                    continue
+                # TODO: redesign this test case. MS-PDFT "_mix" is undefined except
+                # for L-PDFT and XMS-PDFT, whose gradients aren't implemented yet
+                for mc, itype in zip (mca, ('conv', 'DF')):
+                    ci_arr = np.asarray (mc.ci)
+                    if itype == 'conv': mc_grad = mc.nuc_grad_method ()
+                    else: continue #mc_grad = dfsacasscf.Gradients (mc)
+                    # TODO: proper DF functionality
+                    ngorb = mc_grad.ngorb
+                    dw_ref = np.stack ([mc_grad.get_wfn_response (state=i) for i in (0,1)], axis=0)
+                    dworb_ref, dwci_ref = dw_ref[:,:ngorb], dw_ref[:,ngorb:]
+                    with self.subTest (symm=stype, solver=atype, eri=itype, check='energy convergence'):
+                        self.assertTrue (mc.converged)
+                    with self.subTest (symm=stype, solver=atype, eri=itype, check='ref CI d.f. zero'):
+                        self.assertLessEqual (linalg.norm (dwci_ref), 1e-4)
+                    ham_si = np.diag (mc.e_states)
+                    ham_si = si @ ham_si @ si.T
+                    eris = mc.ao2mo (mc.mo_coeff)
+                    ci = list (np.tensordot (si, ci_arr, axes=1))
+                    ci_arr = np.asarray (ci)
+                    si_diag = si * si
+                    dw_diag = np.stack ([mc_grad.get_wfn_response (state=i, ci=ci) for i in (0,1)], axis=0)
+                    dworb_diag, dwci_ref = dw_diag[:,:ngorb], dw_diag[:,ngorb:]
+                    dworb_ref -= np.einsum ('sc,sr->rc', dworb_diag, si_diag)
+                    dwci_ref = -np.einsum ('rpab,qab->rpq', dwci_ref.reshape (2,2,20,20), ci_arr)
+                    dwci_ref -= dwci_ref.transpose (0,2,1)
+                    dwci_ref = np.einsum ('spq,sr->rpq', dwci_ref, si_diag)
+                    dwci_ref = dwci_ref[:,1,0]
+                    for r in (0,1):
+                        dworb_test, dwci_test = mspdft_heff_response (mc_grad, ci=ci, state=r, eris=eris,
+                            si_bra=si[:,r], si_ket=si[:,r], heff_mcscf=ham_si)
+                        dworb_test = mc.pack_uniq_var (dworb_test)
+                        with self.subTest (symm=stype, solver=atype, eri=itype, root=r, check='orb'):
+                            self.assertAlmostEqual (lib.fp (dworb_test), lib.fp (dworb_ref[r]), 8)
+                        with self.subTest (symm=stype, solver=atype, eri=itype, root=r, check='CI'):
+                            self.assertAlmostEqual (lib.fp (dwci_test), lib.fp (dwci_ref[r]), 8)
 
     def test_offdiag_grad_sanity (self):
         for mcs, stype in zip (get_mc_list (), ('nosymm','symm')):
-         for mca, atype in zip (mcs, ('nomix','mix')):
-          if 'no' not in atype:
-            continue
-            # TODO: redesign this test case. MS-PDFT "_mix" is undefined except
-            # for L-PDFT and XMS-PDFT, whose gradients aren't implemented yet
-          for mc, itype in zip (mca, ('conv', 'DF')):
-            ci_arr = np.asarray (mc.ci)
-            if itype == 'conv': mc_grad = mc.nuc_grad_method ()
-            else: continue #mc_grad = dfsacasscf.Gradients (mc)
-            # TODO: proper DF functionality
-            de_ref = np.stack ([mc_grad.get_ham_response (state=i) for i in (0,1)], axis=0)
-            eris = mc.ao2mo (mc.mo_coeff)
-            ci = list (np.tensordot (si, ci_arr, axes=1))
-            ci_arr = np.asarray (ci)
-            si_diag = si * si
-            de_diag = np.stack ([mc_grad.get_ham_response (state=i, ci=ci) for i in (0,1)], axis=0)
-            de_ref -= np.einsum ('sac,sr->rac', de_diag, si_diag)
-            mf_grad = mc._scf.nuc_grad_method ()
-            for r in (0,1):
-                de_test = mspdft_heff_HellmanFeynman (mc_grad, ci=ci, state=r,
-                    si_bra=si[:,r], si_ket=si[:,r], eris=eris, mf_grad=mf_grad)
-                with self.subTest (symm=stype, solver=atype, eri=itype, root=r):
-                    self.assertAlmostEqual (lib.fp (de_test), lib.fp (de_ref[r]), 8)
+            for mca, atype in zip (mcs, ('nomix','mix')):
+                if 'no' not in atype:
+                    continue
+                    # TODO: redesign this test case. MS-PDFT "_mix" is undefined except
+                    # for L-PDFT and XMS-PDFT, whose gradients aren't implemented yet
+                for mc, itype in zip (mca, ('conv', 'DF')):
+                    ci_arr = np.asarray (mc.ci)
+                    if itype == 'conv': mc_grad = mc.nuc_grad_method ()
+                    else: continue #mc_grad = dfsacasscf.Gradients (mc)
+                    # TODO: proper DF functionality
+                    de_ref = np.stack ([mc_grad.get_ham_response (state=i) for i in (0,1)], axis=0)
+                    eris = mc.ao2mo (mc.mo_coeff)
+                    ci = list (np.tensordot (si, ci_arr, axes=1))
+                    ci_arr = np.asarray (ci)
+                    si_diag = si * si
+                    de_diag = np.stack ([mc_grad.get_ham_response (state=i, ci=ci) for i in (0,1)], axis=0)
+                    de_ref -= np.einsum ('sac,sr->rac', de_diag, si_diag)
+                    mf_grad = mc._scf.nuc_grad_method ()
+                    for r in (0,1):
+                        de_test = mspdft_heff_HellmanFeynman (mc_grad, ci=ci, state=r,
+                            si_bra=si[:,r], si_ket=si[:,r], eris=eris, mf_grad=mf_grad)
+                        with self.subTest (symm=stype, solver=atype, eri=itype, root=r):
+                            self.assertAlmostEqual (lib.fp (de_test), lib.fp (de_ref[r]), 8)
 
     def test_scanner (self):
         def get_lih (r):
@@ -166,7 +166,7 @@ class KnownValues(unittest.TestCase):
             self.assertTrue(mc_grad2.converged)
             self.assertAlmostEqual (e1, e2, 6)
             self.assertAlmostEqual (lib.fp (de1), lib.fp (de2), 6)
-    
+
 
 if __name__ == "__main__":
     print("Full Tests for MS-PDFT gradient off-diagonal heff fns")

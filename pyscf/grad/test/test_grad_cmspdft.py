@@ -77,41 +77,41 @@ class KnownValues(unittest.TestCase):
 
     def test_diab_response_sanity (self):
         for mcs, stype in zip (get_mc_list (), ('nosymm','symm')):
-         for mca, atype in zip (mcs, ('nomix','mix')):
-          if atype == 'mix': continue # TODO: enable state-average-mix
-          for mc, itype in zip (mca, ('conv', 'DF')):
-            ci_arr = np.asarray (mc.ci)
-            if itype == 'conv': mc_grad = mc.nuc_grad_method ()
-            else: continue #mc_grad = dfsacasscf.Gradients (mc)
-            eris = mc.ao2mo (mc.mo_coeff)
-            with self.subTest (symm=stype, solver=atype, eri=itype, check='energy convergence'):
-                self.assertTrue (mc.converged)
-            def _crunch (fn):
-                dw = fn (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
-                dworb, dwci = mc_grad.unpack_uniq_var (dw)
-                return dworb, dwci
-            with self.subTest (symm=stype, solver=atype, eri=itype):
-                dworb_test, dwci_test = _crunch (diab_response)
-                dworb_ref, dwci_ref = _crunch (diab_response_o0)
-            with self.subTest (symm=stype, solver=atype, eri=itype, check='orb'):
-                self.assertAlmostEqual (lib.fp (dworb_test), lib.fp (dworb_ref), 8)
-            with self.subTest (symm=stype, solver=atype, eri=itype, check='CI'):
-                self.assertAlmostEqual (lib.fp (dwci_test), lib.fp (dwci_ref), 8)
+            for mca, atype in zip (mcs, ('nomix','mix')):
+                if atype == 'mix': continue # TODO: enable state-average-mix
+                for mc, itype in zip (mca, ('conv', 'DF')):
+                    ci_arr = np.asarray (mc.ci)
+                    if itype == 'conv': mc_grad = mc.nuc_grad_method ()
+                    else: continue #mc_grad = dfsacasscf.Gradients (mc)
+                    eris = mc.ao2mo (mc.mo_coeff)
+                    with self.subTest (symm=stype, solver=atype, eri=itype, check='energy convergence'):
+                        self.assertTrue (mc.converged)
+                    def _crunch (fn):
+                        dw = fn (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris)
+                        dworb, dwci = mc_grad.unpack_uniq_var (dw)
+                        return dworb, dwci
+                    with self.subTest (symm=stype, solver=atype, eri=itype):
+                        dworb_test, dwci_test = _crunch (diab_response)
+                        dworb_ref, dwci_ref = _crunch (diab_response_o0)
+                    with self.subTest (symm=stype, solver=atype, eri=itype, check='orb'):
+                        self.assertAlmostEqual (lib.fp (dworb_test), lib.fp (dworb_ref), 8)
+                    with self.subTest (symm=stype, solver=atype, eri=itype, check='CI'):
+                        self.assertAlmostEqual (lib.fp (dwci_test), lib.fp (dwci_ref), 8)
 
     def test_diab_grad_sanity (self):
         for mcs, stype in zip (get_mc_list (), ('nosymm','symm')):
-         for mca, atype in zip (mcs, ('nomix','mix')):
-          for mc, itype in zip (mca, ('conv', 'DF')):
-            ci_arr = np.asarray (mc.ci)
-            if itype == 'conv': mc_grad = mc.nuc_grad_method ()
-            else: continue #mc_grad = dfsacasscf.Gradients (mc)
-            # TODO: proper DF functionality
-            eris = mc.ao2mo (mc.mo_coeff)
-            mf_grad = mc._scf.nuc_grad_method ()
-            with self.subTest (symm=stype, solver=atype, eri=itype):
-                dh_test = diab_grad (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris, mf_grad=mf_grad)
-                dh_ref = diab_grad_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris, mf_grad=mf_grad)
-                self.assertAlmostEqual (lib.fp (dh_test), lib.fp (dh_ref), 8)
+            for mca, atype in zip (mcs, ('nomix','mix')):
+                for mc, itype in zip (mca, ('conv', 'DF')):
+                    ci_arr = np.asarray (mc.ci)
+                    if itype == 'conv': mc_grad = mc.nuc_grad_method ()
+                    else: continue #mc_grad = dfsacasscf.Gradients (mc)
+                    # TODO: proper DF functionality
+                    eris = mc.ao2mo (mc.mo_coeff)
+                    mf_grad = mc._scf.nuc_grad_method ()
+                    with self.subTest (symm=stype, solver=atype, eri=itype):
+                        dh_test = diab_grad (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris, mf_grad=mf_grad)
+                        dh_ref = diab_grad_o0 (mc_grad, Lis, mo=mc.mo_coeff, ci=mc.ci, eris=eris, mf_grad=mf_grad)
+                        self.assertAlmostEqual (lib.fp (dh_test), lib.fp (dh_ref), 8)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradient objective fn derivatives")

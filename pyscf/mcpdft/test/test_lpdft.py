@@ -34,7 +34,7 @@ def get_lih (r, n_states=2, functional='ftLDA,VWN3', basis='sto3g'):
 
     mc.fix_spin_(ss=0)
     weights = [1.0/float(n_states), ] * n_states
-    
+
     mc = mc.multi_state(weights, "lin")
     mc = mc.run()
     return mc
@@ -128,7 +128,7 @@ class KnownValues(unittest.TestCase):
 
         # Reference values from OpenMolcas v22.02, tag 177-gc48a1862b
         E_MCSCF_AVG_EXPECTED = -7.78902185
-        
+
         # Below reference values from 
         #   - PySCF commit 71fc2a41e697fec76f7f9a5d4d10fd2f2476302c
         #   - mrh   commit c5fc02f1972c1c8793061f20ed6989e73638fc5e
@@ -188,7 +188,7 @@ class KnownValues(unittest.TestCase):
         e_mcscf_mc23_avg = np.dot(lih_mc23.e_mcscf, lih_mc23.weights)
         hcoup = abs(lih_mc23.lpdft_ham[1,0])
         hdiag = lih_mc23.get_lpdft_diag()
-        
+
         # Reference values from 
         #     - PySCF       commit 9a0bb6ddded7049bdacdaf4cfe422f7ce826c2c7
         #     - PySCF-forge commit eb0ad96f632994d2d1846009ecce047193682526
