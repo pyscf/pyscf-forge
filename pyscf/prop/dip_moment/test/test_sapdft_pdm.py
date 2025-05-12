@@ -85,7 +85,7 @@ class KnownValues(unittest.TestCase):
                 dm_test = mc.dip_moment(unit='Debye', origin="Coord_center",state=i)
                 for dmt,dmr in zip(dm_test,dm_ref[i]):
                     self.assertAlmostEqual(dmt, dmr, None, message, delta)
-        
+
 if __name__ == "__main__":
     print("Test for SA-PDFT permanent dipole moments")
     unittest.main()

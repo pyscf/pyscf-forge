@@ -9,7 +9,7 @@ def case_spin_evecs (ks, nspin, ms):
     na = (nspin + neleca - nelecb) // 2
     ndet = int (special.comb (nspin, na, exact=True))
     spinstrs = cistring.addrs2str (nspin, na, list (range (ndet)))
-    
+
     S2mat = np.zeros ((ndet, ndet), dtype=np.float64)
     twoMS = int (round (2 * ms))
     libcsf.FCICSFmakeS2mat (S2mat.ctypes.data_as (ctypes.c_void_p),

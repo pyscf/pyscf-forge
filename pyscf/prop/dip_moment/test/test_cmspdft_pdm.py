@@ -102,7 +102,7 @@ class KnownValues(unittest.TestCase):
                 for dmt,dmr in zip(dm_test,dm_ref[i]):
                     self.assertAlmostEqual(dmt, dmr, None, message, delta)
         mc.stdout.close()
-        
+
     def test_furan_cation_cms3_tblyp_sto3g(self):
         # Numerical ref from this software using 2-point central difference formula
         dm_ref = np.array(\
