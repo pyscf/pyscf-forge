@@ -369,7 +369,7 @@ class KnownValues(unittest.TestCase):
                         self.assertAlmostEqual(
                             np.sum(test[:-1]) + test_nuc, e_ref[state], 9
                         )
-    
+
     def test_decomposition_hybrid_sa(self):
         ref_nuc = 1.0583544218
         ref_states = np.array(
