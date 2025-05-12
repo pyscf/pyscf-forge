@@ -18,12 +18,12 @@ ignore =
 exclude = test, .git, __pycache__, build, dist, __init__.py, .eggs, *.egg
 max-line-length = 120
 
-per-file-ignores =
-    pyscf/dft/libxc.py: E122,E501
-    pyscf/dft/xcfun.py: E122,E501
-    pyscf/grad/sacasscf.py: E501
-    pyscf/lo/ibo.py: E501
-    pyscf/pbc/cc/kccsd_t.py: E501
-    pyscf/pbc/mpicc/kccsd_rhf.py: E501
-    pyscf/pbc/mpicc/kintermediates_rhf.py: E501
-    pyscf/pbc/tools/pywannier90.py: E501
+#per-file-ignores =
+#    pyscf/dft/libxc.py: E122,E501
+#    pyscf/dft/xcfun.py: E122,E501
+#    pyscf/grad/sacasscf.py: E501
+#    pyscf/lo/ibo.py: E501
+#    pyscf/pbc/cc/kccsd_t.py: E501
+#    pyscf/pbc/mpicc/kccsd_rhf.py: E501
+#    pyscf/pbc/mpicc/kintermediates_rhf.py: E501
+#    pyscf/pbc/tools/pywannier90.py: E501
