@@ -72,9 +72,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.226842531, -0.100538192, -0.594129499] 
         # Numerical from this software
         for i in range (3):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
 
     def test_grad_h2_cms2ftlda22_sto3g_slow (self):
         # z_orb:    no
@@ -84,9 +84,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.125068648, -0.181916973] 
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 6)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 6)
 
     def test_grad_h2_cms3ftlda22_631g_slow (self):
         # z_orb:    yes
@@ -96,9 +96,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.1717391582, -0.05578044075, -0.418332932] 
         # Numerical from this software
         for i in range (3):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
 
     def test_grad_h2_cms2ftlda22_631g_slow (self):
         # z_orb:    yes
@@ -108,9 +108,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.1046653372, -0.07056592067] 
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
 
     def test_grad_lih_cms2ftlda44_sto3g_slow (self):
         # z_orb:    no
@@ -120,9 +120,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.0659740768, -0.005995224082] 
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 6)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 6)
 
     def test_grad_lih_cms3ftlda22_sto3g_slow (self):
         # z_orb:    yes
@@ -132,9 +132,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.09307779491, 0.07169985876, -0.08034177097] 
         # Numerical from this software
         for i in range (3):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 6)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 6)
 
     def test_grad_lih_cms2ftlda22_sto3g_slow (self):
         # z_orb:    yes
@@ -144,9 +144,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.1071803011, 0.03972321867] 
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
 
     def test_grad_lih_cms2ftpbe22_sto3g (self):
         # z_orb:    yes
@@ -156,10 +156,10 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.10045064, 0.03648704]
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
-    
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
+
     def test_grad_lih_cms2tm06l22_sto3g (self):
         # z_orb:    yes
         # z_ci:     yes
@@ -169,10 +169,9 @@ class KnownValues(unittest.TestCase):
 
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0]/BOHR
-        
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0]/BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
 
     # MRH 05/05/2023: currently, the only other test which uses DF-MC-PDFT features is
     # test_grad_h2co, which is slower than this. Therefore I am restoring it.
@@ -184,9 +183,9 @@ class KnownValues(unittest.TestCase):
         de_ref = [0.1074553399, 0.03956955205] 
         # Numerical from this software
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref[i], 5)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref[i], 5)
 
     def test_rohf_sanity (self):
         mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
@@ -198,11 +197,11 @@ class KnownValues(unittest.TestCase):
         # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
         # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_num_ref[i], 4)
-            de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref, 6)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_num_ref[i], 4)
+                de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref, 6)
 
     def test_dfrohf_sanity (self):
         mc_grad = diatomic ('Li', 'H', 1.8, 'ftLDA,VWN3', '6-31g', 4, 2, 2, symmetry=True,
@@ -214,11 +213,11 @@ class KnownValues(unittest.TestCase):
         # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
         # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
         for i in range (2):
-         with self.subTest (state=i):
-            de = mc_grad.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_num_ref[i], 4)
-            de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
-            self.assertAlmostEqual (de, de_ref, 6)
+            with self.subTest (state=i):
+                de = mc_grad.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_num_ref[i], 4)
+                de_ref = mc_grad_ref.kernel (state=i) [1,0] / BOHR
+                self.assertAlmostEqual (de, de_ref, 6)
 
 if __name__ == "__main__":
     print("Full Tests for CMS-PDFT gradients of diatomic molecules")

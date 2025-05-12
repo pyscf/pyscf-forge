@@ -101,7 +101,7 @@ class KnownValues(unittest.TestCase):
                 e1 = mc.e_states[state]
                 e2 = e_ref[state] + h0
                 self.assertAlmostEqual (e1, e2, 8)
-        
+
     def test_diabatize (self):
         f_ref = mc.diabatizer ()[0]
         theta_rand = 360 * np.random.rand () - 180
