@@ -424,7 +424,7 @@ class Gradients (sacasscf.Gradients):
             raise NotImplementedError (
                 "{} for hybrid MC-PDFT functionals with different exchange, correlation".format (name)
             )
-        if omega or alpha:
+        if omega:
             raise NotImplementedError (
                 "{} for range-separated MC-PDFT functionals".format (name)
             )
@@ -453,7 +453,7 @@ class Gradients (sacasscf.Gradients):
         nelecas = self.base.nelecas
         spin = abs (nelecas[0]-nelecas[1])
         omega, alpha, hyb = self.base.otfnal._numint.rsh_and_hybrid_coeff(self.base.otxc, spin=spin)
-        if omega or alpha:
+        if omega:
             raise NotImplementedError("range-separated MC-PDFT functionals")
         if abs(hyb[0] - hyb[1]) > 1e-11:
             raise NotImplementedError("hybrid on-top functional with different exchange,correlation components")
