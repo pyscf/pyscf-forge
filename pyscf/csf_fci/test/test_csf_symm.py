@@ -108,44 +108,44 @@ class KnownValues(unittest.TestCase):
                 -9.058272189032948, -9.60258614255864, -9.387425333405808]
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
-          with self.subTest (smult=smult):
-            ne = nel[smult % 2]
-            w = wfnsym[smult-1]
-            e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult, wfnsym=w)
-            ss, smulttest = spin_square0 (ci, norb, ne)
-            self.assertAlmostEqual (smulttest, smult, 8)
-            self.assertAlmostEqual (e, refs[smult-1], 8)
+            with self.subTest (smult=smult):
+                ne = nel[smult % 2]
+                w = wfnsym[smult-1]
+                e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult, wfnsym=w)
+                ss, smulttest = spin_square0 (ci, norb, ne)
+                self.assertAlmostEqual (smulttest, smult, 8)
+                self.assertAlmostEqual (e, refs[smult-1], 8)
         sol.davidson_only = True
         for smult in range (1,6):
-          with self.subTest ("davidson only", smult=smult):
-            ne = nel[smult % 2]
-            w = wfnsym[smult-1]
-            e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult, wfnsym=w)
-            ss, smulttest = spin_square0 (ci, norb, ne)
-            self.assertAlmostEqual (smulttest, smult, 8)
-            self.assertAlmostEqual (e, refs[smult-1], 8)
+            with self.subTest ("davidson only", smult=smult):
+                ne = nel[smult % 2]
+                w = wfnsym[smult-1]
+                e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult, wfnsym=w)
+                ss, smulttest = spin_square0 (ci, norb, ne)
+                self.assertAlmostEqual (smulttest, smult, 8)
+                self.assertAlmostEqual (e, refs[smult-1], 8)
 
     def test_hdiag_csf (self):
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
-          with self.subTest (smult=smult):
-            ne = nel[smult % 2]
-            w = wfnsym[smult-1]
-            sol.wfnsym = w
-            hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
-            hdiag_ref = h2mat[smult-1].diagonal ()
-            self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
+            with self.subTest (smult=smult):
+                ne = nel[smult % 2]
+                w = wfnsym[smult-1]
+                sol.wfnsym = w
+                hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
+                hdiag_ref = h2mat[smult-1].diagonal ()
+                self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
     def test_pspace(self):
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
-          with self.subTest (smult=smult):
-            ne = nel[smult % 2]
-            w = wfnsym[smult-1]
-            sol.wfnsym = w
-            addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
-            h0_ref = h2mat[smult-1][addr,:][:,addr]
-            self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+            with self.subTest (smult=smult):
+                ne = nel[smult % 2]
+                w = wfnsym[smult-1]
+                sol.wfnsym = w
+                addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                h0_ref = h2mat[smult-1][addr,:][:,addr]
+                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
     print("Full Tests for csf_fci solver with symmetry")

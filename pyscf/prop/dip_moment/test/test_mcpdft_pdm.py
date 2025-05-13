@@ -73,7 +73,7 @@ class KnownValues(unittest.TestCase):
 #                with self.subTest (symm=mol.symmetry, eri=lbl):
 #                    test = mc_dip.kernel ()
 #                    self.assertLessEqual (linalg.norm (test-ref), 1e-3)
-            
+
 #    def test_sa (self):
 #        for mol in (mol_nosymm, mol_symm):
 #            mc_conv, ref_conv = get_mc_ref (mol, ri=False, sa2=True)

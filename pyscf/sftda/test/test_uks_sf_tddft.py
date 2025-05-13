@@ -47,7 +47,7 @@ def setUpModule():
     mf_tpss = dft.UKS(mol).set(xc='tpss', conv_tol=1e-12)
     mf_tpss.grids.prune = None
     mf_tpss = mf_tpss.newton().run()
-    
+
 def tearDownModule():
     global mol, mf_lda, mf_bp86 , mf_b3lyp, mf_tpss
     mol.stdout.close()
