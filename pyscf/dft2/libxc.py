@@ -161,17 +161,17 @@ def is_hybrid_xc(xc_code):
         if 'HF' in xc_code:
             return True
         xc = _get_xc(xc_code)
-        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs)
+        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs, xc_code)
     elif numpy.issubdtype(type(xc_code), numpy.integer):
         xc = _get_xc(xc_code)
-        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs)
+        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs, xc_code)
     else:
         return any((is_hybrid_xc(x) for x in xc_code))
 
-def _is_hybrid_xc(xc_objs, hyb, facs):
+def _is_hybrid_xc(xc_objs, hyb, facs, xc_code):
     if _hybrid_coeff(xc_objs, hyb, facs) != 0:
         return True
-    if _rsh_coeff(xc_objs, hyb, facs) != (0, 0, 0):
+    if _rsh_coeff(xc_objs, hyb, facs, xc_code) != (0, 0, 0):
         return True
     return False
 
@@ -276,18 +276,19 @@ def rsh_coeff(xc_code):
     if xc_code is None:
         return 0, 0, 0
 
-    # check_omega = True
-    # if isinstance(xc_code, str) and ',' in xc_code:
-    #     # Parse only X part for the RSH coefficients.  This is to handle
-    #     # exceptions for C functionals such as M11.
-    #     xc_code = format_xc_code(xc_code)
-    #     xc_code = xc_code.split(',')[0] + ','
-    #     if 'SR_HF' in xc_code or 'LR_HF' in xc_code or 'RSH(' in xc_code:
-    #         check_omega = False
     xc = _get_xc(xc_code)
     return xc.rsh_coeff
 
-def _rsh_coeff(xc_objs, hyb, facs, check_omega=True):
+def _rsh_coeff(xc_objs, hyb, facs, xc_code):
+    check_omega = True
+    if isinstance(xc_code, str) and ',' in xc_code:
+        # Parse only X part for the RSH coefficients.  This is to handle
+        # exceptions for C functionals such as M11.
+        xc_code = format_xc_code(xc_code)
+        xc_code = xc_code.split(',')[0] + ','
+        if 'SR_HF' in xc_code or 'LR_HF' in xc_code or 'RSH(' in xc_code:
+            check_omega = False
+
     hyb, alpha, omega = hyb
     if omega == 0:
         # SR and LR Coulomb share the same coefficients
@@ -877,7 +878,7 @@ def _libxc_to_xcfun_indices(xctype, spin=0, deriv=1):
     return numpy.hstack(idx)
 
 def _eval_xc(xc_code, rho, spin=0, deriv=1, omega=None):
-    xc = _get_xc(xc_code, spin)
+    xc = _get_xc(xc_code, spin, omega)
     assert deriv <= xc.max_deriv_order
     xctype = xc.xc_type
     assert xctype in ('HF', 'LDA', 'GGA', 'MGGA')
@@ -885,9 +886,6 @@ def _eval_xc(xc_code, rho, spin=0, deriv=1, omega=None):
     rho = numpy.asarray(rho, order='C', dtype=numpy.double)
     if xctype == 'MGGA' and rho.shape[-2] == 6:
         rho = numpy.asarray(rho[...,[0,1,2,3,5],:], order='C')
-
-    if omega is not None:
-        raise NotImplementedError('use register_custom_functional_() to set omega')
 
     if xc.needs_laplacian:
         raise NotImplementedError('laplacian in meta-GGA method')
@@ -1135,7 +1133,7 @@ class XCFunctionalCache:
 
     @cached_property
     def rsh_coeff(self):
-        return _rsh_coeff(self.xc_objs, self.hyb, self.facs, True)
+        return _rsh_coeff(self.xc_objs, self.hyb, self.facs, self.xc_code)
 
     def customize_(self, ext_params=None, omega=None, hyb=None, facs=None,
                    density_threshold=None, callback=None, clear=True):
@@ -1213,10 +1211,12 @@ _CUSTOM_FUNC_R = {}
 _CUSTOM_FUNC_U = {}
 
 @lru_cache(100)
-def _get_system_xc(xc_code, spin):
-    return XCFunctionalCache(xc_code, spin)
+def _get_system_xc(xc_code, spin, omega=None):
+    return XCFunctionalCache(xc_code, spin, omega)
 
-def _get_xc(xc_code, spin=0):
+def _get_xc(xc_code, spin=0, omega=None):
+    if omega is not None:
+        return _get_system_xc(xc_code, spin, omega)
     try:
         if spin > 0:
             return _CUSTOM_FUNC_U[xc_code]
@@ -1278,6 +1278,14 @@ def register_custom_functional_(new_xc_code, based_on_xc_code, ext_params=None, 
         xc.xc_code = new_xc_code
         xc.customize_(ext_params, omega, hyb, facs, density_threshold, callback, False)
         return xc
+
+    try:
+        parse_xc(new_xc_code)
+        warnings.warn('Attempting to register a custom functional with xc_code '
+                      f'"{new_xc_code}", which is a valid built-in xc_code. '
+                      'Consider using a different xc_code to avoid confusion.')
+    except Exception:
+        pass
 
     if restricted:
         _CUSTOM_FUNC_R[new_xc_code] = build(0)
