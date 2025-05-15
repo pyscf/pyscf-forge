@@ -71,6 +71,8 @@ def _MCPDFT (mc_class, mc_or_mf_or_mol, ot, ncas, nelecas, ncore=None, frozen=No
     else: mc1 = mc_class (mf_or_mol, ncas, nelecas, ncore=ncore)
     mc2 = get_mcpdft_child_class (mc1, ot, **kwargs)
     if mc0 is not None:
+        mc2.verbose = mc0.verbose
+        mc2.stdout = mc0.stdout
         mc2.mo_coeff = mc_or_mf_or_mol.mo_coeff.copy ()    
         mc2.ci = copy.deepcopy (mc_or_mf_or_mol.ci)
         mc2.converged = mc0.converged
