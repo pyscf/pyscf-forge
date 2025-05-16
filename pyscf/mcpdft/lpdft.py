@@ -432,7 +432,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         """
         return self.lpdft_ham
 
-    def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None):
+    def kernel(self, mo_coeff=None, ci0=None, ot=None, verbose=None, dump_chk=True):
         """
         Returns:
             6 elements, they are
@@ -460,7 +460,7 @@ class _LPDFT(mcpdft.MultiStateMCPDFTSolver):
         if ci0 is None and isinstance(getattr(self, "ci", None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        kernel(self, mo_coeff, ci0, ot=ot, verbose=log, dump_chk=True)
+        kernel(self, mo_coeff, ci0, ot=ot, verbose=log, dump_chk=dump_chk)
         self._finalize_lin()
         return (
             self.e_tot,
