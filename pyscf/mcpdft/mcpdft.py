@@ -495,7 +495,7 @@ class _PDFT:
         return self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
-                             grids_level=None, grids_attr=None, dump_chk=True, **kwargs):
+                             grids_level=None, grids_attr=None, dump_chk=True, verbose=None, **kwargs):
         '''Compute the MC-PDFT energy(ies) (and update stored data)
         with the MC-SCF wave function fixed. '''
         if mo_coeff is not None: self.mo_coeff = mo_coeff
@@ -505,6 +505,8 @@ class _PDFT:
         if grids_attr is None: grids_attr = {}
         if grids_level is not None: grids_attr['level'] = grids_level
         if len(grids_attr): self.grids.__dict__.update(**grids_attr)
+        if verbose is None: verbose = self.verbose
+        self.verbose = self.otfnal.verbose = verbose
         nroots = getattr(self.fcisolver, 'nroots', 1)
         epdft = [self.energy_tot(mo_coeff=self.mo_coeff, ci=self.ci, state=ix,
                                  logger_tag='MC-PDFT state {}'.format(ix))
