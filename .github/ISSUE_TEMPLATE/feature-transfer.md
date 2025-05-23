@@ -33,3 +33,6 @@ Include any further information that may be helpful for reviewing this transfer,
 - Benchmark results or performance metrics.
 - Related issues or discussions.
 - Compatibility considerations with other PySCF components.
+
+### Authorship
+Please clarify authorship info, including the names of contributors, and email address/organization if applicable.
