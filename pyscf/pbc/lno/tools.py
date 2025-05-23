@@ -28,11 +28,13 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
     kmo_coeff = kmf.mo_coeff
     kmo_energy = kmf.mo_energy
     ks1e = kmf.get_ovlp()
+    kh1e = kmf.get_hcore()
 
     ksc = [np.dot(s1e,mo_coeff) for s1e,mo_coeff in zip(ks1e,kmo_coeff)]
     kfock = np.asarray([np.dot(sc*moe,sc.T.conj()) for sc,moe in zip(ksc,kmo_energy)])
 
     s1e = _k2s_aoint(ks1e, kpts, phase, 's1e')
+    h1e = _k2s_aoint(kh1e, kpts, phase, 'h1e')
     fock = _k2s_aoint(kfock, kpts, phase, 'fock')
 
     mo_energy, mo_coeff = eig(fock, s1e)
@@ -44,6 +46,7 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
     mf.e_tot = kmf.e_tot * Nk
     mf.converged = True
     mf.get_ovlp = lambda *args: s1e
+    mf.get_hcore = lambda *args: h1e
 
     return mf
 

@@ -116,7 +116,7 @@ def K2SCCSD(mf, with_df, frozen, mo_coeff, mo_occ):
 class MODIFIED_K2SCCSD(MODIFIED_CCSD):
     def __init__(self, mf, with_df, frozen, mo_coeff, mo_occ):
         MODIFIED_CCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
-        self.k2sdf = K2SDF(with_df)
+        self._k2sdf = K2SDF(with_df)
 
     def ao2mo(self, mo_coeff=None):
         return _make_df_eris_outcore(self, mo_coeff)
@@ -135,7 +135,7 @@ def _make_df_eris_outcore(mycc, mo_coeff=None):
     nvir = nmo - nocc
     nvir_pair = nvir*(nvir+1)//2
 
-    k2sdf = mycc.k2sdf
+    k2sdf = mycc._k2sdf
     Naux = k2sdf.Naux_ibz
     naux = k2sdf.naux
     naux_by_q = k2sdf.naux_by_q
@@ -230,7 +230,7 @@ def _make_df_eris_outcore(mycc, mo_coeff=None):
 class MODIFIED_DFK2SCCSD(MODIFIED_DFCCSD):
     def __init__(self, mf, with_df, frozen, mo_coeff, mo_occ):
         MODIFIED_DFCCSD.__init__(self, mf, frozen, mo_coeff, mo_occ)
-        self.k2sdf = K2SDF(with_df)
+        self._k2sdf = K2SDF(with_df)
 
     def ao2mo(self, mo_coeff=None):
         return _make_df_eris(self, mo_coeff)
@@ -320,7 +320,7 @@ def _make_df_eris(mycc, mo_coeff=None):
     nvir_pair = nvir*(nvir+1)//2
     mo_coeff = eris.mo_coeff
 
-    k2sdf = mycc.k2sdf
+    k2sdf = mycc._k2sdf
     naux_by_q = k2sdf.naux_by_q
     naux = k2sdf.naux
     Naux = k2sdf.Naux_ibz
