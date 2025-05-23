@@ -456,15 +456,9 @@ class KLNOCCSD(KLNO,LNOCCSD):
         self.verbose_imp = 2    # ERROR and WARNING
 
         # args for precompute
+        self._s1e = None
         self._h1e = None
         self._vhf = None
-
-    @property
-    def h1e(self):
-        if self._h1e is None:
-            kh1e = self._kscf.get_hcore()
-            self._h1e = k2s_aoint(self._kscf.cell, self.kpts, kh1e, name='h1e')
-        return self._h1e
 
     def impurity_solve(self, mf, mo_coeff, uocc_loc, eris, frozen=None, log=None):
         if log is None: log = logger.new_logger(self)
@@ -474,6 +468,7 @@ class KLNOCCSD(KLNO,LNOCCSD):
         mcc._s1e = self._s1e
         mcc._h1e = self._h1e
         mcc._vhf = self._vhf
+        
         if self.kwargs_imp is not None:
             mcc = mcc.set(**self.kwargs_imp)
 

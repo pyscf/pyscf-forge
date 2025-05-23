@@ -671,6 +671,7 @@ class LNOCCSD(LNO):
         mcc._s1e = self._s1e
         mcc._h1e = self._h1e
         mcc._vhf = self._vhf
+
         if self.kwargs_imp is not None:
             mcc = mcc.set(**self.kwargs_imp)
 

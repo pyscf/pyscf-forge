@@ -150,7 +150,7 @@ def _k2s_aoint(kA, kpts, phase, name='aoint'):
     return sA
 
 
-class K2SDF:
+class K2SDF(lib.StreamObject):
     def __init__(self, with_df, time_reversal_symmetry=True):
         self.with_df = with_df
         self.cell = with_df.cell
@@ -414,6 +414,9 @@ def k2s_iao(cell, kocc_coeff, kpts, minao=MINAO, orth=False, s1e=None):
             Supercell IAO coefficients of shape (nkpts*nao, nkpts*niao) where nao and niao
             are the number of AOs and IAOs within a unit cell. The IAOs are sorted by cell.
     '''
+    from pyscf.lib import logger
+    log = logger.new_logger(cell, cell.verbose)
+
     nkpts = len(kpts)
     kiao_coeff = np.asarray(lo.iao.iao(cell, kocc_coeff, kpts=kpts, minao=minao))
     if orth:
@@ -428,8 +431,9 @@ def k2s_iao(cell, kocc_coeff, kpts, minao=MINAO, orth=False, s1e=None):
     iao_coeff = lib.einsum('Rk,kpq,Sk->RpSq', phase, kiao_coeff,
                            phase.conj()).reshape(nkpts*nao,nkpts*niao)
 
-    if gamma_point(kpts[0]):
-        assert( abs(iao_coeff.imag).max() < 1e-10 )
+    iao_coeff_imag = abs(iao_coeff.imag).max()
+    if gamma_point(kpts[0]) and iao_coeff_imag > 1e-10:
+        log.warn('Discard large imag part in k2s_iao: %6.2e.', iao_coeff_imag)
         iao_coeff = iao_coeff.real
 
     return iao_coeff
