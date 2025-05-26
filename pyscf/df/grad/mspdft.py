@@ -29,11 +29,6 @@ class Gradients (mspdft_grad.Gradients):
         self.auxbasis_response = True
         mspdft_grad.Gradients.__init__(self, pdft)
 
-    def kernel (self, **kwargs):
-        if not ('mf_grad' in kwargs):
-            kwargs['mf_grad'] = dfrhf_grad.Gradients (self.base._scf)
-        return mspdft_grad.Gradients.kernel (self, **kwargs)
-
     def make_fcasscf (self, state=None, casscf_attr={}, fcisolver_attr={}):
         fcasscf = sacasscf_grad.Gradients.make_fcasscf (self, state=state,
             casscf_attr=casscf_attr, fcisolver_attr=fcisolver_attr)

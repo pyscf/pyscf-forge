@@ -15,7 +15,7 @@
 
 # This file can be merged into pyscf.tdscf.uhf.py
 
-import numpy
+import numpy as np
 from pyscf import lib
 from pyscf import scf
 from pyscf import ao2mo
@@ -42,7 +42,7 @@ def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0,collinear_sample
     '''
     mol = mf.mol
     mo_coeff = mf.mo_coeff
-    assert (mo_coeff[0].dtype == numpy.double)
+    assert (mo_coeff[0].dtype == np.double)
     mo_energy = mf.mo_energy
     mo_occ = mf.mo_occ
 
@@ -51,8 +51,8 @@ def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0,collinear_sample
                                       into account.")
 
     if extype==0:
-        occidxb = numpy.where(mo_occ[1]>0)[0]
-        viridxa = numpy.where(mo_occ[0]==0)[0]
+        occidxb = np.where(mo_occ[1]>0)[0]
+        viridxa = np.where(mo_occ[0]==0)[0]
         noccb = len(occidxb)
         nvira = len(viridxa)
         orbob = mo_coeff[1][:,occidxb]
@@ -64,8 +64,8 @@ def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0,collinear_sample
         hdiag = e_ia.ravel()
 
     elif extype==1:
-        occidxa = numpy.where(mo_occ[0]>0)[0]
-        viridxb = numpy.where(mo_occ[1]==0)[0]
+        occidxa = np.where(mo_occ[0]>0)[0]
+        viridxb = np.where(mo_occ[1]==0)[0]
         nocca = len(occidxa)
         nvirb = len(viridxb)
         orboa = mo_coeff[0][:,occidxa]
@@ -84,7 +84,7 @@ def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0,collinear_sample
                                      collinear_samples=collinear_samples)
 
     def vind(zs):
-        zs = numpy.asarray(zs)
+        zs = np.asarray(zs)
 
         ndim0,ndim1 = ndim
         orbo,orbv = orbov
@@ -103,15 +103,15 @@ def gen_tda_operation_sf(mf, fock_ao=None, wfnsym=None,extype=0,collinear_sample
 
 gen_tda_hop_sf = gen_tda_operation_sf
 
-def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=200):
+def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None, collinear_samples=200):
     r'''A and B matrices for TDDFT response function.
 
     A[i,a,j,b] = \delta_{ab}\delta_{ij}(E_a - E_i) + (ia||bj)
     B[i,a,j,b] = (ia||jb)
 
     Spin symmetry is not considered in the returned A, B lists.
-    List A has two items: (A_abab, A_baba).
-    List B has two items: (B_abba, B_baab).
+    List A has two items: (A_baba, A_abab).
+    List B has two items: (B_baab, B_abba).
     '''
     if mo_energy is None: mo_energy = mf.mo_energy
     if mo_coeff is None: mo_coeff = mf.mo_coeff
@@ -119,10 +119,10 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
 
     mol = mf.mol
     nao = mol.nao_nr()
-    occidx_a = numpy.where(mo_occ[0]==1)[0]
-    viridx_a = numpy.where(mo_occ[0]==0)[0]
-    occidx_b = numpy.where(mo_occ[1]==1)[0]
-    viridx_b = numpy.where(mo_occ[1]==0)[0]
+    occidx_a = np.where(mo_occ[0]==1)[0]
+    viridx_a = np.where(mo_occ[0]==0)[0]
+    occidx_b = np.where(mo_occ[1]==1)[0]
+    viridx_b = np.where(mo_occ[1]==0)[0]
     orbo_a = mo_coeff[0][:,occidx_a]
     orbv_a = mo_coeff[0][:,viridx_a]
     orbo_b = mo_coeff[1][:,occidx_b]
@@ -135,10 +135,10 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
     e_ia_b2a = (mo_energy[0][viridx_a,None] - mo_energy[1][occidx_b]).T
     e_ia_a2b = (mo_energy[1][viridx_b,None] - mo_energy[0][occidx_a]).T
 
-    a_b2a = numpy.diag(e_ia_b2a.ravel()).reshape(nocc_b,nvir_a,nocc_b,nvir_a)
-    a_a2b = numpy.diag(e_ia_a2b.ravel()).reshape(nocc_a,nvir_b,nocc_a,nvir_b)
-    b_b2a = numpy.zeros((nocc_b,nvir_a,nocc_a,nvir_b))
-    b_a2b = numpy.zeros((nocc_a,nvir_b,nocc_b,nvir_a))
+    a_b2a = np.diag(e_ia_b2a.ravel()).reshape(nocc_b,nvir_a,nocc_b,nvir_a)
+    a_a2b = np.diag(e_ia_a2b.ravel()).reshape(nocc_a,nvir_b,nocc_a,nvir_b)
+    b_b2a = np.zeros((nocc_b,nvir_a,nocc_a,nvir_b))
+    b_a2b = np.zeros((nocc_a,nvir_b,nocc_b,nvir_a))
     a = (a_b2a, a_a2b)
     b = (b_b2a, b_a2b)
 
@@ -158,10 +158,10 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
         a_b2a, a_a2b = a
         b_b2a, b_a2b = b
 
-        a_b2a-= numpy.einsum('ijba->iajb', eri_a_b2a) * hyb
-        a_a2b-= numpy.einsum('ijba->iajb', eri_a_a2b) * hyb
-        b_b2a-= numpy.einsum('ibja->iajb', eri_b_b2a) * hyb
-        b_a2b-= numpy.einsum('ibja->iajb', eri_b_a2b) * hyb
+        a_b2a-= np.einsum('ijba->iajb', eri_a_b2a) * hyb
+        a_a2b-= np.einsum('ijba->iajb', eri_a_a2b) * hyb
+        b_b2a-= np.einsum('ibja->iajb', eri_b_b2a) * hyb
+        b_a2b-= np.einsum('ibja->iajb', eri_b_a2b) * hyb
 
     if isinstance(mf, scf.hf.KohnShamDFT):
         from pyscf.dft import xc_deriv
@@ -183,27 +183,32 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
         mem_now = lib.current_memory()[0]
         max_memory = max(2000, mf.max_memory*.8-mem_now)
 
+        # it should be optimized, which is the disadvantage of mc approach.
+        fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ,deriv=2,spin=1)[2]
+        p0,p1=0,0 # the two parameters are used for counts the batch of grids.
+
         if xctype == 'LDA':
             ao_deriv = 0
             for ao, mask, weight, coords \
                     in ni0.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
-                fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
-                wfxc = fxc[0,0] * weight
+                p0 = p1
+                p1+= weight.shape[0]
+                wfxc= fxc[0,0][...,p0:p1] * weight
 
                 rho_o_a = lib.einsum('rp,pi->ri', ao, orbo_a)
                 rho_v_a = lib.einsum('rp,pi->ri', ao, orbv_a)
                 rho_o_b = lib.einsum('rp,pi->ri', ao, orbo_b)
                 rho_v_b = lib.einsum('rp,pi->ri', ao, orbv_b)
-                rho_ov_b2a = numpy.einsum('ri,ra->ria', rho_o_b, rho_v_a)
-                rho_ov_a2b = numpy.einsum('ri,ra->ria', rho_o_a, rho_v_b)
+                rho_ov_b2a = np.einsum('ri,ra->ria', rho_o_b, rho_v_a)
+                rho_ov_a2b = np.einsum('ri,ra->ria', rho_o_a, rho_v_b)
 
-                w_ov = numpy.einsum('ria,r->ria', rho_ov_b2a, wfxc*2.0)
+                w_ov = np.einsum('ria,r->ria', rho_ov_b2a, wfxc*2.0)
                 iajb = lib.einsum('ria,rjb->iajb', rho_ov_b2a, w_ov)
                 a_b2a += iajb
                 iajb = lib.einsum('ria,rjb->iajb', rho_ov_a2b, w_ov)
                 b_a2b += iajb
 
-                w_ov = numpy.einsum('ria,r->ria', rho_ov_a2b, wfxc*2.0)
+                w_ov = np.einsum('ria,r->ria', rho_ov_a2b, wfxc*2.0)
                 iajb = lib.einsum('ria,rjb->iajb', rho_ov_a2b, w_ov)
                 a_a2b += iajb
                 iajb = lib.einsum('ria,rjb->iajb', rho_ov_b2a, w_ov)
@@ -213,25 +218,26 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
             ao_deriv = 1
             for ao, mask, weight, coords \
                     in ni.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
-                fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
-                wfxc = fxc * weight
+                p0 = p1
+                p1+= weight.shape[0]
+                wfxc= fxc[...,p0:p1] * weight
 
                 rho_o_a = lib.einsum('xrp,pi->xri', ao, orbo_a)
                 rho_v_a = lib.einsum('xrp,pi->xri', ao, orbv_a)
                 rho_o_b = lib.einsum('xrp,pi->xri', ao, orbo_b)
                 rho_v_b = lib.einsum('xrp,pi->xri', ao, orbv_b)
-                rho_ov_b2a = numpy.einsum('xri,ra->xria', rho_o_b, rho_v_a[0])
-                rho_ov_a2b = numpy.einsum('xri,ra->xria', rho_o_a, rho_v_b[0])
-                rho_ov_b2a[1:4] += numpy.einsum('ri,xra->xria', rho_o_b[0], rho_v_a[1:4])
-                rho_ov_a2b[1:4] += numpy.einsum('ri,xra->xria', rho_o_a[0], rho_v_b[1:4])
+                rho_ov_b2a = np.einsum('xri,ra->xria', rho_o_b, rho_v_a[0])
+                rho_ov_a2b = np.einsum('xri,ra->xria', rho_o_a, rho_v_b[0])
+                rho_ov_b2a[1:4] += np.einsum('ri,xra->xria', rho_o_b[0], rho_v_a[1:4])
+                rho_ov_a2b[1:4] += np.einsum('ri,xra->xria', rho_o_a[0], rho_v_b[1:4])
 
-                w_ov = numpy.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_b2a)
+                w_ov = np.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_b2a)
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_b2a)
                 a_b2a += iajb
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_a2b)
                 b_b2a += iajb
 
-                w_ov = numpy.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_a2b)
+                w_ov = np.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_a2b)
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_a2b)
                 a_a2b += iajb
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_b2a)
@@ -247,28 +253,30 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None,collinear_samples=2
             ao_deriv = 1
             for ao, mask, weight, coords \
                     in ni.block_loop(mol, mf.grids, nao, ao_deriv, max_memory):
-                fxc = cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, 1)[2]
-                wfxc = fxc * weight
+                p0 = p1
+                p1+= weight.shape[0]
+                wfxc = fxc[...,p0:p1] * weight
+
                 rho_oa = lib.einsum('xrp,pi->xri', ao, orbo_a)
                 rho_ob = lib.einsum('xrp,pi->xri', ao, orbo_b)
                 rho_va = lib.einsum('xrp,pi->xri', ao, orbv_a)
                 rho_vb = lib.einsum('xrp,pi->xri', ao, orbv_b)
-                rho_ov_b2a = numpy.einsum('xri,ra->xria', rho_ob, rho_va[0])
-                rho_ov_a2b = numpy.einsum('xri,ra->xria', rho_oa, rho_vb[0])
-                rho_ov_b2a[1:4] += numpy.einsum('ri,xra->xria', rho_ob[0], rho_va[1:4])
-                rho_ov_a2b[1:4] += numpy.einsum('ri,xra->xria', rho_oa[0], rho_vb[1:4])
-                tau_ov_b2a = numpy.einsum('xri,xra->ria', rho_ob[1:4], rho_va[1:4]) * .5
-                tau_ov_a2b = numpy.einsum('xri,xra->ria', rho_oa[1:4], rho_vb[1:4]) * .5
-                rho_ov_b2a = numpy.vstack([rho_ov_b2a, tau_ov_b2a[numpy.newaxis]])
-                rho_ov_a2b = numpy.vstack([rho_ov_a2b, tau_ov_a2b[numpy.newaxis]])
+                rho_ov_b2a = np.einsum('xri,ra->xria', rho_ob, rho_va[0])
+                rho_ov_a2b = np.einsum('xri,ra->xria', rho_oa, rho_vb[0])
+                rho_ov_b2a[1:4] += np.einsum('ri,xra->xria', rho_ob[0], rho_va[1:4])
+                rho_ov_a2b[1:4] += np.einsum('ri,xra->xria', rho_oa[0], rho_vb[1:4])
+                tau_ov_b2a = np.einsum('xri,xra->ria', rho_ob[1:4], rho_va[1:4]) * .5
+                tau_ov_a2b = np.einsum('xri,xra->ria', rho_oa[1:4], rho_vb[1:4]) * .5
+                rho_ov_b2a = np.vstack([rho_ov_b2a, tau_ov_b2a[np.newaxis]])
+                rho_ov_a2b = np.vstack([rho_ov_a2b, tau_ov_a2b[np.newaxis]])
 
-                w_ov = numpy.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_b2a)
+                w_ov = np.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_b2a)
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_b2a)
                 a_b2a += iajb
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_a2b)
                 b_b2a += iajb
 
-                w_ov = numpy.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_a2b)
+                w_ov = np.einsum('xyr,xria->yria', wfxc*2.0, rho_ov_a2b)
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_a2b)
                 a_a2b += iajb
                 iajb = lib.einsum('xria,xrjb->iajb', w_ov, rho_ov_b2a)
@@ -314,25 +322,25 @@ class TDA_SF(TDBase):
             raise NotImplementedError("UKS Spin Flip TDA/ TDDFT haven't taken symmetry\
                                       into account.")
         if self.extype==0:
-            occidxb = numpy.where(mo_occ[1]>0)[0]
-            viridxa = numpy.where(mo_occ[0]==0)[0]
+            occidxb = np.where(mo_occ[1]>0)[0]
+            viridxa = np.where(mo_occ[0]==0)[0]
 
             e_ia_b2a = (mo_energy[0][viridxa,None] - mo_energy[1][occidxb]).T
             e_ia_b2a = e_ia_b2a.ravel()
 
             nov_b2a = e_ia_b2a.size
             nstates = min(nstates, nov_b2a)
-            e_threshold = numpy.sort(e_ia_b2a)[nstates-1]
+            e_threshold = np.sort(e_ia_b2a)[nstates-1]
             e_threshold += self.deg_eia_thresh
 
-            idx = numpy.where(e_ia_b2a <= e_threshold)[0]
-            x0 = numpy.zeros((idx.size, nov_b2a))
+            idx = np.where(e_ia_b2a <= e_threshold)[0]
+            x0 = np.zeros((idx.size, nov_b2a))
             for i, j in enumerate(idx):
                 x0[i, j] = 1  # Koopmans' excitations
 
         elif self.extype==1:
-            occidxa = numpy.where(mo_occ[0]>0)[0]
-            viridxb = numpy.where(mo_occ[1]==0)[0]
+            occidxa = np.where(mo_occ[0]>0)[0]
+            viridxb = np.where(mo_occ[1]==0)[0]
 
             e_ia_a2b = (mo_energy[1][viridxb,None] - mo_energy[0][occidxa]).T
             e_ia_a2b = e_ia_a2b.ravel()
@@ -340,11 +348,11 @@ class TDA_SF(TDBase):
             nov_a2b = e_ia_a2b.size
             nstates = min(nstates, nov_a2b)
 
-            e_threshold = numpy.sort(e_ia_a2b)[nstates-1]
+            e_threshold = np.sort(e_ia_a2b)[nstates-1]
             e_threshold += self.deg_eia_thresh
 
-            idx = numpy.where(e_ia_a2b <= e_threshold)[0]
-            x0 = numpy.zeros((idx.size, nov_a2b))
+            idx = np.where(e_ia_a2b <= e_threshold)[0]
+            x0 = np.zeros((idx.size, nov_a2b))
             for i, j in enumerate(idx):
                 x0[i, j] = 1  # Koopmans' excitations
         return x0
@@ -356,10 +364,10 @@ class TDA_SF(TDBase):
         mol = mf.mol
         mo_energy = mf.mo_energy
         mo_occ = mf.mo_occ
-        occidxa = numpy.where(mo_occ[0]>0)[0]
-        occidxb = numpy.where(mo_occ[1]>0)[0]
-        viridxa = numpy.where(mo_occ[0]==0)[0]
-        viridxb = numpy.where(mo_occ[1]==0)[0]
+        occidxa = np.where(mo_occ[0]>0)[0]
+        occidxb = np.where(mo_occ[1]>0)[0]
+        viridxa = np.where(mo_occ[0]==0)[0]
+        viridxb = np.where(mo_occ[1]==0)[0]
         e_ia_b2a = (mo_energy[0][viridxa,None] - mo_energy[1][occidxb]).T
         e_ia_a2b = (mo_energy[1][viridxb,None] - mo_energy[0][occidxa]).T
 
@@ -374,29 +382,29 @@ class TDA_SF(TDBase):
 
         if self.extype==0:
             nstates = min(nstates, nov_b2a)
-            e_threshold = numpy.sort(e_ia_b2a)[nstates-1]
+            e_threshold = np.sort(e_ia_b2a)[nstates-1]
             e_threshold += self.deg_eia_thresh
 
-            idx = numpy.where(e_ia_b2a <= e_threshold)[0]
-            x0 = numpy.zeros((idx.size, nov_b2a))
+            idx = np.where(e_ia_b2a <= e_threshold)[0]
+            x0 = np.zeros((idx.size, nov_b2a))
             for i, j in enumerate(idx):
                 x0[i, j] = 1  # Koopmans' excitations
 
-            y0 = numpy.zeros((len(idx),nov_a2b))
-            z0 = numpy.concatenate((x0,y0),axis=1)
+            y0 = np.zeros((len(idx),nov_a2b))
+            z0 = np.concatenate((x0,y0),axis=1)
 
         elif self.extype==1:
             nstates = min(nstates, nov_a2b)
-            e_threshold = numpy.sort(e_ia_a2b)[nstates-1]
+            e_threshold = np.sort(e_ia_a2b)[nstates-1]
             e_threshold += self.deg_eia_thresh
 
-            idx = numpy.where(e_ia_a2b <= e_threshold)[0]
-            x0 = numpy.zeros((idx.size, nov_a2b))
+            idx = np.where(e_ia_a2b <= e_threshold)[0]
+            x0 = np.zeros((idx.size, nov_a2b))
             for i, j in enumerate(idx):
                 x0[i, j] = 1  # Koopmans' excitations
 
-            y0 = numpy.zeros((len(idx),nov_b2a))
-            z0 = numpy.concatenate((x0,y0),axis=1)
+            y0 = np.zeros((len(idx),nov_b2a))
+            z0 = np.concatenate((x0,y0),axis=1)
         return z0
 
     def kernel(self, x0=None, nstates=None, extype=None):
@@ -438,13 +446,15 @@ class TDA_SF(TDBase):
         nvirb = nmo - noccb
 
         if self.extype==0:
+            y = np.zeros((nocca,nvirb))
             self.xy = [((xi[:noccb*nvira].reshape(noccb,nvira),0),  # X_alpha_beta
-                        (0,0))  # (Y_beta_alpha)
+                        (0,y))  # (Y_beta_alpha)
                         for xi in x1]
 
         elif self.extype==1:
+            y = np.zeros((noccb,nvira))
             self.xy = [((0,xi[:nocca*nvirb].reshape(nocca,nvirb)),  # X_beta_alpha
-                        (0, 0))  # (Y_beta_alpha)
+                        (y, 0))  # (Y_beta_alpha)
                         for xi in x1]
 
         if self.chkfile:
@@ -456,8 +466,12 @@ class TDA_SF(TDBase):
         return self.e, self.xy
 
     # this function should be moved into uhf.py
-    def get_ab_sf(self, mf=None):
+    def get_ab_sf(self, mf=None, collinear_samples=200):
         if mf is None: mf = self._scf
-        return get_ab_sf(mf)
+        return get_ab_sf(mf, collinear_samples=collinear_samples)
+
+    def nuc_grad_method(self):
+        from pyscf.grad import tduks_sf
+        return tduks_sf.Gradients(self)
 
 scf.uhf.UHF.TDA_SF = lib.class_as_method(TDA_SF)

@@ -136,15 +136,10 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if casdm1s is None: casdm1s = mc.make_one_casdm1s(ci=ci, state=state)
     if casdm2 is None: casdm2 = mc.make_one_casdm2(ci=ci, state=state)
     log = logger.new_logger(mc, verbose=verbose)
-    nelecas = mc.nelecas
     dm1s = _dms.casdm1s_to_dm1s(mc, casdm1s, mo_coeff=mo_coeff)
     cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
-    spin = abs(nelecas[0] - nelecas[1])
-    omega, alpha, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
-    if abs(omega) > 1e-11:
-        raise NotImplementedError("range-separated on-top functionals")
-    hyb_x, hyb_c = hyb
+    hyb_x, hyb_c = ot._numint.rsh_and_hybrid_coeff(ot.otxc, mc.mol.spin)[2]
 
     Vnn = mc._scf.energy_nuc()
     h = mc._scf.get_hcore()
@@ -152,32 +147,40 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, state=0, casdm1s=None,
     if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
         vj, vk = mc._scf.get_jk(dm=dm1s)
         vj = vj[0] + vj[1]
+
     else:
         vj = mc._scf.get_j(dm=dm1)
+
     Te_Vne = np.tensordot(h, dm1)
     # (vj_a + vj_b) * (dm_a + dm_b)
     E_j = np.tensordot(vj, dm1) / 2
-    # (vk_a * dm_a) + (vk_b * dm_b) Mind the difference!
-    if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
-        E_x = -(np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
-        E_x /= 2.0
-    else:
-        E_x = 0
     log.debug('CAS energy decomposition:')
     log.debug('Vnn = %s', Vnn)
     log.debug('Te + Vne = %s', Te_Vne)
     log.debug('E_j = %s', E_j)
-    log.debug('E_x = %s', E_x)
-    E_c = 0
+
+    if abs(hyb_x - hyb_c) > 1e-10:
+        log.warn("exchange and correlation hybridization differ")
+        log.warn("may lead to unphysical results, see https://github.com/pyscf/pyscf-forge/issues/128")
+
+    # Note: this is not the true exchange energy, but just the HF-like exchange
+    E_x = 0.0
+    if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
+        # (vk_a * dm_a) + (vk_b * dm_b)
+        E_x = -(np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
+        E_x /= 2.0
+        log.debug("E_x = %s", E_x)
+        log.debug("Adding (%s) * E_x = %s", hyb_x, hyb_x * E_x)
+
+    # This is not correlation, but the 2-body cumulant tensored with the eri's:
+    # g_pqrs * l_pqrs / 2
+    E_c = 0.0
     if log.verbose >= logger.DEBUG or abs(hyb_c) > 1e-10:
-        # g_pqrs * l_pqrs / 2
-        # if log.verbose >= logger.DEBUG:
         aeri = ao2mo.restore(1, mc.get_h2eff(mo_coeff), mc.ncas)
         E_c = np.tensordot(aeri, cascm2, axes=4) / 2
-        log.debug('E_c = %s', E_c)
-    if abs(hyb_x) > 1e-10 or abs(hyb_c) > 1e-10:
-        log.debug(('Adding %s * %s CAS exchange, %s * %s CAS correlation to '
-                   'E_ot'), hyb_x, E_x, hyb_c, E_c)
+        log.debug("E_c = %s", E_c)
+        log.debug("Adding (%s) * E_c = %s", hyb_c, hyb_c * E_c)
+
     e_mcwfn = Vnn + Te_Vne + E_j + (hyb_x * E_x) + (hyb_c * E_c)
     return e_mcwfn
 
@@ -462,6 +465,18 @@ class _PDFT:
         self.otfnal.verbose = self.verbose
         self.otfnal.stdout = self.stdout
 
+    def get_rhf_base (self):
+        from pyscf.scf.hf import RHF
+        from pyscf.scf.rohf import ROHF
+        from pyscf.scf.hf_symm import SymAdaptedRHF
+        from pyscf.scf.hf_symm import SymAdaptedROHF
+        rhf_cls = self._scf.__class__
+        if issubclass (rhf_cls, SymAdaptedROHF):
+            rhf_cls = lib.replace_class (rhf_cls, SymAdaptedROHF, SymAdaptedRHF)
+        if issubclass (rhf_cls, ROHF):
+            rhf_cls = lib.replace_class (rhf_cls, ROHF, RHF)
+        return lib.view (self._scf, rhf_cls)
+
     @property
     def grids(self):
         return self.otfnal.grids
@@ -480,7 +495,7 @@ class _PDFT:
         return self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
-                             grids_level=None, grids_attr=None, dump_chk=True, **kwargs):
+                             grids_level=None, grids_attr=None, dump_chk=True, verbose=None, **kwargs):
         '''Compute the MC-PDFT energy(ies) (and update stored data)
         with the MC-SCF wave function fixed. '''
         if mo_coeff is not None: self.mo_coeff = mo_coeff
@@ -490,6 +505,8 @@ class _PDFT:
         if grids_attr is None: grids_attr = {}
         if grids_level is not None: grids_attr['level'] = grids_level
         if len(grids_attr): self.grids.__dict__.update(**grids_attr)
+        if verbose is None: verbose = self.verbose
+        self.verbose = self.otfnal.verbose = verbose
         nroots = getattr(self.fcisolver, 'nroots', 1)
         epdft = [self.energy_tot(mo_coeff=self.mo_coeff, ci=self.ci, state=ix,
                                  logger_tag='MC-PDFT state {}'.format(ix))
@@ -540,7 +557,7 @@ class _PDFT:
 
     def get_pdft_veff(self, mo=None, ci=None, state=0, casdm1s=None,
                       casdm2=None, incl_coul=False, paaa_only=False, aaaa_only=False,
-                      jk_pc=False, drop_mcwfn=False, incl_energy=False):
+                      jk_pc=False, drop_mcwfn=False, incl_energy=False, ot=None):
         '''Get the 1- and 2-body MC-PDFT effective potentials for a set
         of mos and ci vectors
 
@@ -576,6 +593,7 @@ class _PDFT:
                 (ie the ``Hartree exchange-correlation'') from the response
             incl_energy : logical
                 If true, includes the on-top potential energy as a 3rd return argument
+            ot : an instance of otfnal class
 
         Returns:
             veff1 : ndarray of shape (nao, nao)
@@ -588,22 +606,51 @@ class _PDFT:
                 On-top energy. Only included if incl_energy is true.
         '''
         t0 = (logger.process_clock(), logger.perf_counter())
-        if mo is None: mo = self.mo_coeff
-        if ci is None: ci = self.ci
-        if casdm1s is None: casdm1s = self.make_one_casdm1s(ci, state=state)
-        if casdm2 is None: casdm2 = self.make_one_casdm2(ci, state=state)
+        if mo is None:
+            mo = self.mo_coeff
+        if ci is None:
+            ci = self.ci
+        if casdm1s is None:
+            casdm1s = self.make_one_casdm1s(ci, state=state)
+        if casdm2 is None:
+            casdm2 = self.make_one_casdm2(ci, state=state)
+        if ot is None:
+            ot = self.otfnal
+
         ncore, ncas = self.ncore, self.ncas
         dm1s = _dms.casdm1s_to_dm1s(self, casdm1s, mo_coeff=mo,
                                     ncore=ncore, ncas=ncas)
         cascm2 = _dms.dm2_cumulant(casdm2, casdm1s)
 
-        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel(self.otfnal, dm1s,
-                                                        cascm2, mo, ncore, ncas, max_memory=self.max_memory,
-                                                        paaa_only=paaa_only, aaaa_only=aaaa_only, jk_pc=jk_pc,
-                                                        drop_mcwfn=drop_mcwfn)
+        spin = abs(self.nelecas[0] - self.nelecas[1])
+        omega, _, hyb = ot._numint.rsh_and_hybrid_coeff(ot.otxc, spin=spin)
+
+        if abs(omega) > 1e-11:
+            raise NotImplementedError("range-separated on-top 1e potentials")
+        if abs(hyb[0] > hyb[1]) > 1e-11:
+            raise NotImplementedError("hybrid functionals with different exchange, correlation components")
+
+        cas_hyb = hyb[0]
+        ot_hyb = 1.0-cas_hyb
+
+        E_ot, pdft_veff1, pdft_veff2 = pdft_veff.kernel(
+            ot,
+            dm1s,
+            cascm2,
+            mo,
+            ncore,
+            ncas,
+            max_memory=self.max_memory,
+            paaa_only=paaa_only,
+            aaaa_only=aaaa_only,
+            jk_pc=jk_pc,
+        )
 
         if incl_coul:
-            pdft_veff1 += self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
+            pdft_veff1 += ot_hyb*self._scf.get_j(self.mol, dm1s[0] + dm1s[1])
+
+        if not drop_mcwfn and cas_hyb > 1e-11:
+            raise NotImplementedError("adding mcwfn response to pdft_veff2")
 
         logger.timer(self, 'get_pdft_veff', *t0)
 
@@ -672,6 +719,8 @@ class _PDFT:
     def nuc_grad_method(self):
         return self._state_average_nuc_grad_method(state=None)
 
+    Gradients=nuc_grad_method
+
     def dip_moment(self, unit='Debye', origin='Coord_Center', state=0):
         if not isinstance(self, mc1step.CASSCF):
             raise NotImplementedError("CASCI-based PDFT dipole moments")
@@ -717,7 +766,7 @@ class _PDFT:
         state_average_mix_(self, fcisolvers, weights)
         return self
 
-    def multi_state_mix(self, fcisolvers=None, weights=(0.5, 0.5), method='CMS'):
+    def multi_state_mix(self, fcisolvers=None, weights=(0.5, 0.5), method='LIN'):
         if method.upper() == "LIN":
             from pyscf.mcpdft.lpdft import linear_multi_state_mix
             return linear_multi_state_mix(self, fcisolvers=fcisolvers, weights=weights)
@@ -725,7 +774,7 @@ class _PDFT:
         else:
             raise NotImplementedError(f"StateAverageMix not available for {method}")
 
-    def multi_state(self, weights=(0.5, 0.5), method='CMS'):
+    def multi_state(self, weights=(0.5, 0.5), method='LIN'):
         if method.upper() == "LIN":
             from pyscf.mcpdft.lpdft import linear_multi_state
             return linear_multi_state(self, weights=weights)

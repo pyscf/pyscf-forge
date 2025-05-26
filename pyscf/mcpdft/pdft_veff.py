@@ -42,7 +42,7 @@ import gc
 
 def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
            max_memory=2000, hermi=1, paaa_only=False, aaaa_only=False,
-           jk_pc=False, drop_mcwfn=False):
+           jk_pc=False):
     '''Get the 1- and 2-body effective potential from MC-PDFT.
 
     Args:
@@ -74,9 +74,6 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         jk_pc : logical
             If true, compute the ppii=pipi elements of veff2
             (otherwise, these are set to zero)
-        drop_mcwfn : logical
-                If true, drops the normal CASSCF wave function
-                contribution (ie the ``Hartree exchange-correlation'') from the response
 
     Returns:
         veff1 : ndarray of shape (nao, nao)
@@ -97,13 +94,10 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
     if abs(omega) > 1e-11:
         raise NotImplementedError("range-separated on-top functionals")
 
-    if drop_mcwfn:
-        if abs(hyb_x - hyb_c) > 1e-11:
-            raise NotImplementedError(
-                "effective potential for hybrid functionals with different exchange, correlations components")
+    if abs(hyb_x - hyb_c) > 1e-11:
+        raise NotImplementedError(
+            "effective potential for hybrid functionals with different exchange, correlations components")
 
-    elif abs(hyb_x) > 1e-11 or abs(hyb_c) > 1e-11:
-        raise NotImplementedError("effective potential for hybrid functionals")
 
     E_ot = 0.0
     veff1 = np.zeros((nao, nao), dtype=dm1s.dtype)
@@ -126,21 +120,22 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
                            mo_occ=dm1s.mo_occ[:, ncore:nocc])
 
     # rho generators
-    make_rho_c = ni._gen_rho_evaluator(ot.mol, dm_core, hermi)[0]
-    make_rho_a = ni._gen_rho_evaluator(ot.mol, dm_cas, hermi)[0]
-    make_rho = ni._gen_rho_evaluator(ot.mol, dm1s, hermi)[0]
+    make_rho_c = ni._gen_rho_evaluator(ot.mol, dm_core, hermi=hermi, with_lapl=False)[0]
+    make_rho_a = ni._gen_rho_evaluator(ot.mol, dm_cas, hermi=hermi, with_lapl=False)[0]
+    make_rho = ni._gen_rho_evaluator(ot.mol, dm1s, hermi=hermi, with_lapl=False)[0]
 
     # memory block size
     gc.collect()
     remaining_floats = (max_memory - current_memory()[0]) * 1e6 / 8
-    nderiv_rho = (1, 4, 10)[dens_deriv]  # ?? for meta-GGA
+    nderiv_rho = (1, 4, 5)[dens_deriv]
     nderiv_Pi = (1, 4)[ot.Pi_deriv]
+    nderiv_ao = (1,4,10)[dens_deriv]
     ncols = 4 + nderiv_rho * nao  # ao, weight, coords
     ncols += nderiv_rho * 4 + nderiv_Pi  # rho, rho_a, rho_c, Pi
     ncols += 1 + nderiv_rho + nderiv_Pi  # eot, vot
 
     # Asynchronous part
-    nveff1 = nderiv_rho * (nao + 1)  # footprint of get_veff_1body
+    nveff1 = nderiv_ao * (nao + 1)  # footprint of get_veff_1body
     nveff2 = veff2._accumulate_ftpt() * nderiv_Pi
     ncols += np.amax([nveff1, nveff2])  # asynchronous fns
     pdft_blksize = int(remaining_floats / (ncols * BLKSIZE)) * BLKSIZE
@@ -161,7 +156,7 @@ def kernel(ot, dm1s, cascm2, mo_coeff, ncore, ncas,
         rho_c = make_rho_c(0, ao, mask, xctype)
         t0 = logger.timer(ot, 'untransformed densities (core and total)', *t0)
         Pi = get_ontop_pair_density(ot, rho, ao, cascm2, mo_cas,
-                                    dens_deriv, mask)
+                                    deriv=ot.Pi_deriv, non0tab=mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
         eot, vot = ot.eval_ot(rho, Pi, weights=weight)[:2]
         E_ot += eot.dot(weight)
@@ -209,28 +204,31 @@ def lazy_kernel(ot, dm1s, cascm2, mo_cas, max_memory=2000, hermi=1,
     '''
     if veff2_mo is not None:
         raise NotImplementedError('Molecular orbital slices for 2-body part')
-    ni, xctype, dens_deriv = ot._numint, ot.xctype, ot.dens_deriv
+    ni, xctype = ot._numint, ot.xctype
+    dens_deriv = ot.dens_deriv
+    Pi_deriv = ot.Pi_deriv
     nao = mo_cas.shape[0]
 
     veff1 = np.zeros_like(dm1s[0])
     veff2 = np.zeros((nao, nao, nao, nao), dtype=veff1.dtype)
 
     t0 = (logger.process_clock(), logger.perf_counter())
-    make_rho = tuple(ni._gen_rho_evaluator(ot.mol, dm1s[i, :, :], hermi)
+    make_rho = tuple(ni._gen_rho_evaluator(ot.mol, dm1s[i, :, :], hermi=hermi, with_lapl=False)
                      for i in range(2))
     for ao, mask, weight, coords in ni.block_loop(ot.mol, ot.grids, nao,
                                                   dens_deriv, max_memory):
         rho = np.asarray([m[0](0, ao, mask, xctype) for m in make_rho])
         t0 = logger.timer(ot, 'untransformed density', *t0)
         Pi = get_ontop_pair_density(ot, rho, ao, cascm2, mo_cas,
-                                    dens_deriv, mask)
+                                    deriv=Pi_deriv, non0tab=mask)
         t0 = logger.timer(ot, 'on-top pair density calculation', *t0)
         _, vot = ot.eval_ot(rho, Pi, weights=weight)[:2]
         vrho, vPi = vot
-        t0 = logger.timer(ot, 'effective potential kernel calculation', *t0)
-        if ao.ndim == 2: ao = ao[None, :, :]
+        t0 = logger.timer(ot, "effective potential kernel calculation", *t0)
+        if ao.ndim == 2:
+            ao = ao[None, :, :]
         # TODO: consistent format req's ao LDA case
-        veff1 += ot.get_eff_1body(ao, weight, vrho)
+        veff1 += ot.get_eff_1body(ao, weight, kern=vrho, non0tab=mask)
         t0 = logger.timer(ot, '1-body effective potential calculation', *t0)
         veff2 += ot.get_eff_2body(ao, weight, kern=vPi, aosym=1)
         t0 = logger.timer(ot, '2-body effective potential calculation', *t0)

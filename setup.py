@@ -13,14 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-NAME = 'pyscf-forge'
+NAME = 'pyscf_forge'
 AUTHOR = 'Pyscf Developer'
 AUTHOR_EMAIL = None
 DESCRIPTION  = 'Staging ground for PySCF core features'
 SO_EXTENSIONS = {
 }
 DEPENDENCIES = ['pyscf', 'numpy']
-VERSION = '1.0.1'
+VERSION = '1.0.3'
 
 #######################################################################
 # Unless not working, nothing below needs to be changed.

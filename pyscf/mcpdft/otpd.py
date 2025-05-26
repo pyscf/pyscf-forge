@@ -79,14 +79,19 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
         deriv = 2 : value, d/dx, d/dy, d/dz, d^2/d|r1-r2|^2_(r1=r2)
     '''
     # Fix dimensionality of rho and ao
+    rho_reshape = False
+    ao_reshape = False
     if rho.ndim == 2:
-        rho = rho.reshape (rho.shape[0], 1, rho.shape[1])
+        rho_reshape = True
+        rho = rho.reshape(rho.shape[0], 1, rho.shape[1])
     if ao.ndim == 2:
-        ao = ao.reshape (1, ao.shape[0], ao.shape[1])
+        ao_reshape = True
+        ao = ao.reshape(1, ao.shape[0], ao.shape[1])
 
     # First cumulant and derivatives (chain rule! product rule!)
     t0 = (logger.process_clock (), logger.perf_counter ())
-    Pi = np.zeros_like (rho[0])[:min(rho.shape[1],5)]
+    Pi_shape = ((1,4,5)[deriv], rho.shape[-1])
+    Pi = np.zeros(Pi_shape, dtype=rho.dtype)
     Pi[0] = rho[0,0] * rho[1,0]
     if deriv > 0:
         assert (rho.shape[1] >= 4), rho.shape
@@ -151,9 +156,11 @@ def get_ontop_pair_density (ot, rho, ao, cascm2, mo_cas, deriv=0,
         t0 = logger.timer (ot, 'otpd second cumulant off-top Laplacian', *t0)
 
     # Unfix dimensionality of rho, ao, and Pi
-    if Pi.shape[0] == 1:
+    # if Pi.shape[0] == 1:
+    if rho_reshape:
         Pi = Pi.reshape (Pi.shape[1])
         rho = rho.reshape (rho.shape[0], rho.shape[2])
+    if ao_reshape:
         ao = ao.reshape (ao.shape[1], ao.shape[2])
 
     return Pi

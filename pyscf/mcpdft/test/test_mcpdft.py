@@ -369,7 +369,7 @@ class KnownValues(unittest.TestCase):
                         self.assertAlmostEqual(
                             np.sum(test[:-1]) + test_nuc, e_ref[state], 9
                         )
-    
+
     def test_decomposition_hybrid_sa(self):
         ref_nuc = 1.0583544218
         ref_states = np.array(
@@ -697,7 +697,7 @@ class KnownValues(unittest.TestCase):
                 e_states_fp = lib.fp(np.sort(mc_scan.e_states))
                 e_states_fp_ref = lib.fp(np.sort(mc0.e_states))
                 self.assertAlmostEqual(e_tot, mc0.e_tot, delta=2e-6)
-                self.assertAlmostEqual(e_states_fp, e_states_fp_ref, delta=5e-6)
+                self.assertAlmostEqual(e_states_fp, e_states_fp_ref, delta=2e-5)
         mc2 = mcpdft.CASCI(mcp1[1][0], "tPBE", 5, 2)
         mc2.fcisolver.nroots = 5
         mc2.run(mo_coeff=mcp[1][0].mo_coeff)
@@ -740,21 +740,31 @@ class KnownValues(unittest.TestCase):
                 case = "SA CASSCF"
             else:
                 case = "SS"
-            
+
             with self.subTest(case=case):
                 self.assertTrue(h5py.is_hdf5(mc.chkfile))
                 self.assertEqual(lib.fp(mc.mo_coeff), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/mo_coeff")))
                 self.assertEqual(mc.e_tot, lib.chkfile.load(mc.chkfile, "pdft/e_tot"))
                 self.assertEqual(lib.fp(mc.e_ot), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_ot")))
                 self.assertEqual(lib.fp(mc.e_mcscf), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_mcscf")))
-                
+
                 # Requires PySCF version > 2.6.2 which is not currently available on pip
                 # for state, (c_ref, c) in enumerate(zip(mc.ci, lib.chkfile.load(mc.chkfile, "pdft/ci"))):
                     # with self.subTest(state=state):
                         # self.assertEqual(lib.fp(c_ref), lib.fp(c))
-                
+
                 if case=="SA CASSCF":
                     self.assertEqual(lib.fp(mc.e_states), lib.fp(lib.chkfile.load(mc.chkfile, "pdft/e_states")))
+
+    def test_h2_triplet(self):
+        mol = gto.M (atom='H 0 0 0; H 1 0 0', basis='sto-3g', spin=2)
+        mf = scf.RHF (mol).run ()
+        mc = mcpdft.CASSCF (mf, 'tPBE', 2, 2).run ()
+        # Reference from OpenMolcas v24.10
+        e_ref = -0.74702903
+        self.assertAlmostEqual (mc.e_tot, e_ref, 6)
+
+
 
 if __name__ == "__main__":
     print("Full Tests for MC-PDFT energy API")

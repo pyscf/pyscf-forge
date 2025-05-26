@@ -24,8 +24,8 @@ from pyscf.sftda.scf_genrep_sftd import _gen_uhf_response_sf
 
 class TDA_SF(uhf_sf.TDA_SF):
     def nuc_grad_method(self):
-        from pyscf.grad import tduks
-        return tduks.Gradients(self)
+        from pyscf.grad import tduks_sf
+        return tduks_sf.Gradients(self)
 
 class CasidaTDDFT(TDA_SF):
     '''Solve the Casida TDDFT formula
@@ -142,18 +142,20 @@ class CasidaTDDFT(TDA_SF):
             x0 = self.init_guess(self._scf, self.nstates)
 
         def pickeig(w, v, nroots, envs):
-            idx = numpy.where(w > 1e-3)[0]
-            return w[idx], v[:,idx], idx
+            realidx = numpy.where((abs(w.imag) < 1e-4) &
+                                  (w.real > -1e-3))[0]
+            return lib.linalg_helper._eigs_cmplx2real(w, v, realidx,
+                                                      real_eigenvectors=True)
 
         # Because the degeneracy has been dealt with by init_guess_sf function.
         nstates_new = x0.shape[0]
         converged, w, x1 = \
-                lib.davidson1(vind, x0, precond,
-                              tol=self.conv_tol,
-                              nroots=nstates_new, lindep=self.lindep,
-                              max_cycle=self.max_cycle,
-                              max_space=self.max_space, pick=pickeig,
-                              verbose=log)
+                lib.davidson_nosym1(vind, x0, precond,
+                                    tol=self.conv_tol,
+                                    nroots=nstates_new,
+                                    max_cycle=self.max_cycle,
+                                    max_space=self.max_space, pick=pickeig,
+                                    verbose=log)
 
         mo_occ = self._scf.mo_occ
         occidxa = numpy.where(mo_occ[0]>0)[0]
@@ -175,14 +177,14 @@ class CasidaTDDFT(TDA_SF):
                 y = z[noccb*nvira:].reshape(nocca,nvirb)
                 norm = lib.norm(x)**2 - lib.norm(y)**2
                 norm = numpy.sqrt(1./norm)
-                return x*norm, y*norm
+                return ((x*norm,0), (0,y*norm))
         elif self.extype==1:
             def norm_xy(z):
                 x = z[:nocca*nvirb].reshape(nocca,nvirb)
                 y = z[nocca*nvirb:].reshape(noccb,nvira)
                 norm = lib.norm(x)**2 - lib.norm(y)**2
                 norm = numpy.sqrt(1./norm)
-                return x*norm, y*norm
+                return ((0,x*norm), (y*norm,0))
 
         self.xy = [norm_xy(z) for z in x1]
 
@@ -209,5 +211,6 @@ def tddft(mf):
     return CasidaTDDFT(mf)
 
 from pyscf import dft
+dft.uks.UKS.TDA_SF   = lib.class_as_method(TDA_SF)
 dft.uks.UKS.TDDFT_SF = lib.class_as_method(TDDFT_SF)
 dft.uks.UKS.TDDFT_SF = tddft

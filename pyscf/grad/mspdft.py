@@ -22,6 +22,7 @@ from pyscf import lib
 from pyscf.lib import logger
 from pyscf.fci import direct_spin1
 from pyscf.mcscf import mc1step, newton_casscf
+from pyscf.csf_fci.csf import CSFFCISolver
 from pyscf.grad import rhf as rhf_grad
 from pyscf.grad import casscf as casscf_grad
 from pyscf.grad import sacasscf as sacasscf_grad
@@ -31,13 +32,6 @@ from itertools import product
 CONV_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_conv_tol_diabatize', 1e-8)
 SING_TOL_DIABATIZE = getattr(__config__, 'mcpdft_mspdft_sing_tol_diabatize', 1e-8)
 SING_STEP_TOL = getattr(__config__, 'grad_mspdft_sing_step_tol', 2*math.pi)
-
-try:
-    from mrh.my_pyscf.fci.csf import CSFFCISolver
-except ModuleNotFoundError:
-    # dummy
-    class CSFFCISolver :
-        pass
 
 def _unpack_state (state):
     if hasattr (state, '__len__'): return state[0], state[1]
@@ -138,7 +132,7 @@ def mspdft_heff_HellmanFeynman (mc_grad, atmlst=None, mo=None, ci=None,
     if si_bra is None: si_bra = si[:,bra]
     if si_ket is None: si_ket = si[:,ket]
     if eris is None: eris = mc.ao2mo (mo)
-    if mf_grad is None: mf_grad = mc._scf.nuc_grad_method ()
+    if mf_grad is None: mf_grad = mc.get_rhf_base ().nuc_grad_method ()
     if verbose is None: verbose = mc_grad.verbose
     ncore = mc.ncore
     log = logger.new_logger (mc_grad, verbose)
@@ -429,7 +423,7 @@ class Gradients (mcpdft_grad.Gradients):
         ket, bra = _unpack_state (state)
         if si_bra is None: si_bra = si[:,bra]
         if si_ket is None: si_ket = si[:,ket]
-        if mf_grad is None: mf_grad = self.base._scf.nuc_grad_method ()
+        if mf_grad is None: mf_grad = self.base.get_rhf_base ().nuc_grad_method ()
         if verbose is None: verbose = self.verbose
         si_diag = si_bra * si_ket
         log = logger.new_logger (self, verbose)

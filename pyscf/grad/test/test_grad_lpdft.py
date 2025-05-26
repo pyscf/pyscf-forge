@@ -26,7 +26,7 @@ import unittest
 
 from pyscf import scf, gto, df, dft, lib
 from pyscf import mcpdft
-
+from pyscf.fci.addons import _unpack_nelec
 
 def diatomic(
     atom1,
@@ -62,8 +62,8 @@ def diatomic(
         mf = mf.density_fit(auxbasis=df.aug_etb(mol))
 
     mc = mcpdft.CASSCF(mf.run(), fnal, ncas, nelecas, grids_level=grids_level)
-    if spin is None:
-        spin = mol.nelectron % 2
+    neleca, nelecb = _unpack_nelec (nelecas, spin=spin)
+    spin = neleca-nelecb
 
     ss = spin * (spin + 2) * 0.25
     mc = mc.multi_state(
@@ -265,6 +265,47 @@ class KnownValues(unittest.TestCase):
             with self.subTest(state=i):
                 de = mc_grad.kernel(state=i)[1, 0]
                 self.assertAlmostEqual(de, NUM_REF[i], 5)
+
+    def test_rohf_sanity (self):
+        n_states = 3
+        mc_grad = diatomic(
+            "Li", "H", 1.4, "ftpbe", "6-31g", 4, 2, n_states, density_fit=False, spin=2
+        )
+        mc_grad_ref = diatomic(
+            "Li", "H", 1.4, "ftpbe", "6-31g", 4, (2,0), n_states, density_fit=False
+        )
+
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        NUM_REF = [-0.062533, -0.058472, -0.058472]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 4)
+                de_ref = mc_grad_ref.kernel(state=i)[1, 0]
+                self.assertAlmostEqual (de, de_ref, 6)
+
+    def test_dfrohf_sanity (self):
+        n_states = 3
+        mc_grad = diatomic(
+            "Li", "H", 1.4, "ftpbe", "6-31g", 4, 2, n_states, density_fit=True, spin=2
+        )
+        mc_grad_ref = diatomic(
+            "Li", "H", 1.4, "ftpbe", "6-31g", 4, (2,0), n_states, density_fit=True,
+        )
+
+        # Numerical from this software
+        # PySCF commit:         bee0ce288a655105e27fcb0293b203939b7aecc9
+        # PySCF-forge commit:   50bc1da117ced9613948bee14a99a02c7b2c5769
+        NUM_REF = [-0.062548, -0.058501, -0.058501]
+        for i in range(n_states):
+            with self.subTest(state=i):
+                de = mc_grad.kernel(state=i)[1, 0]
+                self.assertAlmostEqual(de, NUM_REF[i], 4)
+                de_ref = mc_grad_ref.kernel(state=i)[1, 0]
+                self.assertAlmostEqual (de, de_ref, 6)
+
 
 
 if __name__ == "__main__":

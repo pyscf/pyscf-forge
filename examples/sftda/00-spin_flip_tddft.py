@@ -49,35 +49,34 @@ mftd2.e # to get the excited energies
 mftd2.xy # to get the transition vectors
 
 #
-# 3. get_ab_sf()
+# 3. spin flip up TDDFT, which can not converged.
 #
+mftd3 = sftda.TDDFT_SF(mf) # equal to mftd3 = mf.TDDFT_SF()
+mftd3.nstates = 4
+mftd3.extype = 0
+mftd3.collinear_samples=200
+mftd3.kernel()
+
+mftd3.e
+mftd3.xy
+
+#
+# 4. spin flip down TDDFT, which can not converged.
+#
+mftd4 = sftda.uks_sf.CasidaTDDFT(mf)
+mftd4.nstates = 4
+mftd4.extype = 1
+mftd4.collinear_samples=200
+mftd4.kernel()
+
+mftd4.e
+mftd4.xy
+
+#
+# 5. get_ab_sf()
+# Besides, users can use get_ab_sf() to construct the whole TDDFT matrix
+#          to get all excited energies, if the system is small.
 # a, b = sftda.TDA_SF(mf).get_ab_sf()
 a, b = sftda.TDDFT_SF(mf).get_ab_sf()
-# List a has two items: (A_abab, A_baba) with A[i,a,j,b].
-# List b has two items: (B_abba, B_baab) with B[i,a,j,b].
-
-#
-# 4. spin flip up TDDFT, which can not converged.
-#    Just give an input example here.
-#    Users can use get_ab_sf() to construct the whole TDDFT matrix
-#    to get the excited energies, if the system is small.
-# mftd3 = sftda.TDDFT_SF(mf) # equal to mftd3 = mf.TDDFT_SF()
-# mftd3.nstates = 4
-# mftd3.extype = 0
-# mftd3.collinear_samples=200
-# mftd3.kernel()
-
-# mftd3.e
-# mftd3.xy
-
-#
-# 5. spin flip down TDDFT, which can not converged.
-#    Just give an input example here.
-# mftd4 = sftda.uks_sf.CasidaTDDFT(mf)
-# mftd4.nstates = 4
-# mftd4.extype = 1
-# mftd4.collinear_samples=200
-# mftd4.kernel()
-
-# mftd4.e
-# mftd4.xy
+# List a has two items: (A_baba,A_abab) with A[i,a,j,b].
+# List b has two items: (B_baab,B_abba) with B[i,a,j,b].

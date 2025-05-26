@@ -282,7 +282,7 @@ def lpdft_HellmanFeynman_grad(
     if ci is None:
         ci = mc.ci
     if mf_grad is None:
-        mf_grad = mc._scf.nuc_grad_method()
+        mf_grad = mc.get_rhf_base ().nuc_grad_method()
     if mc.frozen is not None:
         raise NotImplementedError
     mol = mc.mol
@@ -391,7 +391,7 @@ class Gradients(sacasscf.Gradients):
         hyb_x, hyb_c = hyb
         if hyb_x or hyb_c:
             raise NotImplementedError("{} for hybrid MC-PDFT functionals".format(name))
-        if omega or alpha:
+        if omega:
             raise NotImplementedError(
                 "{} for range-separated MC-PDFT functionals".format(name)
             )

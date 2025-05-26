@@ -47,7 +47,7 @@ def get_h2o(mol,iroots=3):
     #mc.fcisolver = csf_solver(mol, smult=1, symm='A1')
     fix_spin_(mc.fcisolver, ss=0)
     mc.fcisolver.wfnsym = 'A1'
-    mc = mc.multi_state(weights)
+    mc = mc.multi_state(weights, 'cms')
     mo = mcscf.sort_mo(mc, mf.mo_coeff, [4,5,8,9])
     mc.conv_tol = 1e-11
     mc.kernel(mo)
@@ -102,7 +102,7 @@ class KnownValues(unittest.TestCase):
                 for dmt,dmr in zip(dm_test,dm_ref[i]):
                     self.assertAlmostEqual(dmt, dmr, None, message, delta)
         mc.stdout.close()
-        
+
     def test_furan_cation_cms3_tblyp_sto3g(self):
         # Numerical ref from this software using 2-point central difference formula
         dm_ref = np.array(\
