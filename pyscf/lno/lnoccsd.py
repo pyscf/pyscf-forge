@@ -544,17 +544,24 @@ def impurity_solve(mcc, mo_coeff, uocc_loc, mo_occ, maskact, eris,
             oovv = ovov.reshape(nactocc,nactvir,nactocc,nactvir).transpose(0,2,1,3)
             ovov = None
             cput1 = log.timer_debug1('imp sol - eri    ', *cput1)
+            
             # MP2 fragment energy
             t1, t2 = mcc.init_amps(eris=imp_eris)[1:]
             cput1 = log.timer_debug1('imp sol - mp2 amp', *cput1)
             elcorr_pt2 = get_fragment_energy(oovv, t2, uocc_loc).real
             cput1 = log.timer_debug1('imp sol - mp2 ene', *cput1)
+
             # CCSD fragment energy
             t1, t2 = mcc.kernel(eris=imp_eris, t1=t1, t2=t2)[1:]
+            if not mcc.converged:
+                log.warn('Impurity CCSD did not converge, please be careful of the results.')
+
             cput1 = log.timer_debug1('imp sol - cc  amp', *cput1)
             t2 += einsum('ia,jb->ijab',t1,t1)
             elcorr_cc = get_fragment_energy(oovv, t2, uocc_loc)
             cput1 = log.timer_debug1('imp sol - cc  ene', *cput1)
+            
+            # CCSD(T) fragment energy
             if ccsd_t:
                 if nactmo > max_las_size_ccsd_t:
                     log.warn('Number of active space orbitals (%d) exceed '
