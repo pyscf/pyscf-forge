@@ -431,9 +431,10 @@ def k2s_iao(cell, kocc_coeff, kpts, minao=MINAO, orth=False, s1e=None):
     iao_coeff = lib.einsum('Rk,kpq,Sk->RpSq', phase, kiao_coeff,
                            phase.conj()).reshape(nkpts*nao,nkpts*niao)
 
-    iao_coeff_imag = abs(iao_coeff.imag).max()
-    if gamma_point(kpts[0]) and iao_coeff_imag > 1e-10:
-        log.warn('Discard large imag part in k2s_iao: %6.2e.', iao_coeff_imag)
+    if gamma_point(kpts[0]):
+        iao_coeff_imag = abs(iao_coeff.imag).max()
+        if iao_coeff_imag > 1e-10:
+            log.warn('Discard large imag part in k2s_iao: %6.2e.', iao_coeff_imag)
         iao_coeff = iao_coeff.real
 
     return iao_coeff
