@@ -226,7 +226,7 @@ def _scf_to_trexio(mf, trexio_file):
     # 4.2 Molecular orbitals (mo group)
     if isinstance(mf, scf.uhf.UHF):
         mo_energy = np.ravel(mf.mo_energy)
-        mo_up, mo_dn = mf.mo_coeff  
+        mo_up, mo_dn = mf.mo_coeff
         idx = _order_ao_index(mf.mol)
         mo_up = mo_up[idx].T
         mo_dn = mo_dn[idx].T
