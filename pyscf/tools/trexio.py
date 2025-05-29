@@ -226,7 +226,11 @@ def _scf_to_trexio(mf, trexio_file):
     # 4.2 Molecular orbitals (mo group)
     if isinstance(mf, scf.uhf.UHF):
         mo_energy = np.ravel(mf.mo_energy)
-        mo = np.hstack(*mf.mo_coeff)
+        mo_up, mo_dn = mf.mo_coeff
+        idx = _order_ao_index(mf.mol)
+        mo_up = mo_up[idx].T
+        mo_dn = mo_dn[idx].T
+        mo=np.concatenate([mo_up, mo_dn], axis=0)
         mo_occ = np.ravel(mf.mo_occ)
         spin = np.zeros(mo_energy.size, dtype=int)
         spin[mf.mo_energy[0].size:] = 1
@@ -234,13 +238,16 @@ def _scf_to_trexio(mf, trexio_file):
     else:
         mo_energy = mf.mo_energy
         mo = mf.mo_coeff
+        idx = _order_ao_index(mf.mol)
+        mo = mo[idx].T
         mo_occ = mf.mo_occ
         spin = np.zeros(mo_energy.size, dtype=int)
         mo_type = 'RHF'
+
+    # write to a TREXIO file
     trexio.write_mo_type(trexio_file, mo_type)
-    idx = _order_ao_index(mf.mol)
     trexio.write_mo_num(trexio_file, mo_energy.size)
-    trexio.write_mo_coefficient(trexio_file, mo[idx].T.ravel())
+    trexio.write_mo_coefficient(trexio_file, mo.ravel())
     trexio.write_mo_energy(trexio_file, mo_energy)
     trexio.write_mo_occupation(trexio_file, mo_occ)
     trexio.write_mo_spin(trexio_file, spin)
