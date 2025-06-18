@@ -232,7 +232,7 @@ def update_k(mf, C_ks, mocc_ks):
 
     for s in [0,1]:
         C_ks_s = get_kcomp(C_ks, s, load=False)
-        mf.with_jk.update_k_support_vec(C_ks_s, mocc_ks[s], mf.kpts, comp=s)
+        mf.with_jk.update_k_support_vec(C_ks_s, mocc_ks[s], mf.kpts, comp=s, Ct_ks=C_ks_s)
 
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     mf.scf_summary["t-ace"] += tock - tick
@@ -284,7 +284,7 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                 kpt = kpts[k]
                 occ = np.where(mocc_ks[s][k] > khf.THR_OCC)[0]
                 Co_k = get_kcomp(C_ks_s, k, occ=occ)
-                e_comp_k = mf.apply_Fock_kpt(Co_k, kpt, mocc_ks, mesh, Gv,
+                e_comp_k = mf.apply_Fock_kpt(Co_k, kpt, mocc_ks[s], mesh, Gv,
                                              vj_R, exxdiv, comp=s,
                                              ret_E=True)[1]
                 e_comp_k *= 0.5
@@ -339,7 +339,7 @@ def converge_band(mf, C_ks, mocc_ks, kpts, Cout_ks=None,
     for s in [0,1]:
         C_ks_s = get_spin_component(C_ks, s)
         conv_ks[s], moeout_ks[s], Cout_ks_s, fc_ks[s] = khf.converge_band(
-                            mf, C_ks_s, mocc_ks[s], kpts, mesh=mesh, Gv=Gv,
+                            mf, C_ks_s, mocc_ks, kpts, mesh=mesh, Gv=Gv,
                             vj_R=vj_R, comp=s,
                             conv_tol_davidson=conv_tol_davidson,
                             max_cycle_davidson=max_cycle_davidson,

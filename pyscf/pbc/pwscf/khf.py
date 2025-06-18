@@ -24,6 +24,8 @@ from pyscf.pbc.pwscf import jk as pw_jk
 from pyscf.lib import logger
 import pyscf.lib.parameters as param
 
+from pyscf.pbc.lib.kpts_helper import member
+
 
 # TODO
 # 1. fractional occupation (for metals)
@@ -822,7 +824,7 @@ def update_k(mf, C_ks, mocc_ks):
         mf.scf_summary["t-ace"] = np.zeros(2)
 
     mesh = np.array(mf.cell.mesh)
-    if np.all(abs(mesh-mesh/2*2)>0):   # all odd --> s2 symm for occ bands
+    if np.all(abs(mesh-mesh//2*2)>0):   # all odd --> s2 symm for occ bands
         mf.with_jk.update_k_support_vec(C_ks, mocc_ks, mf.kpts)
     else:
         mf.with_jk.update_k_support_vec(C_ks, mocc_ks, mf.kpts, Ct_ks=C_ks)
@@ -855,15 +857,16 @@ def eig_subspace(mf, C_ks, mocc_ks, mesh=None, Gv=None, vj_R=None, exxdiv=None,
         set_kcomp(C_k, C_ks, k)
         C_k = Cbar_k = None
 
-    mocc_ks = get_mo_occ(cell, moe_ks=moe_ks)
-    if mf.exxdiv == "ewald":
-        moe_ks = ewald_correction(moe_ks, mocc_ks, mf.madelung)
+    if comp is None:
+        mocc_ks = mf.get_mo_occ(moe_ks=moe_ks)
+        if mf.exxdiv == "ewald":
+            moe_ks = ewald_correction(moe_ks, mocc_ks, mf.madelung)
 
     return C_ks, moe_ks, mocc_ks
 
 
 def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
-                    ret_E=False):
+                    ret_E=False, mocc_ks=None):
     r""" Apply hcore (kinetic and PP) opeartor to orbitals at given k-point.
     """
 
@@ -871,25 +874,31 @@ def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
 
     es = np.zeros(3, dtype=np.complex128)
 
+    if mocc_ks is None:
+        mocc_k = 2
+    else:
+        k = member(kpt, mf.kpts)[0]
+        mocc_k = mocc_ks[k][:C_k.shape[0]]
+
     tspans = np.zeros((3,2))
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
 
     tmp = pw_helper.apply_kin_kpt(C_k, kpt, mesh, Gv)
     Cbar_k = tmp
-    es[0] = np.einsum("ig,ig->", C_k.conj(), tmp) * 2
+    es[0] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = tock - tick
 
     if C_k_R is None: C_k_R = tools.ifft(C_k, mesh)
     tmp = with_pp.apply_vppl_kpt(C_k, mesh=mesh, C_k_R=C_k_R)
     Cbar_k += tmp
-    es[1] = np.einsum("ig,ig->", C_k.conj(), tmp) * 2
+    es[1] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[1] = tick - tock
 
     tmp = with_pp.apply_vppnl_kpt(C_k, kpt, mesh=mesh, Gv=Gv, comp=comp)
     Cbar_k += tmp
-    es[2] = np.einsum("ig,ig->", C_k.conj(), tmp) * 2
+    es[2] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[2] = tock - tick
 
@@ -922,17 +931,24 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
     tspans = np.zeros((2,2))
     es = np.zeros(2, dtype=np.complex128)
 
+    if mocc_ks is None:
+        mocc_k = 2
+    else:
+        k = member(kpt, mf.kpts)[0]
+        mocc_k = mocc_ks[k][:C_k.shape[0]]
+    Cto_k = C_k.conj() * mocc_k[:, None]
+
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     tmp = with_jk.apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R)
     Cbar_k = tmp * 2.
-    es[0] = np.einsum("ig,ig->", C_k.conj(), tmp) * 2.
+    es[0] = np.einsum("ig,ig->", Cto_k, tmp)
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = np.asarray(tock - tick).reshape(1,2)
 
     tmp = -with_jk.apply_k_kpt(C_k, kpt, mesh=mesh, Gv=Gv, exxdiv=exxdiv,
                                comp=comp)
     Cbar_k += tmp
-    es[1] = np.einsum("ig,ig->", C_k.conj(), tmp)
+    es[1] = np.einsum("ig,ig->", Cto_k, tmp) * 0.5
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[1] = np.asarray(tick - tock).reshape(1,2)
 
@@ -965,7 +981,7 @@ def apply_Fock_kpt(mf, C_k, kpt, mocc_ks, mesh, Gv, vj_R, exxdiv,
     C_k_R = tools.ifft(C_k, mesh)
 # 1e part
     res_1e = mf.apply_hcore_kpt(C_k, kpt, mesh, Gv, with_pp, comp=comp,
-                                C_k_R=C_k_R, ret_E=ret_E)
+                                C_k_R=C_k_R, ret_E=ret_E, mocc_ks=mocc_ks)
 # 2e part
     res_2e = mf.apply_veff_kpt(C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
                                exxdiv, C_k_R=C_k_R, comp=comp, ret_E=ret_E)
@@ -986,7 +1002,8 @@ def ewald_correction(moe_ks, mocc_ks, madelung):
         moe_ks_new = [None] * nkpts
         for k in range(nkpts):
             moe_ks_new[k] = moe_ks[k].copy()
-            moe_ks_new[k][mocc_ks[k]>THR_OCC] -= madelung
+            # moe_ks_new[k][mocc_ks[k]>THR_OCC] -= 0.5 * mocc_ks[k] * madelung
+            moe_ks_new[k][:] -= 0.5 * mocc_ks[k] * madelung
     else:                               # UHF
         ncomp = len(moe_ks)
         moe_ks_new = [None] * ncomp
@@ -1033,7 +1050,8 @@ def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
     if full_ham:
         return moe_ks
 
-    mocc_ks = get_mo_occ(cell, moe_ks=moe_ks)
+    if ret_mocc or comp is None:
+        mocc_ks = mf.get_mo_occ(moe_ks=moe_ks)
     if mf.exxdiv == "ewald" and comp is None:
         moe_ks = ewald_correction(moe_ks, mocc_ks, mf.madelung)
 
@@ -1058,6 +1076,14 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
     kpts = mf.kpts
     nkpts = len(kpts)
 
+    # tot1 = 0
+    # tot2 = 0
+    # for mocc_k in mocc_ks:
+    #     tot1 += np.sum(0.5 * mocc_k)
+    #     tot2 += np.sum((0.5 * mocc_k)**2)
+    # ratio = tot2 / tot1
+    # print("RATIO", ratio)
+
     e_ks = np.zeros(nkpts)
     if moe_ks is None:
         if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
@@ -1079,6 +1105,7 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
         for comp,e in zip(mf.scf_summary["e_comp_name_lst"], e_comp):
             mf.scf_summary[comp] = e
     else:
+        # TODO does not handle occupations correctly
         for k in range(nkpts):
             kpt = kpts[k]
             occ = np.where(mocc_ks[k] > THR_OCC)[0]
@@ -1169,6 +1196,8 @@ def converge_band(mf, C_ks, mocc_ks, kpts, Cout_ks=None,
                   max_cycle_davidson=100,
                   verbose_davidson=0):
     if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
+    if comp is not None:
+        mocc_ks = mocc_ks[comp]
 
     nkpts = len(kpts)
     if Cout_ks is None: Cout_ks = C_ks
@@ -1254,6 +1283,7 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
         C_ks = fswap.create_group("C_ks")
     mocc_ks = [None] * nkpts
     for k in range(nkpts):
+        # TODO check this is closed-shell as it does not work for smearing
         Cv = pw_helper.get_C_ks_G(cell_cpw, [kpts[k]], [Cao], [nao])[0]
         occ = np.where(mocc_ks0[k]>THR_OCC)[0]
         Co = get_kcomp(Co_ks, k, occ=occ)

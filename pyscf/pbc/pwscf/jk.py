@@ -15,6 +15,13 @@ from pyscf import __config__
 THR_OCC = 1e-10
 
 
+def _mul_by_occ_(C_k, mocc_k, occ=None):
+    if occ is None:
+        occ = np.where(mocc_k > THR_OCC)[0].tolist()
+    occ = np.sqrt(0.5 * mocc_k[occ])
+    C_k[:] *= occ[:, None]
+
+
 def get_rho_R(C_ks, mocc_ks, mesh):
     nkpts = len(C_ks)
     rho_R = 0.
@@ -22,6 +29,7 @@ def get_rho_R(C_ks, mocc_ks, mesh):
         occ = np.where(mocc_ks[k] > THR_OCC)[0].tolist()
         Co_k = get_kcomp(C_ks, k, occ=occ)
         Co_k_R = tools.ifft(Co_k, mesh)
+        _mul_by_occ_(Co_k_R, mocc_ks[k], occ)
         rho_R += np.einsum("ig,ig->g", Co_k_R.conj(), Co_k_R).real
     return rho_R
 
@@ -75,6 +83,7 @@ def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
             Co_k2 = None
         else:
             Co_k2_R = get_kcomp(C_ks_R, k2, occ=occ)
+        _mul_by_occ_(Co_k2_R, mocc_ks[k2], occ)
         for j in range(no_k2):
             Cj_k2_R = Co_k2_R[j]
             vij_R = tools.ifft(
@@ -114,6 +123,7 @@ def apply_k_s1(cell, C_ks, mocc_ks, kpts, Ct_ks, ktpts, mesh, Gv, out=None,
 
     for k in range(nkpts):
         Co_k = get_kcomp(C_ks, k, occ=occ_ks[k])
+        _mul_by_occ_(Co_k, mocc_ks[k], occ_ks[k])
         set_kcomp(tools.ifft(Co_k, mesh), Co_ks_R, k)
         Co_k = None
 
@@ -187,6 +197,8 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
         n_k1 = n_ks[k1]
         Cbar_k1 = np.ndarray((n_k1,ngrids), dtype=dtype, buffer=buf1)
         Cbar_k1.fill(0)
+
+        mocc_k1 = 0.5 * mocc_ks[k1][:no_k1]
         for k2,kpt2 in enumerate(kpts):
             if n_k1 == no_k1 and k2 > k1: continue
 
@@ -195,6 +207,7 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
 
             coulG = tools.get_coulG(cell, kpt1-kpt2, exx=False, mesh=mesh,
                                     Gv=Gv)
+            mocc_k2 = 0.5 * mocc_ks[k2][:no_k2]
 
             # o --> o
             if k2 <= k1:
@@ -206,9 +219,12 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
                     jmax2 = i if k2 == k1 else no_k2
                     vji_R = tools.ifft(tools.fft(C_k2_R[:jmax].conj() *
                                        C_k1_R[i], mesh) * coulG, mesh)
-                    Cbar_k1[i] += np.sum(vji_R * C_k2_R[:jmax], axis=0)
+                    Cbar_k1[i] += np.sum(
+                        vji_R * C_k2_R[:jmax] * mocc_k2[:jmax, None], axis=0
+                    )
                     if jmax2 > 0:
-                        Cbar_k2[:jmax2] += vji_R[:jmax2].conj() * C_k1_R[i]
+                        Co_k1_R_i = C_k1_R[i] * mocc_k1[i]
+                        Cbar_k2[:jmax2] += vji_R[:jmax2].conj() * Co_k1_R_i
 
                 acc_kcomp(Cbar_k2, out, k2, occ=occ_ks[k2])
 
@@ -218,7 +234,7 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
                     vij_R = tools.ifft(tools.fft(C_k1_R[no_k1:] *
                                                  C_k2_R[j].conj(), mesh) *
                                        coulG, mesh)
-                    Cbar_k1[no_k1:] += vij_R  * C_k2_R[j]
+                    Cbar_k1[no_k1:] += vij_R  * C_k2_R[j] * mocc_k2[j]
 
         acc_kcomp(Cbar_k1, out, k1)
 

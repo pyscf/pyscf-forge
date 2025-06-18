@@ -38,7 +38,6 @@ def setUpModule():
     )
     ATOM.mesh = [25, 25, 25]
     ATOM.build()
-    ATOM.verbose = 6
 
     nk = 1
     kmesh = (nk,)*3
@@ -63,15 +62,12 @@ class KnownValues(unittest.TestCase):
                 mf = krks.PWKRKS(cell, kpts, xc=xc)
             else:
                 mf = kuks.PWKUKS(cell, kpts, xc=xc)
+        mf.conv_tol = 1e-8
         mf.__dict__.update(**kwargs)
         if run:
             mf.kernel()
+            mf.dump_scf_summary()
         return mf
-
-    def _check_rhf_uhf(self, cell, kpts, xc=None, rtol=1e-7, atol=1e-7):
-        rmf = self._get_calc(cell, kpts, spinpol=False, xc=xc)
-        umf = self._get_calc(cell, kpts, spinpol=True, xc=xc)
-        assert_almost_equal(rmf.e_tot, umf.e_tot, rtol=rtol, atol=atol)
 
     def _check_fd(self, mf):
         if not mf.converged:
@@ -189,6 +185,14 @@ class KnownValues(unittest.TestCase):
     def test_fd_hf(self):
         rmf = self._get_calc(CELL, KPTS, nvir=2)
         umf = self._get_calc(CELL, KPTS, nvir=2, spinpol=True)
+        #e_tot2 = rmf.energy_tot(C_ks=rmf.mo_coeff,
+        #        mocc_ks=[occ for occ in rmf.mo_occ])
+        #print(e_tot2)
+        #rmf.dump_scf_summary()
+        #e_tot2 = umf.energy_tot(C_ks=[rmf.mo_coeff] * 2,
+        #        mocc_ks=[[occ for occ in rmf.mo_occ]] * 2)
+        #print(e_tot2)
+        #umf.dump_scf_summary()
         assert_allclose(rmf.e_tot, umf.e_tot)
         assert_allclose(rmf.mo_energy, umf.mo_energy[0])
         assert_allclose(rmf.mo_energy, umf.mo_energy[1])
@@ -208,6 +212,10 @@ class KnownValues(unittest.TestCase):
                              damp_type="simple", damp_factor=0.7)
         umf = self._get_calc(cell, KPTS, nvir=2, xc=xc, spinpol=True,
                              damp_type="simple", damp_factor=0.7)
+        e_tot2 = umf.energy_tot(C_ks=[rmf.mo_coeff] * 2,
+                mocc_ks=[[occ for occ in rmf.mo_occ]] * 2)
+        print(e_tot2)
+        umf.dump_scf_summary()
         assert_allclose(rmf.e_tot, umf.e_tot)
         assert_allclose(rmf.mo_energy, umf.mo_energy[0])
         assert_allclose(rmf.mo_energy, umf.mo_energy[1])
