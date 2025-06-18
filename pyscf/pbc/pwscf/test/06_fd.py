@@ -66,7 +66,6 @@ class KnownValues(unittest.TestCase):
         mf.__dict__.update(**kwargs)
         if run:
             mf.kernel()
-            mf.dump_scf_summary()
         return mf
 
     def _check_fd(self, mf):
@@ -172,7 +171,6 @@ class KnownValues(unittest.TestCase):
                 if spinpol:
                     # TODO why?
                     expected_de /= 2
-                print(expected_de, fd)
                 assert_allclose(expected_de, fd, atol=1e-8, rtol=1e-8)
         
         if not spinpol:
@@ -183,17 +181,11 @@ class KnownValues(unittest.TestCase):
 
 
     def test_fd_hf(self):
+        ref = -10.649288588747416
         rmf = self._get_calc(CELL, KPTS, nvir=2)
         umf = self._get_calc(CELL, KPTS, nvir=2, spinpol=True)
-        #e_tot2 = rmf.energy_tot(C_ks=rmf.mo_coeff,
-        #        mocc_ks=[occ for occ in rmf.mo_occ])
-        #print(e_tot2)
-        #rmf.dump_scf_summary()
-        #e_tot2 = umf.energy_tot(C_ks=[rmf.mo_coeff] * 2,
-        #        mocc_ks=[[occ for occ in rmf.mo_occ]] * 2)
-        #print(e_tot2)
-        #umf.dump_scf_summary()
-        assert_allclose(rmf.e_tot, umf.e_tot)
+        assert_allclose(rmf.e_tot, ref, atol=1e-7, rtol=0)
+        assert_allclose(rmf.e_tot, umf.e_tot, atol=1e-7, rtol=0)
         assert_allclose(rmf.mo_energy, umf.mo_energy[0])
         assert_allclose(rmf.mo_energy, umf.mo_energy[1])
         assert_allclose(rmf.mo_occ, umf.mo_occ[0])
@@ -201,7 +193,7 @@ class KnownValues(unittest.TestCase):
         self._check_fd(rmf)
         self._check_fd(umf)
 
-    def _check_fd_ks(self, xc, mesh=None):
+    def _check_fd_ks(self, xc, mesh=None, ref=None):
         if mesh is None:
             cell = CELL
         else:
@@ -212,11 +204,9 @@ class KnownValues(unittest.TestCase):
                              damp_type="simple", damp_factor=0.7)
         umf = self._get_calc(cell, KPTS, nvir=2, xc=xc, spinpol=True,
                              damp_type="simple", damp_factor=0.7)
-        e_tot2 = umf.energy_tot(C_ks=[rmf.mo_coeff] * 2,
-                mocc_ks=[[occ for occ in rmf.mo_occ]] * 2)
-        print(e_tot2)
-        umf.dump_scf_summary()
-        assert_allclose(rmf.e_tot, umf.e_tot)
+        if ref is not None:
+            assert_allclose(rmf.e_tot, ref, atol=1e-7, rtol=0)
+        assert_allclose(rmf.e_tot, umf.e_tot, atol=1e-7, rtol=0)
         assert_allclose(rmf.mo_energy, umf.mo_energy[0])
         assert_allclose(rmf.mo_energy, umf.mo_energy[1])
         assert_allclose(rmf.mo_occ, umf.mo_occ[0])
@@ -225,16 +215,16 @@ class KnownValues(unittest.TestCase):
         self._check_fd(umf)
 
     def test_fd_ks_lda(self):
-        self._check_fd_ks("LDA")
+        self._check_fd_ks("LDA", ref=-10.453600311477887)
 
     def test_fd_ks_gga(self):
-        self._check_fd_ks("PBE")
+        self._check_fd_ks("PBE", ref=-10.931960348543591)
 
     def test_fd_ks_mgga(self):
-        self._check_fd_ks("R2SCAN", mesh=[21, 21, 21])
+        self._check_fd_ks("R2SCAN", mesh=[21, 21, 21], ref=-10.881956126701505)
 
     def test_fd_ks_hyb(self):
-        self._check_fd_ks("PBE0")
+        self._check_fd_ks("PBE0", ref=-10.940602656908139)
 
 
 if __name__ == "__main__":
