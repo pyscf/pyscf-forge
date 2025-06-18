@@ -1,7 +1,7 @@
 from pyscf.pbc import gto, scf, mp
 from pyscf.gto.basis import parse_nwchem, parse_cp2k_pp
 from pyscf.pbc.gto.cell import fromfile
-from pyscf.pbc.pwscf import khf, krks
+from pyscf.pbc.pwscf import khf, kuhf, krks, kuks
 from pyscf.pbc.pwscf.smearing import smearing_
 
 def get_basis(atoms):
@@ -31,8 +31,12 @@ kpts = cell.make_kpts(
     scaled_center=[0.6223, 0.2953, 0.0000],
 )
 
+spinpol = True
 if True:
-    kmf = khf.PWKRHF(cell, kpts)
+    if spinpol:
+        kmf = kuhf.PWKUHF(cell, kpts)
+    else:
+        kmf = khf.PWKRHF(cell, kpts)
     kmf = smearing_(kmf, sigma=.01, method='gauss')
     kmf.xc = "PBE"
     kmf.nvir = 3
@@ -41,7 +45,10 @@ if True:
     kmf.kernel()
     kmf.dump_scf_summary()
 else:
-    kmf = krks.PWKRKS(cell, kpts)
+    if spinpol:
+        kmf = kuks.PWKUKS(celll, kpts)
+    else:
+        kmf = krks.PWKRKS(cell, kpts)
     kmf = smearing_(kmf, sigma=0.01, method='gauss')
     kmf.xc = "PBE"
     kmf.nvir = 3
