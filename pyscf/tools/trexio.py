@@ -421,16 +421,14 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
     from trexio_tools.group_tools import determinant as trexio_det
 
     mo_num = norb
-    int64_num = int((mo_num - 1) / 64) + 1
+    int64_num = trexio.get_int64_num(tf)
     occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
 
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
-        occsa_upshifted = [orb + 1 for orb in a]
-        occsb_upshifted = [orb + 1 for orb in b]
         det_tmp = []
-        det_tmp += trexio_det.to_determinant_list(occsa_upshifted, int64_num)
-        det_tmp += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
+        det_tmp += trexio_det.to_determinant_list(occsa, int64_num)
+        det_tmp += trexio_det.to_determinant_list(occsb, int64_num)
         det_list.append(det_tmp)
 
     if num_determinants > chunk_size:
