@@ -427,8 +427,8 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
         det_tmp = []
-        det_tmp += trexio_det.to_determinant_list(occsa, int64_num)
-        det_tmp += trexio_det.to_determinant_list(occsb, int64_num)
+        det_tmp += trexio_det.to_determinant_list([orb for orb in a], int64_num)
+        det_tmp += trexio_det.to_determinant_list([orb for orb in b], int64_num)
         det_list.append(det_tmp)
 
     if num_determinants > chunk_size:
