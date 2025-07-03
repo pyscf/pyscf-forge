@@ -452,7 +452,7 @@ def get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold, chunk_size):
+def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
     from trexio_tools.group_tools import determinant as trexio_det
 
     mo_num = norb
