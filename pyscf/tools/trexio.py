@@ -476,18 +476,18 @@ def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=1
         n_chunks = 1
 
     if trexio.has_determinant(trexio_file):
-      trexio.delete_determinant(trexio_file)
+        trexio.delete_determinant(trexio_file)
 
     offset_file = 0
     for i in range(n_chunks):
-        start = i * chunk_size
-        end = min((i + 1) * chunk_size, num_determinants)
-        current_chunk_size = end - start
+      start = i * chunk_size
+      end = min((i + 1) * chunk_size, num_determinants)
+      current_chunk_size = end - start
 
-        if current_chunk_size > 0:
-            trexio.write_determinant_list(trexio_file, offset_file, current_chunk_size, det_list[start:end])
-            trexio.write_determinant_coefficient(trexio_file, offset_file, current_chunk_size, ci_values[start:end])
-            offset_file += current_chunk_size
+      if current_chunk_size > 0:
+           trexio.write_determinant_list(trexio_file, offset_file, current_chunk_size, det_list[start:end])
+           trexio.write_determinant_coefficient(trexio_file, offset_file, current_chunk_size, ci_values[start:end])
+           offset_file += current_chunk_size
 
 def read_det_trexio(filename):
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
