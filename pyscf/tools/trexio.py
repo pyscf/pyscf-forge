@@ -33,8 +33,8 @@ def to_trexio(obj, filename, backend='h5', ci_threshold=None, chunk_size=None):
         elif isinstance(obj, scf.hf.SCF):
             _scf_to_trexio(obj, tf)
         elif isinstance(obj, mcscf.casci.CASCI) or isinstance(obj, mcscf.CASSCF):
-            ci_threshold = ci_threshold if ci_threshold is not None else 0. 
-            chunk_size = chunk_size if chunk_size is not None else 100000 
+            ci_threshold = ci_threshold if ci_threshold is not None else 0.
+            chunk_size = chunk_size if chunk_size is not None else 100000
             _mcscf_to_trexio(obj, tf, ci_threshold=ci_threshold, chunk_size=chunk_size)
         else:
             raise NotImplementedError(f'Conversion function for {obj.__class__}')
@@ -278,8 +278,8 @@ def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
     occupation = np.zeros(num_mo) 
     occupation[:ncore] = 2.0
     rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
-    natural_occ = np.linalg.eigh(rdm1)[0] 
-    occupation[ncore:ncore + ncas] = natural_occ[::-1] 
+    natural_occ = np.linalg.eigh(rdm1)[0]
+    occupation[ncore:ncore + ncas] = natural_occ[::-1]
     occupation[ncore + ncas:] = 0.0
     trexio.write_mo_occupation(trexio_file, occupation)
 
