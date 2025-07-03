@@ -271,11 +271,11 @@ def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
     ncore = cas_obj.ncore
     ncas = cas_obj.ncas
     mo_classes = np.array(["Virtual"] * num_mo, dtype=str)  # Initialize all MOs as Virtual
-    mo_classes[:ncore] = "Core"                    
-    mo_classes[ncore:ncore + ncas] = "Active"     
+    mo_classes[:ncore] = "Core"
+    mo_classes[ncore:ncore + ncas] = "Active"
     trexio.write_mo_class(trexio_file, list(mo_classes))
 
-    occupation = np.zeros(num_mo) 
+    occupation = np.zeros(num_mo)
     occupation[:ncore] = 2.0
     rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
     natural_occ = np.linalg.eigh(rdm1)[0]
@@ -367,7 +367,7 @@ def write_eri(eri, filename, backend='h5'):
 
     idx=idx.reshape((num_integrals,4))
     for i in range(num_integrals):
-        idx[i,1],idx[i,2]=idx[i,2],idx[i,1] 
+        idx[i,1],idx[i,2]=idx[i,2],idx[i,1]
 
     idx=idx.flatten()
 
