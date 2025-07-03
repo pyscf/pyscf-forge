@@ -485,18 +485,18 @@ def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=1
       current_chunk_size = end - start
 
       if current_chunk_size > 0:
-           trexio.write_determinant_list(trexio_file, offset_file, current_chunk_size, det_list[start:end])
-           trexio.write_determinant_coefficient(trexio_file, offset_file, current_chunk_size, ci_values[start:end])
-           offset_file += current_chunk_size
+          trexio.write_determinant_list(trexio_file, offset_file, current_chunk_size, det_list[start:end])
+          trexio.write_determinant_coefficient(trexio_file, offset_file, current_chunk_size, ci_values[start:end])
+          offset_file += current_chunk_size
 
 def read_det_trexio(filename):
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-        offset_file = 0
+       offset_file = 0
 
-        num_det = trexio.read_determinant_num(tf)
-        coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
-        det = trexio.read_determinant_list(tf, offset_file, num_det)
-        return num_det, coeff, det
+       num_det = trexio.read_determinant_num(tf)
+       coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
+       det = trexio.read_determinant_list(tf, offset_file, num_det)
+       return num_det, coeff, det
 
 def _to_segment_contraction(mol):
     '''transform generally contracted basis to segment contracted basis
