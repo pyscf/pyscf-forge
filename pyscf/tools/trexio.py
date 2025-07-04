@@ -365,6 +365,7 @@ def write_eri(eri, filename, backend='h5'):
         idx[:,:,2:] = idx_pair[None,:,:]
         idx = idx[np.tril_indices(npair)]
 
+# Started working on physicist notation
 #    idx=idx.reshape((num_integrals,4))
 #    for i in range(num_integrals):
 #        idx[i,1],idx[i,2]=idx[i,2],idx[i,1]
