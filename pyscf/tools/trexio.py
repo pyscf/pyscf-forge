@@ -376,18 +376,16 @@ def write_eri(eri, filename, backend='h5'):
         trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
 
 def read_eri(filename):
-    '''Read ERIs in AO basis, 8-fold symmetry is assumed'''
-    raise NotImplementedError("Reading ERIs is not yet implemented.")
-#    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-#        nmo = trexio.read_mo_num(tf)
-#        nao_pair = nmo * (nmo+1) // 2
-#        eri_size = nao_pair * (nao_pair+1) // 2
-#        idx, data, n_read, eof_flag = trexio.read_mo_2e_int_eri(tf, 0, eri_size)
-#    eri = np.zeros(eri_size)
-#    x = idx[:,0]*(idx[:,0]+1)//2 + idx[:,1]
-#    y = idx[:,2]*(idx[:,2]+1)//2 + idx[:,3]
-#    eri[x*(x+1)//2+y] = data
-#    return eri
+    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
+        nmo = trexio.read_mo_num(tf)
+        nao_pair = nmo * (nmo+1) // 2
+        eri_size = nao_pair * (nao_pair+1) // 2
+        idx, data, n_read, eof_flag = trexio.read_mo_2e_int_eri(tf, 0, eri_size)
+    eri = np.zeros(eri_size)
+    x = idx[:,0]*(idx[:,0]+1)//2 + idx[:,2]
+    y = idx[:,2]*(idx[:,2]+1)//2 + idx[:,3]
+    eri[x*(x+1)//2+y] = data
+    return eri
 
 def _order_ao_index(mol):
     if mol.cart:
