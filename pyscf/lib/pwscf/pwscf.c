@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <math.h>
+#include <complex.h>
 #include "config.h"
 
 
@@ -77,6 +78,16 @@ inline static int modulo(int i, int j) {
     return (i % j + j) % j;
 }
 
+inline static size_t rotated_index(const int *c, const size_t *N,
+                                   const int *shift,
+                                   int xi, int yi, int zi)
+{
+    int xo = modulo(c[0] * xi + c[1] * yi + c[2] * zi + shift[0], N[0]);
+    int yo = modulo(c[3] * xi + c[4] * yi + c[5] * zi + shift[1], N[1]);
+    int zo = modulo(c[6] * xi + c[7] * yi + c[8] * zi + shift[2], N[2]);
+    return zo + N[2] * (yo + N[1] * xo);
+}
+
 // f is the function shape (n[0], n[1], n[2])
 // c is the 3x3 rotation matrix
 // assumes that each coord in fin maps to 1 coord in fout,
@@ -85,24 +96,50 @@ inline static int modulo(int i, int j) {
 // This function essentially applies
 // fout += rot(wt * fin)
 void add_rotated_realspace_func(const double *fin, double *fout, const int *n,
-                                const int *c, const double wt) {
+                                const int *c, const double wt)
+{
+#pragma omp parallel
+{
+    const size_t N[3] = {n[0], n[1], n[2]};
+    const int shift[3] = {0, 0, 0};
+    size_t indi;
+    size_t indo;
+    int xi, yi, zi;
+    // int xo, yo, zo;
+#pragma omp for schedule(static)
+    for (xi = 0; xi < n[0]; xi++) {
+        indi = xi * N[1] * N[2];
+        for (yi = 0; yi < n[1]; yi++) {
+            for (zi = 0; zi < n[2]; zi++) {
+                //xo = modulo(c[0] * xi + c[1] * yi + c[2] * zi, n[0]);
+                //yo = modulo(c[3] * xi + c[4] * yi + c[5] * zi, n[1]);
+                //zo = modulo(c[6] * xi + c[7] * yi + c[8] * zi, n[2]);
+                //indo = zo + N[2] * (yo + N[1] * xo);
+                indo = rotated_index(c, N, shift, xi, yi, zi);
+                fout[indo] += wt * fin[indi];
+                indi++;
+            }
+        }
+    }
+}
+}
+
+void get_rotated_complex_func(const double complex *fin,
+                              double complex *fout, const int *n,
+                              const int *c, const int *shift) {
 #pragma omp parallel
 {
     const size_t N[3] = {n[0], n[1], n[2]};
     size_t indi;
     size_t indo;
     int xi, yi, zi;
-    int xo, yo, zo;
 #pragma omp for schedule(static)
     for (xi = 0; xi < n[0]; xi++) {
         indi = xi * N[1] * N[2];
         for (yi = 0; yi < n[1]; yi++) {
             for (zi = 0; zi < n[2]; zi++) {
-                xo = modulo(c[0] * xi + c[1] * yi + c[2] * zi, n[0]);
-                yo = modulo(c[3] * xi + c[4] * yi + c[5] * zi, n[1]);
-                zo = modulo(c[6] * xi + c[7] * yi + c[8] * zi, n[2]);
-                indo = zo + N[2] * (yo + N[1] * xo);
-                fout[indo] += wt * fin[indi];
+                indo = rotated_index(c, N, shift, xi, yi, zi);
+                fout[indo] = fin[indi];
                 indi++;
             }
         }

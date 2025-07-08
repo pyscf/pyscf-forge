@@ -133,10 +133,12 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
 
     log.info("generating init guess using %s basis", cell.basis)
 
+    if kpts_obj is None:
+        kpts_obj = kpts
     if len(kpts) < 30:
-        pmf = scf.KUHF(cell, kpts)
+        pmf = scf.KUHF(cell, kpts_obj)
     else:
-        pmf = scf.KUHF(cell, kpts).density_fit()
+        pmf = scf.KUHF(cell, kpts_obj).density_fit()
 
     if key.lower() == "cycle1":
         pmf.max_cycle = 0

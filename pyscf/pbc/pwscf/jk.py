@@ -11,8 +11,6 @@ from pyscf.pbc.lib.kpts_helper import member, is_zero
 from pyscf import lib
 from pyscf import __config__
 
-from pyscf.pbc.pwscf import kpt_symm
-
 
 THR_OCC = 1e-10
 
@@ -33,24 +31,6 @@ def get_rho_R(C_ks, mocc_ks, mesh):
         Co_k_R = tools.ifft(Co_k, mesh)
         _mul_by_occ_(Co_k_R, mocc_ks[k], occ)
         rho_R += np.einsum("ig,ig->g", Co_k_R.conj(), Co_k_R).real
-    return rho_R
-
-
-def get_rho_R_ksym(C_ks, mocc_ks, mesh, kpts):
-    rho_R = np.zeros(np.prod(mesh), dtype=np.float64, order="C")
-    tmp_R = np.empty_like(rho_R)
-    for k in range(kpts.nkpts_ibz):
-        occ = np.where(mocc_ks[k] > THR_OCC)[0].tolist()
-        Co_k = get_kcomp(C_ks, k, occ=occ)
-        Co_k_R = tools.ifft(Co_k, mesh)
-        _mul_by_occ_(Co_k_R, mocc_ks[k], occ)
-        tmp_R[:] = lib.einsum("ig,ig->g", Co_k_R.conj(), Co_k_R).real
-        for istar, iop in enumerate(kpts.stars_ops[k]):
-            k2 = kpts.stars[k][istar]
-            rot = kpts.ops[iop].rot
-            #if kpts.time_reversal_symm_bz[k2]:
-            #    rot[:] *= -1
-            kpt_symm.add_rotated_realspace_func_(tmp_R, rho_R, mesh, rot, 1.0)
     return rho_R
 
 
@@ -425,13 +405,6 @@ class PWJK:
         if vj_R is None: vj_R = self.vj_R
         return apply_j_kpt(C_k, mesh, vj_R, C_k_R=None)
 
-    # NOTE seems this was never used, and since we are adding MGGA term
-    # to apply_j_kpt we should remove this to avoid accidentally calling it.
-    # def apply_j(self, C_ks, mesh=None, vj_R=None, C_ks_R=None, out=None):
-    #     if mesh is None: mesh = self.mesh
-    #     if vj_R is None: vj_R = self.vj_R
-    #     return apply_j(C_ks, mesh, vj_R, C_ks_R=out, out=out)
-
     def apply_k_kpt(self, C_k, kpt, mesh=None, Gv=None, exxdiv=None, comp=None):
         if comp is None:
             W_ks = self.exx_W_ks
@@ -456,6 +429,7 @@ class PWJK:
             return apply_k_kpt(cell, C_k, kpt, None, mocc_ks, kpts, mesh, Gv,
                                C_ks_R=W_ks, exxdiv=exxdiv)
 
+    """
     def apply_k(self, C_ks, mocc_ks, kpts, Ct_ks=None, mesh=None, Gv=None,
                 exxdiv=None, out=None):
         cell = self.cell
@@ -464,3 +438,5 @@ class PWJK:
         if exxdiv is None: exxdiv = self.exxdiv
         return apply_k(cell, C_ks, mocc_ks, kpts, mesh, Gv, Ct_ks=Ct_ks,
                        exxdiv=exxdiv, out=out)
+    """
+                       

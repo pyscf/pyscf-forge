@@ -190,7 +190,7 @@ def get_C_ks_G(cell, kpts, mo_coeff_ks, n_ks, out=None, verbose=0):
             for krel, ao in enumerate(ao_ks):
                 k = krel + k0
                 kpt = kpts[k].reshape(-1,1)
-                C_k = mo_coeff_ks[k][:,:n_ks[k]]
+                C_k = np.asarray(mo_coeff_ks[k][:,:n_ks[k]], order='C')
                 C_ks_R[krel][p0:p1] = lib.dot(ao, C_k)
                 if not gamma_point(kpt):
                     phase = np.exp(-1j * lib.dot(coords[p0:p1], kpt))

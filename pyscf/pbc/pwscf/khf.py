@@ -35,7 +35,7 @@ from pyscf.pbc.lib.kpts_helper import member
 THR_OCC = 1E-3
 
 
-def kernel_doubleloop(mf, kpts, C0=None,
+def kernel_doubleloop(mf, C0=None,
                       nbandv=0, nbandv_extra=1,
                       conv_tol=1.E-6,
                       conv_tol_davidson=1.E-6, conv_tol_band=1e-4,
@@ -61,7 +61,6 @@ def kernel_doubleloop(mf, kpts, C0=None,
     cput0 = (logger.process_clock(), logger.perf_counter())
 
     cell = mf.cell
-    nkpts = len(kpts)
 
     nbando, nbandv_tot, nband, nband_tot = mf.get_nband(nbandv, nbandv_extra)
     log.info("Num of occ bands= %s", nbando)
@@ -95,7 +94,7 @@ def kernel_doubleloop(mf, kpts, C0=None,
     log.debug("Init charge cycle")
     chg_scf_conv, fc_init, vj_R, C_ks, moe_ks, mocc_ks, e_tot = \
                         mf.kernel_charge(
-                            C_ks, mocc_ks, kpts, nband, mesh=mesh, Gv=Gv,
+                            C_ks, mocc_ks, nband, mesh=mesh, Gv=Gv,
                             max_cycle=max_cycle, conv_tol=0.1,
                             max_cycle_davidson=max_cycle_davidson,
                             conv_tol_davidson=0.001,
@@ -143,7 +142,7 @@ def kernel_doubleloop(mf, kpts, C0=None,
         # charge SCF
         chg_scf_conv, fc_this, vj_R, C_ks, moe_ks, mocc_ks, e_tot = \
                             mf.kernel_charge(
-                                C_ks, mocc_ks, kpts, nband, mesh=mesh, Gv=Gv,
+                                C_ks, mocc_ks, nband, mesh=mesh, Gv=Gv,
                                 max_cycle=max_cycle, conv_tol=chg_conv_tol,
                                 max_cycle_davidson=max_cycle_davidson,
                                 conv_tol_davidson=conv_tol_davidson,
@@ -202,7 +201,7 @@ def kernel_doubleloop(mf, kpts, C0=None,
 
         chg_scf_conv, fc_this, vj_R, C_ks, moe_ks, mocc_ks, e_tot = \
                             mf.kernel_charge(
-                                C_ks, mocc_ks, kpts, nband, mesh=mesh, Gv=Gv,
+                                C_ks, mocc_ks, nband, mesh=mesh, Gv=Gv,
                                 max_cycle=max_cycle, conv_tol=chg_conv_tol,
                                 max_cycle_davidson=max_cycle_davidson,
                                 conv_tol_davidson=conv_tol_davidson,
@@ -379,7 +378,7 @@ def remove_extra_virbands(C_ks, moe_ks, mocc_ks, nbandv_extra):
                                   nbandv_extra[comp])
 
 
-def kernel_charge(mf, C_ks, mocc_ks, kpts, nband, mesh=None, Gv=None,
+def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
                   max_cycle=50, conv_tol=1e-6,
                   max_cycle_davidson=10, conv_tol_davidson=1e-8,
                   verbose_davidson=0,
@@ -404,46 +403,6 @@ def kernel_charge(mf, C_ks, mocc_ks, kpts, nband, mesh=None, Gv=None,
         chgmixer = pw_helper.AndersonMixing(mf)
 
     cput1 = (logger.process_clock(), logger.perf_counter())
-    # for cycle in range(max_cycle):
-    #
-    #     if cycle > 0:   # charge mixing
-    #         vj_R = chgmixer.next_step(mf, vj_R, vj_R-last_vj_R)
-    #
-    #     conv_ks, moe_ks, C_ks, fc_ks = mf.converge_band(
-    #                         C_ks, mocc_ks, kpts,
-    #                         mesh=mesh, Gv=Gv,
-    #                         vj_R=vj_R,
-    #                         conv_tol_davidson=conv_tol_davidson,
-    #                         max_cycle_davidson=max_cycle_davidson,
-    #                         verbose_davidson=verbose_davidson)
-    #     fc_this = sum(fc_ks)
-    #     fc_tot += fc_this
-    #
-    #     # update mo occ
-    #     mocc_ks = mf.get_mo_occ(moe_ks)
-    #
-    #     # update coulomb potential and energy
-    #     last_vj_R = vj_R
-    #     vj_R = mf.get_vj_R(C_ks, mocc_ks)
-    #
-    #     if cycle > 0: last_hf_e = e_tot
-    #     e_tot = mf.energy_tot(C_ks, mocc_ks, vj_R=vj_R)
-    #     if not last_hf_e is None:
-    #         de = e_tot-last_hf_e
-    #     else:
-    #         de = float("inf")
-    #     logger.debug(mf, '  chg cyc= %d E= %.15g  delta_E= %4.3g  %d FC (%d tot)',
-    #                 cycle+1, e_tot, de, fc_this, fc_tot)
-    #     mf.dump_moe(moe_ks, mocc_ks, nband=nband, trigger_level=logger.DEBUG3)
-    #
-    #     if abs(de) < conv_tol:
-    #         scf_conv = True
-    #
-    #     cput1 = logger.timer_debug1(mf, 'chg cyc= %d'%(cycle+1),
-    #                                 *cput1)
-    #
-    #     if scf_conv:
-    #         break
 
     for cycle in range(max_cycle):
 
@@ -457,7 +416,7 @@ def kernel_charge(mf, C_ks, mocc_ks, kpts, nband, mesh=None, Gv=None,
             vj_R = chgmixer.next_step(mf, vj_R, last_vj_R)
 
         conv_ks, moe_ks, C_ks, fc_ks = mf.converge_band(
-                            C_ks, mocc_ks, kpts,
+                            C_ks, mocc_ks, mf.kpts,
                             mesh=mesh, Gv=Gv,
                             vj_R=vj_R,
                             conv_tol_davidson=conv_tol_davidson,
@@ -600,7 +559,7 @@ def orth_mo(cell, C_ks, mocc_ks, thr=1e-3):
 
 
 def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
-                   key="hcore", out=None):
+                   key="hcore", out=None, kpts_obj=None):
     """
         Args:
             nvir (int):
@@ -642,10 +601,12 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
 
     log.info("generating init guess using %s basis", cell.basis)
 
+    if kpts_obj is None:
+        kpts_obj = kpts
     if len(kpts) < 30:
-        pmf = scf.KRHF(cell, kpts)
+        pmf = scf.KRHF(cell, kpts_obj)
     else:
-        pmf = scf.KRHF(cell, kpts).density_fit()
+        pmf = scf.KRHF(cell, kpts_obj).density_fit()
 
     if key.lower() == "cycle1":
         pmf.max_cycle = 0
@@ -1076,13 +1037,7 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
     kpts = mf.kpts
     nkpts = len(kpts)
 
-    # tot1 = 0
-    # tot2 = 0
-    # for mocc_k in mocc_ks:
-    #     tot1 += np.sum(0.5 * mocc_k)
-    #     tot2 += np.sum((0.5 * mocc_k)**2)
-    # ratio = tot2 / tot1
-    # print("RATIO", ratio)
+    wts = mf.weights
 
     e_ks = np.zeros(nkpts)
     if moe_ks is None:
@@ -1095,8 +1050,8 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
             e_comp_k = mf.apply_Fock_kpt(Co_k, kpt, mocc_ks, mesh, Gv,
                                          vj_R, exxdiv, ret_E=True)[1]
             e_ks[k] = np.sum(e_comp_k)
-            e_comp += e_comp_k
-        e_comp /= nkpts
+            e_comp += e_comp_k * wts[k]
+        # e_comp /= nkpts
 
         if exxdiv == "ewald":
             e_comp[mf.scf_summary["e_comp_name_lst"].index("ex")] += \
@@ -1105,6 +1060,7 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
         for comp,e in zip(mf.scf_summary["e_comp_name_lst"], e_comp):
             mf.scf_summary[comp] = e
     else:
+        raise NotImplementedError
         # TODO does not handle occupations correctly
         for k in range(nkpts):
             kpt = kpts[k]
@@ -1113,7 +1069,8 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
             e1_comp = mf.apply_hcore_kpt(Co_k, kpt, mesh, Gv, mf.with_pp,
                                          ret_E=True)[1]
             e_ks[k] = np.sum(e1_comp) * 0.5 + np.sum(moe_ks[k][occ])
-    e_scf = np.sum(e_ks) / nkpts
+    # e_scf = np.sum(e_ks) / nkpts
+    e_scf = np.dot(e_ks, wts)
 
     if moe_ks is None and exxdiv == "ewald":
         # Note: ewald correction is not needed if e_tot is computed from
@@ -1393,6 +1350,12 @@ class PWKRHF(pbc_hf.KSCF):
     @property
     def kpts(self):
         return self._kpts
+    @property
+    def kpts_obj(self):
+        return None
+    @property
+    def weights(self):
+        return [1.0 / len(self._kpts)] * len(self._kpts)
     @kpts.setter
     def kpts(self, x):
         self._kpts = np.reshape(x, (-1,3))
@@ -1590,7 +1553,7 @@ class PWKRHF(pbc_hf.KSCF):
 
         self.converged, self.e_tot, self.mo_energy, self.mo_coeff, \
                 self.mo_occ = kernel_doubleloop(
-                            self, self.kpts, C0=C0,
+                            self, C0=C0,
                             nbandv=self.nvir, nbandv_extra=self.nvir_extra,
                             conv_tol=self.conv_tol, max_cycle=self.max_cycle,
                             conv_tol_band=self.conv_tol_band,

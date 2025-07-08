@@ -102,6 +102,7 @@ def eval_xc(mf, xc_code, rhovec_R, xctype, mesh=None, Gv=None):
     if spin == 0:
         vxcvec_R = vxcvec_R[None, ...]
         rho_R = rhovec_R[0]
+        rhovec_R = rhovec_R.view()[None, ...]
     else:
         rho_R = rhovec_R[:, 0].sum(0)
     exc = dv * exc_R.dot(rho_R)
@@ -243,6 +244,8 @@ class PWKohnShamDFT(rks.KohnShamDFT):
             spinfac = 1
             rho_R = rhovec_R[:, 0].mean(0)
             nkpts = len(C_ks[0])
+        if self.kpts_obj is not None:
+            nkpts = self.kpts_obj.nkpts
         vj_R = self.with_jk.get_vj_R_from_rho_R(rho_R, mesh=mesh, Gv=Gv)
         rhovec_R[:] *= (spinfac / nkpts) * ng / dv
         exc, vxcdot, vxc_R, vtau_R = self.eval_xc(

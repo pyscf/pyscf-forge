@@ -71,7 +71,7 @@ class KnownValues(unittest.TestCase):
     def _check_fd(self, mf):
         if not mf.converged:
             mf.kernel()
-            assert mv.converged
+            assert mf.converged
         mo_energy, mo_occ = mf.get_mo_energy(mf.mo_coeff, mf.mo_occ)
         # mo_energy, mo_occ = mf.mo_energy, mf.mo_occ
         delta = 1e-5

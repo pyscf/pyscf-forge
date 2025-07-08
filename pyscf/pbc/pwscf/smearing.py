@@ -33,6 +33,7 @@ def smearing_(mf, *args, **kwargs):
 
 
 def _occ_from_C(C_ks):
+    raise NotImplementedError  # TODO
     nkpts = len(C_ks)
     if nocc == 0:
         mocc_ks = [np.zeros(get_kcomp(C_ks,k,load=False).shape[0])
@@ -56,7 +57,6 @@ class _SmearingPWKSCF(_SmearingKSCF):
             assert nocc == cell.nelectron / 2.0
         if moe_ks is not None:
             mocc_ks = self.get_occ(mo_energy_kpts=np.array(moe_ks))
-            print("OCC CALC", self.istype("KUHF"), self.istype("PWKUHF"), np.sum(mocc_ks), np.max(mocc_ks), np.asarray(mocc_ks).size)
             if self.istype("KUHF") or self.istype("PWKUHF"):
                 mocc_ks = [[2 * occ for occ in mocc_ks[0]], [2 * occ for occ in mocc_ks[1]]]
         elif C_ks is not None:
