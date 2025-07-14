@@ -6,9 +6,10 @@ import tempfile
 import numpy as np
 import scipy.linalg
 from scipy.special import dawsn
+from scipy.interpolate import make_interp_spline
 
 from pyscf.pbc.pwscf.pw_helper import (get_kcomp, set_kcomp, get_C_ks_G, orth,
-                                       get_mesh_map)
+                                       get_mesh_map, wf_fft, wf_ifft)
 from pyscf.pbc.gto import pseudo as gth_pseudo
 from pyscf.pbc import tools
 from pyscf.pbc.lib.kpts_helper import member
@@ -43,20 +44,22 @@ def get_vpplocG(cell, mesh=None, Gv=None):
     elif cell.pseudo is not None:
         if "GTH" in cell.pseudo.upper():
             return get_vpplocG_gth(cell, Gv)
+        elif cell.pseudo == "SG15":
+            return get_vpplocG_sg15(cell, Gv)
         else:
             raise NotImplementedError("Pseudopotential %s is currently not supported." % (str(cell.pseudo)))
     else:
         return get_vpplocG_alle(cell, Gv)
 
 
-def apply_vppl_kpt(cell, C_k, mesh=None, vpplocR=None, C_k_R=None):
+def apply_vppl_kpt(cell, C_k, mesh=None, vpplocR=None, C_k_R=None, basis=None):
     if mesh is None: mesh = cell.mesh
     if vpplocR is None: vpplocR = get_vpplocR(cell, mesh)
-    if C_k_R is None: C_k_R = tools.ifft(C_k, mesh)
-    return tools.fft(C_k_R * vpplocR, mesh)
+    if C_k_R is None: C_k_R = wf_ifft(C_k, mesh, basis=basis)
+    return wf_fft(C_k_R * vpplocR, mesh, basis=basis)
 
 
-def apply_vppnl_kpt(cell, C_k, kpt, mesh=None, Gv=None):
+def apply_vppnl_kpt(cell, C_k, kpt, mesh=None, Gv=None, basis=None):
     if mesh is None: mesh = cell.mesh
     if Gv is None: Gv = cell.get_Gv(mesh=mesh)
 
@@ -64,7 +67,9 @@ def apply_vppnl_kpt(cell, C_k, kpt, mesh=None, Gv=None):
         return apply_vppnl_kpt_ccecp(cell, C_k, kpt, Gv)
     elif cell.pseudo is not None:
         if "GTH" in cell.pseudo.upper():
-            return apply_vppnl_kpt_gth(cell, C_k, kpt, Gv)
+            return apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=basis)
+        elif cell.pseudo == "SG15":
+            return apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=basis)
         else:
             raise NotImplementedError("Pseudopotential %s is currently not "
                                       "supported." % (str(cell.pseudo)))
@@ -81,6 +86,8 @@ def get_pp_type(cell):
         return "alle"
     elif haspp:
         if isinstance(cell.pseudo, str):
+            if cell.pseudo == "SG15":
+                return "SG15"
             assert("GTH" in cell.pseudo.upper())
         elif isinstance(cell.pseudo, dict):
             for key,pp in cell.pseudo.items():
@@ -212,13 +219,15 @@ class PWPP:
                                       ncomp=ncomp, thr_eig=self.threshold_svec,
                                       use_numexpr=self.ecpnloc_use_numexpr)
 
-    def apply_vppl_kpt(self, C_k, mesh=None, vpplocR=None, C_k_R=None):
+    def apply_vppl_kpt(self, C_k, mesh=None, vpplocR=None, C_k_R=None,
+                       basis=None):
         if mesh is None: mesh = self.mesh
         if vpplocR is None: vpplocR = self.vpplocR
         return apply_vppl_kpt(self, C_k, mesh=mesh, vpplocR=vpplocR,
-                              C_k_R=C_k_R)
+                              C_k_R=C_k_R, basis=basis)
 
-    def apply_vppnl_kpt(self, C_k, kpt, mesh=None, Gv=None, comp=None):
+    def apply_vppnl_kpt(self, C_k, kpt, mesh=None, Gv=None, comp=None,
+                        basis=None):
         cell = self.cell
         if self.pptype == "ccecp":
             k = member(kpt, self.kpts)[0]
@@ -233,7 +242,9 @@ class PWPP:
                     raise RuntimeError("comp must be None or int")
                 return lib.dot(lib.dot(C_k, W_k.T.conj()), W_k)
         elif self.pptype == "gth":
-            return apply_vppnl_kpt_gth(cell, C_k, kpt, Gv)
+            return apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=basis)
+        elif self.pptype == "SG15":
+            return apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=basis)
         elif self.pptype == "alle":
             return apply_vppnl_kpt_alle(cell, C_k, kpt, Gv)
         else:
@@ -259,10 +270,30 @@ def get_vpplocG_gth(cell, Gv):
     return -gth_pseudo.get_vlocG(cell, Gv)
 
 
-def apply_vppnl_kpt_gth(cell, C_k, kpt, Gv):
-    SI = cell.get_SI(Gv=Gv)
+def get_vpplocG_sg15(cell, Gv):
+    coulG = tools.get_coulG(cell, Gv=Gv)
+    G2 = np.einsum('ix,ix->i', Gv, Gv)
+    G = np.sqrt(G2)
+    G0idx = np.where(G2==0)[0]
+    vlocG = np.zeros((cell.natm, len(G2)))
+    for ia in range(cell.natm):
+        Zia = cell.atom_charge(ia)
+        symb = cell.atom_symbol(ia)
+        vlocG[ia] = Zia * coulG
+        if symb in cell._pseudo:
+            pp = cell._pseudo[symb]
+            spline = make_interp_spline(pp["grids"]["k"], pp["local_part"]["recip"])
+            vlocG[ia] *= spline(G) / Zia  # spline is normalized to Zia
+            # alpha parameters from the non-divergent Hartree+Vloc G=0 term.
+            # TODO this needed? Should compute limit of second deriv.
+            # How to figure out if this is working?
+            # vlocG[ia,G0idx] = pp["local_part"]["finite_g0"]
+    vlocG[:] *= -1
+    return vlocG
+
+
+def apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=None):
     no = C_k.shape[0]
-    ngrids = Gv.shape[0]
 
     # non-local pp
     from pyscf import gto
@@ -276,53 +307,103 @@ def apply_vppnl_kpt_gth(cell, C_k, kpt, Gv):
     fakemol._bas[0,gto.PTR_EXP  ] = ptr+3
     fakemol._bas[0,gto.PTR_COEFF] = ptr+4
 
-    buf = np.empty((48,ngrids), dtype=np.complex128)
-    def get_Cbar_k_nl(kpt, C_k_):
-        Cbar_k = np.zeros_like(C_k_)
-
+    if basis is None:
         Gk = Gv + kpt
-        G_rad = lib.norm(Gk, axis=1)
-        vppnl = 0
-        for ia in range(cell.natm):
-            symb = cell.atom_symbol(ia)
-            if symb not in cell._pseudo:
-                continue
-            pp = cell._pseudo[symb]
+        SI = cell.get_SI(Gv=Gv)
+    else:
+        Gk = basis.Gk
+        SI = cell.get_SI(Gv=Gk-kpt)
+    ngrids = Gk.shape[0]
+    buf = np.empty((48,ngrids), dtype=np.complex128)
+    Cbar_k = np.zeros_like(C_k)
+
+    G_rad = lib.norm(Gk, axis=1)
+    #:vppnl = 0
+    for ia in range(cell.natm):
+        symb = cell.atom_symbol(ia)
+        if symb not in cell._pseudo:
+            continue
+        pp = cell._pseudo[symb]
+        p1 = 0
+        for l, proj in enumerate(pp[5:]):
+            rl, nl, hl = proj
+            if nl > 0:
+                fakemol._bas[0,gto.ANG_OF] = l
+                fakemol._env[ptr+3] = .5*rl**2
+                fakemol._env[ptr+4] = rl**(l+1.5)*np.pi**1.25
+                pYlm_part = fakemol.eval_gto('GTOval', Gk)
+
+                p0, p1 = p1, p1+nl*(l*2+1)
+                # pYlm is real, SI[ia] is complex
+                pYlm = np.ndarray((nl,l*2+1,ngrids), dtype=np.complex128, buffer=buf[p0:p1])
+                for k in range(nl):
+                    qkl = gth_pseudo.pp._qli(G_rad*rl, l, k)
+                    pYlm[k] = pYlm_part.T * qkl
+                #:SPG_lmi = np.einsum('g,nmg->nmg', SI[ia].conj(), pYlm)
+                #:SPG_lm_aoG = np.einsum('nmg,gp->nmp', SPG_lmi, aokG)
+                #:tmp = np.einsum('ij,jmp->imp', hl, SPG_lm_aoG)
+                #:vppnl += np.einsum('imp,imq->pq', SPG_lm_aoG.conj(), tmp)
+        if p1 > 0:
+            SPG_lmi = buf[:p1]
+            SPG_lmi *= SI[ia].conj()
             p1 = 0
             for l, proj in enumerate(pp[5:]):
                 rl, nl, hl = proj
                 if nl > 0:
-                    fakemol._bas[0,gto.ANG_OF] = l
-                    fakemol._env[ptr+3] = .5*rl**2
-                    fakemol._env[ptr+4] = rl**(l+1.5)*np.pi**1.25
-                    pYlm_part = fakemol.eval_gto('GTOval', Gk)
-
                     p0, p1 = p1, p1+nl*(l*2+1)
-                    # pYlm is real, SI[ia] is complex
-                    pYlm = np.ndarray((nl,l*2+1,ngrids), dtype=np.complex128, buffer=buf[p0:p1])
-                    for k in range(nl):
-                        qkl = gth_pseudo.pp._qli(G_rad*rl, l, k)
-                        pYlm[k] = pYlm_part.T * qkl
-                    #:SPG_lmi = np.einsum('g,nmg->nmg', SI[ia].conj(), pYlm)
-                    #:SPG_lm_aoG = np.einsum('nmg,gp->nmp', SPG_lmi, aokG)
-                    #:tmp = np.einsum('ij,jmp->imp', hl, SPG_lm_aoG)
-                    #:vppnl += np.einsum('imp,imq->pq', SPG_lm_aoG.conj(), tmp)
-            if p1 > 0:
-                SPG_lmi = buf[:p1]
-                SPG_lmi *= SI[ia].conj()
-                p1 = 0
-                for l, proj in enumerate(pp[5:]):
-                    rl, nl, hl = proj
-                    if nl > 0:
-                        p0, p1 = p1, p1+nl*(l*2+1)
-                        hl = np.asarray(hl)
-                        SPG_lmi_ = SPG_lmi[p0:p1].reshape(nl,l*2+1,-1)
-                        tmp = np.einsum("imG,IG->Iim", SPG_lmi_, C_k_)
-                        tmp = np.einsum("ij,Iim->Ijm", hl, tmp)
-                        Cbar_k += np.einsum("Iim,imG->IG", tmp, SPG_lmi_.conj())
-        return Cbar_k / cell.vol
+                    hl = np.asarray(hl)
+                    SPG_lmi_ = SPG_lmi[p0:p1].reshape(nl,l*2+1,-1)
+                    tmp = np.einsum("imG,IG->Iim", SPG_lmi_, C_k)
+                    tmp = np.einsum("ij,Iim->Ijm", hl, tmp)
+                    Cbar_k += np.einsum("Iim,imG->IG", tmp, SPG_lmi_.conj())
+    Cbar_k /= cell.vol
 
-    Cbar_k = get_Cbar_k_nl(kpt, C_k)
+    return Cbar_k
+
+
+def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
+    no = C_k.shape[0]
+    from pyscf.pbc.gto.pseudo.pp import Ylm, Ylm_real, cart2polar
+
+    if basis is None:
+        Gk = Gv + kpt
+        SI = cell.get_SI(Gv=Gv)
+    else:
+        Gk = basis.Gk
+        SI = cell.get_SI(Gv=Gk-kpt)
+    ngrids = Gk.shape[0]
+    # buf = np.empty((48,ngrids), dtype=np.complex128)
+    Cbar_k = np.zeros_like(C_k)
+
+    G_rad, G_theta, G_phi = cart2polar(Gk)
+    G_phi[:] = G_phi % (2 * np.pi)
+    lmax = np.max([[proj["l"] for proj in pp["projectors"]]
+                  for pp in cell._pseudo.values()])
+    G_ylm = np.empty(((lmax + 1) * (lmax + 1), ngrids), dtype=np.float64)
+    lm = 0
+    for l in range(lmax + 1):
+        for m in range(2 * l + 1):
+            G_ylm[lm] = Ylm(l, m, G_theta, G_phi)
+            lm += 1
+
+    for ia in range(cell.natm):
+        symb = cell.atom_symbol(ia)
+        if symb not in cell._pseudo:
+            continue
+        pp = cell._pseudo[symb]
+        kmesh = pp["grids"]["k"]
+        for iproj, proj in enumerate(pp["projectors"]):
+            l = proj["l"]
+            pfunc = proj["kproj"]
+            spline = make_interp_spline(kmesh, pfunc)
+            radpart = spline(G_rad)
+            sphpart = G_ylm[l*l:(l+1)*(l+1)]
+            d = pp["dij"][iproj, iproj]
+            SPG_mi = radpart * sphpart * SI[ia].conj()
+            tmp = np.einsum("mG,IG->Im", SPG_mi, C_k)
+            tmp *= d
+            Cbar_k += np.einsum("Im,mG->IG", tmp, SPG_mi.conj())
+    Cbar_k /= cell.vol
 
     return Cbar_k
 

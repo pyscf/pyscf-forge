@@ -85,7 +85,7 @@ def kernel_doubleloop(mf, C0=None,
     mf.scf_summary["t-init"] = tock - tick
 
     # init E
-    mesh = cell.mesh
+    mesh = mf.wf_mesh
     Gv = cell.get_Gv(mesh)
     vj_R = mf.get_vj_R(C_ks, mocc_ks, mesh=mesh, Gv=Gv)
     mf.update_pp(C_ks)
@@ -559,7 +559,7 @@ def orth_mo(cell, C_ks, mocc_ks, thr=1e-3):
 
 
 def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
-                   key="hcore", out=None, kpts_obj=None):
+                   key="hcore", out=None, kpts_obj=None, mesh=None):
     """
         Args:
             nvir (int):
@@ -578,8 +578,13 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
     if basis is None: basis = cell0.basis
     if pseudo is None: pseudo = cell0.pseudo
     cell = cell0.copy()
+    if cell.__class__ != gto.Cell:
+        cell.__class__ = gto.Cell
+        cell.pseudo = None
+        cell._pseudo = None
     cell.basis = basis
-    if len(cell._ecp) > 0:  # use GTH to avoid the slow init time of ECP
+    if len(cell._ecp) > 0 or pseudo == "SG15": 
+        # use GTH to avoid the slow init time of ECP
         gth_pseudo = {}
         for iatm in range(cell0.natm):
             atm = cell0.atom_symbol(iatm)
@@ -592,7 +597,8 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
                 gth_pseudo[atm] = "gth-pade-q%d"%q
         log.debug("Using the GTH-PP for init guess: %s", gth_pseudo)
         cell.pseudo = gth_pseudo
-        cell.ecp = cell._ecp = cell._ecpbas = None
+        cell.ecp = None
+        cell._ecp = cell._ecpbas = {}
     else:
         cell.pseudo = pseudo
     cell.ke_cutoff = cell0.ke_cutoff
@@ -634,7 +640,7 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
 
     log.debug1("converting init MOs from GTO basis to PW basis")
     C_ks = pw_helper.get_C_ks_G(cell, kpts, mo_coeff, ntot_ks, out=out,
-                                verbose=cell0.verbose)
+                                verbose=cell0.verbose, mesh=mesh)
     mocc_ks = [mo_occ[k][:ntot_ks[k]] for k in range(nkpts)]
 
     C_ks = orth_mo(cell0, C_ks, mocc_ks)
@@ -784,7 +790,7 @@ def update_k(mf, C_ks, mocc_ks):
     if "t-ace" not in mf.scf_summary:
         mf.scf_summary["t-ace"] = np.zeros(2)
 
-    mesh = np.array(mf.cell.mesh)
+    mesh = np.array(mf.wf_mesh)
     if np.all(abs(mesh-mesh//2*2)>0):   # all odd --> s2 symm for occ bands
         mf.with_jk.update_k_support_vec(C_ks, mocc_ks, mf.kpts)
     else:
@@ -840,24 +846,27 @@ def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
     else:
         k = member(kpt, mf.kpts)[0]
         mocc_k = mocc_ks[k][:C_k.shape[0]]
+    
+    basis = mf.get_basis_kpt(kpt)
 
     tspans = np.zeros((3,2))
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
 
-    tmp = pw_helper.apply_kin_kpt(C_k, kpt, mesh, Gv)
+    tmp = pw_helper.apply_kin_kpt(C_k, kpt, Gv, basis=basis)
     Cbar_k = tmp
     es[0] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = tock - tick
 
-    if C_k_R is None: C_k_R = tools.ifft(C_k, mesh)
-    tmp = with_pp.apply_vppl_kpt(C_k, mesh=mesh, C_k_R=C_k_R)
+    if C_k_R is None: raise NotImplementedError  # C_k_R = tools.ifft(C_k, mesh)
+    tmp = with_pp.apply_vppl_kpt(C_k, mesh=mesh, C_k_R=C_k_R, basis=basis)
     Cbar_k += tmp
     es[1] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[1] = tick - tock
 
-    tmp = with_pp.apply_vppnl_kpt(C_k, kpt, mesh=mesh, Gv=Gv, comp=comp)
+    tmp = with_pp.apply_vppnl_kpt(C_k, kpt, mesh=mesh, Gv=Gv, comp=comp,
+                                  basis=basis)
     Cbar_k += tmp
     es[2] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
@@ -899,15 +908,17 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
         mocc_k = mocc_ks[k][:C_k.shape[0]]
     Cto_k = C_k.conj() * mocc_k[:, None]
 
+    basis = mf.get_basis_kpt(kpt)
+
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
-    tmp = with_jk.apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R)
+    tmp = with_jk.apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R, basis=basis)
     Cbar_k = tmp * 2.
     es[0] = np.einsum("ig,ig->", Cto_k, tmp)
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = np.asarray(tock - tick).reshape(1,2)
 
     tmp = -with_jk.apply_k_kpt(C_k, kpt, mesh=mesh, Gv=Gv, exxdiv=exxdiv,
-                               comp=comp)
+                               comp=comp, basis=basis)
     Cbar_k += tmp
     es[1] = np.einsum("ig,ig->", Cto_k, tmp) * 0.5
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
@@ -939,7 +950,7 @@ def apply_Fock_kpt(mf, C_k, kpt, mocc_ks, mesh, Gv, vj_R, exxdiv,
     kpts = mf.kpts
     with_pp = mf.with_pp
     with_jk = mf.with_jk
-    C_k_R = tools.ifft(C_k, mesh)
+    C_k_R = pw_helper.wf_ifft(C_k, mesh, mf.get_basis_kpt(kpt))
 # 1e part
     res_1e = mf.apply_hcore_kpt(C_k, kpt, mesh, Gv, with_pp, comp=comp,
                                 C_k_R=C_k_R, ret_E=ret_E, mocc_ks=mocc_ks)
@@ -1028,7 +1039,7 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
     Pass `moe_ks` to avoid the cost of applying the expensive vj and vk.
     '''
     cell = mf.cell
-    if mesh is None: mesh = cell.mesh
+    if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
     if exxdiv is None: exxdiv = mf.exxdiv
 
@@ -1089,8 +1100,11 @@ def energy_tot(mf, C_ks, mocc_ks, moe_ks=None, mesh=None, Gv=None,
     return e_tot
 
 
-def get_precond_davidson(kpt, Gv):
-    kG = kpt + Gv if np.sum(np.abs(kpt)) > 1.E-9 else Gv
+def get_precond_davidson(kpt, Gv, basis=None):
+    if basis is None:
+        kG = kpt + Gv if np.sum(np.abs(kpt)) > 1.E-9 else Gv
+    else:
+        kG = basis.Gk
     dF = np.einsum("gj,gj->g", kG, kG) * 0.5
     # precond = lambda dx, e, x0: dx/(dF - e)
     def precond(dx, e, x0):
@@ -1126,7 +1140,7 @@ def converge_band_kpt(mf, C_k, kpt, mocc_ks, nband=None, mesh=None, Gv=None,
 
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
 
-    precond = get_precond_davidson(kpt, Gv)
+    precond = get_precond_davidson(kpt, Gv, basis=mf.get_basis_kpt(kpt))
 
     nroots = C_k.shape[0] if nband is None else nband
 
@@ -1317,7 +1331,7 @@ class PWKRHF(pbc_hf.KSCF):
     check_convergence = None
     callback = None
 
-    def __init__(self, cell, kpts=np.zeros((1,3)), ekincut=None,
+    def __init__(self, cell, kpts=np.zeros((1,3)), ekincut=None, ecut_xc=None,
                  exxdiv=getattr(__config__, 'pbc_scf_PWKRHF_exxdiv', 'ewald')):
 
         if not cell._built:
@@ -1326,6 +1340,15 @@ class PWKRHF(pbc_hf.KSCF):
 
         self.cell = cell
         mol_hf.SCF.__init__(self, cell)
+
+        if ekincut is None:
+            self._ekincut = None
+            self._ecut_xc = None
+        else:
+            self._ekincut = ekincut
+            if ecut_xc is None:
+                ecut_xc = 4 * ekincut
+            self._ecut_xc = ecut_xc
 
         self.kpts = kpts
         self.exxdiv = exxdiv
@@ -1348,6 +1371,38 @@ class PWKRHF(pbc_hf.KSCF):
         self._etot_shift_ewald = -0.5*self._madelung*self.cell.nelectron
 
     @property
+    def wf_mesh(self):
+        if self._wf_mesh is None:
+            return np.asarray(self.cell.mesh)
+        else:
+            return self._wf_mesh
+
+    @property
+    def xc_mesh(self):
+        if self._xc_mesh is None:
+            return np.asarray(self.cell.mesh)
+        else:
+            return self._xc_mesh
+
+    def set_meshes(self, wf_mesh=None, xc_mesh=None):
+        self._wf_mesh, self._xc_mesh, self._wf2xc, self._basis_data = (
+            pw_helper.get_basis_data(self.cell, self.kpts, self._ekincut,
+                                     wf_mesh=wf_mesh, xc_mesh=xc_mesh)
+        )
+        self.with_jk = None
+
+    @property
+    def ekincut(self):
+        return self._ekincut
+    
+    def get_basis_kpt(self, kpt):
+        if self._basis_data is None:
+            return None
+        else:
+            k = member(kpt, self.kpts)[0]
+            return self._basis_data[k]
+
+    @property
     def kpts(self):
         return self._kpts
     @property
@@ -1361,6 +1416,13 @@ class PWKRHF(pbc_hf.KSCF):
         self._kpts = np.reshape(x, (-1,3))
         # update madelung constant and energy shift for exxdiv
         self._set_madelung()
+        if self._ekincut is None:
+            self._wf_mesh = None
+            self._xc_mesh = None
+            self._wf2xc = None
+            self._basis_data = None
+        else:
+            self.set_meshes()
 
     @property
     def etot_shift_ewald(self):
@@ -1493,10 +1555,16 @@ class PWKRHF(pbc_hf.KSCF):
         if key in ["h1e","hcore","cycle1","scf"]:
             C_ks, mocc_ks = get_init_guess(cell, kpts,
                                            basis=basis, pseudo=pseudo,
-                                           nvir=nvir, key=key, out=out)
+                                           nvir=nvir, key=key, out=out,
+                                           mesh=self.wf_mesh)
         else:
             logger.warn(self, "Unknown init guess %s", key)
             raise RuntimeError
+        
+        if self._basis_data is not None:
+            for k, kpt in enumerate(self.kpts):
+                inds = self.get_basis_kpt(kpt).indexes
+                set_kcomp(np.ascontiguousarray(C_ks[k][:, inds]), C_ks, k)
 
         return C_ks, mocc_ks
 
@@ -1532,13 +1600,18 @@ class PWKRHF(pbc_hf.KSCF):
         return self.with_jk.get_vj_R(C_ks, mocc_ks, mesh=mesh, Gv=Gv)
 
     def init_pp(self, with_pp=None, **kwargs):
-        return pw_pseudo.pseudopotential(self, with_pp=with_pp,
+        if self.wf_mesh is None:
+            mesh = None
+        else:
+            mesh = self.wf_mesh  # [13, 13, 13]
+        return pw_pseudo.pseudopotential(self, with_pp=with_pp, mesh=mesh,
                                          outcore=self.outcore, **kwargs)
 
     def init_jk(self, with_jk=None, ace_exx=None):
         if ace_exx is None: ace_exx = self.ace_exx
         return pw_jk.jk(self, with_jk=with_jk, ace_exx=ace_exx,
-                        outcore=self.outcore)
+                        outcore=self.outcore, mesh=self.wf_mesh,
+                        basis_ks=self._basis_data)
 
     def scf(self, C0=None, **kwargs):
         self.dump_flags()
@@ -1616,19 +1689,110 @@ if __name__ == "__main__":
         ke_cutoff=50,
         pseudo="gth-pade",
     )
-    cell.mesh = [13, 13, 13]
+    MESH = [13, 13, 13]
+    cell.mesh = MESH
+    # cell.mesh = [17, 17, 17]
+    # cell.mesh = [29, 29, 29]
     cell.build()
     cell.verbose = 6
     print(cell.nelectron)
 
-    kmesh = [2, 1, 1]
+    res = pw_helper.get_mesh_map(cell, None, None, (3, 3, 3), (2, 2, 2))
+    print(res)
+    # exit()
+
+    kmesh = [2, 2, 2]
     kpts = cell.make_kpts(kmesh)
 
-    mf = PWKRHF(cell, kpts)
+    mf = PWKRHF(cell, kpts, ekincut=None)
     mf.damp_type = "simple"
     mf.damp_factor = 0.7
     mf.nvir = 4 # converge first 4 virtual bands
     mf.kernel()
     mf.dump_scf_summary()
 
+    terms = ['nuc', 'kin', 'ppl', 'ppnl', 'coul', 'ex']
+    ets = []
+    ng_list = [13, 17, 23, 25, 33, 45, 51]
+    ng_list = [14, 15, 19, 21, 25, 29, 33, 37]
+    ngx = np.max(ng_list)
+    elists = []
+    for ng in ng_list:
+        print("NGRID", ng)
+        mf2 = PWKRHF(cell, kpts, ekincut=1000)
+        mf2.set_meshes(wf_mesh=[ng, ng, ng], xc_mesh=[ngx, ngx, ngx])
+        # cell.mesh = [ng, ng, ng]
+        # cell.build()
+        # mf2 = PWKRHF(cell, kpts, ekincut=None)
+        if False:
+            mf2.damp_type = "simple"
+            mf2.damp_factor = 0.7
+            mf2.nvir = 4 # converge first 4 virtual bands
+            mf2.conv_tol = 1e-7
+            mf2.kernel()
+            mf2.dump_scf_summary()
+            ets.append(mf2.e_tot)
+        else:
+            mf2.init_jk()
+            mf2.init_pp()
+            mf2.update_k(mf.mo_coeff, mf.mo_occ)
+        print(mf2.energy_tot(mf.mo_coeff, mf.mo_occ))
+        ens = []
+        for t in terms:
+            ens.append(mf2.scf_summary[t])
+        elists.append(ens)
+        print(ens)
+        print()
+        print()
+    print("RESULT", ets)
+    ens = []
+    for t in terms:
+        ens.append(mf.scf_summary[t])
+    print(ens)
+    for es in elists:
+        print(np.array(es) - np.array(elists[-1]))
+    exit()
+    print()
+    print()
+    print()
+
+    ets = []
+    for ecut in [25, 50, 75, 100]:
+        mf2 = PWKRHF(cell, kpts, ekincut=ecut)
+        mf2.xc_mesh = MESH
+        print("HI", mf2.wf_mesh)
+        mf2.damp_type = "simple"
+        mf2.damp_factor = 0.7
+        mf2.nvir = 4 # converge first 4 virtual bands
+        mf2.init_jk()
+        mf2.init_pp()
+        mo_coeff = [coeff[:, mf2._wf2xc][:, basis.indexes]
+                    for coeff, basis in zip(mf.mo_coeff, mf2._basis_data)]
+        mf2.update_k(mo_coeff, mf.mo_occ)
+        mf2.energy_tot(mo_coeff, mf.mo_occ)
+        ens = []
+        mf2.kernel()
+        for t in terms:
+            ens.append(mf2.scf_summary[t])
+        print(terms)
+        print(ens, mf2.e_tot)
+        ets.append(mf2.e_tot)
+    print(ets)
+    exit()
+
+    mf2 = PWKRHF(cell, kpts, ekincut=100)
+    print(mf2.wf_mesh)
+    mf2.damp_type = "simple"
+    mf2.damp_factor = 0.7
+    mf2.nvir = 4 # converge first 4 virtual bands
+    mf2.init_jk()
+    mf2.init_pp()
+    mo_coeff = [coeff[:, basis.indexes] for coeff, basis in zip(mf.mo_coeff, mf2._basis_data)]
+    mf2.update_k(mo_coeff, mf.mo_occ)
+    mf2.energy_tot(mo_coeff, mf.mo_occ)
+    print(mf2.wf_mesh)
+    mf2.kernel()
+    mf2.dump_scf_summary()
+
+    print(mf.e_tot, mf2.e_tot)
     assert(abs(mf.e_tot - -10.673452914596) < 1.e-5)

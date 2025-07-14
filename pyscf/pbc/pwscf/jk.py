@@ -6,7 +6,7 @@ import numpy as np
 
 from pyscf.pbc import tools
 from pyscf.pbc.pwscf.pw_helper import (get_kcomp, set_kcomp, acc_kcomp,
-                                       scale_kcomp)
+                                       scale_kcomp, wf_fft, wf_ifft)
 from pyscf.pbc.lib.kpts_helper import member, is_zero
 from pyscf import lib
 from pyscf import __config__
@@ -22,21 +22,22 @@ def _mul_by_occ_(C_k, mocc_k, occ=None):
     C_k[:] *= occ[:, None]
 
 
-def get_rho_R(C_ks, mocc_ks, mesh):
+def get_rho_R(C_ks, mocc_ks, mesh, basis_ks=None):
     nkpts = len(C_ks)
     rho_R = 0.
     for k in range(nkpts):
         occ = np.where(mocc_ks[k] > THR_OCC)[0].tolist()
         Co_k = get_kcomp(C_ks, k, occ=occ)
-        Co_k_R = tools.ifft(Co_k, mesh)
+        basis = None if basis_ks is None else basis_ks[k]
+        Co_k_R = wf_ifft(Co_k, mesh, basis)
         _mul_by_occ_(Co_k_R, mocc_ks[k], occ)
         rho_R += np.einsum("ig,ig->g", Co_k_R.conj(), Co_k_R).real
     return rho_R
 
 
-def apply_j_kpt(C_k, mesh, vj_R, C_k_R=None):
-    if C_k_R is None: C_k_R = tools.ifft(C_k, mesh)
-    return tools.fft(C_k_R * vj_R, mesh)
+def apply_j_kpt(C_k, mesh, vj_R, C_k_R=None, basis=None):
+    if C_k_R is None: C_k_R = wf_ifft(C_k, mesh, basis)
+    return wf_fft(C_k_R * vj_R, mesh, basis)
 
 
 # def apply_j(C_ks, mesh, vj_R, C_ks_R=None, out=None):
@@ -52,7 +53,8 @@ def apply_j_kpt(C_k, mesh, vj_R, C_k_R=None):
 
 
 def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
-                C_k_R=None, C_ks_R=None, exxdiv=None):
+                C_k_R=None, C_ks_R=None, exxdiv=None,
+                basis=None, basis_ks=None):
     r""" Apply the EXX operator to given MOs
 
     Math:
@@ -67,9 +69,11 @@ def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
     ngrids = Gv.shape[0]
     nkpts = len(kpts)
     fac = ngrids**2./(cell.vol*nkpts)
+    if basis_ks is None:
+        basis_ks = [None] * len(C_ks)
 
     Cbar_k = np.zeros_like(C_k)
-    if C_k_R is None: C_k_R = tools.ifft(C_k, mesh)
+    if C_k_R is None: C_k_R = wf_ifft(C_k, mesh, basis=basis)
 
     for k2 in range(nkpts):
         kpt2 = kpts[k2]
@@ -79,7 +83,7 @@ def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
         no_k2 = occ.size
         if C_ks_R is None:
             Co_k2 = get_kcomp(C_ks, k2, occ=occ)
-            Co_k2_R = tools.ifft(Co_k2, mesh)
+            Co_k2_R = wf_ifft(Co_k2, mesh, basis=basis_ks[k2])
             Co_k2 = None
         else:
             Co_k2_R = get_kcomp(C_ks_R, k2, occ=occ)
@@ -90,7 +94,7 @@ def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
                 tools.fft(C_k_R * Cj_k2_R.conj(), mesh) * coulG, mesh)
             Cbar_k += vij_R * Cj_k2_R
 
-    Cbar_k = tools.fft(Cbar_k, mesh) * fac
+    Cbar_k = wf_fft(Cbar_k, mesh, basis=basis) * fac
 
     return Cbar_k
 
@@ -101,12 +105,14 @@ def apply_k_kpt_support_vec(C_k, W_k):
 
 
 def apply_k_s1(cell, C_ks, mocc_ks, kpts, Ct_ks, ktpts, mesh, Gv, out=None,
-               outcore=False):
+               outcore=False, basis_ks=None):
     nkpts = len(kpts)
     nktpts = len(ktpts)
     ngrids = np.prod(mesh)
     fac = ngrids**2./(cell.vol*nkpts)
     occ_ks = [np.where(mocc_ks[k] > THR_OCC)[0] for k in range(nkpts)]
+    if basis_ks is None:
+        basis_ks = [None] * len(C_ks)
 
     if out is None: out = [None] * nktpts
 
@@ -124,12 +130,12 @@ def apply_k_s1(cell, C_ks, mocc_ks, kpts, Ct_ks, ktpts, mesh, Gv, out=None,
     for k in range(nkpts):
         Co_k = get_kcomp(C_ks, k, occ=occ_ks[k])
         _mul_by_occ_(Co_k, mocc_ks[k], occ_ks[k])
-        set_kcomp(tools.ifft(Co_k, mesh), Co_ks_R, k)
+        set_kcomp(wf_ifft(Co_k, mesh, basis_ks[k]), Co_ks_R, k)
         Co_k = None
 
     for k in range(nktpts):
         Ct_k = get_kcomp(Ct_ks, k)
-        set_kcomp(tools.ifft(Ct_k, mesh), Ct_ks_R, k)
+        set_kcomp(wf_ifft(Ct_k, mesh, basis_ks[k]), Ct_ks_R, k)
         Ct_k = None
 
     for k1,kpt1 in enumerate(ktpts):
@@ -145,18 +151,21 @@ def apply_k_s1(cell, C_ks, mocc_ks, kpts, Ct_ks, ktpts, mesh, Gv, out=None,
                                    coulG, mesh)
                 Ctbar_k1 += vij_R * Cj_k2_R
 
-        Ctbar_k1 = tools.fft(Ctbar_k1, mesh) * fac
+        Ctbar_k1 = wf_fft(Ctbar_k1, mesh, basis_ks[k1]) * fac
         set_kcomp(Ctbar_k1, out, k1)
         Ctbar_k1 = None
 
     return out
 
 
-def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
+def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False,
+               basis_ks=None):
     nkpts = len(kpts)
     ngrids = np.prod(mesh)
     fac = ngrids**2./(cell.vol*nkpts)
     occ_ks = [np.where(mocc_ks[k] > THR_OCC)[0] for k in range(nkpts)]
+    if basis_ks is None:
+        basis_ks = [None] * len(C_ks)
 
     if out is None: out = [None] * nkpts
 
@@ -183,8 +192,9 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
 
     for k in range(nkpts):
         C_k = get_kcomp(C_ks, k)
-        set_kcomp(tools.ifft(C_k, mesh), C_ks_R, k)
-        set_kcomp(np.zeros_like(C_k), out, k)
+        set_kcomp(wf_ifft(C_k, mesh, basis_ks[k]), C_ks_R, k)
+        set_kcomp(np.zeros((C_k.shape[0], np.prod(mesh)), dtype=np.complex128),
+                  out, k)
         C_k = None
 
     dtype = np.complex128
@@ -239,22 +249,26 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False):
         acc_kcomp(Cbar_k1, out, k1)
 
     for k in range(nkpts):
-        set_kcomp(tools.fft(get_kcomp(out, k), mesh) * fac, out, k)
+        set_kcomp(wf_fft(get_kcomp(out, k), mesh, basis_ks[k]) * fac, out, k)
 
     return out
 
 
 def apply_k(cell, C_ks, mocc_ks, kpts, mesh, Gv, Ct_ks=None, ktpts=None,
-            exxdiv=None, out=None, outcore=False):
+            exxdiv=None, out=None, outcore=False, basis_ks=None):
     if Ct_ks is None:
-        return apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out, outcore)
+        return apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out, outcore,
+                          basis_ks=basis_ks)
     else:
-        return apply_k_s1(cell, C_ks, mocc_ks, kpts, Ct_ks, ktpts, mesh, Gv, out, outcore)
+        return apply_k_s1(cell, C_ks, mocc_ks, kpts, Ct_ks, ktpts, mesh, Gv,
+                          out, outcore, basis_ks=basis_ks)
 
 
-def jk(mf, with_jk=None, ace_exx=True, outcore=False):
+def jk(mf, with_jk=None, ace_exx=True, outcore=False, mesh=None,
+       basis_ks=None):
     if with_jk is None:
-        with_jk = PWJK(mf.cell, mf.kpts, exxdiv=mf.exxdiv)
+        with_jk = PWJK(mf.cell, mf.kpts, exxdiv=mf.exxdiv,
+                       mesh=mesh, basis_ks=basis_ks)
         with_jk.ace_exx = ace_exx
         with_jk.outcore = outcore
 
@@ -265,7 +279,7 @@ def jk(mf, with_jk=None, ace_exx=True, outcore=False):
 
 def get_ace_support_vec(cell, C1_ks, mocc1_ks, k1pts, C2_ks=None, k2pts=None,
                         out=None, mesh=None, Gv=None, exxdiv=None, method="cd",
-                        outcore=False):
+                        outcore=False, basis_ks=None):
     """ Compute the ACE support vectors for orbitals given by C2_ks and the
     corresponding k-points given by k2pts, using the Fock matrix obtained from
     C1_ks, mocc1_ks, k1pts. If C2_ks and/or k2pts are not provided, their
@@ -286,7 +300,7 @@ def get_ace_support_vec(cell, C1_ks, mocc1_ks, k1pts, C2_ks=None, k2pts=None,
 
     W_ks = apply_k(cell, C1_ks, mocc1_ks, k1pts, mesh, Gv,
                    Ct_ks=C2_ks, ktpts=k2pts, exxdiv=exxdiv, out=W_ks,
-                   outcore=outcore)
+                   outcore=outcore, basis_ks=basis_ks)
 
     if C2_ks is None: C2_ks = C1_ks
     if k2pts is None: k2pts = k1pts
@@ -318,6 +332,7 @@ class PWJK:
         # kwargs
         self.ace_exx = kwargs.get("ace_exx", True)
         self.outcore = kwargs.get("outcore", False)
+        self.basis_ks = kwargs.get("basis_ks", None)
 
         # the following are not input options
         self.exx_W_ks = None
@@ -340,12 +355,13 @@ class PWJK:
         if mesh is None: mesh = self.mesh
         if Gv is None: Gv = self.get_Gv(mesh)
         if ncomp == 1:
-            rho_R = get_rho_R(C_ks, mocc_ks, mesh)
+            rho_R = get_rho_R(C_ks, mocc_ks, mesh, self.basis_ks)
         else:
             rho_R = 0.
             for comp in range(ncomp):
                 C_ks_comp = get_kcomp(C_ks, comp, load=False)
-                rho_R += get_rho_R(C_ks_comp, mocc_ks[comp], mesh)
+                rho_R += get_rho_R(C_ks_comp, mocc_ks[comp], mesh,
+                                   self.basis_ks)
             rho_R *= 1./ncomp
         return rho_R
 
@@ -373,6 +389,9 @@ class PWJK:
         if self.exx_W_ks is None:
             self.__init_exx()
 
+        if mesh is None:
+            mesh = self.mesh
+
         nkpts = len(kpts)
 
         if comp is None:
@@ -392,20 +411,23 @@ class PWJK:
             out = get_ace_support_vec(self.cell, C_ks, mocc_ks, kpts,
                                       C2_ks=Ct_ks, k2pts=kpts, out=out,
                                       mesh=mesh, Gv=Gv, exxdiv=exxdiv,
-                                      method="cd", outcore=self.outcore)
+                                      method="cd", outcore=self.outcore,
+                                      basis_ks=self.basis_ks)
         else:   # store ifft of Co_ks
             if mesh is None: mesh = self.mesh
             for k in range(nkpts):
                 occ = np.where(mocc_ks[k]>THR_OCC)[0]
                 Co_k = get_kcomp(C_ks, k, occ=occ)
-                set_kcomp(tools.ifft(Co_k, mesh), out, k)
+                basis = None if self.basis_ks is None else self.basis_ks[k]
+                set_kcomp(wf_ifft(Co_k, mesh, basis), out, k)
 
-    def apply_j_kpt(self, C_k, mesh=None, vj_R=None, C_k_R=None):
+    def apply_j_kpt(self, C_k, mesh=None, vj_R=None, C_k_R=None, basis=None):
         if mesh is None: mesh = self.mesh
         if vj_R is None: vj_R = self.vj_R
-        return apply_j_kpt(C_k, mesh, vj_R, C_k_R=None)
+        return apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R, basis=basis)
 
-    def apply_k_kpt(self, C_k, kpt, mesh=None, Gv=None, exxdiv=None, comp=None):
+    def apply_k_kpt(self, C_k, kpt, mesh=None, Gv=None, exxdiv=None, comp=None,
+                    basis=None):
         if comp is None:
             W_ks = self.exx_W_ks
         elif isinstance(comp, int):
@@ -427,16 +449,6 @@ class PWJK:
             mocc_ks = [np.ones(get_kcomp(W_ks, k, load=False).shape[0])*2
                        for k in range(nkpts)]
             return apply_k_kpt(cell, C_k, kpt, None, mocc_ks, kpts, mesh, Gv,
-                               C_ks_R=W_ks, exxdiv=exxdiv)
-
-    """
-    def apply_k(self, C_ks, mocc_ks, kpts, Ct_ks=None, mesh=None, Gv=None,
-                exxdiv=None, out=None):
-        cell = self.cell
-        if mesh is None: mesh = self.mesh
-        if Gv is None: Gv = self.get_Gv(mesh)
-        if exxdiv is None: exxdiv = self.exxdiv
-        return apply_k(cell, C_ks, mocc_ks, kpts, mesh, Gv, Ct_ks=Ct_ks,
-                       exxdiv=exxdiv, out=out)
-    """
+                               C_ks_R=W_ks, exxdiv=exxdiv, basis=basis,
+                               basis_ks=self.basis_ks)
                        

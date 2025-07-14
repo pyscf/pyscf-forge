@@ -3,6 +3,8 @@ from pyscf.pbc import gto as pbcgto
 from pyscf.pbc.pwscf import khf, krks, jk, kpt_symm
 from pyscf.pbc.pwscf.smearing import smearing_
 import numpy as np
+from pyscf.pbc import tools
+from numpy.testing import assert_almost_equal
 import time
 
 
@@ -18,8 +20,8 @@ def get_mf_and_kpts():
         ke_cutoff=50,
         pseudo="gth-pade",
     )
-    # cell.mesh = [42, 42, 42]
-    cell.mesh = [28, 28, 28]
+    # cell.mesh = [28, 28, 28]
+    cell.mesh = [24, 24, 24]
     cell.build()
     # kmesh = (4, 4, 4)
     kmesh = (3, 3, 3)
@@ -73,6 +75,7 @@ class TestSymmetry(unittest.TestCase):
         print(np.linalg.norm(rhosym_R - rho_R))
         print(np.abs(rhosym_R - rho_R).sum() / rho_R.sum())
         print(np.max(np.abs(rhosym_R - rho_R)) / np.mean(rho_R))
+        assert np.max(np.abs(rhosym_R - rho_R)) / np.mean(rho_R) < 1e-4
         print(t1 - t0, t3 - t2, len(C_ks), len(Csym_ks))
         print("DONE")
         print()
@@ -86,11 +89,13 @@ class TestSymmetry(unittest.TestCase):
 
         rho1 = mf.get_rho_for_xc("LDA", C_ks, mocc_ks)
         rho2 = mf2.get_rho_for_xc("LDA", Csym_ks, moccsym_ks)
-        print(rho1.mean() * cell.vol, rho2.mean() * cell.vol)
+        print(rho1.sum() * cell.vol, rho2.sum() * cell.vol)
         print(np.abs(rho1 - rho2).mean() * cell.vol)
 
         print(mf.scf_summary, mf2.scf_summary)
         print(eref, epred)
+        assert_almost_equal(np.abs(rho1 - rho2).mean() * cell.vol, 0, 6)
+        assert_almost_equal(epred, eref, 6)
     
     def test_get_wf(self):
         global mf, cell, kpts_sym
@@ -102,11 +107,44 @@ class TestSymmetry(unittest.TestCase):
             dot1 = np.einsum("ig,jg->ij", Cref.conj(), Cref)
             dot2 = np.einsum("ig,jg->ij", Cref.conj(), Cpred)
             dot3 = np.einsum("ig,jg->ij", Cpred.conj(), Cpred)
+            rdot1 = np.abs(dot1)
+            rdot2 = np.abs(dot2)
+            rdot3 = np.abs(dot3)
+            assert_almost_equal(rdot1[:2, :2], rdot2[:2, :2], 6)
+            assert_almost_equal(rdot1[:2], rdot2[:2], 4)
+            assert_almost_equal(rdot1, rdot3, 6)
             print(k)
             print(moe)
             print(np.abs(dot1).sum(), np.abs(np.diag(dot1))**2)
             print(np.abs(dot2).sum(), np.abs(np.diag(dot2))**2)
             print(np.abs(dot3).sum(), np.abs(np.diag(dot3))**2)
+            print()
+            k += 1
+    
+    def test_get_wf_real(self):
+        global mf, cell, kpts_sym
+        C_ks = [coeff.copy() for coeff in mf.mo_coeff]
+        C_ks_R = [tools.ifft(C_k, mf.wf_mesh) for C_k in C_ks]
+        Csym_ks_R = [C_ks_R[k_bz].copy() for k_bz in kpts_sym.ibz2bz]
+        Cpred_ks_R = kpt_symm.get_C_from_C_ibz(Csym_ks_R, cell.mesh, kpts_sym,
+                                               realspace=True) 
+        k = 0
+        norm = C_ks[0].shape[-1]
+        for moe, Cref, Cpred in zip(mf.mo_energy, C_ks_R, Cpred_ks_R):
+            dot1 = norm * np.einsum("ig,jg->ij", Cref.conj(), Cref)
+            dot2 = norm * np.einsum("ig,jg->ij", Cref.conj(), Cpred)
+            dot3 = norm * np.einsum("ig,jg->ij", Cpred.conj(), Cpred)
+            rdot1 = np.abs(dot1)
+            rdot2 = np.abs(dot2)
+            rdot3 = np.abs(dot3)
+            print(k)
+            print(moe)
+            print(np.abs(dot1).sum(), np.abs(np.diag(dot1))**2)
+            print(np.abs(dot2).sum(), np.abs(np.diag(dot2))**2)
+            print(np.abs(dot3).sum(), np.abs(np.diag(dot3))**2)
+            assert_almost_equal(rdot1[:2, :2], rdot2[:2, :2], 6)
+            assert_almost_equal(rdot1[:2], rdot2[:2], 4)
+            assert_almost_equal(rdot1, rdot3, 6)
             print()
             k += 1
 
@@ -115,8 +153,8 @@ class TestSymmetry(unittest.TestCase):
 
         import time
 
-        # kmesh = (3, 3, 3)
-        kmesh = (2, 2, 2)
+        kmesh = (3, 3, 3)
+        # kmesh = (2, 2, 2)
         kpts = cell.make_kpts(kmesh)
 
         kpts_sym = cell_sym.make_kpts(
@@ -135,6 +173,7 @@ class TestSymmetry(unittest.TestCase):
         print(mf.scf_summary)
         print(mf_sym.scf_summary)
         print(mf.e_tot, mf_sym.e_tot, mf.e_tot - mf_sym.e_tot)
+        assert_almost_equal(mf_sym.e_tot, mf.e_tot, 5)
         print(t1 - t0, t3 - t2)
 
 

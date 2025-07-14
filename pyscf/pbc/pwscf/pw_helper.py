@@ -15,6 +15,90 @@ from pyscf import lib
 from pyscf.lib import logger
 
 
+class PWBasis:
+    """
+    A simple container to store a plane-wave basis for a given
+    k-point. A PWBasis consists of all the plane-waves
+    on `mesh` which have a smaller kinetic energy than `cutoff`.
+    The indexes of these plane-waves are given by `indexes`
+    and have kinetic energy `ke`
+
+    Attributes:
+        mesh: mesh from which the basis is constructed.
+        cutoff: PW cutoff in Hartree
+        indexes: The (raveled) indexes on mesh that are
+            part of the basis, i.e. which have kinetic
+            energy smaller than cutoff
+        ke: The kinetic energy of each plane-wave given
+            by the indexes
+    """
+    def __init__(self, mesh, cutoff, indexes, ke, Gk):
+        self.mesh = mesh
+        self.cutoff = cutoff
+        self.indexes = indexes
+        self.ke = ke
+        self.Gk = Gk
+    
+    @property
+    def npw(self):
+        return self.ke.size
+    
+
+def get_basis_data(cell, kpts, ekincut, wf_mesh=None, xc_mesh=None,
+                   sphere=True):
+    latvec = cell.lattice_vectors()
+    if wf_mesh is None:
+        use_small_inner_mesh = True
+        if ekincut is None:
+            wf_mesh = cell.mesh
+        else:
+            wf_mesh = tools.cutoff_to_mesh(latvec, 4 * ekincut)
+    else:
+        use_small_inner_mesh = False
+    if xc_mesh is None:
+        if ekincut is None:
+            xc_mesh = wf_mesh
+        else:
+            xc_mesh = tools.cutoff_to_mesh(latvec, 16 * ekincut)
+    if not sphere:
+        if use_small_inner_mesh:
+            inner_mesh = [((((m + 1) // 2) - 1) // 2) * 2 + 1 for m in wf_mesh]
+        else:
+            inner_mesh = wf_mesh
+        indexes = get_mesh_map(cell, None, None, mesh=wf_mesh, mesh2=inner_mesh)
+    wf2xc = get_mesh_map(cell, None, None, mesh=xc_mesh, mesh2=wf_mesh)
+    Gv = cell.get_Gv(np.array(wf_mesh))
+    basis_data = []
+    for kpt in kpts:
+        kinetic = get_kinetic(kpt, Gv)
+        if sphere:
+            indexes = np.where(kinetic < ekincut)[0]
+        basis_data.append(PWBasis(
+            wf_mesh,
+            ekincut,
+            np.asarray(indexes, dtype=np.uintp, order="C"),
+            np.asarray(kinetic[indexes], dtype=np.float64, order="C"),
+            np.asarray((kpt + Gv)[indexes, :], dtype=np.float64, order="C"),
+        ))
+    return np.array(wf_mesh), np.array(xc_mesh), wf2xc, basis_data
+
+
+def wf_fft(C_k_R, mesh, basis=None):
+    assert C_k_R.dtype == np.complex128
+    C_k = tools.fft(C_k_R, mesh)
+    if basis is not None:
+        C_k = C_k[:, basis.indexes]
+    return C_k
+
+
+def wf_ifft(C_k, mesh, basis=None):
+    if basis is not None:
+        _C_k = np.zeros((C_k.shape[0], np.prod(mesh)), dtype=C_k.dtype)
+        _C_k[:, basis.indexes] = C_k
+        C_k = _C_k
+    return tools.ifft(C_k, mesh)
+
+
 """ Helper functions
 """
 def get_kcomp(C_ks, k, load=True, occ=None, copy=False):
@@ -142,7 +226,7 @@ def get_nocc_ks_from_mocc(mocc_ks):
     return np.asarray([np.sum(np.asarray(mocc) > 0) for mocc in mocc_ks])
 
 
-def get_C_ks_G(cell, kpts, mo_coeff_ks, n_ks, out=None, verbose=0):
+def get_C_ks_G(cell, kpts, mo_coeff_ks, n_ks, out=None, verbose=0, mesh=None):
     """ Return Cik(G) for input MO coeff. The normalization convention is such that Cik(G).conj()@Cjk(G) = delta_ij.
     """
     log = logger.new_logger(cell, verbose)
@@ -153,6 +237,10 @@ def get_C_ks_G(cell, kpts, mo_coeff_ks, n_ks, out=None, verbose=0):
     dtype = np.complex128
     dsize = 16
 
+    if mesh is not None:
+        cell = cell.copy()
+        cell.mesh = mesh
+        cell.build()
     mydf = df.FFTDF(cell)
     mesh = mydf.mesh
     ni = mydf._numint
@@ -398,14 +486,19 @@ def gtomf2pwmf(mf, chkfile=None):
     return pwmf
 
 
-""" kinetic energy
-"""
-def apply_kin_kpt(C_k, kpt, mesh, Gv):
-    no = C_k.shape[0]
+def get_kinetic(kpt, Gv):
     kG = kpt + Gv if np.sum(np.abs(kpt)) > 1.E-9 else Gv
     kG2 = np.einsum("gj,gj->g", kG, kG) * 0.5
-    Cbar_k = C_k * kG2
+    return kG2
 
+
+""" kinetic energy
+"""
+def apply_kin_kpt(C_k, kpt, Gv, basis=None):
+    if basis is None:
+        Cbar_k = C_k * get_kinetic(kpt, Gv)
+    else:
+        Cbar_k = C_k * basis.ke
     return Cbar_k
 
 
