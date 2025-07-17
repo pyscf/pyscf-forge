@@ -115,6 +115,12 @@ def setUpModule():
     global get_water_triplet, water_tm06l, water_tmc23
     global lih_tmc23_2, lih_tmc23_sa2_2, water_tmc23_2
 
+    from importlib import reload
+    from pyscf import dft2
+    dft.libxc = dft2.libxc
+    reload (mcpdft)
+    reload (mcpdft.otfnal)
+
     # register otfnal tMC23_2 which is identical to MC23
     mc232_preset = mcpdft.otfnal.OT_PRESET['MC23']
     mcpdft.otfnal.register_otfnal('MC23_2', mc232_preset)

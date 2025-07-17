@@ -1,3 +1,7 @@
+# patch dft2.libxc (must be done before loading mpcdft module)
+from pyscf import dft
+from pyscf import dft2
+dft.libxc = dft2.libxc
 #!/usr/bin/env/python
 from pyscf import gto, scf, mcpdft
 

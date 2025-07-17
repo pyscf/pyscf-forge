@@ -82,6 +82,11 @@ def diatomic(
 
 def setUpModule():
     global mols, original_grids
+    from importlib import reload
+    from pyscf import dft2
+    dft.libxc = dft2.libxc
+    reload (mcpdft)
+    reload (mcpdft.otfnal)
     mols = []
     original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False

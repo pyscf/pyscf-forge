@@ -91,6 +91,13 @@ def get_water_triplet(functional='tPBE', basis="6-31G"):
 
 def setUpModule():
     global lih, lih_4, lih_tpbe, lih_tpbe0, lih_mc23, water, t_water, original_grids
+
+    from importlib import reload
+    from pyscf import dft2
+    dft.libxc = dft2.libxc
+    reload (mcpdft)
+    reload (mcpdft.otfnal)
+
     original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
     lih = get_lih(1.5)
