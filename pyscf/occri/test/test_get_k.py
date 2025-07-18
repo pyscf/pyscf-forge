@@ -1,11 +1,11 @@
 import numpy
 import pyscf
-import sys, os
 from pyscf.pbc import gto
 from pyscf.occri import OCCRI
 
+TOL = 1.e-8
+
 if __name__ == "__main__":
-    sys.stdout = open(os.devnull, "w")
     refcell = gto.Cell()
     refcell.atom = """ 
         C 0.000000 0.000000 1.780373
@@ -24,24 +24,65 @@ if __name__ == "__main__":
             [0.000000, 0.000000, 3.560745],
         ]
     )
-    refcell.basis = "gth-dzvp-molopt-sr"
+    refcell.basis = "gth-cc-dzvp"
     refcell.pseudo = "gth-pbe"
-    refcell.spin = 0
-    refcell.verbose = 0
     refcell.ke_cutoff = 70
-    refcell.exp_to_discard = 0.2
     refcell.build()
 
-    ############ occRI-FFTDF ############
-    mf = pyscf.pbc.scf.RKS(refcell)
-    mf.init_guess = "1e"
+    ############ RHF ############
+    en_fftdf = -43.9399339901445
+    mf = pyscf.pbc.scf.RHF(refcell)
     mf.with_df = OCCRI(
         mf,
     )
     en = mf.kernel()
-    sys.stdout = sys.__stdout__
-    en_diff = abs(en - -43.8779860184878) / refcell.natm
-    if en_diff < 1.0e-10:
-        print("single grid occRI passed", en_diff)
+    en_diff = abs(en - en_fftdf) / refcell.natm
+    if en_diff < TOL:
+        print("RHF occRI passed", en_diff)
     else:
-        print("single grid occRI FAILED!!!", en_diff)
+        print("RHF occRI FAILED!!!", en_diff)
+
+
+    ############ UHF ############
+    mf = pyscf.pbc.scf.UHF(refcell)
+    en_fftdf = -43.9399339901445
+    mf = pyscf.pbc.scf.UHF(refcell)
+    mf.with_df = OCCRI(
+        mf,
+    )
+    en = mf.kernel()
+    en_diff = abs(en - en_fftdf) / refcell.natm
+    if en_diff < TOL:
+        print("UHF occRI passed", en_diff)
+    else:
+        print("UHF occRI FAILED!!!", en_diff)    
+
+
+    ############ RKS ############
+    en_fftdf = -45.0265010261793
+    mf = pyscf.pbc.scf.RKS(refcell)
+    mf.xc = 'pbe0'
+    mf.with_df = OCCRI(
+        mf,
+    )
+    en = mf.kernel()
+    en_diff = abs(en - en_fftdf) / refcell.natm
+    if en_diff < TOL:
+        print("RKS occRI passed", en_diff)
+    else:
+        print("RKS occRI FAILED!!!", en_diff)
+
+
+    ############ UKS ############
+    en_fftdf = -45.0265009589458
+    mf = pyscf.pbc.scf.UKS(refcell)
+    mf.xc = 'pbe0'
+    mf.with_df = OCCRI(
+        mf,
+    )
+    en = mf.kernel()
+    en_diff = abs(en - en_fftdf) / refcell.natm
+    if en_diff < TOL:
+        print("UKS occRI passed", en_diff)
+    else:
+        print("UKS occRI FAILED!!!", en_diff)            
