@@ -3,6 +3,8 @@ import scipy
 from pyscf import lib
 from pyscf.pbc import tools
 from functools import reduce
+from pyscf import occri 
+# import joblib
 
 def make_natural_orbitals(cell, dms, kpts=None):
     s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts).astype(dms[0].dtype)
@@ -103,13 +105,13 @@ def occRI_get_k(mydf, dms, exxdiv=None):
 
     nset = len(mo_coeff)
     mesh = cell.mesh
-    weight = (ngrids/ cell.vol)
+    weight = (cell.vol/ ngrids)
     nao = mo_coeff[0].shape[-1]
     vk = numpy.empty((nset, nao, nao), numpy.float64)
     s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
 
     aovals = mydf._numint.eval_ao(cell, coords)[0]
-    aovals = numpy.asarray(aovals.T, order='C') * (cell.vol/ ngrids)**0.5
+    aovals = numpy.asarray(aovals.T, order='C')
     ao_mos = [numpy.matmul( mo, aovals, order='C') for mo in mo_coeff]
 
     # Parallelize over the outer loop (i) using joblib.
@@ -117,9 +119,9 @@ def occRI_get_k(mydf, dms, exxdiv=None):
     coulG = tools.get_coulG(cell, mesh=mesh)
     for j in range(nset):
         nmo = mo_coeff[j].shape[0]
-        vR_dm = numpy.zeros((nmo, ngrids), numpy.float64)
+        vR_dm2 = numpy.zeros((nmo, ngrids), numpy.float64)
         for i in range(nmo):
-            integrals_uu(i, ao_mos[j], vR_dm, coulG, mo_occ[j], mesh)
+            integrals_uu(i, ao_mos[j], vR_dm2, coulG, mo_occ[j], mesh)
 
         vR_dm *= weight
         vk_j = aovals @ vR_dm.T
@@ -138,3 +140,58 @@ def occRI_get_k(mydf, dms, exxdiv=None):
 
     return vk
 
+
+def occRI_get_k_opt(mydf, dms, exxdiv=None):
+    cell = mydf.cell
+    mesh = mydf.mesh
+    assert cell.low_dim_ft_type != 'inf_vacuum'
+    assert cell.dimension != 1
+    coords = cell.gen_uniform_grids(mesh)
+    ngrids = coords.shape[0]
+    
+    if getattr(dms, "mo_coeff", None) is not None:
+        mo_coeff = numpy.asarray(dms.mo_coeff)
+        mo_occ = numpy.asarray(dms.mo_occ)
+    else:
+        mo_coeff, mo_occ = make_natural_orbitals(cell, dms)
+    tol = 1.0e-6
+    is_occ = mo_occ > tol
+    mo_coeff = [numpy.asarray(coeff[:, is_occ[i]].T, order='C') for i, coeff in enumerate(mo_coeff)]
+
+    nset = len(mo_coeff)
+    mesh = cell.mesh.astype(numpy.int32)
+    weight = (cell.vol / ngrids)
+    nao = mo_coeff[0].shape[-1]
+    nmo = mo_coeff[0].shape[0]
+    vk = numpy.empty((nset, nao, nao), numpy.float64)
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
+
+    aovals = mydf._numint.eval_ao(cell, coords)[0]
+    aovals = numpy.asarray(aovals.T, order='C')
+    ao_mos = [numpy.matmul( mo, aovals, order='C') for mo in mo_coeff]
+
+    # Parallelize over the outer loop (i) using joblib.
+    # The inner loop is handled inside the function. Nec for memory cost.
+    coulG = tools.get_coulG(cell, mesh=mesh).reshape(*mesh)[..., : mesh[2] // 2 + 1].ravel()
+
+    for j in range(nset):
+        nmo = mo_coeff[j].shape[0]
+        vR_dm = numpy.zeros((nmo* ngrids), numpy.float64)    
+        occri.occRI_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
+        vR_dm = vR_dm.reshape(nmo, ngrids)
+        vR_dm *= weight
+        vk_j = aovals @ vR_dm.T
+        vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
+
+    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
+    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
+    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
+    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
+    # and 3D should use the ewald probe charge correction.
+    if exxdiv == 'ewald' and cell.dimension != 0:
+        s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
+        madelung = tools.pbc.madelung(cell, mydf.kpts)
+        for i, dm in enumerate(dms):
+            vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
+
+    return vk

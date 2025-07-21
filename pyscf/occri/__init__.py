@@ -1,6 +1,7 @@
 import pyscf
 import numpy
 import time
+import ctypes
 from pyscf import lib
 from pyscf.occri import occri_k
 
@@ -16,6 +17,24 @@ Unless the parties otherwise agree in writing, users are subject to the followin
 (3) Sandeep Sharma reserves the right to revoke the access to the code any time, 
     in which case the users must discard their copies immediately.
     """
+
+# Load the shared library
+liboccri = lib.load_library('liboccri')
+
+# Bind functions
+ndpointer = numpy.ctypeslib.ndpointer
+
+occRI_vR = liboccri.occRI_vR
+occRI_vR.restype = None
+occRI_vR.argtypes = [
+    ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+    ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+    ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+    ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),
+    ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
+    ctypes.c_int,
+]
+
 
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
@@ -46,7 +65,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             self.get_jk = self.get_jk_kpts
             self.get_k = occri_k.get_k_occRI_kpts
         else:
-            self.get_k = occri_k.occRI_get_k
+            self.get_k = occri_k.occRI_get_k_opt
 
     def get_jk(
         self,

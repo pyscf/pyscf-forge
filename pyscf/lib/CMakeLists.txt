@@ -122,6 +122,30 @@ set_target_properties (clib_pdft PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
 
+# Build the occRI library
+set(OCCRI_SOURCE_FILES
+    occri/occri.c
+    occri/occri.h
+)
+add_library (occri SHARED ${OCCRI_SOURCE_FILES})
+# Add include directory if headers are not in the current folder
+target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
+# Link against FFTW, fblas, BLAS, and OpenMP
+find_package(OpenMP REQUIRED)
+find_package(BLAS REQUIRED)
+target_link_libraries(occri
+    ${BLAS_LIBRARIES}
+    ${OPENMP_C_PROPERTIES}
+    fftw3   # assumes system-wide FFTW; adjust if local build
+    fftw3_threads
+)
+# Set output directory and name
+set_target_properties(occri PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "occri"
+)
+
 # Build the LibXC interface v2 library
 set (LIBXC_ITRF2_SOURCE_FILES "dft/libxc_itrf2.c")
 add_library (clib_libxc_itrf2 SHARED ${LIBXC_ITRF2_SOURCE_FILES})

@@ -32,9 +32,7 @@ if __name__ == "__main__":
     ############ RHF ############
     en_fftdf = -43.9399339901445
     mf = pyscf.pbc.scf.RHF(refcell)
-    mf.with_df = OCCRI(
-        mf,
-    )
+    mf.with_df = OCCRI(mf)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
@@ -47,9 +45,7 @@ if __name__ == "__main__":
     mf = pyscf.pbc.scf.UHF(refcell)
     en_fftdf = -43.9399339901445
     mf = pyscf.pbc.scf.UHF(refcell)
-    mf.with_df = OCCRI(
-        mf,
-    )
+    mf.with_df = OCCRI(mf)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
@@ -62,9 +58,7 @@ if __name__ == "__main__":
     en_fftdf = -45.0265010261793
     mf = pyscf.pbc.scf.RKS(refcell)
     mf.xc = 'pbe0'
-    mf.with_df = OCCRI(
-        mf,
-    )
+    mf.with_df = OCCRI(mf)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
@@ -77,9 +71,7 @@ if __name__ == "__main__":
     en_fftdf = -45.0265009589458
     mf = pyscf.pbc.scf.UKS(refcell)
     mf.xc = 'pbe0'
-    mf.with_df = OCCRI(
-        mf,
-    )
+    mf.with_df = OCCRI(mf)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
