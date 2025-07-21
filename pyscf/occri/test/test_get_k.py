@@ -68,9 +68,9 @@ if __name__ == "__main__":
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("RHF occRI passed", en_diff)
+        print("RHF occri passed", en_diff)
     else:
-        print("RHF occRI FAILED!!!", en_diff)
+        print("RHF occri FAILED!!!", en_diff)
 
 
     # Test 2: Unrestricted Hartree-Fock (UHF)
@@ -81,9 +81,9 @@ if __name__ == "__main__":
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("UHF occRI passed", en_diff)
+        print("UHF occri passed", en_diff)
     else:
-        print("UHF occRI FAILED!!!", en_diff)    
+        print("UHF occri FAILED!!!", en_diff)    
 
 
     # Test 3: Restricted Kohn-Sham DFT with PBE0 hybrid functional
@@ -95,9 +95,9 @@ if __name__ == "__main__":
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("RKS occRI passed", en_diff)
+        print("RKS occri passed", en_diff)
     else:
-        print("RKS occRI FAILED!!!", en_diff)
+        print("RKS occri FAILED!!!", en_diff)
 
 
     # Test 4: Unrestricted Kohn-Sham DFT with PBE0 hybrid functional  
@@ -109,6 +109,6 @@ if __name__ == "__main__":
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("UKS occRI passed", en_diff)
+        print("UKS occri passed", en_diff)
     else:
-        print("UKS occRI FAILED!!!", en_diff)            
+        print("UKS occri FAILED!!!", en_diff)            

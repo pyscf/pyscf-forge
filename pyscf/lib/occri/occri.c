@@ -135,7 +135,7 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
 }
 
 
-void occRI_vR(double *vR_dm, double *mo_occ, double *coulG,
+void occri_vR(double *vR_dm, double *mo_occ, double *coulG,
                  int mesh[3], double *ao_mos, int nmo) {
 
     const int ngrids = mesh[0] * mesh[1] * mesh[2];

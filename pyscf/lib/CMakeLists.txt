@@ -123,7 +123,7 @@ set_target_properties (clib_pdft PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
 
-# Build the occRI library (optional - depends on availability of FFTW, BLAS, OpenMP)
+# Build the occri library (optional - depends on availability of FFTW, BLAS, OpenMP)
 option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, BLAS, OpenMP)" ON)
 
 if(BUILD_OCCRI)

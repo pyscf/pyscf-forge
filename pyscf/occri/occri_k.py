@@ -4,12 +4,12 @@ Python-side integrals and exchange matrix evaluation for OCCRI
 This file defines:
     - fallback Python-only routines for reference/validation (e.g., integrals_uu)
     - orbital transformation and natural orbital construction
-    - wrapper functions to call the C-extension occRI_vR
+    - wrapper functions to call the C-extension occri_vR
     - utilities to build the full AO exchange matrix
 
 Key Functions:
-    - occRI_get_k_opt: Calls the C implementation of OCCRI
-    - occRI_get_k:      Calls the reference Python implementation
+    - occri_get_k_opt: Calls the C implementation of OCCRI
+    - occri_get_k:      Calls the reference Python implementation
     - build_full_exchange: Contracts exchange contributions from AO basis
 
 Used internally by the OCCRI class defined in __init__.py
@@ -168,7 +168,7 @@ def integrals_uu(i, ao_mos, vR_dm, coulG, mo_occ, mesh):
         vR_dm[i] += vR.real * moIR_j * (mo_occ[j] * sqrt_ngrids)
 
 
-def occRI_get_k(mydf, dms, exxdiv=None):
+def occri_get_k(mydf, dms, exxdiv=None):
     """
     Reference Python implementation of OCCRI exchange matrix evaluation.
     
@@ -265,7 +265,7 @@ def occRI_get_k(mydf, dms, exxdiv=None):
     return vk
 
 
-def occRI_get_k_opt(mydf, dms, exxdiv=None):
+def occri_get_k_opt(mydf, dms, exxdiv=None):
     """
     Optimized C-accelerated implementation of OCCRI exchange matrix evaluation.
     
@@ -294,11 +294,11 @@ def occRI_get_k_opt(mydf, dms, exxdiv=None):
     Notes:
     ------
     This optimized implementation:
-    1. Uses the same algorithm as occRI_get_k but with C acceleration
+    1. Uses the same algorithm as occri_get_k but with C acceleration
     2. Leverages FFTW for optimized FFT operations
     3. Uses OpenMP for parallel loop execution
     4. Optimizes memory layout for better cache performance
-    5. Calls the external C function occRI_vR for core computations
+    5. Calls the external C function occri_vR for core computations
     
     Performance improvements over Python version:
     - ~5-10x speedup from compiled C code
@@ -307,7 +307,7 @@ def occRI_get_k_opt(mydf, dms, exxdiv=None):
     - FFTW provides fastest possible FFT operations
     
     The C extension must be properly compiled and linked for this function
-    to work correctly. Falls back to occRI_get_k if C extension fails.
+    to work correctly. Falls back to occri_get_k if C extension fails.
     
     Raises:
     -------
@@ -355,12 +355,109 @@ def occRI_get_k_opt(mydf, dms, exxdiv=None):
     for j in range(nset):
         nmo = mo_coeff[j].shape[0]
         vR_dm = numpy.zeros(nmo * ngrids, dtype=numpy.float64, order='C')
-        occri.occRI_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
+        occri.occri_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
         
         vR_dm = vR_dm.reshape(nmo, ngrids) * weight
         
         vk_j = numpy.empty((nao, nmo), dtype=numpy.float64, order='C')
         numpy.dot(aovals, vR_dm.T, out=vk_j)
+        vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
+
+    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
+    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
+    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
+    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
+    # and 3D should use the ewald probe charge correction.
+    if exxdiv == 'ewald' and cell.dimension != 0:
+        madelung = tools.pbc.madelung(cell, mydf.kpts)
+        for i, dm in enumerate(dms):
+            vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
+
+    return vk
+
+
+def occri_get_k(mydf, dms, exxdiv=None):
+    """
+    Reference Python implementation of OCCRI exchange matrix evaluation.
+    
+    This function provides a pure Python implementation of the occupied orbital
+    resolution of identity method for computing exact exchange matrices. It serves
+    as a reference for validation and fallback when the optimized C implementation
+    is unavailable.
+    
+    Parameters:
+    -----------
+    mydf : OCCRI object
+        Density fitting object containing cell and grid information
+    dms : ndarray or list of ndarray
+        Density matrix or matrices in AO basis
+        Shape: (..., nao, nao) for each spin component
+    exxdiv : str, optional
+        Exchange divergence treatment. Options:
+        - 'ewald': Apply Ewald probe charge correction (recommended for 3D)
+        - None: No correction applied
+        
+    Returns:
+    --------
+    ndarray
+        Exchange matrix or matrices in AO basis, same shape as input dms
+        
+    Notes:
+    ------
+    This implementation:
+    1. Constructs natural orbitals from density matrices
+    2. Evaluates orbitals on real-space FFT grid
+    3. Computes exchange integrals using FFT-based Coulomb evaluation
+    4. Contracts results back to AO basis using build_full_exchange
+    5. Applies Ewald correction if requested for periodic boundary conditions
+    
+    The method scales as O(N_occ^2 * N_grid) where N_occ is the number of 
+    occupied orbitals and N_grid is the number of FFT grid points.
+    
+    Raises:
+    -------
+    AssertionError
+        If cell.low_dim_ft_type == 'inf_vacuum' or cell.dimension == 1
+        (not supported in current implementation)
+    """
+    cell = mydf.cell
+    mesh = mydf.mesh
+    assert cell.low_dim_ft_type != 'inf_vacuum'
+    assert cell.dimension != 1
+    coords = cell.gen_uniform_grids(mesh)
+    ngrids = coords.shape[0]
+    
+    if getattr(dms, "mo_coeff", None) is not None:
+        mo_coeff = numpy.asarray(dms.mo_coeff)
+        mo_occ = numpy.asarray(dms.mo_occ)
+    else:
+        mo_coeff, mo_occ = make_natural_orbitals(cell, dms)
+    tol = 1.0e-6
+    is_occ = mo_occ > tol
+    mo_coeff = [numpy.asarray(coeff[:, is_occ[i]].T, order='C') for i, coeff in enumerate(mo_coeff)]
+
+    nset = len(mo_coeff)
+    mesh = cell.mesh
+    weight = (cell.vol/ ngrids)
+    nao = mo_coeff[0].shape[-1]
+    vk = numpy.empty((nset, nao, nao), numpy.float64)
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
+
+    aovals = mydf._numint.eval_ao(cell, coords)[0]
+    aovals = numpy.asarray(aovals.T, order='C')
+    ao_mos = [numpy.matmul( mo, aovals, order='C') for mo in mo_coeff]
+
+    # Parallelize over the outer loop (i) using joblib.
+    # The inner loop is handled inside the function. Nec for memory cost.
+    coulG = tools.get_coulG(cell, mesh=mesh)
+    for j in range(nset):
+        nmo = mo_coeff[j].shape[0]
+        vR_dm = numpy.zeros((nmo, ngrids), numpy.float64)
+        for i in range(nmo):
+            integrals_uu(i, ao_mos[j], vR_dm, coulG, mo_occ[j], mesh)
+
+        vR_dm *= weight
+        vk_j = aovals @ vR_dm.T
         vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts

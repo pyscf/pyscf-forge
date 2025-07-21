@@ -90,7 +90,7 @@ from pyscf.occri import occri_k
 # Fall back to pure Python implementation if unavailable
 _OCCRI_C_AVAILABLE = False
 liboccri = None
-occRI_vR = None
+occri_vR = None
 
 try:
     # Load the shared library
@@ -99,9 +99,9 @@ try:
     # Bind functions
     ndpointer = numpy.ctypeslib.ndpointer
     
-    occRI_vR = liboccri.occRI_vR
-    occRI_vR.restype = None
-    occRI_vR.argtypes = [
+    occri_vR = liboccri.occri_vR
+    occri_vR.restype = None
+    occri_vR.argtypes = [
         ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
         ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
         ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
@@ -194,13 +194,13 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
         if str(self.method[0]) == 'k':
             self.get_jk = self.get_jk_kpts
-            self.get_k = occri_k.get_k_occRI_kpts
+            self.get_k = occri_k.get_k_occri_kpts
         else:
             # Choose implementation based on C extension availability
             if _OCCRI_C_AVAILABLE:
-                self.get_k = occri_k.occRI_get_k_opt  # Optimized C implementation
+                self.get_k = occri_k.occri_get_k_opt  # Optimized C implementation
             else:
-                self.get_k = occri_k.occRI_get_k      # Pure Python fallback
+                self.get_k = occri_k.occri_get_k      # Pure Python fallback
 
     def get_jk(
         self,
