@@ -114,7 +114,7 @@ def build_full_exchange(S, Kao, mo_coeff):
     # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
     # Optimize as -Sa @ Koo @ Sa.T using GEMM operations
     Koo = mo_coeff @ Kao
-    numpy.matmul(Sa, Koo, out=Sa_Kao)  # Reuse Sa_Kao as temporary
+    Sa_Kao = numpy.matmul(Sa, Koo)
     Kuv -= numpy.matmul(Sa_Kao, Sa.T, order='C')
     return Kuv
 
