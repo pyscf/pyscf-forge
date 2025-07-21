@@ -22,7 +22,7 @@ from pyscf.pbc import tools
 from functools import reduce
 from pyscf import occri
 
-def make_natural_orbitals(cell, dms, kpts=None):
+def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
     """
     Construct natural orbitals from density matrices.
     
@@ -53,17 +53,21 @@ def make_natural_orbitals(cell, dms, kpts=None):
     where S is the overlap matrix, D is the density matrix, C are the coefficients,
     and n are the occupation numbers.
     """
-    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts).astype(dms[0].dtype)
+    sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts), dtype=dms.dtype)
     mo_coeff = numpy.zeros_like(dms)
-    mo_occ = numpy.zeros((dms.shape[0], dms.shape[1]), numpy.float64 )
+    nao = cell.nao
+    nset = dms.shape[0]
+    nK = kpts.shape[0]
+    mo_occ = numpy.zeros((nset, nK, nao), numpy.float64 )
     for i, dm in enumerate(dms):
-        # Diagonalize the DM in AO
-        A = lib.reduce(numpy.dot, (s, dm, s))
-        w, v = scipy.linalg.eigh(A, b=s)
+        for k, s in enumerate(sk):
+            # Diagonalize the DM in AO
+            A = lib.reduce(numpy.dot, (s, dm[k], s))
+            w, v = scipy.linalg.eigh(A, b=s)
 
-        # Flip since they're in increasing order
-        mo_occ[i] = numpy.flip(w)
-        mo_coeff[i] = numpy.flip(v, axis=1)
+            # Flip since they're in increasing order
+            mo_occ[i][k] = numpy.flip(w)
+            mo_coeff[i][k] = numpy.flip(v, axis=1)
 
     if mo_coeff.ndim != dms.ndim:
         mo_coeff = mo_coeff.reshape(dms.shape)
@@ -108,14 +112,14 @@ def build_full_exchange(S, Kao, mo_coeff):
     # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
     # This is equivalent to Sa @ Kao.T + Kao @ Sa.T
     # Use symmetric rank-k update (SYRK) when possible
-    Sa_Kao = numpy.matmul(Sa, Kao.T, order='C')
-    Kuv = Sa_Kao + Sa_Kao.T
+    Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order='C')
+    Kuv = Sa_Kao + Sa_Kao.T.conj()
     
     # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
     # Optimize as -Sa @ Koo @ Sa.T using GEMM operations
-    Koo = mo_coeff @ Kao
+    Koo = mo_coeff.conj() @ Kao
     Sa_Kao = numpy.matmul(Sa, Koo)
-    Kuv -= numpy.matmul(Sa_Kao, Sa.T, order='C')
+    Kuv -= numpy.matmul(Sa_Kao, Sa.T.conj(), order='C')
     return Kuv
 
 
@@ -154,18 +158,18 @@ def integrals_uu(i, ao_mos, vR_dm, coulG, mo_occ, mesh):
     5. Contract with orbital and occupation: vR_dm += V_ij(r) * φ_j(r) * n_j
     """
     ngrids = ao_mos.shape[-1]
-    moIR_i = ao_mos[i]
+    i_Rg = ao_mos[i]
     sqrt_ngrids = ngrids ** 0.5
     inv_sqrt_ngrids = 1.0 / sqrt_ngrids
     
     rho1 = numpy.empty(ngrids, dtype=numpy.float64)
     
-    for j, moIR_j in enumerate(ao_mos):
-        numpy.multiply(moIR_i, moIR_j, out=rho1)
+    for j, j_Rg in enumerate(ao_mos):
+        numpy.multiply(i_Rg, j_Rg, out=rho1)
         vG = tools.fft(rho1, mesh)
         vG *= inv_sqrt_ngrids * coulG
         vR = tools.ifft(vG, mesh)
-        vR_dm[i] += vR.real * moIR_j * (mo_occ[j] * sqrt_ngrids)
+        vR_dm[i] += vR.real * j_Rg * (mo_occ[j] * sqrt_ngrids)
 
 
 def occri_get_k(mydf, dms, exxdiv=None):
@@ -242,15 +246,15 @@ def occri_get_k(mydf, dms, exxdiv=None):
     # Parallelize over the outer loop (i) using joblib.
     # The inner loop is handled inside the function. Nec for memory cost.
     coulG = tools.get_coulG(cell, mesh=mesh)
-    for j in range(nset):
-        nmo = mo_coeff[j].shape[0]
+    for n in range(nset):
+        nmo = mo_coeff[n].shape[0]
         vR_dm = numpy.zeros((nmo, ngrids), numpy.float64)
-        for i in range(nmo):
-            integrals_uu(i, ao_mos[j], vR_dm, coulG, mo_occ[j], mesh)
+        for j in range(nmo):
+            integrals_uu(j, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh)
 
         vR_dm *= weight
         vk_j = aovals @ vR_dm.T
-        vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
+        vk[n] = build_full_exchange(s, vk_j, mo_coeff[n])
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
@@ -259,8 +263,8 @@ def occri_get_k(mydf, dms, exxdiv=None):
     # and 3D should use the ewald probe charge correction.
     if exxdiv == 'ewald' and cell.dimension != 0:
         madelung = tools.pbc.madelung(cell, mydf.kpts)
-        for i, dm in enumerate(dms):
-            vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
+        for j, dm in enumerate(dms):
+            vk[j] += madelung * reduce(numpy.dot, (s, dm, s))
 
     return vk
 
@@ -352,16 +356,14 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
 
     coulG = tools.get_coulG(cell, mesh=mesh).reshape(*mesh)[..., : mesh[2] // 2 + 1].ravel()
     
-    for j in range(nset):
-        nmo = mo_coeff[j].shape[0]
-        vR_dm = numpy.zeros(nmo * ngrids, dtype=numpy.float64, order='C')
-        occri.occri_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
-        
+    vR_dm = numpy.empty(nmo * ngrids, dtype=numpy.float64, order='C')
+    vk_j = numpy.empty((nao, nmo), dtype=numpy.float64, order='C')
+    for n in range(nset):
+        nmo = mo_coeff[n].shape[0]
+        occri.occri_vR(vR_dm, mo_occ[n], coulG, mesh, ao_mos[n].ravel(), nmo)
         vR_dm = vR_dm.reshape(nmo, ngrids) * weight
-        
-        vk_j = numpy.empty((nao, nmo), dtype=numpy.float64, order='C')
         numpy.dot(aovals, vR_dm.T, out=vk_j)
-        vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
+        vk[n] = build_full_exchange(s, vk_j, mo_coeff[n])
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
@@ -375,8 +377,56 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
 
     return vk
 
+def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
+    """
+    Compute occupied-occupied exchange integrals using FFT.
+    
+    This function evaluates the exchange integrals between occupied orbitals
+    using FFT-based techniques. It computes the Coulomb interaction in reciprocal
+    space and transforms back to real space for contraction with orbital densities.
+    
+    Parameters:
+    -----------
+    i : int
+        Index of the reference occupied orbital
+    ao_mos : list of ndarray
+        Molecular orbitals in AO basis evaluated on real-space grid
+        Shape: (nmo, ngrids) for each k-point/spin
+    vR_dm : ndarray
+        Output array for exchange potential, shape (nmo, ngrids)
+        Modified in-place
+    coulG : ndarray
+        Coulomb interaction in reciprocal space, shape (ngrids,)
+    mo_occ : ndarray
+        Molecular orbital occupation numbers, shape (nmo,)
+    mesh : ndarray
+        FFT mesh dimensions [nx, ny, nz]
+        
+    Notes:
+    ------
+    This function implements the core FFT-based exchange integral evaluation:
+    1. Form orbital pair density ρ_ij(r) = φ_i(r) φ_j(r)  
+    2. Transform to reciprocal space: ρ̃_ij(G) = FFT[ρ_ij(r)]
+    3. Apply Coulomb kernel: Ṽ_ij(G) = ρ̃_ij(G) * v_C(G)
+    4. Transform back: V_ij(r) = IFFT[Ṽ_ij(G)]
+    5. Contract with orbital and occupation: vR_dm += V_ij(r) * φ_j(r) * n_j
+    """
+    ngrids = ao_mos[0].shape[1]
+    nmo = ao_mos[0].shape[0]
+    sqrt_ngrids = ngrids ** 0.5
+    inv_sqrt_ngrids = 1.0 / sqrt_ngrids
+    
+    rho1 = numpy.empty(ngrids, dtype=numpy.complex128)
+    
+    for i in range(nmo):
+        numpy.multiply(ao_mos[k_prim][i].conj() * expmikr, ao_mos[k][j], out=rho1)
+        vG = tools.fft(rho1, mesh)
+        vG *= inv_sqrt_ngrids * coulG
+        vR = tools.ifft(vG, mesh)
+        vR_dm[j] += vR * ao_mos[k_prim][i] * expmikr.conj() * (mo_occ[k_prim][i] * sqrt_ngrids)
 
-def occri_get_k(mydf, dms, exxdiv=None):
+
+def occri_get_k_kpts(mydf, dms, exxdiv=None):
     """
     Reference Python implementation of OCCRI exchange matrix evaluation.
     
@@ -431,34 +481,38 @@ def occri_get_k(mydf, dms, exxdiv=None):
         mo_coeff = numpy.asarray(dms.mo_coeff)
         mo_occ = numpy.asarray(dms.mo_occ)
     else:
-        mo_coeff, mo_occ = make_natural_orbitals(cell, dms)
+        mo_coeff, mo_occ = make_natural_orbitals(cell, dms, mydf.kpts)
     tol = 1.0e-6
     is_occ = mo_occ > tol
-    mo_coeff = [numpy.asarray(coeff[:, is_occ[i]].T, order='C') for i, coeff in enumerate(mo_coeff)]
+    nset = dms.shape[0]
+    kpts = mydf.kpts
+    nk = mydf.Nk
+    mo_coeff = [[numpy.asarray(mo_coeff[n][k][:, is_occ[n][k]].T, order='C') for k in range(nk)] for n in range(nset)]
 
-    nset = len(mo_coeff)
     mesh = cell.mesh
-    weight = (cell.vol/ ngrids)
-    nao = mo_coeff[0].shape[-1]
-    vk = numpy.empty((nset, nao, nao), numpy.float64)
-    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
+    weight = ngrids/ cell.vol  / nk
+    nao = cell.nao
+    vk = numpy.empty((nset, nk, nao, nao), dms.dtype)
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
 
-    aovals = mydf._numint.eval_ao(cell, coords)[0]
-    aovals = numpy.asarray(aovals.T, order='C')
-    ao_mos = [numpy.matmul( mo, aovals, order='C') for mo in mo_coeff]
+    aovals = mydf._numint.eval_ao(cell, coords, kpts=kpts)
+    aovals = [numpy.asarray(ao.T * (cell.vol / ngrids) ** 0.5, order='C') for ao in aovals]
+    ao_mos = [[numpy.matmul( mo_coeff[n][k], aovals[k], order='C') for k in range(nk)] for n in range(nset)]
+    
+    for n in range(nset):
+        for k in range(nk):
+            nmo = mo_coeff[n][k].shape[0]
+            vR_dm = numpy.zeros((nmo, ngrids), numpy.complex128)
+            for j in range(nmo):
+                for k_prim in range(nk):
+                    nmo = mo_coeff[n][k_prim].shape[0]
+                    coulG = tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh)
+                    expmikr = numpy.exp(-1j * (coords @ (kpts[k] - kpts[k_prim])))
+                    integrals_uu_kpts(j, k, k_prim, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh, expmikr)
 
-    # Parallelize over the outer loop (i) using joblib.
-    # The inner loop is handled inside the function. Nec for memory cost.
-    coulG = tools.get_coulG(cell, mesh=mesh)
-    for j in range(nset):
-        nmo = mo_coeff[j].shape[0]
-        vR_dm = numpy.zeros((nmo, ngrids), numpy.float64)
-        for i in range(nmo):
-            integrals_uu(i, ao_mos[j], vR_dm, coulG, mo_occ[j], mesh)
-
-        vR_dm *= weight
-        vk_j = aovals @ vR_dm.T
-        vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
+            vR_dm *= weight
+            vk_j = aovals[k].conj() @ vR_dm.T
+            vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k]).real
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
@@ -467,7 +521,8 @@ def occri_get_k(mydf, dms, exxdiv=None):
     # and 3D should use the ewald probe charge correction.
     if exxdiv == 'ewald' and cell.dimension != 0:
         madelung = tools.pbc.madelung(cell, mydf.kpts)
-        for i, dm in enumerate(dms):
-            vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
+        for n in range(nset):
+            for k in range(nk):
+                vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k])).real
 
     return vk

@@ -177,24 +177,19 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         assert self.method in ['hf', 'uhf', 'khf', 'kuhf', 'rks', 'uks', 'krks', 'kuks']
         
         self.StartTime = time.time()
-        cell = mydf.cell
-        super().__init__(cell=cell)  # Need this for pyscf's eval_ao function
-        self.exxdiv = "ewald"
-        self.cell = cell
+        self.cell = mydf.cell
         self.kmesh = kmesh
-        
         self.Nk = numpy.prod(self.kmesh)
         self.kpts = self.cell.make_kpts(
             self.kmesh, space_group_symmetry=False, time_reversal_symmetry=False, wrap_around=True
-        )
-
-        self.joblib_njobs = lib.numpy_helper._np_helper.get_omp_threads()
-
+        )        
+        super().__init__(cell=self.cell, kpts=self.kpts)  # Need this for pyscf's eval_ao function
+        self.exxdiv = "ewald"
+        
         self.get_j = pyscf.pbc.df.fft_jk.get_j_kpts
 
         if str(self.method[0]) == 'k':
-            self.get_jk = self.get_jk_kpts
-            self.get_k = occri_k.get_k_occri_kpts
+            self.get_k = occri_k.occri_get_k_kpts
         else:
             # Choose implementation based on C extension availability
             if _OCCRI_C_AVAILABLE:
@@ -255,20 +250,24 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         both single matrices and batches of matrices consistently.
         """
         dm_shape = dm.shape
-        dm = dm.reshape(-1, dm_shape[-2], dm_shape[-1])
+        nK = self.Nk
+        mo_coeff, mo_occ = [None]* 2
+        if getattr(dm, "mo_coeff", None) is not None:
+            mo_coeff = numpy.asarray(dm.mo_coeff)
+            mo_occ = numpy.asarray(dm.mo_occ)
+        dm = dm.reshape(-1, nK, dm_shape[-2], dm_shape[-1])
+        if mo_coeff is not None:
+            dm = lib.tag_array(dm, mo_occ=mo_occ.reshape(dm.shape[0], self.Nk, self.cell.nao), mo_coeff=mo_coeff.reshape(dm.shape))
+        
         
         if with_j:
-            vj = self.get_j(self, dm)
-
-        if with_k:
-            vk = self.get_k(self, dm, exxdiv)
-
-        if with_j:
+            vj = self.get_j(self, dm, kpts=self.kpts)
             vj = numpy.asarray(vj, dtype=dm.dtype).reshape(dm_shape)
         else:
             vj = None
 
         if with_k:
+            vk = self.get_k(self, dm, exxdiv)
             vk = numpy.asarray(vk, dtype=dm.dtype).reshape(dm_shape)
         else:
             vk = None

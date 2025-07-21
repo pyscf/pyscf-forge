@@ -7,10 +7,10 @@ periodic systems. The tests ensure that OCCRI maintains chemical accuracy
 while providing computational speedup.
 
 Test Coverage:
-    - Restricted Hartree-Fock (RHF)
-    - Unrestricted Hartree-Fock (UHF) 
-    - Restricted Kohn-Sham DFT (RKS) with PBE0 functional
-    - Unrestricted Kohn-Sham DFT (UKS) with PBE0 functional
+    - Restricted Hartree-Fock (KRHF)
+    - Unrestricted Hartree-Fock (KUHF) 
+    - Restricted Kohn-Sham DFT (KRKS) with PBE0 functional
+    - Unrestricted Kohn-Sham DFT (KUKS) with PBE0 functional
 
 The test system is a diamond structure with 8 carbon atoms, chosen as a
 representative covalent solid for validating periodic exchange evaluation.
@@ -54,23 +54,26 @@ if __name__ == "__main__":
             [0.000000, 0.000000, 3.560745],
         ]
     )
-    refcell.basis = "gth-cc-dzvp"      # Double-zeta valence basis with polarization
+    refcell.basis = "unc-gth-cc-dzvp"      # Double-zeta valence basis with polarization
     refcell.pseudo = "gth-pbe"         # Goedecker-Teter-Hutter pseudopotentials
     refcell.ke_cutoff = 70             # Kinetic energy cutoff in Hartree
     refcell.verbose = 4                # Suppress SCF output for cleaner test logs
     refcell.build()
 
+    kmesh = [1,1,2]
+    kpts = refcell.make_kpts(kmesh)
+
     # Test 1: Restricted Hartree-Fock (RHF)
     # Reference energy from standard FFTDF calculation  
-    en_fftdf = -43.9399339901445
-    mf = pyscf.pbc.scf.RHF(refcell)
-    mf.with_df = OCCRI(mf)
+    en_fftdf = -44.097903676012
+    mf = pyscf.pbc.scf.KRHF(refcell, kpts=kpts)
+    mf.with_df = OCCRI(mf, kmesh=kmesh)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("RHF occri passed", en_diff)
+        print("KRHF occri passed", en_diff)
     else:
-        print("RHF occri FAILED!!!", en_diff)
+        print("KRHF occri FAILED!!!", en_diff)
 
 
     # Test 2: Unrestricted Hartree-Fock (UHF)
