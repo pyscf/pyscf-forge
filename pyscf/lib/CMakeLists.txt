@@ -67,6 +67,7 @@ if (MKL)
 endif (MKL)
 #link_directories ($ENV{LD_LIBRARY_PATH})
 
+# BLAS is required for some components, but made optional for OCCRI
 find_package(BLAS REQUIRED)
 #find_package (LAPACK REQUIRED)
 
@@ -122,29 +123,72 @@ set_target_properties (clib_pdft PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
 
-# Build the occRI library
-set(OCCRI_SOURCE_FILES
-    occri/occri.c
-    occri/occri.h
-)
-add_library (occri SHARED ${OCCRI_SOURCE_FILES})
-# Add include directory if headers are not in the current folder
-target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
-# Link against FFTW, fblas, BLAS, and OpenMP
-find_package(OpenMP REQUIRED)
-find_package(BLAS REQUIRED)
-target_link_libraries(occri
-    ${BLAS_LIBRARIES}
-    ${OPENMP_C_PROPERTIES}
-    fftw3   # assumes system-wide FFTW; adjust if local build
-    fftw3_threads
-)
-# Set output directory and name
-set_target_properties(occri PROPERTIES
-    CLEAN_DIRECT_OUTPUT 1
-    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_NAME "occri"
-)
+# Build the occRI library (optional - depends on availability of FFTW, BLAS, OpenMP)
+option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, BLAS, OpenMP)" ON)
+
+if(BUILD_OCCRI)
+    set(OCCRI_SOURCE_FILES
+        occri/occri.c
+        occri/occri.h
+    )
+    
+    # Check for required dependencies
+    set(OCCRI_DEPS_FOUND TRUE)
+    
+    # Find FFTW (optional)
+    find_library(FFTW3_LIBRARY fftw3)
+    find_library(FFTW3_THREADS_LIBRARY fftw3_threads)
+    find_path(FFTW3_INCLUDE_DIR fftw3.h)
+    
+    if(NOT FFTW3_LIBRARY OR NOT FFTW3_THREADS_LIBRARY OR NOT FFTW3_INCLUDE_DIR)
+        message(STATUS "FFTW3 not found - OCCRI C extension will not be built")
+        set(OCCRI_DEPS_FOUND FALSE)
+    endif()
+    
+    # Find BLAS (optional)
+    find_package(BLAS)
+    if(NOT BLAS_FOUND)
+        message(STATUS "BLAS not found - OCCRI C extension will not be built")
+        set(OCCRI_DEPS_FOUND FALSE)
+    endif()
+    
+    # Find OpenMP (optional)
+    find_package(OpenMP)
+    if(NOT OPENMP_FOUND)
+        message(STATUS "OpenMP not found - OCCRI C extension will not be built")
+        set(OCCRI_DEPS_FOUND FALSE)
+    endif()
+    
+    if(OCCRI_DEPS_FOUND)
+        message(STATUS "Building OCCRI C extension with FFTW, BLAS, and OpenMP")
+        add_library(occri SHARED ${OCCRI_SOURCE_FILES})
+        
+        # Add include directories
+        target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
+        target_include_directories(occri PRIVATE ${FFTW3_INCLUDE_DIR})
+        
+        # Link against FFTW, BLAS, and OpenMP
+        target_link_libraries(occri
+            ${BLAS_LIBRARIES}
+            ${OPENMP_C_PROPERTIES}
+            ${FFTW3_LIBRARY}
+            ${FFTW3_THREADS_LIBRARY}
+        )
+        
+        # Set output directory and name
+        set_target_properties(occri PROPERTIES
+            CLEAN_DIRECT_OUTPUT 1
+            LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+            OUTPUT_NAME "occri"
+        )
+    else()
+        message(STATUS "OCCRI C extension disabled due to missing dependencies")
+        message(STATUS "Pure Python implementation will be used (performance will be reduced)")
+        message(STATUS "To enable optimized version, install: FFTW3, BLAS, OpenMP")
+    endif()
+else()
+    message(STATUS "OCCRI C extension build disabled by user")
+endif()
 
 # Build the LibXC interface v2 library
 set (LIBXC_ITRF2_SOURCE_FILES "dft/libxc_itrf2.c")

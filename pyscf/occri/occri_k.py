@@ -348,7 +348,13 @@ def occRI_get_k_opt(mydf, dms, exxdiv=None):
     for j in range(nset):
         nmo = mo_coeff[j].shape[0]
         vR_dm = numpy.zeros((nmo* ngrids), numpy.float64)    
-        occri.occRI_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
+        # Check if C extension is available, otherwise fallback to Python
+        from pyscf.occri import occRI_vR, _OCCRI_C_AVAILABLE
+        if _OCCRI_C_AVAILABLE and occRI_vR is not None:
+            occRI_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
+        else:
+            # This should not happen if the method selection in __init__.py works correctly
+            raise RuntimeError("occRI_get_k_opt called but C extension not available. This indicates an error in method selection.")
         vR_dm = vR_dm.reshape(nmo, ngrids)
         vR_dm *= weight
         vk_j = aovals @ vR_dm.T
