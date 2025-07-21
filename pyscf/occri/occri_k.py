@@ -102,20 +102,20 @@ def build_full_exchange(S, Kao, mo_coeff):
     K_μν ≈ Σ_P C_μP W_PP' C_νP' where C are fitting coefficients
     """
 
-    # First term: Sa @ Koa  
+    # Compute Sa = S @ mo_coeff.T once and reuse
     Sa = S @ mo_coeff.T
-    tmp = numpy.matmul(Sa, Kao.T, order='C')  # Ensure C-contiguous for better cache performance
     
-    # Initialize with first term
-    Kuv = tmp.copy()
+    # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
+    # This is equivalent to Sa @ Kao.T + Kao @ Sa.T
+    # Use symmetric rank-k update (SYRK) when possible
+    Sa_Kao = numpy.matmul(Sa, Kao.T, order='C')
+    Kuv = Sa_Kao + Sa_Kao.T
     
-    # Second term: add transpose in-place (leverages symmetry)
-    Kuv += tmp.T
-    
-    # Third term: use temporary for the inner multiplication to avoid double allocation
+    # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
+    # Optimize as -Sa @ Koo @ Sa.T using GEMM operations
     Koo = mo_coeff @ Kao
-    Sa_Koo = numpy.matmul(Sa, Koo, order='C')
-    Kuv -= numpy.matmul(Sa_Koo, Sa.T)
+    numpy.matmul(Sa, Koo, out=Sa_Kao)  # Reuse Sa_Kao as temporary
+    Kuv -= numpy.matmul(Sa_Kao, Sa.T, order='C')
     return Kuv
 
 
@@ -155,14 +155,17 @@ def integrals_uu(i, ao_mos, vR_dm, coulG, mo_occ, mesh):
     """
     ngrids = ao_mos.shape[-1]
     moIR_i = ao_mos[i]
+    sqrt_ngrids = ngrids ** 0.5
+    inv_sqrt_ngrids = 1.0 / sqrt_ngrids
+    
+    rho1 = numpy.empty(ngrids, dtype=numpy.float64)
+    
     for j, moIR_j in enumerate(ao_mos):
-        rho1 = moIR_i * moIR_j
+        numpy.multiply(moIR_i, moIR_j, out=rho1)
         vG = tools.fft(rho1, mesh)
-        vG *= 1.0 / ngrids ** 0.5
-        vG *= coulG
+        vG *= inv_sqrt_ngrids * coulG
         vR = tools.ifft(vG, mesh)
-        vR *= ngrids ** 0.5
-        vR_dm[i] += vR.real * moIR_j * mo_occ[j]
+        vR_dm[i] += vR.real * moIR_j * (mo_occ[j] * sqrt_ngrids)
 
 
 def occRI_get_k(mydf, dms, exxdiv=None):
@@ -241,9 +244,9 @@ def occRI_get_k(mydf, dms, exxdiv=None):
     coulG = tools.get_coulG(cell, mesh=mesh)
     for j in range(nset):
         nmo = mo_coeff[j].shape[0]
-        vR_dm2 = numpy.zeros((nmo, ngrids), numpy.float64)
+        vR_dm = numpy.zeros((nmo, ngrids), numpy.float64)
         for i in range(nmo):
-            integrals_uu(i, ao_mos[j], vR_dm2, coulG, mo_occ[j], mesh)
+            integrals_uu(i, ao_mos[j], vR_dm, coulG, mo_occ[j], mesh)
 
         vR_dm *= weight
         vk_j = aovals @ vR_dm.T
@@ -255,7 +258,6 @@ def occRI_get_k(mydf, dms, exxdiv=None):
     # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
     # and 3D should use the ewald probe charge correction.
     if exxdiv == 'ewald' and cell.dimension != 0:
-        s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
         madelung = tools.pbc.madelung(cell, mydf.kpts)
         for i, dm in enumerate(dms):
             vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
@@ -325,39 +327,40 @@ def occRI_get_k_opt(mydf, dms, exxdiv=None):
         mo_occ = numpy.asarray(dms.mo_occ)
     else:
         mo_coeff, mo_occ = make_natural_orbitals(cell, dms)
+    
     tol = 1.0e-6
     is_occ = mo_occ > tol
-    mo_coeff = [numpy.asarray(coeff[:, is_occ[i]].T, order='C') for i, coeff in enumerate(mo_coeff)]
+    mo_coeff = [numpy.ascontiguousarray(coeff[:, is_occ[i]].T) for i, coeff in enumerate(mo_coeff)]
 
     nset = len(mo_coeff)
     mesh = cell.mesh.astype(numpy.int32)
-    weight = (cell.vol / ngrids)
+    weight = cell.vol / ngrids
     nao = mo_coeff[0].shape[-1]
     nmo = mo_coeff[0].shape[0]
-    vk = numpy.empty((nset, nao, nao), numpy.float64)
+    
+    vk = numpy.zeros((nset, nao, nao), numpy.float64, order='C')
     s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
 
     aovals = mydf._numint.eval_ao(cell, coords)[0]
-    aovals = numpy.asarray(aovals.T, order='C')
-    ao_mos = [numpy.matmul( mo, aovals, order='C') for mo in mo_coeff]
+    aovals = numpy.ascontiguousarray(aovals.T)
+    
+    ao_mos = []
+    for mo in mo_coeff:
+        ao_mo = numpy.empty((mo.shape[0], ngrids), dtype=numpy.float64, order='C')
+        numpy.dot(mo, aovals, out=ao_mo)
+        ao_mos.append(ao_mo)
 
-    # Parallelize over the outer loop (i) using joblib.
-    # The inner loop is handled inside the function. Nec for memory cost.
     coulG = tools.get_coulG(cell, mesh=mesh).reshape(*mesh)[..., : mesh[2] // 2 + 1].ravel()
-
+    
     for j in range(nset):
         nmo = mo_coeff[j].shape[0]
-        vR_dm = numpy.zeros((nmo* ngrids), numpy.float64)    
-        # Check if C extension is available, otherwise fallback to Python
-        from pyscf.occri import occRI_vR, _OCCRI_C_AVAILABLE
-        if _OCCRI_C_AVAILABLE and occRI_vR is not None:
-            occRI_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
-        else:
-            # This should not happen if the method selection in __init__.py works correctly
-            raise RuntimeError("occRI_get_k_opt called but C extension not available. This indicates an error in method selection.")
-        vR_dm = vR_dm.reshape(nmo, ngrids)
-        vR_dm *= weight
-        vk_j = aovals @ vR_dm.T
+        vR_dm = numpy.zeros(nmo * ngrids, dtype=numpy.float64, order='C')
+        occri.occRI_vR(vR_dm, mo_occ[j], coulG, mesh, ao_mos[j].ravel(), nmo)
+        
+        vR_dm = vR_dm.reshape(nmo, ngrids) * weight
+        
+        vk_j = numpy.empty((nao, nmo), dtype=numpy.float64, order='C')
+        numpy.dot(aovals, vR_dm.T, out=vk_j)
         vk[j] = build_full_exchange(s, vk_j, mo_coeff[j])
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
@@ -366,7 +369,6 @@ def occRI_get_k_opt(mydf, dms, exxdiv=None):
     # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
     # and 3D should use the ewald probe charge correction.
     if exxdiv == 'ewald' and cell.dimension != 0:
-        s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
         madelung = tools.pbc.madelung(cell, mydf.kpts)
         for i, dm in enumerate(dms):
             vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
