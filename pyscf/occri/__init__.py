@@ -109,6 +109,25 @@ try:
         ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
         ctypes.c_int,
     ]
+    
+    occri_vR_kpts = liboccri.occri_vR_kpts
+    occri_vR_kpts.restype = None
+    occri_vR_kpts.argtypes = [
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vR_dm_real
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vR_dm_imag
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # mo_occ
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # coulG_all_real
+        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # mesh
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # expmikr_all_real
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # expmikr_all_imag
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # kpts
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # ao_mos_real
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # ao_mos_imag
+        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # nmo
+        ctypes.c_int,                                      # ngrids
+        ctypes.c_int,                                      # nk
+        ctypes.c_int,                                      # k_idx
+    ]
     _OCCRI_C_AVAILABLE = True
     print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
     
@@ -189,7 +208,11 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         self.get_j = pyscf.pbc.df.fft_jk.get_j_kpts
 
         if str(self.method[0]) == 'k':
-            self.get_k = occri_k.occri_get_k_kpts
+            # Choose k-point implementation based on C extension availability
+            if _OCCRI_C_AVAILABLE:
+                self.get_k = occri_k.occri_get_k_kpts_opt  # Optimized C k-point implementation
+            else:
+                self.get_k = occri_k.occri_get_k_kpts      # Pure Python k-point fallback
         else:
             # Choose implementation based on C extension availability
             if _OCCRI_C_AVAILABLE:
@@ -197,11 +220,11 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             else:
                 self.get_k = occri_k.occri_get_k      # Pure Python fallback
 
-        # Print all attributes
-        print()
-        print("******** <class 'ISDFX'> ********", flush=True)
-        for key, value in vars(self).items():
-            print(f"{key}: {value}", flush=True)
+        # # Print all attributes
+        # print()
+        # print("******** <class 'OCCRI'> ********", flush=True)
+        # for key, value in vars(self).items():
+        #     print(f"{key}: {value}", flush=True)
 
 
     def get_jk(
@@ -265,7 +288,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         dm = dm.reshape(-1, nK, dm_shape[-2], dm_shape[-1])
         if mo_coeff is not None:
             dm = lib.tag_array(dm, mo_occ=mo_occ.reshape(dm.shape[0], self.Nk, self.cell.nao), mo_coeff=mo_coeff.reshape(dm.shape))
-        
         
         if with_j:
             vj = self.get_j(self, dm, kpts=self.kpts)
