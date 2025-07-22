@@ -246,7 +246,56 @@ void free_thread_fftw_buffers_complex(FFTWBuffersComplex **buffers, int nthreads
     free(buffers);
 }
 
-// Helper function for k-point exchange integrals
+/*
+ * Compute k-point exchange integrals between occupied orbitals using complex FFT.
+ * 
+ * This function evaluates exchange integrals for periodic systems with k-point sampling.
+ * It handles the complex phase factors arising from Bloch functions and applies the
+ * Coulomb interaction in reciprocal space using complex-to-complex FFT transforms.
+ * 
+ * The algorithm implements:
+ * 1. Form complex orbital pair density: ρ_ij(r) = conj(φ_i^{k'}(r)) * exp(-i(k-k')·r) * φ_j^k(r)
+ * 2. Transform to reciprocal space: ρ̃_ij(G) = FFT[ρ_ij(r)]
+ * 3. Apply Coulomb kernel: Ṽ_ij(G) = ρ̃_ij(G) * v_C(|G+k-k'|)
+ * 4. Transform back to real space: V_ij(r) = IFFT[Ṽ_ij(G)]
+ * 5. Contract with orbital and phase: vR_dm += V_ij(r) * conj(φ_i^{k'}(r)) * exp(+i(k-k')·r) * n_i
+ *
+ * Parameters:
+ * -----------
+ * j : int
+ *     Orbital index j at k-point k
+ * k : int  
+ *     k-point index for orbital j
+ * k_prim : int
+ *     k-point index for orbital i (k')
+ * ao_k_j_real/imag : double*
+ *     Real/imaginary parts of orbital j at k-point k on grid
+ * ao_kprim_real/imag : double*
+ *     Real/imaginary parts of all orbitals at k-point k' on grid 
+ * vR_dm_real/imag : double*
+ *     Output arrays for exchange potential (modified in-place)
+ * coulG : double*
+ *     Coulomb kernel in G-space for k-point difference k-k'
+ * mo_occ_kprim : double*
+ *     Occupation numbers for orbitals at k-point k'
+ * expmikr_real/imag : double*
+ *     Phase factors exp(-i(k-k')·r) on grid
+ * mesh : int[3]
+ *     FFT mesh dimensions [nx, ny, nz]
+ * nmo : int*
+ *     Number of orbitals at each k-point
+ * ngrids : int
+ *     Number of real-space grid points
+ * buf : FFTWBuffersComplex*
+ *     Pre-allocated FFTW buffers for complex transforms
+ *
+ * Notes:
+ * ------
+ * - Uses complex-to-complex FFTs to handle k-point phase factors
+ * - Applies proper normalization factors for FFTW c2c transforms
+ * - Vectorized loops with OpenMP SIMD directives for performance
+ * - Thread-safe when called with separate buffer instances
+ */
 void integrals_uu_kpts(int j, int k, int k_prim, 
                        double *ao_k_j_real, double *ao_k_j_imag,
                        double *ao_kprim_real, double *ao_kprim_imag,
@@ -320,6 +369,79 @@ void integrals_uu_kpts(int j, int k, int k_prim,
     }
 }
 
+/*
+ * Main k-point exchange matrix evaluation using OCCRI method with OpenMP parallelization.
+ *
+ * This function computes exchange integrals for periodic systems with k-point sampling
+ * using the Occupied Orbital Coulomb Resolution of Identity (OCCRI) method. It handles
+ * complex Bloch functions, k-point phase factors, and multiple k-point interactions
+ * efficiently using optimized C code with FFTW and OpenMP.
+ *
+ * Algorithm Overview:
+ * ------------------
+ * For each orbital j at k-point k:
+ *   For each k-point k':
+ *     For each orbital i at k':
+ *       Compute exchange integral (j,k | i,k') using FFT-based Coulomb evaluation
+ *       Apply k-point phase factors exp(±i(k-k')·r)
+ *       Accumulate contributions to exchange potential
+ *
+ * Key Features:
+ * -------------
+ * - OpenMP parallelization over orbital indices
+ * - Complex FFT handling for k-point phase factors  
+ * - Efficient memory layout with pre-allocated buffers
+ * - Vectorized inner loops for optimal performance
+ * - Thread-safe FFTW usage with per-thread buffers
+ *
+ * Parameters:
+ * -----------
+ * vR_dm_real/imag : double*
+ *     Output arrays for exchange potential in real/imaginary parts
+ *     Shape: (nmo[k_idx] * ngrids)
+ * mo_occ : double*
+ *     Flattened occupation numbers for all k-points with nmo_max padding
+ *     Layout: [k0: nmo_max values, k1: nmo_max values, ...]
+ * coulG_all : double*
+ *     Coulomb kernels for all k-point differences
+ *     Shape: (nk * ngrids), coulG_all[k_prim*ngrids:(k_prim+1)*ngrids] = v_C(|G+k-k_prim|)
+ * mesh : int[3]
+ *     FFT mesh dimensions [nx, ny, nz]
+ * expmikr_all_real/imag : double*
+ *     Phase factors exp(-i(k-k')·r) for all k-point pairs
+ *     Shape: (nk * ngrids)
+ * kpts : double*
+ *     k-point coordinates (currently unused but kept for interface compatibility)
+ * ao_real/imag : double*
+ *     Flattened orbital data for all k-points with nmo_max padding per k-point
+ *     Layout: [k0: nmo_max*ngrids values, k1: nmo_max*ngrids values, ...]
+ * nmo : int*
+ *     Number of orbitals at each k-point, shape (nk,)
+ * ngrids : int
+ *     Number of real-space grid points
+ * nk : int
+ *     Number of k-points
+ * k_idx : int
+ *     Index of target k-point for which to compute exchange potential
+ *
+ * Memory Layout:
+ * --------------
+ * All input arrays use C-contiguous (row-major) ordering.
+ * Orbital data is padded to nmo_max for consistent indexing across k-points.
+ * Output vR_dm contains only nmo[k_idx] orbitals (no padding).
+ *
+ * Performance Notes:
+ * ------------------
+ * - Uses dynamic OpenMP scheduling for load balancing
+ * - Each thread gets dedicated FFTW buffers to avoid conflicts  
+ * - Memory access patterns optimized for cache efficiency
+ * - SIMD vectorization applied to inner loops where possible
+ *
+ * Thread Safety:
+ * --------------
+ * Function is thread-safe when called from different threads with different
+ * output arrays. Internal OpenMP parallelization handles synchronization.
+ */
 void occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag, 
                    double *mo_occ, double *coulG_all, int mesh[3], 
                    double *expmikr_all_real, double *expmikr_all_imag, 

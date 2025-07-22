@@ -33,10 +33,17 @@ Basic Usage:
 
 Advanced Usage with k-points:
     >>> from pyscf.pbc import scf
-    >>> kpts = cell.make_kpts([2,2,2])
+    >>> kpts = cell.make_kpts([2,2,2])  # 2x2x2 k-point mesh
     >>> mf = scf.KRHF(cell, kpts)
-    >>> mf.with_df = OCCRI(mf, kmesh=[2,2,2])
+    >>> mf.with_df = OCCRI(mf, kmesh=[2,2,2])  # k-point OCCRI
     >>> energy = mf.kernel()
+    
+k-point Features:
+    - Handles complex Bloch functions and k-point phase factors
+    - Supports arbitrary k-point meshes with proper momentum conservation
+    - Optimized C implementation for complex FFTs and phase factor handling
+    - Automatic fallback to Python implementation if C extension unavailable
+    - Compatible with both collinear and non-collinear spin systems
 
 Theory:
     The OCCRI method approximates the exchange matrix elements using:
@@ -110,23 +117,24 @@ try:
         ctypes.c_int,
     ]
     
+    # k-point exchange function with complex FFT support
     occri_vR_kpts = liboccri.occri_vR_kpts
     occri_vR_kpts.restype = None
     occri_vR_kpts.argtypes = [
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vR_dm_real
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vR_dm_imag
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # mo_occ
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # coulG_all_real
-        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # mesh
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # expmikr_all_real
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # expmikr_all_imag
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # kpts
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # ao_mos_real
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # ao_mos_imag
-        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # nmo
-        ctypes.c_int,                                      # ngrids
-        ctypes.c_int,                                      # nk
-        ctypes.c_int,                                      # k_idx
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vR_dm_real - output exchange potential (real part)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vR_dm_imag - output exchange potential (imag part) 
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # mo_occ - occupation numbers (all k-points, padded)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # coulG_all - Coulomb kernels for all k-point differences
+        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # mesh - FFT mesh dimensions [nx,ny,nz]
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # expmikr_all_real - phase factors exp(-i(k-k')·r) real
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # expmikr_all_imag - phase factors exp(-i(k-k')·r) imag
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # kpts - k-point coordinates (currently unused)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # ao_mos_real - orbital data all k-points (real, padded)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # ao_mos_imag - orbital data all k-points (imag, padded)
+        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # nmo - number of orbitals per k-point array
+        ctypes.c_int,                                      # ngrids - total number of real-space grid points
+        ctypes.c_int,                                      # nk - total number of k-points
+        ctypes.c_int,                                      # k_idx - target k-point index for computation
     ]
     _OCCRI_C_AVAILABLE = True
     print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
@@ -209,10 +217,11 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
         if str(self.method[0]) == 'k':
             # Choose k-point implementation based on C extension availability
+            # k-point methods handle complex Bloch functions and phase factors
             if _OCCRI_C_AVAILABLE:
-                self.get_k = occri_k.occri_get_k_kpts_opt  # Optimized C k-point implementation
+                self.get_k = occri_k.occri_get_k_kpts_opt  # Optimized C k-point implementation with complex FFT
             else:
-                self.get_k = occri_k.occri_get_k_kpts      # Pure Python k-point fallback
+                self.get_k = occri_k.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
         else:
             # Choose implementation based on C extension availability
             if _OCCRI_C_AVAILABLE:

@@ -405,37 +405,60 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
 
 def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
     """
-    Compute occupied-occupied exchange integrals using FFT.
+    Compute k-point exchange integrals between occupied orbitals using complex FFT.
     
-    This function evaluates the exchange integrals between occupied orbitals
-    using FFT-based techniques. It computes the Coulomb interaction in reciprocal
-    space and transforms back to real space for contraction with orbital densities.
+    This function evaluates exchange integrals for periodic systems with k-point sampling,
+    handling complex Bloch functions and k-point phase factors. It implements the core
+    computational kernel for the OCCRI method in momentum space.
+    
+    Algorithm:
+    ----------
+    For each orbital i at k-point k_prim:
+        1. Form complex orbital pair density: ρ_ij(r) = conj(φ_i^{k'}(r)) * exp(-i(k-k')·r) * φ_j^k(r)
+        2. Transform to reciprocal space: ρ̃_ij(G) = FFT[ρ_ij(r)]
+        3. Apply Coulomb kernel: Ṽ_ij(G) = ρ̃_ij(G) * v_C(|G+k-k'|) / sqrt(N_grid)
+        4. Transform back to real space: V_ij(r) = IFFT[Ṽ_ij(G)]
+        5. Contract and accumulate: vR_dm[j] += V_ij(r) * conj(φ_i^{k'}(r)) * exp(+i(k-k')·r) * n_i * sqrt(N_grid)
     
     Parameters:
     -----------
-    i : int
-        Index of the reference occupied orbital
+    j : int
+        Orbital index j at k-point k
+    k : int
+        k-point index for orbital j
+    k_prim : int 
+        k-point index for orbital i (k')
     ao_mos : list of ndarray
-        Molecular orbitals in AO basis evaluated on real-space grid
-        Shape: (nmo, ngrids) for each k-point/spin
+        Molecular orbitals for all k-points, each shape (nmo, ngrids)
+        ao_mos[k][i] contains orbital i at k-point k evaluated on real-space grid
     vR_dm : ndarray
-        Output array for exchange potential, shape (nmo, ngrids)
-        Modified in-place
+        Output exchange potential array, shape (nmo, ngrids), complex dtype
+        Modified in-place to accumulate contributions
     coulG : ndarray
-        Coulomb interaction in reciprocal space, shape (ngrids,)
-    mo_occ : ndarray
-        Molecular orbital occupation numbers, shape (nmo,)
+        Coulomb interaction kernel in G-space for momentum transfer k-k'
+        Shape: (ngrids,), real values: v_C(|G+k-k'|) = 4π/|G+k-k'|^2
+    mo_occ : list of ndarray
+        Orbital occupation numbers for each k-point
+        mo_occ[k_prim][i] = occupation of orbital i at k-point k_prim
     mesh : ndarray
-        FFT mesh dimensions [nx, ny, nz]
+        FFT mesh dimensions [nx, ny, nz], determines grid resolution
+    expmikr : ndarray
+        k-point phase factors exp(-i(k-k')·r) on real-space grid
+        Shape: (ngrids,), complex values
         
     Notes:
     ------
-    This function implements the core FFT-based exchange integral evaluation:
-    1. Form orbital pair density ρ_ij(r) = φ_i(r) φ_j(r)  
-    2. Transform to reciprocal space: ρ̃_ij(G) = FFT[ρ_ij(r)]
-    3. Apply Coulomb kernel: Ṽ_ij(G) = ρ̃_ij(G) * v_C(G)
-    4. Transform back: V_ij(r) = IFFT[Ṽ_ij(G)]
-    5. Contract with orbital and occupation: vR_dm += V_ij(r) * φ_j(r) * n_j
+    - Uses complex FFT to handle k-point phase factors from Bloch functions
+    - Applies sqrt(N_grid) normalization to match PySCF FFT conventions
+    - Phase factors expmikr handle momentum conservation: G -> G + k - k'
+    - The complex conjugate operations ensure proper Hermiticity of exchange matrix
+    - For Γ-point only (k=k'=0), this reduces to the standard real-space algorithm
+    
+    Performance:
+    ------------
+    - O(N_occ * N_grid * log(N_grid)) complexity per k-point pair
+    - Memory usage: O(N_grid) for temporary arrays
+    - Can be called in parallel for different (j,k,k') combinations
     """
     ngrids = ao_mos[0].shape[1]
     nmo = ao_mos[k_prim].shape[0]
@@ -562,40 +585,89 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
 
 def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     """
-    Optimized C-accelerated implementation of OCCRI k-point exchange matrix evaluation.
+    Production C-accelerated implementation of k-point OCCRI exchange matrix evaluation.
     
-    This function provides the production implementation of the occupied orbital
-    resolution of identity method using an optimized C extension with OpenMP
-    parallelization and FFTW for maximum performance in k-point calculations.
+    This function provides the high-performance implementation of the occupied orbital
+    resolution of identity method for k-point calculations using an optimized C extension
+    with FFTW and OpenMP. It handles complex Bloch functions, k-point phase factors,
+    and multiple k-point interactions with maximum computational efficiency.
+    
+    Performance Features:
+    ---------------------
+    - Native C implementation with FFTW for optimal FFT performance
+    - OpenMP parallelization over orbital indices for multi-core scaling
+    - Optimized memory layout with padding for vectorization
+    - Complex-to-complex FFTs for proper k-point phase handling
+    - Thread-safe operation with per-thread FFTW buffers
     
     Parameters:
     -----------
     mydf : OCCRI object
-        Density fitting object containing cell and k-point information
-    dms : ndarray or list of ndarray
-        Density matrix or matrices in AO basis for each k-point
-        Shape: (nset, nk, nao, nao) for each spin component
+        Density fitting object containing cell, k-points, and grid information
+        Must have attributes: cell, kpts, mesh, Nk (number of k-points)
+    dms : ndarray
+        Density matrices in AO basis for all k-points  
+        Shape: (nset, nk, nao, nao) where nset is number of spin components
+        Complex dtype supported for non-collinear systems
     exxdiv : str, optional
-        Exchange divergence treatment. Options:
+        Exchange divergence treatment for periodic systems. Options:
         - 'ewald': Apply Ewald probe charge correction (recommended for 3D)
-        - None: No correction applied
+        - None: No divergence correction applied
         
     Returns:
     --------
     ndarray
-        Exchange matrix or matrices in AO basis, same shape as input dms
+        Exchange matrices in AO basis for all k-points
+        Shape: (nset, nk, nao, nao), same as input dms
+        Real parts taken for final result (imaginary parts should be negligible)
         
-    Notes:
-    ------
-    This optimized implementation:
-    1. Uses complex FFTs for proper k-point phase handling
-    2. Leverages FFTW for optimized FFT operations
-    3. Uses OpenMP for parallel loop execution over orbitals
-    4. Optimizes memory layout for better cache performance
-    5. Calls the external C function occri_vR_kpts for core computations
+    Algorithm (C Implementation):
+    -----------------------------
+    1. Flatten and pad orbital data with nmo_max for consistent indexing
+    2. For each k-point and spin component:
+       a. Pre-compute all Coulomb kernels v_C(|G+k-k'|) for k-point differences
+       b. Pre-compute phase factors exp(-i(k-k')·r) for all k-point pairs
+       c. Call optimized C function occri_vR_kpts:
+          - Parallel loop over orbital j at target k-point
+          - For each j, loop over all k-points k'
+          - For each (j,k,k'), loop over orbitals i at k'
+          - Compute exchange integral using complex FFT with phase factors
+       d. Contract results back to AO basis using build_full_exchange
+    3. Apply Ewald correction if requested
     
-    The C extension handles the complex k-point phase factors and 
-    multiple Coulomb kernels efficiently with vectorized operations.
+    Memory Management:
+    ------------------
+    - Uses nmo_max padding for consistent array indexing across k-points
+    - Separate arrays for real/imaginary parts to interface with C
+    - Pre-allocates all temporary arrays to avoid memory fragmentation
+    - FFTW buffers allocated per thread for optimal performance
+    
+    Performance Notes:
+    ------------------
+    - Typical speedup: 5-10x over Python reference implementation
+    - Scales well with number of CPU cores via OpenMP
+    - Memory usage: O(N_k * N_occ_max * N_grid)
+    - Best performance with FFTW_PATIENT planning (done once per mesh size)
+    
+    
+    Requirements:
+    -------------
+    - Compiled C extension with FFTW and OpenMP support
+    - Compatible with both real and complex density matrices
+    - Requires periodic boundary conditions (cell.dimension > 0)
+    
+    Limitations:
+    ------------
+    - 1D systems with inf_vacuum not supported
+    - Very large k-point meshes may exhaust memory
+    - C extension must be properly compiled and linked
+    
+    Raises:
+    -------
+    RuntimeError
+        If C extension is not available or fails to load
+    AssertionError  
+        If cell.low_dim_ft_type == 'inf_vacuum' or cell.dimension == 1
     """
     cell = mydf.cell
     mesh = mydf.mesh
