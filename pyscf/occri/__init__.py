@@ -91,7 +91,8 @@ import numpy
 import time
 import ctypes
 from pyscf import lib
-from pyscf.occri import occri_k
+from pyscf.occri import occri_k, occri_k_kpts
+from pyscf.lib import logger
 
 # Attempt to load the optimized C extension with FFTW, BLAS, and OpenMP
 # Fall back to pure Python implementation if unavailable
@@ -144,6 +145,61 @@ except (OSError, ImportError, AttributeError) as e:
     print("OCCRI: Performance will be reduced. Consider installing FFTW, BLAS, and OpenMP for optimal speed")
     _OCCRI_C_AVAILABLE = False
 
+def log_mem(mydf):
+    cell = mydf.cell
+    nao = cell.nao
+    ngrids = numpy.prod(cell.mesh)
+    mem_now = lib.current_memory()[0]
+    max_memory = mydf.max_memory - mem_now
+    blksize = int(min(nao, max(1, (max_memory-mem_now)*1e6/16/4/ngrids/nao)))
+    logger.debug1(mydf, 'fft_jk: get_k_kpts max_memory %s  blksize %d',
+                  max_memory, blksize)
+    
+def build_full_exchange(S, Kao, mo_coeff):
+    """
+    Construct full exchange matrix from occupied orbital components.
+    
+    This function builds the complete exchange matrix in the atomic orbital (AO)
+    basis from the occupied-occupied (Koo) and occupied-all (Koa) components
+    computed using the resolution of identity approximation.
+    
+    Parameters:
+    -----------
+    Sa : numpy.ndarray
+        Overlap matrix times MO coefficients (nao x nocc)
+    Kao : numpy.ndarray
+        Occupied-all exchange matrix components (nao x nocc)
+    Koo : numpy.ndarray
+        Occupied-occupied exchange matrix components (nocc x nocc)
+        
+    Returns:
+    --------
+    numpy.ndarray
+        Full exchange matrix in AO basis (nao x nao)
+        
+    Algorithm:
+    ----------
+    K_μν = Sa_μi * Koa_iν + Sa_νi * Koa_iμ - Sa_μi * Koo_ij * Sa_νj
+    
+    This corresponds to the resolution of identity expression:
+    K_μν ≈ Σ_P C_μP W_PP' C_νP' where C are fitting coefficients
+    """
+
+    # Compute Sa = S @ mo_coeff.T once and reuse
+    Sa = S @ mo_coeff.T
+    
+    # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
+    # This is equivalent to Sa @ Kao.T + Kao @ Sa.T
+    # Use symmetric rank-k update (SYRK) when possible
+    Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order='C')
+    Kuv = Sa_Kao + Sa_Kao.T.conj()
+    
+    # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
+    # Optimize as -Sa @ Koo @ Sa.T using GEMM operations
+    Koo = mo_coeff.conj() @ Kao
+    Sa_Kao = numpy.matmul(Sa, Koo)
+    Kuv -= numpy.matmul(Sa_Kao, Sa.T.conj(), order='C')
+    return Kuv    
 
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
     """
@@ -219,9 +275,9 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             # Choose k-point implementation based on C extension availability
             # k-point methods handle complex Bloch functions and phase factors
             if _OCCRI_C_AVAILABLE:
-                self.get_k = occri_k.occri_get_k_opt_kpts  # Optimized C k-point implementation with complex FFT
+                self.get_k = occri_k_kpts.occri_get_k_opt_kpts  # Optimized C k-point implementation with complex FFT
             else:
-                self.get_k = occri_k.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
+                self.get_k = occri_k_kpts.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
         else:
             # Choose implementation based on C extension availability
             if _OCCRI_C_AVAILABLE:
