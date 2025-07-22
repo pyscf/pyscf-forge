@@ -21,6 +21,17 @@ from pyscf import lib
 from pyscf.pbc import tools
 from functools import reduce
 from pyscf import occri
+from pyscf.lib import logger
+
+def log_mem(mydf):
+    cell = mydf.cell
+    nao = cell.nao
+    ngrids = numpy.prod(cell.mesh)
+    mem_now = lib.current_memory()[0]
+    max_memory = mydf.max_memory - mem_now
+    blksize = int(min(nao, max(1, (max_memory-mem_now)*1e6/16/4/ngrids/nao)))
+    logger.debug1(mydf, 'fft_jk: get_k_kpts max_memory %s  blksize %d',
+                  max_memory, blksize)
 
 def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
     """
@@ -53,10 +64,8 @@ def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
     where S is the overlap matrix, D is the density matrix, C are the coefficients,
     and n are the occupation numbers.
     """
-    sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts))
-    if abs(dms.imag).max() < 1.e-6:
-        sk = sk.real 
-    sk = numpy.asarray(sk, dtype=dms.dtype)
+    sk = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
+    sk = [numpy.asarray(s, dtype=dm[0][k].dtype) for k, s in enumerate(sk)] # Sometimes pyscf return s with dtype > float64.
     mo_coeff = numpy.zeros_like(dms)
     nao = cell.nao
     nset = dms.shape[0]
@@ -246,6 +255,9 @@ def occri_get_k(mydf, dms, exxdiv=None):
     aovals = numpy.asarray(aovals.T, order='C')
     ao_mos = [numpy.matmul( mo, aovals, order='C') for mo in mo_coeff]
 
+    log_mem(mydf)
+    t1 = (logger.process_clock(), logger.perf_counter())
+
     # Parallelize over the outer loop (i) using joblib.
     # The inner loop is handled inside the function. Nec for memory cost.
     coulG = tools.get_coulG(cell, mesh=mesh)
@@ -259,6 +271,8 @@ def occri_get_k(mydf, dms, exxdiv=None):
         vk_j = aovals @ vR_dm.T
         vk[n] = build_full_exchange(s, vk_j, mo_coeff[n])
 
+    t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%0, *t1)
+    
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
     # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
@@ -357,6 +371,9 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
         numpy.dot(mo, aovals, out=ao_mo)
         ao_mos.append(ao_mo)
 
+    log_mem(mydf)
+    t1 = (logger.process_clock(), logger.perf_counter())
+
     coulG = tools.get_coulG(cell, mesh=mesh).reshape(*mesh)[..., : mesh[2] // 2 + 1].ravel()
     
     vR_dm = numpy.empty(nmo * ngrids, dtype=numpy.float64, order='C')
@@ -367,6 +384,8 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
         vR_dm = vR_dm.reshape(nmo, ngrids) * weight
         numpy.dot(aovals, vR_dm.T, out=vk_j)
         vk[n] = build_full_exchange(s, vk_j, mo_coeff[n])
+
+    t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%0, *t1)
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
@@ -501,7 +520,10 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     aovals = mydf._numint.eval_ao(cell, coords, kpts=kpts)
     aovals = [numpy.asarray(ao.T * (cell.vol / ngrids) ** 0.5, order='C') for ao in aovals]
     ao_mos = [[numpy.matmul( mo_coeff[n][k], aovals[k], order='C') for k in range(nk)] for n in range(nset)]
-    
+
+    log_mem(mydf)
+    t1 = (logger.process_clock(), logger.perf_counter())
+
     for n in range(nset):
         for k in range(nk):
             nmo = mo_coeff[n][k].shape[0]
@@ -515,6 +537,8 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
             vR_dm *= weight
             vk_j = aovals[k].conj() @ vR_dm.T
             vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k]).real
+
+            t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%k, *t1)
 
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are

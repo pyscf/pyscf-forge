@@ -57,7 +57,7 @@ if __name__ == "__main__":
     refcell.basis = "gth-cc-dzvp"      # Double-zeta valence basis with polarization
     refcell.pseudo = "gth-pbe"         # Goedecker-Teter-Hutter pseudopotentials
     refcell.ke_cutoff = 70             # Kinetic energy cutoff in Hartree
-    refcell.verbose = 4                # Suppress SCF output for cleaner test logs
+    refcell.verbose = 0                # Suppress SCF output for cleaner test logs
     refcell.build()
 
     # Test 1: Restricted Hartree-Fock (RHF)
