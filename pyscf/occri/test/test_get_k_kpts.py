@@ -78,40 +78,38 @@ if __name__ == "__main__":
 
     # Test 2: Unrestricted Hartree-Fock (UHF)
     # For closed-shell diamond, UHF should give same energy as RHF
-    en_fftdf = -43.9399339901445
-    mf = pyscf.pbc.scf.UHF(refcell)
-    mf.with_df = OCCRI(mf)
+    mf = pyscf.pbc.scf.KUHF(refcell, kpts=kpts)
+    mf.with_df = OCCRI(mf, kmesh=kmesh)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("UHF occri passed", en_diff)
+        print("KUHF occri passed", en_diff)
     else:
-        print("UHF occri FAILED!!!", en_diff)    
+        print("KUHF occri FAILED!!!", en_diff)    
 
 
     # Test 3: Restricted Kohn-Sham DFT with PBE0 hybrid functional
     # PBE0 contains 25% exact exchange, testing hybrid DFT capability
-    en_fftdf = -45.0265010261793
-    mf = pyscf.pbc.scf.RKS(refcell)
+    en_fftdf = -45.33605172707 
+    mf = pyscf.pbc.scf.KRKS(refcell, kpts=kpts)
     mf.xc = 'pbe0'  # 25% exact exchange + 75% PBE exchange + 100% PBE correlation
-    mf.with_df = OCCRI(mf)
+    mf.with_df = OCCRI(mf, kmesh=kmesh)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("RKS occri passed", en_diff)
+        print("KRKS occri passed", en_diff)
     else:
-        print("RKS occri FAILED!!!", en_diff)
+        print("KRKS occri FAILED!!!", en_diff)
 
 
     # Test 4: Unrestricted Kohn-Sham DFT with PBE0 hybrid functional  
     # Tests spin-unrestricted hybrid DFT (should match RKS for closed shell)
-    en_fftdf = -45.0265010261753
-    mf = pyscf.pbc.scf.UKS(refcell)
+    mf = pyscf.pbc.scf.KUKS(refcell, kpts=kpts)
     mf.xc = 'pbe0'  # Same functional as RKS test
-    mf.with_df = OCCRI(mf)
+    mf.with_df = OCCRI(mf, kmesh=kmesh)
     en = mf.kernel()
     en_diff = abs(en - en_fftdf) / refcell.natm
     if en_diff < TOL:
-        print("UKS occri passed", en_diff)
+        print("KUKS occri passed", en_diff)
     else:
-        print("UKS occri FAILED!!!", en_diff)            
+        print("KUKS occri FAILED!!!", en_diff)            

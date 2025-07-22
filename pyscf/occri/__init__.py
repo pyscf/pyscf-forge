@@ -197,6 +197,13 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             else:
                 self.get_k = occri_k.occri_get_k      # Pure Python fallback
 
+        # Print all attributes
+        print()
+        print("******** <class 'ISDFX'> ********", flush=True)
+        for key, value in vars(self).items():
+            print(f"{key}: {value}", flush=True)
+
+
     def get_jk(
         self,
         dm=None,
@@ -262,12 +269,16 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         
         if with_j:
             vj = self.get_j(self, dm, kpts=self.kpts)
+            if abs(dm.imag).max() < 1.e-6:
+                vj = vj.real
             vj = numpy.asarray(vj, dtype=dm.dtype).reshape(dm_shape)
         else:
             vj = None
 
         if with_k:
             vk = self.get_k(self, dm, exxdiv)
+            if abs(dm.imag).max() < 1.e-6:
+                vk = vk.real 
             vk = numpy.asarray(vk, dtype=dm.dtype).reshape(dm_shape)
         else:
             vk = None

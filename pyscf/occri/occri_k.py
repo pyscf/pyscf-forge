@@ -53,7 +53,10 @@ def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
     where S is the overlap matrix, D is the density matrix, C are the coefficients,
     and n are the occupation numbers.
     """
-    sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts), dtype=dms.dtype)
+    sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts))
+    if abs(dms.imag).max() < 1.e-6:
+        sk = sk.real 
+    sk = numpy.asarray(sk, dtype=dms.dtype)
     mo_coeff = numpy.zeros_like(dms)
     nao = cell.nao
     nset = dms.shape[0]
@@ -412,7 +415,7 @@ def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr)
     5. Contract with orbital and occupation: vR_dm += V_ij(r) * φ_j(r) * n_j
     """
     ngrids = ao_mos[0].shape[1]
-    nmo = ao_mos[0].shape[0]
+    nmo = ao_mos[k_prim].shape[0]
     sqrt_ngrids = ngrids ** 0.5
     inv_sqrt_ngrids = 1.0 / sqrt_ngrids
     
@@ -505,7 +508,6 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
             vR_dm = numpy.zeros((nmo, ngrids), numpy.complex128)
             for j in range(nmo):
                 for k_prim in range(nk):
-                    nmo = mo_coeff[n][k_prim].shape[0]
                     coulG = tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh)
                     expmikr = numpy.exp(-1j * (coords @ (kpts[k] - kpts[k_prim])))
                     integrals_uu_kpts(j, k, k_prim, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh, expmikr)
