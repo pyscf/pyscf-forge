@@ -219,7 +219,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             # Choose k-point implementation based on C extension availability
             # k-point methods handle complex Bloch functions and phase factors
             if _OCCRI_C_AVAILABLE:
-                self.get_k = occri_k.occri_get_k_kpts_opt  # Optimized C k-point implementation with complex FFT
+                self.get_k = occri_k.occri_get_k_opt_kpts  # Optimized C k-point implementation with complex FFT
             else:
                 self.get_k = occri_k.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
         else:
@@ -294,7 +294,11 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         if getattr(dm, "mo_coeff", None) is not None:
             mo_coeff = numpy.asarray(dm.mo_coeff)
             mo_occ = numpy.asarray(dm.mo_occ)
-        dm = dm.reshape(-1, nK, dm_shape[-2], dm_shape[-1])
+        if str(self.get_k.__name__[-4:]) == 'kpts':
+            dm = dm.reshape(-1, nK, dm_shape[-2], dm_shape[-1])
+        else:
+            dm = dm.reshape(-1, dm_shape[-2], dm_shape[-1])
+        
         if mo_coeff is not None:
             dm = lib.tag_array(dm, mo_occ=mo_occ.reshape(dm.shape[0], self.Nk, self.cell.nao), mo_coeff=mo_coeff.reshape(dm.shape))
         

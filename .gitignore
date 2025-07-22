@@ -135,3 +135,6 @@ dmypy.json
 
 # MacOS
 .DS_Store
+
+# benchmarking folder
+pyscf/occri/benchmark*

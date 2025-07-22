@@ -33,7 +33,7 @@ def log_mem(mydf):
     logger.debug1(mydf, 'fft_jk: get_k_kpts max_memory %s  blksize %d',
                   max_memory, blksize)
 
-def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
+def make_natural_orbitals(cell, dms):
     """
     Construct natural orbitals from density matrices.
     
@@ -47,8 +47,6 @@ def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
         Unit cell object containing atomic and basis set information
     dms : ndarray
         Density matrix or matrices in AO basis, shape (..., nao, nao)
-    kpts : ndarray, optional
-        k-point coordinates. If None, assumes Gamma point calculation
         
     Returns:
     --------
@@ -64,10 +62,62 @@ def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
     where S is the overlap matrix, D is the density matrix, C are the coefficients,
     and n are the occupation numbers.
     """
+    nao = cell.nao
+    nset = dms.shape[0]    
+
+    s = cell.pbc_intor('int1e_ovlp', hermi=1).astype(numpy.float64) # Sometimes pyscf return s with dtype float128.
+    mo_coeff = numpy.zeros_like(dms)
+    mo_occ = numpy.zeros((nset, nao), numpy.float64 )
+
+    for n, dm in enumerate(dms):
+        # Diagonalize the DM in AO
+        A = lib.reduce(numpy.dot, (s, dm, s))
+        w, v = scipy.linalg.eigh(A, b=s)
+
+        # Flip since they're in increasing order
+        mo_occ[n] = numpy.flip(w)
+        mo_coeff[n] = numpy.flip(v, axis=1)
+
+    return mo_coeff, mo_occ
+
+
+def make_natural_orbitals_kpts(cell, dms, kpts=numpy.zeros((1,3))):
+    """
+    Parameters:
+    -----------
+    cell : pyscf.pbc.gto.Cell
+        Unit cell object containing atomic and basis set information
+    dms : ndarray
+        Density matrix or matrices in AO basis, shape (..., nao, nao)
+    kpts : ndarray, optional
+        k-point coordinates. If None, assumes Gamma point calculation
+        
+    Returns:
+    --------
+    tuple of ndarray
+        (mo_coeff, mo_occ) where:
+        - mo_coeff: Natural orbital coefficients, same shape as dms
+                  mo_occ[n, k, i] = occupation of orbital i at k-point k, spin n
+                  Real values ordered from highest to lowest occupation
+        
+    k-point Specific Features:
+    --------------------------
+    - Handles complex overlap matrices for general k-points
+    - Automatic dtype detection: uses real arithmetic when |Im(dm)| < 1e-6
+    - Independent natural orbital construction at each k-point
+    - Preserves k-point symmetry and Bloch function properties
+    - Supports both collinear and non-collinear spin systems
+    """
+    # Compute k-point dependent overlap matrices
     sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts))
+    
+    # Use real arithmetic when density matrices are effectively real
+    # This optimization is important for closed-shell systems at real k-points
     if abs(dms.imag).max() < 1.e-6:
         sk = sk.real
-    sk = numpy.asarray(sk, dtype=dms.dtype) # Sometimes pyscf return s with dtype float128.
+        
+    # Ensure consistent dtype (PySCF sometimes returns float128)
+    sk = numpy.asarray(sk, dtype=dms.dtype)
     mo_coeff = numpy.zeros_like(dms)
     nao = cell.nao
     nset = dms.shape[0]
@@ -82,11 +132,6 @@ def make_natural_orbitals(cell, dms, kpts=numpy.zeros((1,3))):
             # Flip since they're in increasing order
             mo_occ[i][k] = numpy.flip(w)
             mo_coeff[i][k] = numpy.flip(v, axis=1)
-
-    if mo_coeff.ndim != dms.ndim:
-        mo_coeff = mo_coeff.reshape(dms.shape)
-    if mo_occ.ndim != (dms.ndim -1) :
-        mo_occ = mo_occ.reshape(-1, dms.shape[-1])
 
     return mo_coeff, mo_occ
 
@@ -221,8 +266,11 @@ def occri_get_k(mydf, dms, exxdiv=None):
     4. Contracts results back to AO basis using build_full_exchange
     5. Applies Ewald correction if requested for periodic boundary conditions
     
-    The method scales as O(N_occ^2 * N_grid) where N_occ is the number of 
-    occupied orbitals and N_grid is the number of FFT grid points.
+    The method scales as O(N_k^2 * N_occ^2 * N_grid * log(N_grid)) where:
+    - N_k = number of k-points
+    - N_occ = average number of occupied orbitals per k-point  
+    - N_grid = number of FFT grid points
+    The log(N_grid) factor comes from FFT operations, and N_k^2 from all k-point pair interactions.
     
     Raises:
     -------
@@ -511,8 +559,11 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     4. Contracts results back to AO basis using build_full_exchange
     5. Applies Ewald correction if requested for periodic boundary conditions
     
-    The method scales as O(N_occ^2 * N_grid) where N_occ is the number of 
-    occupied orbitals and N_grid is the number of FFT grid points.
+    The method scales as O(N_k^2 * N_occ^2 * N_grid * log(N_grid)) where:
+    - N_k = number of k-points
+    - N_occ = average number of occupied orbitals per k-point  
+    - N_grid = number of FFT grid points
+    The log(N_grid) factor comes from FFT operations, and N_k^2 from all k-point pair interactions.
     
     Raises:
     -------
@@ -531,7 +582,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
         mo_coeff = numpy.asarray(dms.mo_coeff)
         mo_occ = numpy.asarray(dms.mo_occ)
     else:
-        mo_coeff, mo_occ = make_natural_orbitals(cell, dms, mydf.kpts)
+        mo_coeff, mo_occ = make_natural_orbitals_kpts(cell, dms, mydf.kpts)
     tol = 1.0e-6
     is_occ = mo_occ > tol
     nset = dms.shape[0]
@@ -583,7 +634,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     return vk
 
 
-def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
+def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
     """
     Production C-accelerated implementation of k-point OCCRI exchange matrix evaluation.
     
@@ -680,7 +731,7 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
         mo_coeff = numpy.asarray(dms.mo_coeff)
         mo_occ = numpy.asarray(dms.mo_occ)
     else:
-        mo_coeff, mo_occ = make_natural_orbitals(cell, dms, mydf.kpts)
+        mo_coeff, mo_occ = make_natural_orbitals_kpts(cell, dms, mydf.kpts)
     
     # Optimize occupation number filtering
     tol = 1.0e-6
@@ -757,7 +808,7 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
                     nmo, ngrids, nk, k, 
                 )
             else:
-                raise RuntimeError("occri_get_k_kpts_opt called but C extension not available.")
+                raise RuntimeError("occri_get_k_opt_kpts called but C extension not available.")
             
             # Reshape and apply weight - only take the first nmo orbitals
             vR_dm = (vR_dm_real + 1j * vR_dm_imag).reshape(nmo[k], ngrids)
