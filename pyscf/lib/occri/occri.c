@@ -22,6 +22,7 @@
 #include "occri.h"
 #include <stdlib.h>
 #include <math.h>
+#include <stdint.h>
 #include <fftw3.h>
 #include <omp.h>
 #include "vhf/fblas.h"
@@ -117,7 +118,7 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
         const double mo_occ_j_isqn = mo_occ[j] * isqn;  // Hoist multiplication
 
         // Vectorizable loop: compute density
-        #pragma omp simd aligned(rho,ao_mos_i,ao_mos_j:64)
+        #pragma omp simd
         for (int g = 0; g < ngrids; g++) {
             rho[g] = ao_mos_i[g] * ao_mos_j[g];
         }
@@ -125,7 +126,7 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
         fftw_execute(buf->forward);
 
         // Vectorizable loop: apply Coulomb kernel
-        #pragma omp simd aligned(vG,coulG:64)
+        #pragma omp simd
         for (int g = 0; g < ncomplex; g++) {
             const double scale = coulG[g] * isqn;
             vG[g][0] *= scale;
@@ -136,7 +137,7 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
 
         // Vectorizable loop: accumulate result with better memory access
         double * const vR_dm_i = &vR_dm[idx_i];
-        #pragma omp simd aligned(vR_dm_i,vR,ao_mos_j:64)
+        #pragma omp simd
         for (int g = 0; g < ngrids; g++) {
             vR_dm_i[g] += vR[g] * ao_mos_j[g] * mo_occ_j_isqn;
         }
