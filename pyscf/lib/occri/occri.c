@@ -144,27 +144,79 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
 }
 
 
-void occri_vR(double *vR_dm, double *mo_occ, double *coulG,
-                 int mesh[3], double *ao_mos, int nmo) {
-
-    const int ngrids = mesh[0] * mesh[1] * mesh[2];
+void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
+               double *coulG, double *overlap, int mesh[3], int nmo, int nao, int ngrids) {
+    /*
+     * Direct computation of exchange matrix with all operations in C.
+     * 
+     * This function computes:
+     * 1. ao_mos = mo_coeff @ aovals (MO values on grid)
+     * 2. Exchange integrals using FFT 
+     * 3. Full exchange matrix construction (build_full_exchange equivalent)
+     * 
+     * Parameters:
+     * -----------
+     * vk_out : double* [nao x nao]
+     *     Output exchange matrix in AO basis
+     * mo_coeff : double* [nmo x nao] 
+     *     MO coefficients (transposed from Python convention)
+     * mo_occ : double* [nmo]
+     *     MO occupation numbers
+     * aovals : double* [nao x ngrids]
+     *     AO values evaluated on real-space grid
+     * coulG : double* [ncomplex]
+     *     Coulomb kernel in G-space
+     * overlap : double* [nao x nao]
+     *     AO overlap matrix
+     * mesh : int[3]
+     *     FFT mesh dimensions [nx, ny, nz]
+     * nmo, nao, ngrids : int
+     *     Number of MOs, AOs, and grid points
+     */
+    
     const int nthreads = omp_get_max_threads();
+    const double weight = 1.0; // Weight will be applied in Python after return
 
     // Initialize FFTW multithreading support
     if (!fftw_init_threads()) {
         fprintf(stderr, "FFTW thread init failed\n");
         exit(1);
     }
-
-    // Tell FFTW how many threads to use per plan (1 per buffer for thread safety)
     fftw_plan_with_nthreads(1);
 
-    // Pre-zero the output array for better cache behavior
+    // Allocate aligned arrays for intermediate results
+    double *ao_mos = fftw_malloc(sizeof(double) * nmo * ngrids);
+    double *vR_dm = fftw_malloc(sizeof(double) * nmo * ngrids);
+    double *Sa = fftw_malloc(sizeof(double) * nao * nmo);      // overlap @ mo_coeff.T
+    double *vk_j = fftw_malloc(sizeof(double) * nao * nmo);    // aovals @ vR_dm.T
+    double *Koo = fftw_malloc(sizeof(double) * nmo * nmo);     // mo_coeff.T @ vk_j
+    
+    if (!ao_mos || !vR_dm || !Sa || !vk_j || !Koo) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(1);
+    }
+
+    // Step 1: Compute ao_mos = mo_coeff @ aovals
+    // mo_coeff is [nmo x nao], aovals is [nao x ngrids], result is [nmo x ngrids]
+    #pragma omp parallel for
+    for (int i = 0; i < nmo; i++) {
+        for (int g = 0; g < ngrids; g++) {
+            double sum = 0.0;
+            #pragma omp simd reduction(+:sum)
+            for (int a = 0; a < nao; a++) {
+                sum += mo_coeff[i * nao + a] * aovals[a * ngrids + g];
+            }
+            ao_mos[i * ngrids + g] = sum;
+        }
+    }
+
+    // Step 2: Initialize vR_dm output array
     #pragma omp parallel for simd
     for (int i = 0; i < nmo * ngrids; i++) {
         vR_dm[i] = 0.0;
     }
 
+    // Step 3: Compute exchange integrals using existing integrals_uu function
     FFTWBuffers **fftw_buffers_array = allocate_thread_fftw_buffers(mesh, nthreads);
 
     #pragma omp parallel
@@ -172,7 +224,6 @@ void occri_vR(double *vR_dm, double *mo_occ, double *coulG,
         const int tid = omp_get_thread_num();
         FFTWBuffers *buf = fftw_buffers_array[tid];
 
-        // Use static scheduling for better load balancing with irregular workloads
         #pragma omp for schedule(static)
         for (int i = 0; i < nmo; i++) {
             integrals_uu(i, ao_mos, vR_dm, coulG, nmo, ngrids, mo_occ, mesh, buf);
@@ -180,8 +231,87 @@ void occri_vR(double *vR_dm, double *mo_occ, double *coulG,
     }
 
     free_thread_fftw_buffers(fftw_buffers_array, nthreads);
-    
-    // Clean up FFTW threading
+
+    // Apply weight factor
+    #pragma omp parallel for simd
+    for (int i = 0; i < nmo * ngrids; i++) {
+        vR_dm[i] *= weight;
+    }
+
+    // Step 4: Compute vk_j = aovals @ vR_dm.T
+    // aovals is [nao x ngrids], vR_dm is [nmo x ngrids], result is [nao x nmo]
+    #pragma omp parallel for
+    for (int a = 0; a < nao; a++) {
+        for (int i = 0; i < nmo; i++) {
+            double sum = 0.0;
+            #pragma omp simd reduction(+:sum)
+            for (int g = 0; g < ngrids; g++) {
+                sum += aovals[a * ngrids + g] * vR_dm[i * ngrids + g];
+            }
+            vk_j[a * nmo + i] = sum;
+        }
+    }
+
+    // Step 5: Compute Sa = overlap @ mo_coeff.T  
+    // overlap is [nao x nao], mo_coeff.T is [nao x nmo], result is [nao x nmo]
+    #pragma omp parallel for
+    for (int a = 0; a < nao; a++) {
+        for (int i = 0; i < nmo; i++) {
+            double sum = 0.0;
+            #pragma omp simd reduction(+:sum)
+            for (int b = 0; b < nao; b++) {
+                sum += overlap[a * nao + b] * mo_coeff[i * nao + b];  // mo_coeff[i][b] = mo_coeff.T[b][i]
+            }
+            Sa[a * nmo + i] = sum;
+        }
+    }
+
+    // Step 6: Compute Koo = mo_coeff @ vk_j
+    // mo_coeff is [nmo x nao], vk_j is [nao x nmo], result is [nmo x nmo]
+    #pragma omp parallel for
+    for (int i = 0; i < nmo; i++) {
+        for (int j = 0; j < nmo; j++) {
+            double sum = 0.0;
+            #pragma omp simd reduction(+:sum)
+            for (int a = 0; a < nao; a++) {
+                sum += mo_coeff[i * nao + a] * vk_j[a * nmo + j];
+            }
+            Koo[i * nmo + j] = sum;
+        }
+    }
+
+    // Step 7: Build full exchange matrix
+    // K_uv = Sa_ui * vk_j_vi + Sa_vi * vk_j_ui - Sa_ui * Koo_ij * Sa_vj
+    #pragma omp parallel for
+    for (int u = 0; u < nao; u++) {
+        for (int v = 0; v < nao; v++) {
+            double Kuv = 0.0;
+            
+            // First two terms: Sa_ui * vk_j_vi + Sa_vi * vk_j_ui
+            #pragma omp simd reduction(+:Kuv)
+            for (int i = 0; i < nmo; i++) {
+                Kuv += Sa[u * nmo + i] * vk_j[v * nmo + i];  // Sa[u][i] * vk_j[v][i]
+                Kuv += Sa[v * nmo + i] * vk_j[u * nmo + i];  // Sa[v][i] * vk_j[u][i]
+            }
+            
+            // Third term: -Sa_ui * Koo_ij * Sa_vj
+            for (int i = 0; i < nmo; i++) {
+                #pragma omp simd reduction(-:Kuv)
+                for (int j = 0; j < nmo; j++) {
+                    Kuv -= Sa[u * nmo + i] * Koo[i * nmo + j] * Sa[v * nmo + j];
+                }
+            }
+            
+            vk_out[u * nao + v] = Kuv;
+        }
+    }
+
+    // Clean up
+    fftw_free(ao_mos);
+    fftw_free(vR_dm);
+    fftw_free(Sa);
+    fftw_free(vk_j);
+    fftw_free(Koo);
     fftw_cleanup_threads();
 }
 

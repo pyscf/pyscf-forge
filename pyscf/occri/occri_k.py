@@ -299,33 +299,36 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
     mesh = cell.mesh.astype(numpy.int32)
     weight = cell.vol / ngrids
     nao = mo_coeff[0].shape[-1]
-    nmo = mo_coeff[0].shape[0]
     
     vk = numpy.zeros((nset, nao, nao), numpy.float64, order='C')
     s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
 
     aovals = mydf._numint.eval_ao(cell, coords)[0]
-    aovals = numpy.ascontiguousarray(aovals.T)
-    
-    ao_mos = []
-    for mo in mo_coeff:
-        ao_mo = numpy.empty((mo.shape[0], ngrids), dtype=numpy.float64, order='C')
-        numpy.dot(mo, aovals, out=ao_mo)
-        ao_mos.append(ao_mo)
 
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
 
     coulG = tools.get_coulG(cell, mesh=mesh).reshape(*mesh)[..., : mesh[2] // 2 + 1].ravel()
     
-    vR_dm = numpy.empty(nmo * ngrids, dtype=numpy.float64, order='C')
-    vk_j = numpy.empty((nao, nmo), dtype=numpy.float64, order='C')
     for n in range(nset):
         nmo = mo_coeff[n].shape[0]
-        occri.occri_vR(vR_dm, mo_occ[n], coulG, mesh, ao_mos[n].ravel(), nmo)
-        vR_dm = vR_dm.reshape(nmo, ngrids) * weight
-        numpy.dot(aovals, vR_dm.T, out=vk_j)
-        vk[n] = occri.build_full_exchange(s, vk_j, mo_coeff[n])
+        
+        # Prepare arrays for C interface
+        mo_coeff_c = numpy.ascontiguousarray(mo_coeff[n])  # Shape: (nmo, nao)
+        mo_occ_c = numpy.ascontiguousarray(mo_occ[n])      # Shape: (nmo,)
+        aovals_c = numpy.ascontiguousarray(aovals.T)       # Shape: (nao, ngrids)
+        coulG_c = numpy.ascontiguousarray(coulG)           # Shape: (ncomplex,)
+        s_c = numpy.ascontiguousarray(s)                   # Shape: (nao, nao)
+        
+        # Output array
+        vk_out = numpy.zeros((nao, nao), dtype=numpy.float64, order='C')
+        
+        # Call C function
+        occri.occri_vR(vk_out, mo_coeff_c, mo_occ_c, aovals_c, 
+                      coulG_c, s_c, mesh, nmo, nao, ngrids)
+        
+        # Apply weight factor (cell volume normalization)
+        vk[n] = vk_out * weight
 
     t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%0, *t1)
 

@@ -110,12 +110,16 @@ try:
     occri_vR = liboccri.occri_vR
     occri_vR.restype = None
     occri_vR.argtypes = [
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),
-        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),
-        ctypes.c_int,
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # vk_out - output exchange matrix (nao x nao)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # mo_coeff - MO coefficients (nmo x nao)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # mo_occ - occupation numbers (nmo,)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # aovals - AO values on grid (nao x ngrids)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # coulG - Coulomb kernel (ncomplex,)
+        ndpointer(ctypes.c_double, flags="C_CONTIGUOUS"),  # overlap - overlap matrix (nao x nao)
+        ndpointer(ctypes.c_int, flags="C_CONTIGUOUS"),     # mesh - FFT mesh dimensions [nx,ny,nz]
+        ctypes.c_int,                                      # nmo - number of MOs
+        ctypes.c_int,                                      # nao - number of AOs
+        ctypes.c_int,                                      # ngrids - number of grid points
     ]
     
     # k-point exchange function with complex FFT support
@@ -138,7 +142,6 @@ try:
         ctypes.c_int,                                      # k_idx - target k-point index for computation
     ]
     _OCCRI_C_AVAILABLE = True
-    print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
     
 except (OSError, ImportError, AttributeError) as e:
     print(f"OCCRI: C extension not available ({str(e)}), falling back to pure Python implementation")
@@ -234,7 +237,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         >>> energy = mf.kernel()
     """
 
-    def __init__(self, mydf, kmesh = [1,1,1], **kwargs,):
+    def __init__(self, mydf, kmesh = [1,1,1], disable_c=False, **kwargs,):
         """
         Initialize the OCCRI density fitting object.
         
@@ -271,16 +274,19 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         
         self.get_j = pyscf.pbc.df.fft_jk.get_j_kpts
 
+        if _OCCRI_C_AVAILABLE and not disable_c:
+            print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
+
         if str(self.method[0]) == 'k':
             # Choose k-point implementation based on C extension availability
             # k-point methods handle complex Bloch functions and phase factors
-            if _OCCRI_C_AVAILABLE:
+            if _OCCRI_C_AVAILABLE and not disable_c:
                 self.get_k = occri_k_kpts.occri_get_k_opt_kpts  # Optimized C k-point implementation with complex FFT
             else:
                 self.get_k = occri_k_kpts.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
         else:
             # Choose implementation based on C extension availability
-            if _OCCRI_C_AVAILABLE:
+            if _OCCRI_C_AVAILABLE and not disable_c:
                 self.get_k = occri_k.occri_get_k_opt  # Optimized C implementation
             else:
                 self.get_k = occri_k.occri_get_k      # Pure Python fallback
