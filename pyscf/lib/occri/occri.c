@@ -450,7 +450,7 @@ void integrals_uu_kpts(int j, int k, int k_prim,
         const double mo_occ_i = mo_occ_kprim[i] * isqn;
 
         // Vectorizable loop: compute complex density with phase factor
-        #pragma omp simd aligned(rho_c,expmikr_real,expmikr_imag:64)
+        #pragma omp simd
         for (int g = 0; g < ngrids; g++) {
             // rho = conj(ao_mos_kprim[i]) * exp(-i k·r) * ao_mos_k[j]
             // Apply phase factor to ao_i: ao_i_phase = conj(ao_i) * exp(-i k·r)
@@ -465,7 +465,7 @@ void integrals_uu_kpts(int j, int k, int k_prim,
         fftw_execute(buf->forward_c2c);
 
         // Vectorizable loop: apply Coulomb kernel
-        #pragma omp simd aligned(vG_c,coulG:64)
+        #pragma omp simd
         for (int g = 0; g < ngrids; g++) {
             const double vG_real = vG_c[g][0];
             const double vG_imag = vG_c[g][1];
@@ -480,7 +480,7 @@ void integrals_uu_kpts(int j, int k, int k_prim,
 
         // Vectorizable loop: accumulate result with phase factor
         const int idx_vR_j = j * ngrids;
-        #pragma omp simd aligned(vR_c,expmikr_real,expmikr_imag:64)
+        #pragma omp simd
         for (int g = 0; g < ngrids; g++) {
             // Apply phase factor to ao_i: ao_i_phase = ao_i * exp(+i k·r)
             // This matches i_Rg_exp.conj() in the Python version
