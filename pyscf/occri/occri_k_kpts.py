@@ -53,9 +53,6 @@ def make_natural_orbitals_kpts(cell, dms, kpts=numpy.zeros((1,3))):
     """
     # Compute k-point dependent overlap matrices
     sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts))
-    
-    # Use real arithmetic when density matrices are effectively real
-    # This optimization is important for closed-shell systems at real k-points
     if abs(dms.imag).max() < 1.e-6:
         sk = sk.real
         
@@ -248,16 +245,8 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
 
             t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%k, *t1)
 
-    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
-    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
-    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
-    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
-    # and 3D should use the ewald probe charge correction.
     if exxdiv == 'ewald' and cell.dimension != 0:
-        madelung = tools.pbc.madelung(cell, mydf.kpts)
-        for n in range(nset):
-            for k in range(nk):
-                vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k])).real
+        _ewald_exxdiv_for_G0(mydf, s, dms, vk)
 
     return vk
 
@@ -373,7 +362,7 @@ def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
                 for k in range(nk)] for n in range(nset)]
 
     # Pre-allocate output arrays
-    mesh = cell.mesh.astype(numpy.int32)
+    mesh = numpy.asarray(cell.mesh, numpy.int32)
     weight = ngrids / cell.vol / nk
     nao = cell.nao
     vk = numpy.zeros((nset, nk, nao, nao), numpy.complex128, order='C')
@@ -450,9 +439,20 @@ def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
     
     # Apply Ewald correction if requested
     if exxdiv == 'ewald' and cell.dimension != 0:
-        madelung = tools.pbc.madelung(cell, mydf.kpts)
-        for n in range(nset):
-            for k in range(nk):
-                vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k]))
+        _ewald_exxdiv_for_G0(mydf, s, dms, vk)
     
     return vk
+
+def _ewald_exxdiv_for_G0(mydf, s, dms, vk):
+    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
+    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
+    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
+    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
+    # and 3D should use the ewald probe charge correction.
+    cell = mydf.cell
+    madelung = tools.pbc.madelung(cell, mydf.kpts)
+    nset = dms.shape[0]
+    nk = dms.shape[1]
+    for n in range(nset):
+        for k in range(nk):
+            vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k]))

@@ -57,8 +57,8 @@ def make_natural_orbitals(cell, dms):
     nset = dms.shape[0]    
 
     s = cell.pbc_intor('int1e_ovlp', hermi=1).astype(numpy.float64) # Sometimes pyscf return s with dtype float128.
-    mo_coeff = numpy.zeros_like(dms)
-    mo_occ = numpy.zeros((nset, nao), numpy.float64 )
+    mo_coeff = numpy.zeros_like(dms, order='C')
+    mo_occ = numpy.zeros((nset, nao), numpy.float64, order='C' )
 
     for n, dm in enumerate(dms):
         # Diagonalize the DM in AO
@@ -213,19 +213,22 @@ def occri_get_k(mydf, dms, exxdiv=None):
         vk[n] = occri.build_full_exchange(s, vk_j, mo_coeff[n])
 
     t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%0, *t1)
-    
+
+    if exxdiv == 'ewald' and cell.dimension != 0:
+        _ewald_exxdiv_for_G0(mydf, s, dms, vk)
+
+    return vk
+
+def _ewald_exxdiv_for_G0(mydf, s, dms, vk):
     # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
     # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
     # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
     # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
     # and 3D should use the ewald probe charge correction.
-    if exxdiv == 'ewald' and cell.dimension != 0:
-        madelung = tools.pbc.madelung(cell, mydf.kpts)
-        for j, dm in enumerate(dms):
-            vk[j] += madelung * reduce(numpy.dot, (s, dm, s))
-
-    return vk
-
+    cell = mydf.cell
+    madelung = tools.pbc.madelung(cell, mydf.kpts)
+    for j, dm in enumerate(dms):
+        vk[j] += madelung * reduce(numpy.dot, (s, dm, s))
 
 def occri_get_k_opt(mydf, dms, exxdiv=None):
     """
@@ -285,8 +288,8 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
     ngrids = coords.shape[0]
     
     if getattr(dms, "mo_coeff", None) is not None:
-        mo_coeff = numpy.asarray(dms.mo_coeff)
-        mo_occ = numpy.asarray(dms.mo_occ)
+        mo_coeff = numpy.asarray(dms.mo_coeff, order='C')
+        mo_occ = numpy.asarray(dms.mo_occ, order='C')
     else:
         mo_coeff, mo_occ = make_natural_orbitals(cell, dms)
     
@@ -296,14 +299,15 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
     mo_occ = [numpy.ascontiguousarray(occ[is_occ[i]]) for i, occ in enumerate(mo_occ)]
     
     nset = len(mo_coeff)
-    mesh = cell.mesh.astype(numpy.int32)
+    mesh = numpy.asarray(cell.mesh, numpy.int32)
     weight = cell.vol / ngrids
     nao = mo_coeff[0].shape[-1]
     
     vk = numpy.zeros((nset, nao, nao), numpy.float64, order='C')
-    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None).astype(numpy.float64)
+    s = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=None), dtype=numpy.float64, order='C')
 
     aovals = mydf._numint.eval_ao(cell, coords)[0]
+    aovals = numpy.ascontiguousarray(aovals.T)       # Shape: (nao, ngrids)
 
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
@@ -316,30 +320,14 @@ def occri_get_k_opt(mydf, dms, exxdiv=None):
         # Prepare arrays for C interface
         mo_coeff_c = numpy.ascontiguousarray(mo_coeff[n])  # Shape: (nmo, nao)
         mo_occ_c = numpy.ascontiguousarray(mo_occ[n])      # Shape: (nmo,)
-        aovals_c = numpy.ascontiguousarray(aovals.T)       # Shape: (nao, ngrids)
-        coulG_c = numpy.ascontiguousarray(coulG)           # Shape: (ncomplex,)
-        s_c = numpy.ascontiguousarray(s)                   # Shape: (nao, nao)
-        
-        # Output array
-        vk_out = numpy.zeros((nao, nao), dtype=numpy.float64, order='C')
         
         # Call C function
-        occri.occri_vR(vk_out, mo_coeff_c, mo_occ_c, aovals_c, 
-                      coulG_c, s_c, mesh, nmo, nao, ngrids)
-        
-        # Apply weight factor (cell volume normalization)
-        vk[n] = vk_out * weight
+        occri.occri_vR(vk[n], mo_coeff_c, mo_occ_c, aovals, 
+                      coulG, s, mesh, nmo, nao, ngrids, weight)
 
     t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%0, *t1)
 
-    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
-    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
-    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
-    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
-    # and 3D should use the ewald probe charge correction.
     if exxdiv == 'ewald' and cell.dimension != 0:
-        madelung = tools.pbc.madelung(cell, mydf.kpts)
-        for i, dm in enumerate(dms):
-            vk[i] += madelung * reduce(numpy.dot, (s, dm, s))
+        _ewald_exxdiv_for_G0(mydf, s, dms, vk)
 
     return vk

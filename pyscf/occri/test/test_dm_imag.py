@@ -60,32 +60,3 @@ print("Final DM max imaginary part:", abs(dm_final.imag).max())
 mf.with_df = OCCRI(mf, kmesh=kmesh)
 vk = mf.get_k()
 print("Exchange matrix computed successfully")
-
-# #   Alternative: Simpler Spin-Polarized System
-
-# #   If the magnetic field approach is too complex, try this simpler open-shell system:
-
-# # Open-shell radical system
-# cell = gto.Cell()
-# cell.atom = '''
-# Li 0.0 0.0 0.0
-# '''
-# cell.a = np.eye(3) * 4.0  # 4 Bohr cubic cell
-# cell.basis = 'sto-3g'
-# cell.build()
-
-# kmesh = [2, 2, 2]
-# kpts = cell.make_kpts(kmesh)
-# mf = scf.KUHF(cell, kpts=kpts)
-
-# # Force spin polarization
-# mf.init_guess = 'atom'
-# dm_init = mf.get_init_guess()
-
-# # Break symmetry manually
-# dm_init[0] += 0.1j * np.random.random(dm_init[0].shape) * 0.01
-# dm_init[1] -= 0.1j * np.random.random(dm_init[1].shape) * 0.01
-
-# mf.kernel(dm_init)
-# dm_final = mf.make_rdm1()
-# print("Final DM max imaginary part:", abs(dm_final.imag).max())

@@ -146,7 +146,8 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
 
 
 void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
-               double *coulG, double *overlap, int mesh[3], int nmo, int nao, int ngrids) {
+               double *coulG, double *overlap, int mesh[3], int nmo, int nao, 
+               int ngrids, const double weight) {
     /*
      * Direct computation of exchange matrix with all operations in C.
      * 
@@ -176,7 +177,6 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
      */
     
     const int nthreads = omp_get_max_threads();
-    const double weight = 1.0; // Weight will be applied in Python after return
 
     // Initialize FFTW multithreading support
     if (!fftw_init_threads()) {
@@ -233,12 +233,6 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
 
     free_thread_fftw_buffers(fftw_buffers_array, nthreads);
 
-    // Apply weight factor
-    #pragma omp parallel for simd
-    for (int i = 0; i < nmo * ngrids; i++) {
-        vR_dm[i] *= weight;
-    }
-
     // Step 4: Compute vk_j = aovals @ vR_dm.T
     // aovals is [nao x ngrids], vR_dm is [nmo x ngrids], result is [nao x nmo]
     #pragma omp parallel for
@@ -249,7 +243,7 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
             for (int g = 0; g < ngrids; g++) {
                 sum += aovals[a * ngrids + g] * vR_dm[i * ngrids + g];
             }
-            vk_j[a * nmo + i] = sum;
+            vk_j[a * nmo + i] = sum * weight;
         }
     }
 

@@ -120,6 +120,7 @@ try:
         ctypes.c_int,                                      # nmo - number of MOs
         ctypes.c_int,                                      # nao - number of AOs
         ctypes.c_int,                                      # ngrids - number of grid points
+        ctypes.c_double,                                   # weight
     ]
     
     # k-point exchange function with complex FFT support
@@ -192,16 +193,13 @@ def build_full_exchange(S, Kao, mo_coeff):
     Sa = S @ mo_coeff.T
     
     # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
-    # This is equivalent to Sa @ Kao.T + Kao @ Sa.T
-    # Use symmetric rank-k update (SYRK) when possible
     Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order='C')
     Kuv = Sa_Kao + Sa_Kao.T.conj()
     
     # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
-    # Optimize as -Sa @ Koo @ Sa.T using GEMM operations
     Koo = mo_coeff.conj() @ Kao
-    Sa_Kao = numpy.matmul(Sa, Koo)
-    Kuv -= numpy.matmul(Sa_Kao, Sa.T.conj(), order='C')
+    Sa_Koo = numpy.matmul(Sa, Koo)
+    Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order='C')
     return Kuv    
 
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
@@ -219,7 +217,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
     
     Attributes:
         method (str): The type of mean-field method being used (e.g., 'rhf', 'uhf', 'rks', 'uks')
-        df_obj: Reference to the original density fitting object
         cell: The unit cell object
         kmesh (list): k-point mesh dimensions [nkx, nky, nkz]
         Nk (int): Total number of k-points
@@ -257,9 +254,9 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             'hf', 'uhf', 'khf', 'kuhf', 'rks', 'uks', 'krks', 'kuks')
         """
         
+        mydf._is_mem_enough = lambda : False
+
         self.method = mydf.__module__.rsplit('.', 1)[-1]
-        self.df_obj = mydf
-        
         assert self.method in ['hf', 'uhf', 'khf', 'kuhf', 'rks', 'uks', 'krks', 'kuks']
         
         self.StartTime = time.time()
@@ -274,7 +271,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         
         self.get_j = pyscf.pbc.df.fft_jk.get_j_kpts
 
-        if _OCCRI_C_AVAILABLE and not disable_c:
+        if _OCCRI_C_AVAILABLE and not disable_c and self.cell.verbose > 3:
             print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
 
         if str(self.method[0]) == 'k':
@@ -356,7 +353,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         if getattr(dm, "mo_coeff", None) is not None:
             mo_coeff = numpy.asarray(dm.mo_coeff)
             mo_occ = numpy.asarray(dm.mo_occ)
-        if str(self.get_k.__name__[-4:]) == 'kpts':
+        if str(self.method[0]) == 'k':
             dm = dm.reshape(-1, nK, dm_shape[-2], dm_shape[-1])
         else:
             dm = dm.reshape(-1, dm_shape[-2], dm_shape[-1])

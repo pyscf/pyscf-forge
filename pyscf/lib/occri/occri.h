@@ -44,13 +44,23 @@ FFTWBuffersComplex **allocate_thread_fftw_buffers_complex(int mesh[3], int nthre
 void free_thread_fftw_buffers_complex(FFTWBuffersComplex **buffers, int nthreads);
 
 void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
-              double *coulG, double *overlap, int mesh[3], int nmo, int nao, int ngrids);
+              double *coulG, double *overlap, int mesh[3], int nmo, int nao, int ngrids, double weight);
 
 void occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag, 
                    double *mo_occ, double *coulG_all, int mesh[3], 
                    double *expmikr_all_real, double *expmikr_all_imag, 
                    double *kpts, double *ao_real, double *ao_imag,
                    int *nmo, int ngrids, int nk, int k_idx);
+
+void occri_vR_kpts_full(double *vk_out, 
+                        double *aovals_real, double *aovals_imag,
+                        double *overlap_real, double *overlap_imag,
+                        double *mo_coeff_real, double *mo_coeff_imag,
+                        double *mo_occ, double *coulG_all, int mesh[3],
+                        double *expmikr_all_real, double *expmikr_all_imag,
+                        double *kpts, double *ao_real, double *ao_imag,
+                        int *nmo, int ngrids, int nk, int k_idx, int nao,
+                        double weight);
 
 #ifdef __cplusplus
 }

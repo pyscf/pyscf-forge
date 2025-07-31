@@ -166,7 +166,6 @@ if(BUILD_OCCRI)
         # Add include directories
         target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
         target_include_directories(occri PRIVATE ${FFTW3_INCLUDE_DIR})
-        # Note: PySCF headers (including vhf/fblas.h) are available via global include_directories
         
         # Link against FFTW, BLAS, and OpenMP
         target_link_libraries(occri
