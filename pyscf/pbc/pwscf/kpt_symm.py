@@ -488,8 +488,8 @@ class KsymMixin:
             kpts = libkpts.make_kpts(
                 self.cell,
                 kpts=np.reshape(x, (-1,3)),
-                space_group_symmetry=True,
-                time_reversal_symmetry=True,
+                space_group_symmetry=False,
+                time_reversal_symmetry=False,
             )
         elif isinstance(x, libkpts.KPoints):
             kpts = x

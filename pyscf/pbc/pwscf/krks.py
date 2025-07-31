@@ -234,7 +234,41 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         # TODO
         raise NotImplementedError
 
-    def get_vj_R(self, C_ks, mocc_ks, mesh=None, Gv=None):
+    def coarse_to_dense_grid(self, func_xR, out_xr=None):
+        # TODO use real FFTs here since the real-space density is real
+        ratio = np.prod(self.xc_mesh) / np.prod(self.wf_mesh)
+        invr = 1 / ratio
+        rhovec_G = tools.fft(func_xR, self.wf_mesh)
+        dense_size = np.prod(self.xc_mesh)
+        if func_xR.ndim == 1:
+            shape = (dense_size,)
+        else:
+            nrho = func_xR.shape[0]
+            shape = (nrho, dense_size)
+        rhovec_g = np.zeros(shape, dtype=np.complex128)
+        # print(rhovec_g.shape, self._wf2xc.shape, rhovec_G.shape)
+        rhovec_g[..., self._wf2xc] = rhovec_G
+        if out_xr is None:
+            rhovec_r = tools.ifft(rhovec_g, self.xc_mesh).real
+        else:
+            rhovec_r = out_xr
+            rhovec_r[:] = tools.ifft(rhovec_g, self.xc_mesh).real
+        rhovec_r[:] *= ratio
+        return rhovec_r
+
+    def dense_to_coarse_grid(self, func_xr, out_xR=None):
+        # TODO use real FFTs here since the real-space density is real
+        ratio = np.prod(self.xc_mesh) / np.prod(self.wf_mesh)
+        invr = 1 / ratio
+        vxcvec_g = tools.fft(func_xr, self.xc_mesh) * invr
+        vxcvec_G = np.asarray(vxcvec_g[:, self._wf2xc], order="C")
+        if out_xR is None:
+            out_xR = tools.ifft(vxcvec_G, self.wf_mesh).real
+        else:
+            out_xR[:] = tools.ifft(vxcvec_G, self.wf_mesh).real
+        return out_xR
+
+    def get_vj_R(self, C_ks, mocc_ks, mesh=None, Gv=None, save_rho=False):
         # Override get_vj_R to include XC potential
         cell = self.cell
         if mesh is None: mesh = self.wf_mesh
@@ -257,13 +291,20 @@ class PWKohnShamDFT(rks.KohnShamDFT):
             nkpts = self.kpts_obj.nkpts
         vj_R = self.with_jk.get_vj_R_from_rho_R(rho_R, mesh=mesh, Gv=Gv)
         rhovec_R[:] *= (spinfac / nkpts) * ng / dv
+        if save_rho:
+            self._rhovec_R = rhovec_R
         if (self.wf_mesh == self.xc_mesh).all():
             # xc integration is on the same mesh as density generation
             exc, vxcvec_R = self.eval_xc(
                 self.xc, rhovec_R, xctype
             )
+            if hasattr(self, "_deda_r") and self._deda_r is not None:
+                # TODO add this back in
+                vxcvec_R[:] += self._deda_r * self._damix_r
         else:
             # xc integration is on a denser mesh than density generation
+            # TODO this doesn't work for spin polarization
+            """
             ratio = np.prod(self.xc_mesh) / np.prod(self.wf_mesh)
             invr = 1 / ratio
             nrho = rhovec_R.shape[0]
@@ -273,16 +314,22 @@ class PWKohnShamDFT(rks.KohnShamDFT):
             # print(rhovec_g.shape, self._wf2xc.shape, rhovec_G.shape)
             rhovec_g[..., self._wf2xc] = rhovec_G
             rhovec_r = tools.ifft(rhovec_g, self.xc_mesh).real * ratio
+            """
+            rhovec_r = self.coarse_to_dense_grid(rhovec_R)
             exc, vxcvec_r = self.eval_xc(
                 self.xc, rhovec_r, xctype
             )
+            if hasattr(self, "_deda_r") and self._deda_r is not None:
+                # TODO add this back in
+                vxcvec_r[:] += self._deda_r * self._damix_r
             vxcvec_R = np.empty_like(rhovec_R)
             if vxcvec_R.ndim == 2:
                 vxcvec_R = vxcvec_R[None, ...]
             for s in range(vxcvec_r.shape[0]):
-                vxcvec_g = tools.fft(vxcvec_r[s], self.xc_mesh) * invr
-                vxcvec_G = np.asarray(vxcvec_g[:, self._wf2xc], order="C")
-                vxcvec_R[s] = tools.ifft(vxcvec_G, self.wf_mesh).real
+                self.dense_to_coarse_grid(vxcvec_r[s], vxcvec_R[s])
+                #vxcvec_g = tools.fft(vxcvec_r[s], self.xc_mesh) * invr
+                #vxcvec_G = np.asarray(vxcvec_g[:, self._wf2xc], order="C")
+                #vxcvec_R[s] = tools.ifft(vxcvec_G, self.wf_mesh).real
         vxcdot, vxc_R, vtau_R = vxc_from_vxcvec(
             rhovec_R, vxcvec_R, xctype, mesh, Gv, dv
         )

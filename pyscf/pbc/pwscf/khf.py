@@ -805,7 +805,7 @@ def eig_subspace(mf, C_ks, mocc_ks, mesh=None, Gv=None, vj_R=None, exxdiv=None,
 
     cell = mf.cell
     if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
-    if mesh is None: mesh = cell.mesh
+    if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
     if exxdiv is None: exxdiv = mf.exxdiv
 
@@ -992,7 +992,7 @@ def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
 
     cell = mf.cell
     if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
-    if mesh is None: mesh = cell.mesh
+    if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
     if exxdiv is None: exxdiv = mf.exxdiv
 

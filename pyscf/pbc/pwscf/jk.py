@@ -16,6 +16,8 @@ THR_OCC = 1e-10
 
 
 def _mul_by_occ_(C_k, mocc_k, occ=None):
+    # TODO this won't work with some types of smearing
+    # because it assumes positive occupations
     if occ is None:
         occ = np.where(mocc_k > THR_OCC)[0].tolist()
     occ = np.sqrt(0.5 * mocc_k[occ])
