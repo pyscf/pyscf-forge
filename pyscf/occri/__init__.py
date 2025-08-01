@@ -1,52 +1,6 @@
 """
-OCCRI (Occupied Orbital Coulomb Resolution of Identity) Interface for PySCF
-
-This module provides an efficient implementation of the resolution-of-identity (RI)
-approximation for computing exact exchange in periodic systems using PySCF. The
-method is particularly effective for systems requiring many k-points and uses
-FFT-based techniques for optimal performance.
-
-The OCCRI approach exploits the fact that only occupied orbitals contribute to
-the exchange interaction, significantly reducing computational cost compared to
-traditional methods while maintaining chemical accuracy.
-
-Key Features:
-    - Efficient exchange matrix evaluation using occupied orbital RI
-    - FFT-based Coulomb potential evaluation in real space
-    - OpenMP parallelization through C extension
-    - Support for periodic boundary conditions (3D systems)
-    - Compatible with RHF, UHF, RKS, UKS, and their k-point variants
-
-Theory:
-    The OCCRI method approximates the exchange matrix elements using:
-    K_μν ≈ Σ_P C_μP W_PP' C_νP'
-
-    where C_μP are fitting coefficients related to occupied orbitals and
-    W_PP' represents the Coulomb interaction in the auxiliary basis.
-
-Dependencies:
-    Required:
-        - PySCF >= 2.0
-        - NumPy >= 1.17
-        - SciPy >= 1.5
-
-    Optional (for optimal performance):
-        - FFTW3 (for optimized FFT operations)
-        - BLAS (for optimized linear algebra)
-        - OpenMP (for parallelization)
-
-Build Configuration:
-    The module automatically detects available dependencies and falls back to
-    pure Python implementation if the optimized C extension cannot be built.
-
-    To control the build process:
-        - Set BUILD_OCCRI=OFF to disable C extension build entirely
-        - Set CMAKE_CONFIGURE_ARGS for additional CMake options
-
-    Example:
-        BUILD_OCCRI=OFF pip install .  # Force Python-only build
-        pip install .                  # Auto-detect dependencies
-
+OCCRI (Occupied Orbital Coulomb Resolution of Identity) for efficient
+exact exchange evaluation in periodic systems.
 """
 
 import ctypes
@@ -171,24 +125,7 @@ def log_mem(mydf):
 
 
 def make_natural_orbitals(mydf, dms):
-    """
-    Parameters:
-    -----------
-    cell : pyscf.pbc.gto.Cell
-        Unit cell object containing atomic and basis set information
-    dms : ndarray
-        Density matrix or matrices in AO basis, shape (..., nao, nao)
-    kpts : ndarray, optional
-        k-point coordinates. If None, assumes Gamma point calculation
-
-    Returns:
-    --------
-    tuple of ndarray
-        (mo_coeff, mo_occ) where:
-        - mo_coeff: Natural orbital coefficients, same shape as dms
-                  mo_occ[n, k, i] = occupation of orbital i at k-point k, spin n
-                  Real values ordered from highest to lowest occupation
-    """
+    """Construct natural orbitals from density matrix"""
     # print("Building Orbitals")
     cell = mydf.cell
     kpts = mydf.kpts
@@ -217,34 +154,7 @@ def make_natural_orbitals(mydf, dms):
 
 
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
-    """
-    Occupied Orbital Coulomb Resolution of Identity (OCCRI) density fitting class.
-
-    This class implements the OCCRI method for efficient evaluation of exact exchange
-    in periodic systems. It extends PySCF's FFTDF class to provide optimized exchange
-    matrix construction using the resolution of identity approximation restricted to
-    occupied orbitals.
-
-    The method is particularly efficient for systems with many k-points and provides
-    significant speedup over traditional exact exchange implementations while
-    maintaining chemical accuracy.
-
-    Attributes:
-        method (str): The type of mean-field method being used (e.g., 'rhf', 'uhf', 'rks', 'uks')
-        cell: The unit cell object
-        kmesh (list): k-point mesh dimensions [nkx, nky, nkz]
-        kpts (ndarray): Array of k-point coordinates
-
-    Example:
-        >>> from pyscf.pbc import gto, scf
-        >>> from pyscf.occri import OCCRI
-        >>>
-        >>> cell = gto.Cell()
-        >>> # ... set up cell ...
-        >>> mf = scf.RHF(cell)
-        >>> mf.with_df = OCCRI(mf)
-        >>> energy = mf.kernel()
-    """
+    """Occupied Orbital Coulomb Resolution of Identity density fitting"""
 
     def __init__(
         self,
@@ -253,24 +163,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         disable_c=False,
         **kwargs,
     ):
-        """
-        Initialize the OCCRI density fitting object.
-
-        Parameters:
-        -----------
-        mydf : SCF object
-            The self-consistent field object (RHF, UHF, RKS, UKS, or k-point variants)
-        kmesh : list of int, optional
-            k-point mesh dimensions [nkx, nky, nkz]. Default is [1,1,1] (Gamma point)
-        **kwargs : dict
-            Additional keyword arguments passed to parent FFTDF class
-
-        Raises:
-        -------
-        AssertionError
-            If the method type is not supported (must be one of:
-            'hf', 'uhf', 'khf', 'kuhf', 'rks', 'uks', 'krks', 'kuks')
-        """
+        """Initialize OCCRI density fitting object"""
 
         mydf._is_mem_enough = lambda: False
         # NOTE: PySCF calls get_jk -> get_jk passing dm.reshape(...), dropping the mo_coeff.
@@ -331,41 +224,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         exxdiv="ewald",
         **kwargs,
     ):
-        """
-        Compute Coulomb (J) and exchange (K) matrices using OCCRI method.
-
-        This method combines the efficient J matrix evaluation from PySCF's FFTDF
-        with the optimized K matrix evaluation from OCCRI. The exchange part uses
-        the occupied orbital resolution of identity approach for improved performance.
-
-        Parameters:
-        -----------
-        dm : ndarray
-            Density matrix or matrices in AO basis
-        hermi : int, optional
-            Hermiticity flag (1 for Hermitian, 0 for non-Hermitian). Default is 1
-        kpt : ndarray, optional
-            Single k-point (not used in current implementation)
-        kpts_band : ndarray, optional
-            k-points for band structure (not used in current implementation)
-        with_j : bool, optional
-            Whether to compute Coulomb matrix. Default inferred from context
-        with_k : bool, optional
-            Whether to compute exchange matrix. Default inferred from context
-        omega : float, optional
-            Range separation parameter (not used in current implementation)
-        exxdiv : str, optional
-            Treatment of exchange divergence. 'ewald' adds Ewald correction
-        **kwargs : dict
-            Additional keyword arguments
-
-        Returns:
-        --------
-        tuple of ndarray
-            (vj, vk) where:
-            - vj: Coulomb matrix (or None if with_j=False)
-            - vk: Exchange matrix (or None if with_k=False)
-        """
+        """Compute J and K matrices using OCCRI"""
         if cell is None:
             cell = self.cell
         if dm is None:
@@ -430,13 +289,9 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         return
 
     def copy(self):
-        """
-        Create a shallow copy of the OCCRI object.
-        """
+        """Create a shallow copy"""
         return self.view(self.__class__)
 
     def get_keyword_arguments(self):
-        """
-        Retrieve all keyword arguments for the OCCRI object.
-        """
+        """Get keyword arguments"""
         return {key: value for key, value in self.__dict__.items() if key != "cell"}

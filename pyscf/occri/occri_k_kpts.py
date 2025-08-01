@@ -1,58 +1,17 @@
 """
-Python-side integrals and exchange matrix evaluation for OCCRI
-
-This file defines:
-    - fallback Python-only routines for reference/validation (e.g., integrals_uu)
-    - wrapper functions to call the C-extension occri_vR
-    - utilities to build the full AO exchange matrix
-
-Key Functions:
-    - occri_get_k_kpts_opt: Calls the C implementation of OCCRI
-    - occri_get_k_kpts: Calls the reference Python implementation
-    - build_full_exchange: Contracts exchange contributions from AO basis
-
-Used internally by the OCCRI class defined in __init__.py
+OCCRI exchange matrix evaluation for k-point calculations
 """
-
-from functools import reduce
 
 import numpy
 from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
 
-from pyscf import lib, occri
+from pyscf import occri
 from pyscf.lib import logger
 from pyscf.pbc import tools
 
 
 def build_full_exchange(S, Kao, mo_coeff):
-    """
-    Construct full exchange matrix from occupied orbital components.
-
-    This function builds the complete exchange matrix in the atomic orbital (AO)
-    basis from the occupied-occupied (Koo) and occupied-all (Koa) components
-    computed using the resolution of identity approximation.
-
-    Parameters:
-    -----------
-    Sa : numpy.ndarray
-        Overlap matrix times MO coefficients (nao x nocc)
-    Kao : numpy.ndarray
-        Occupied-all exchange matrix components (nao x nocc)
-    Koo : numpy.ndarray
-        Occupied-occupied exchange matrix components (nocc x nocc)
-
-    Returns:
-    --------
-    numpy.ndarray
-        Full exchange matrix in AO basis (nao x nao)
-
-    Algorithm:
-    ----------
-    K_μν = Sa_μi * Koa_iν + Sa_νi * Koa_iμ - Sa_μi * Koo_ij * Sa_νj
-
-    This corresponds to the resolution of identity expression:
-    K_μν ≈ Σ_P C_μP W_PP' C_νP' where C are fitting coefficients
-    """
+    """Build full exchange matrix from occupied orbital components"""
 
     # Compute Sa = S @ mo_coeff.T once and reuse
     Sa = S @ mo_coeff.T
@@ -69,49 +28,7 @@ def build_full_exchange(S, Kao, mo_coeff):
 
 
 def integrals_uu(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
-    """
-    Compute k-point exchange integrals between occupied orbitals using complex FFT.
-
-    This function evaluates exchange integrals for periodic systems with k-point sampling,
-    handling complex Bloch functions and k-point phase factors. It implements the core
-    computational kernel for the OCCRI method in momentum space.
-
-    Algorithm:
-    ----------
-    For each orbital i at k-point k_prim:
-        1. Form complex orbital pair density: ρ_ij(r) = conj(φ_i^{k'}(r)) * exp(-i(k-k')·r) * φ_j^k(r)
-        2. Transform to reciprocal space: ρ̃_ij(G) = FFT[ρ_ij(r)]
-        3. Apply Coulomb kernel: Ṽ_ij(G) = ρ̃_ij(G) * v_C(|G+k-k'|) / sqrt(N_grid)
-        4. Transform back to real space: V_ij(r) = IFFT[Ṽ_ij(G)]
-        5. Contract and accumulate: vR_dm[j] += V_ij(r) * conj(φ_i^{k'}(r)) * exp(+i(k-k')·r) * n_i * sqrt(N_grid)
-
-    Parameters:
-    -----------
-    j : int
-        Orbital index j at k-point k
-    k : int
-        k-point index for orbital j
-    k_prim : int
-        k-point index for orbital i (k')
-    ao_mos : list of ndarray
-        Molecular orbitals for all k-points, each shape (nmo, ngrids)
-        ao_mos[k][i] contains orbital i at k-point k evaluated on real-space grid
-    vR_dm : ndarray
-        Output exchange potential array, shape (nmo, ngrids), complex dtype
-        Modified in-place to accumulate contributions
-    coulG : ndarray
-        Coulomb interaction kernel in G-space for momentum transfer k-k'
-        Shape: (ngrids,), real values: v_C(|G+k-k'|) = 4π/|G+k-k'|^2
-    mo_occ : list of ndarray
-        Orbital occupation numbers for each k-point
-        mo_occ[k_prim][i] = occupation of orbital i at k-point k_prim
-    mesh : ndarray
-        FFT mesh dimensions [nx, ny, nz], determines grid resolution
-    expmikr : ndarray
-        k-point phase factors exp(-i(k-k')·r) on real-space grid
-        Shape: (ngrids,), complex values
-
-    """
+    """Compute k-point exchange integrals using complex FFT"""
     ngrids = ao_mos[0].shape[1]
     nmo = ao_mos[k_prim].shape[0]
     rho1 = numpy.empty(ngrids, dtype=vR_dm.dtype)
@@ -126,51 +43,7 @@ def integrals_uu(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
 
 
 def occri_get_k_kpts(mydf, dms, exxdiv=None):
-    """
-    Reference Python implementation of OCCRI exchange matrix evaluation.
-
-    This function provides a pure Python implementation of the occupied orbital
-    resolution of identity method for computing exact exchange matrices. It serves
-    as a reference for validation and fallback when the optimized C implementation
-    is unavailable.
-
-    Parameters:
-    -----------
-    mydf : OCCRI object
-        Density fitting object containing cell and grid information
-    dms : ndarray or list of ndarray
-        Density matrix or matrices in AO basis
-        Shape: (..., nao, nao) for each spin component
-    exxdiv : str, optional
-        Exchange divergence treatment. Options:
-        - 'ewald': Apply Ewald probe charge correction (recommended for 3D)
-        - None: No correction applied
-
-    Returns:
-    --------
-    ndarray
-        Exchange matrix or matrices in AO basis, same shape as input dms
-
-    Notes:
-    ------
-    This implementation:
-    1. Evaluates orbitals on real-space FFT grid
-    2. Computes exchange integrals using FFT-based Coulomb evaluation
-    3. Contracts results back to AO basis using occri.build_full_exchange
-    4. Applies Ewald correction if requested for periodic boundary conditions
-
-    The method scales as O(N_k^2 * N_occ^2 * N_grid * log(N_grid)) where:
-    - N_k = number of k-points
-    - N_occ = average number of occupied orbitals per k-point
-    - N_grid = number of FFT grid points
-    The log(N_grid) factor comes from FFT operations, and N_k^2 from all k-point pair interactions.
-
-    Raises:
-    -------
-    AssertionError
-        If cell.low_dim_ft_type == 'inf_vacuum' or cell.dimension == 1
-        (not supported in current implementation)
-    """
+    """Reference Python implementation of k-point exchange matrix evaluation"""
     cell = mydf.cell
     mesh = mydf.mesh
     assert cell.low_dim_ft_type != "inf_vacuum"
@@ -244,62 +117,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
 
 
 def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
-    """
-    Production C-accelerated implementation of k-point OCCRI exchange matrix evaluation.
-
-    This function provides the high-performance implementation of the occupied orbital
-    resolution of identity method for k-point calculations using an optimized C extension
-    with FFTW and OpenMP. It handles complex Bloch functions, k-point phase factors,
-    and multiple k-point interactions with maximum computational efficiency.
-
-    Performance Features:
-    ---------------------
-    - Native C implementation with FFTW for optimal FFT performance
-    - OpenMP parallelization over orbital indices for multi-core scaling
-    - Optimized memory layout with padding for vectorization
-    - Complex-to-complex FFTs for proper k-point phase handling
-    - Thread-safe operation with per-thread FFTW buffers
-
-    Parameters:
-    -----------
-    mydf : OCCRI object
-        Density fitting object containing cell, k-points, and grid information
-        Must have attributes: cell, kpts, mesh, Nk (number of k-points)
-    dms : ndarray
-        Density matrices in AO basis for all k-points
-        Shape: (nset, nk, nao, nao) where nset is number of spin components
-        Complex dtype supported for non-collinear systems
-    exxdiv : str, optional
-        Exchange divergence treatment for periodic systems. Options:
-        - 'ewald': Apply Ewald probe charge correction (recommended for 3D)
-        - None: No divergence correction applied
-
-    Returns:
-    --------
-    ndarray
-        Exchange matrices in AO basis for all k-points
-        Shape: (nset, nk, nao, nao), same as input dms
-        Real parts taken for final result (imaginary parts should be negligible)
-
-    Algorithm (C Implementation):
-    -----------------------------
-    1. Flatten and pad orbital data with nmo_max for consistent indexing
-    2. For each k-point and spin component:
-       a. Pre-compute all Coulomb kernels v_C(|G+k-k'|) for k-point differences
-       b. Pre-compute phase factors exp(-i(k-k')·r) for all k-point pairs
-       c. Call optimized C function occri_vR_kpts:
-          - Parallel loop over orbital j at target k-point
-          - For each j, loop over all k-points k'
-          - For each (j,k,k'), loop over orbitals i at k'
-          - Compute exchange integral using complex FFT with phase factors
-       d. Contract results back to AO basis using occri.build_full_exchange
-    3. Apply Ewald correction if requested
-
-    Raises:
-    -------
-    AssertionError
-        If cell.low_dim_ft_type == 'inf_vacuum' or cell.dimension == 1
-    """
+    """Optimized C implementation of k-point exchange matrix evaluation"""
     cell = mydf.cell
     mesh = mydf.mesh
     assert cell.low_dim_ft_type != "inf_vacuum"
