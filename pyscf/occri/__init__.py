@@ -17,34 +17,6 @@ Key Features:
     - Support for periodic boundary conditions (3D systems)
     - Compatible with RHF, UHF, RKS, UKS, and their k-point variants
 
-Basic Usage:
-    >>> from pyscf.pbc import gto, scf
-    >>> from pyscf.occri import OCCRI
-    >>> 
-    >>> cell = gto.Cell()
-    >>> cell.atom = 'C 0 0 0; C 1 1 1'
-    >>> cell.a = numpy.eye(3) * 4
-    >>> cell.basis = 'gth-dzvp'
-    >>> cell.build()
-    >>> 
-    >>> mf = scf.RHF(cell)
-    >>> mf.with_df = OCCRI(mf)
-    >>> energy = mf.kernel()
-
-Advanced Usage with k-points:
-    >>> from pyscf.pbc import scf
-    >>> kpts = cell.make_kpts([2,2,2])  # 2x2x2 k-point mesh
-    >>> mf = scf.KRHF(cell, kpts)
-    >>> mf.with_df = OCCRI(mf, kmesh=[2,2,2])  # k-point OCCRI
-    >>> energy = mf.kernel()
-    
-k-point Features:
-    - Handles complex Bloch functions and k-point phase factors
-    - Supports arbitrary k-point meshes with proper momentum conservation
-    - Optimized C implementation for complex FFTs and phase factor handling
-    - Automatic fallback to Python implementation if C extension unavailable
-    - Compatible with both collinear and non-collinear spin systems
-
 Theory:
     The OCCRI method approximates the exchange matrix elements using:
     K_μν ≈ Σ_P C_μP W_PP' C_νP'
@@ -75,15 +47,6 @@ Build Configuration:
         BUILD_OCCRI=OFF pip install .  # Force Python-only build
         pip install .                  # Auto-detect dependencies
 
-Performance:
-    - C extension with all dependencies: ~10-20x faster than Python
-    - Pure Python fallback: Maintains chemical accuracy but slower performance
-    - Recommended: Install FFTW3, BLAS, and OpenMP for best performance
-
-References:
-    [1] Original OCCRI method development and implementation
-    [2] PySCF: the Python‐based simulations of chemistry framework
-        WIREs Comput Mol Sci. 2018;8:e1340
 """
 
 import pyscf
@@ -178,16 +141,8 @@ def make_natural_orbitals(mydf, dms):
         - mo_coeff: Natural orbital coefficients, same shape as dms
                   mo_occ[n, k, i] = occupation of orbital i at k-point k, spin n
                   Real values ordered from highest to lowest occupation
-        
-    k-point Specific Features:
-    --------------------------
-    - Handles complex overlap matrices for general k-points
-    - Automatic dtype detection: uses real arithmetic when |Im(dm)| < 1e-6
-    - Independent natural orbital construction at each k-point
-    - Preserves k-point symmetry and Bloch function properties
-    - Supports both collinear and non-collinear spin systems
     """
-    print("Building Orbitals")
+    # print("Building Orbitals")
     cell = mydf.cell
     kpts = mydf.kpts
     nk = kpts.shape[0]
@@ -230,9 +185,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         method (str): The type of mean-field method being used (e.g., 'rhf', 'uhf', 'rks', 'uks')
         cell: The unit cell object
         kmesh (list): k-point mesh dimensions [nkx, nky, nkz]
-        Nk (int): Total number of k-points
         kpts (ndarray): Array of k-point coordinates
-        joblib_njobs (int): Number of OpenMP threads available
     
     Example:
         >>> from pyscf.pbc import gto, scf
@@ -271,7 +224,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         mydf.get_jk = self.get_jk
         #BUG: Some PySCF methods have bugs when tagging initial guess dm. 
         # For example, RKRS can modify dm without modifying mo_occ in the same way.
-        # As a work around, always diagonalize dm on first iteration.
+        # As a work around, always diagonalize dm on first iteration. See 02-kpoint...
         self.scf_iter = 0
 
         self.method = mydf.__module__.rsplit('.', 1)[-1]
@@ -350,11 +303,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             (vj, vk) where:
             - vj: Coulomb matrix (or None if with_j=False)  
             - vk: Exchange matrix (or None if with_k=False)
-            
-        Notes:
-        ------
-        The method automatically reshapes input density matrices to handle
-        both single matrices and batches of matrices consistently.
         """
         if cell is None: cell = self.cell
         if dm is None:
@@ -364,13 +312,14 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         dm_shape = dm.shape
         nk = self.kpts.shape[0]
         nao = cell.nao
-        if getattr(dm, "mo_coeff", None) is None or self.scf_iter==0:
-            dm = make_natural_orbitals(self, dm.reshape(-1, nk, nao, nao))
-        else:
-            mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)
-            mo_occ = numpy.asarray(dm.mo_occ).reshape(-1, nk, nao)
-            dm = lib.tag_array(dm.reshape(-1, nk, nao, nao), 
-                               mo_coeff=mo_coeff, mo_occ=mo_occ)
+        if with_k:
+            if getattr(dm, "mo_coeff", None) is None or self.scf_iter==0:
+                dm = make_natural_orbitals(self, dm.reshape(-1, nk, nao, nao))
+            else:
+                mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)
+                mo_occ = numpy.asarray(dm.mo_occ).reshape(-1, nk, nao)
+                dm = lib.tag_array(dm.reshape(-1, nk, nao, nao), 
+                                mo_coeff=mo_coeff, mo_occ=mo_occ)
 
         if with_j:
             vj = self.get_j(self, dm, kpts=self.kpts)
@@ -408,34 +357,11 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
     def copy(self):
         """
         Create a shallow copy of the OCCRI object.
-        
-        Returns:
-        --------
-        OCCRI
-            A shallow copy of the current OCCRI instance
-            
-        Notes:
-        ------
-        This creates a new view of the same data rather than duplicating
-        the underlying arrays, which is memory efficient for large systems.
         """
         return self.view(self.__class__)
 
     def get_keyword_arguments(self):
         """
         Retrieve all keyword arguments for the OCCRI object.
-        
-        This method extracts all object attributes except the cell object,
-        which is useful for serialization or creating similar objects.
-        
-        Returns:
-        --------
-        dict
-            Dictionary of all attributes except 'cell'
-            
-        Notes:
-        ------
-        The cell object is excluded because it's typically handled separately
-        and contains complex nested data structures.
         """
         return {key: value for key, value in self.__dict__.items() if key != "cell"}

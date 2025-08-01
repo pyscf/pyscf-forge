@@ -31,7 +31,8 @@ cell.atom = '''
 cell.basis = 'gth-szv'          # Compact basis for faster demonstration
 cell.pseudo = 'gth-pbe'         # Pseudopotentials for efficiency
 cell.a = numpy.eye(3) * 3.5607  # Diamond lattice parameter
-cell.mesh = [20] * 3            # FFT mesh - adjust for accuracy vs speed trade-off
+cell.mesh = [20] * 3            # FFT mesh
+cell.verbose = 0
 cell.build()
 
 print(f"System: Diamond structure with {cell.natm} atoms")
@@ -55,7 +56,7 @@ for i, kpt in enumerate(kpts):
 
 # Set up KRHF calculation with OCCRI
 mf = scf.KRHF(cell, kpts)
-mf.with_df = OCCRI(mf, kmesh=kmesh)  # Specify kmesh for consistency
+mf.with_df = OCCRI(mf, kmesh=kmesh)  # Specify kmesh
 
 print("\nRunning KRHF calculation...")
 energy = mf.kernel()
@@ -70,8 +71,6 @@ print("Example 2: Different SCF methods with OCCRI")
 print("="*60)
 
 # RHF - Restricted (closed shell)
-# Note, KRHF has bug in PySCF when tagging dm. 
-# Must diagonalize on initial pass.
 print("\n2a. Restricted Hartree-Fock (RHF)")
 mf_rhf = scf.KRHF(cell, kpts)
 mf_rhf.with_df = OCCRI(mf_rhf, kmesh=kmesh)

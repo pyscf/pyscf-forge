@@ -333,8 +333,7 @@ class TestOCCRI(unittest.TestCase):
         e_kuhf = mf_kuhf.e_tot
         
         # Should give identical energies for closed shell k-point systems
-        # This test will currently FAIL due to the bug we identified
-        self.assertAlmostEqual(e_krhf, e_kuhf, places=6, 
+        self.assertAlmostEqual(e_krhf, e_kuhf, places=8, 
                               msg=f"KRHF-KUHF energy difference too large: {abs(e_krhf - e_kuhf):.2e} Ha")
         
     def test_small_system(self):

@@ -3,7 +3,6 @@ Python-side integrals and exchange matrix evaluation for OCCRI
 
 This file defines:
     - fallback Python-only routines for reference/validation (e.g., integrals_uu)
-    - orbital transformation and natural orbital construction
     - wrapper functions to call the C-extension occri_vR
     - utilities to build the full AO exchange matrix
 
@@ -21,20 +20,7 @@ from pyscf.pbc import tools
 from functools import reduce
 from pyscf import occri
 from pyscf.lib import logger
-
-def _ewald_exxdiv_for_G0(mydf, s, dms, vk):
-    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
-    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
-    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
-    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
-    # and 3D should use the ewald probe charge correction.
-    cell = mydf.cell
-    madelung = tools.pbc.madelung(cell, mydf.kpts)
-    nset = dms.shape[0]
-    nk = dms.shape[1]
-    for n in range(nset):
-        for k in range(nk):
-            vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k]))
+from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
 
 def build_full_exchange(S, Kao, mo_coeff):
     """
@@ -79,7 +65,7 @@ def build_full_exchange(S, Kao, mo_coeff):
     Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order='C')
     return Kuv            
 
-def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
+def integrals_uu(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
     """
     Compute k-point exchange integrals between occupied orbitals using complex FFT.
     
@@ -121,20 +107,7 @@ def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr)
     expmikr : ndarray
         k-point phase factors exp(-i(k-k')·r) on real-space grid
         Shape: (ngrids,), complex values
-        
-    Notes:
-    ------
-    - Uses complex FFT to handle k-point phase factors from Bloch functions
-    - Applies sqrt(N_grid) normalization to match PySCF FFT conventions
-    - Phase factors expmikr handle momentum conservation: G -> G + k - k'
-    - The complex conjugate operations ensure proper Hermiticity of exchange matrix
-    - For Γ-point only (k=k'=0), this reduces to the standard real-space algorithm
-    
-    Performance:
-    ------------
-    - O(N_occ * N_grid * log(N_grid)) complexity per k-point pair
-    - Memory usage: O(N_grid) for temporary arrays
-    - Can be called in parallel for different (j,k,k') combinations
+
     """
     ngrids = ao_mos[0].shape[1]
     nmo = ao_mos[k_prim].shape[0]
@@ -178,11 +151,10 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     Notes:
     ------
     This implementation:
-    1. Constructs natural orbitals from density matrices
-    2. Evaluates orbitals on real-space FFT grid
-    3. Computes exchange integrals using FFT-based Coulomb evaluation
-    4. Contracts results back to AO basis using occri.build_full_exchange
-    5. Applies Ewald correction if requested for periodic boundary conditions
+    1. Evaluates orbitals on real-space FFT grid
+    2. Computes exchange integrals using FFT-based Coulomb evaluation
+    3. Contracts results back to AO basis using occri.build_full_exchange
+    4. Applies Ewald correction if requested for periodic boundary conditions
     
     The method scales as O(N_k^2 * N_occ^2 * N_grid * log(N_grid)) where:
     - N_k = number of k-points
@@ -214,7 +186,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     aovals = [numpy.asarray(ao.T , order='C') for ao in aovals]
     
     # Transform to MO basis for each k-point and spin
-    ao_mos = [[lib.dot( mo_coeff[n][k], aovals[k]) for k in range(nk)] for n in range(nset)]
+    ao_mos = [[mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
     out_type = numpy.complex128 if [abs(ao.imag).max() > 1.e-6  for ao in aovals] else numpy.float64
     aovals = [ao * weight for ao in aovals]
 
@@ -247,15 +219,15 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
                 for k_prim in range(nk):
                     coulG = coulG_cache[k][k_prim]
                     expmikr = expmikr_cache[k][k_prim]
-                    integrals_uu_kpts(j, k, k_prim, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh, expmikr)
+                    integrals_uu(j, k, k_prim, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh, expmikr)
 
-            vk_j = lib.dot(aovals[k].conj(), vR_dm.T)
+            vk_j = numpy.matmul(aovals[k].conj(), vR_dm.T, order='C')
             vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
 
             t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%k, *t1)
 
     if exxdiv == 'ewald' and cell.dimension != 0:
-        _ewald_exxdiv_for_G0(mydf, s, dms, vk)
+         _ewald_exxdiv_for_G0(cell, kpts, dms, vk)
 
     return vk
 
@@ -312,37 +284,8 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
        d. Contract results back to AO basis using occri.build_full_exchange
     3. Apply Ewald correction if requested
     
-    Memory Management:
-    ------------------
-    - Uses nmo_max padding for consistent array indexing across k-points
-    - Separate arrays for real/imaginary parts to interface with C
-    - Pre-allocates all temporary arrays to avoid memory fragmentation
-    - FFTW buffers allocated per thread for optimal performance
-    
-    Performance Notes:
-    ------------------
-    - Typical speedup: 5-10x over Python reference implementation
-    - Scales well with number of CPU cores via OpenMP
-    - Memory usage: O(N_k * N_occ_max * N_grid)
-    - Best performance with FFTW_PATIENT planning (done once per mesh size)
-    
-    
-    Requirements:
-    -------------
-    - Compiled C extension with FFTW and OpenMP support
-    - Compatible with both real and complex density matrices
-    - Requires periodic boundary conditions (cell.dimension > 0)
-    
-    Limitations:
-    ------------
-    - 1D systems with inf_vacuum not supported
-    - Very large k-point meshes may exhaust memory
-    - C extension must be properly compiled and linked
-    
     Raises:
     -------
-    RuntimeError
-        If C extension is not available or fails to load
     AssertionError  
         If cell.low_dim_ft_type == 'inf_vacuum' or cell.dimension == 1
     """
@@ -368,7 +311,7 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     aovals = [numpy.ascontiguousarray(ao.T) for ao in aovals]
     
     # Transform to MO basis for each k-point and spin
-    ao_mos = [[lib.dot( mo_coeff[n][k], aovals[k]) for k in range(nk)] for n in range(nset)]
+    ao_mos = [[ mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
     aovals = [ao * weight for ao in aovals]
     
     occri.log_mem(mydf)
@@ -427,13 +370,13 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
             vR_dm = (vR_dm_real + 1j * vR_dm_imag).reshape(nmo[k], ngrids)
             
             # Contract back to AO basis
-            vk_j = lib.dot(aovals[k].conj(), vR_dm.T)
+            vk_j = numpy.matmul( aovals[k].conj(), vR_dm.T, order='C')
             vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
             
             t1 = logger.timer_debug1(mydf, f'get_k_kpts_opt: k-point {k}', *t1)
     
     # Apply Ewald correction if requested
     if exxdiv == 'ewald' and cell.dimension != 0:
-        _ewald_exxdiv_for_G0(mydf, s, dms, vk)
+        _ewald_exxdiv_for_G0(cell, kpts, dms, vk)
     
     return vk

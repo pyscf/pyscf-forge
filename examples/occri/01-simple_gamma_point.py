@@ -38,7 +38,8 @@ cell.atom = '''
 cell.basis = 'gth-szv'           # Compact basis set
 cell.pseudo = 'gth-pbe'          # Pseudopotentials
 cell.a = numpy.eye(3) * 3.5607   # Diamond lattice parameter (Å)
-cell.mesh = [20] * 3             # FFT mesh - balance between speed and accuracy
+cell.mesh = [20] * 3             # FFT mesh
+cell.verbose = 0
 cell.build()
 
 print(f"System: {' '.join(cell.atom_symbol(i) for i in range(cell.natm))} ({cell.natm} atoms)")
@@ -185,7 +186,7 @@ Configuration options:
 Compatible methods:
   • scf.RHF, scf.UHF          # Hartree-Fock
   • scf.RKS, scf.UKS          # DFT (any functional)
-  • Gamma point calculations only (use 02-kpoint for k-points)
+  • Gamma point calculations (use 02-kpoint for k-points)
 
 Performance tips:
   • C extension ~5-10x faster than Python
