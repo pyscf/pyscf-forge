@@ -4,7 +4,7 @@
 OCCRI Performance Demonstration
 
 This example demonstrates OCCRI's performance characteristics and shows
-how to benchmark it against standard FFTDF. OCCRI provides significant 
+how to benchmark it against standard FFTDF. OCCRI provides significant
 speedup while maintaining chemical accuracy.
 
 Key topics covered:
@@ -15,31 +15,37 @@ Key topics covered:
 """
 
 import time
+
 import numpy
-from pyscf.pbc import gto, scf, df
+
 from pyscf.occri import OCCRI
+from pyscf.pbc import df, gto, scf
 
 # Set up a moderately sized system for performance comparison
 cell = gto.Cell()
-cell.atom = '''
+cell.atom = """
     C 0.000000 0.000000 1.780373
     C 0.890186 0.890186 2.670559
     C 0.000000 1.780373 0.000000
     C 0.890186 2.670559 0.890186
-'''
-cell.basis = 'gth-cc-tzvp'
-cell.pseudo = 'gth-pbe'
-cell.a = numpy.array([
-    [3.560745, 0.000000, 0.000000],
-    [0.000000, 3.560745, 0.000000], 
-    [0.000000, 0.000000, 3.560745],
-])
+"""
+cell.basis = "gth-cc-tzvp"
+cell.pseudo = "gth-pbe"
+cell.a = numpy.array(
+    [
+        [3.560745, 0.000000, 0.000000],
+        [0.000000, 3.560745, 0.000000],
+        [0.000000, 0.000000, 3.560745],
+    ]
+)
 cell.mesh = [25] * 3
 cell.verbose = 0
 cell.build()
 
 print("=== OCCRI Performance Comparison ===")
-print(f"System: {' '.join(cell.atom_symbol(i) for i in range(cell.natm))} ({cell.natm} atoms, {cell.nao} AOs)")
+print(
+    f"System: {' '.join(cell.atom_symbol(i) for i in range(cell.natm))} ({cell.natm} atoms, {cell.nao} AOs)"
+)
 print(f"Basis: {cell.basis}")
 print(f"Mesh: {cell.mesh}")
 
@@ -49,31 +55,31 @@ print("\n1. K matrix construction timing comparison")
 # Set up common density matrix for fair comparison
 print("   Setting up test density matrix...")
 mf_ref = scf.RHF(cell)
-mf_ref.max_cycle = 1 # Store MO Coeff for comparison
+mf_ref.max_cycle = 1  # Store MO Coeff for comparison
 mf_ref.kernel()
 dm = mf_ref.make_rdm1()
 
 # Time FFTDF K matrix construction only
 print("   Timing FFTDF K matrix construction...")
 mf_ref = scf.RHF(cell)
-mf_ref._is_mem_enough = lambda : False # Turn off 'incore' for small demo
+mf_ref._is_mem_enough = lambda: False  # Turn off 'incore' for small demo
 start_time = time.time()
 _, vk_fftdf = mf_ref.get_jk(dm=dm, with_j=False, with_k=True)
 fftdf_k_time = time.time() - start_time
 
-# Time OCCRI K matrix construction only  
+# Time OCCRI K matrix construction only
 print("   Timing OCCRI K matrix construction...")
 mf_occri = scf.RHF(cell)
 mf_occri.with_df = OCCRI(mf_occri)
-mf_occri.with_df.scf_iter = 1 # Don't rebuild MOs for timing
+mf_occri.with_df.scf_iter = 1  # Don't rebuild MOs for timing
 
 start_time = time.time()
 _, vk_occri = mf_occri.get_jk(dm=dm, with_j=False, with_k=True)
 occri_k_time = time.time() - start_time
 
 # Results
-k_energy_fftdf = numpy.einsum('ij,ji', vk_fftdf, dm) * 0.5
-k_energy_occri = numpy.einsum('ij,ji', vk_occri, dm) * 0.5
+k_energy_fftdf = numpy.einsum("ij,ji", vk_fftdf, dm) * 0.5
+k_energy_occri = numpy.einsum("ij,ji", vk_occri, dm) * 0.5
 energy_diff = abs(k_energy_fftdf - k_energy_occri)
 k_speedup = fftdf_k_time / occri_k_time
 
@@ -104,8 +110,12 @@ occri_multi_time = time.time() - start_time
 
 multi_speedup = fftdf_multi_time / occri_multi_time
 
-print(f"   FFTDF: {n_calls} calls in {fftdf_multi_time:.3f}s ({fftdf_multi_time/n_calls:.3f}s per call)")
-print(f"   OCCRI: {n_calls} calls in {occri_multi_time:.3f}s ({occri_multi_time/n_calls:.3f}s per call)")
+print(
+    f"   FFTDF: {n_calls} calls in {fftdf_multi_time:.3f}s ({fftdf_multi_time/n_calls:.3f}s per call)"
+)
+print(
+    f"   OCCRI: {n_calls} calls in {occri_multi_time:.3f}s ({occri_multi_time/n_calls:.3f}s per call)"
+)
 print(f"   Average K speedup: {multi_speedup:.2f}x")
 
 
@@ -117,6 +127,7 @@ print(f"• Exchange energy accuracy: ~{energy_diff:.0e} Hartree")
 print("\n=== Optimization Notes ===")
 try:
     from pyscf.occri import _OCCRI_C_AVAILABLE
+
     if _OCCRI_C_AVAILABLE:
         print("✓ Using optimized C extension with FFTW and OpenMP")
         print("  - Compiled C code provides ~5-10x base speedup")
@@ -152,19 +163,23 @@ print("• Quick test calculations with minimal basis sets")
 
 print("\n=== Critical Performance Scaling Insight ===")
 print("K matrix construction complexity (the bottleneck OCCRI optimizes):")
-print(f"• FFTDF K matrix: O(N_k² × N_AO² × N_grid × log(N_grid))")
-print(f"• OCCRI K matrix: O(N_k² × N_occ² × N_grid × log(N_grid))")
-print(f"• Theoretical K matrix speedup: N_AO²/N_occ² = {cell.nao**2/(cell.nelectron//2)**2:.1f}x")
+print("• FFTDF K matrix: O(N_k² × N_AO² × N_grid × log(N_grid))")
+print("• OCCRI K matrix: O(N_k² × N_occ² × N_grid × log(N_grid))")
+print(
+    f"• Theoretical K matrix speedup: N_AO²/N_occ² = {cell.nao**2/(cell.nelectron//2)**2:.1f}x"
+)
 print("")
 
 print(f"\nCurrent system ({cell.basis}):")
 print(f"• {cell.nao} AOs, {cell.nelectron//2} occupied orbitals")
 print(f"• Theoretical K speedup limit: {cell.nao**2/(cell.nelectron//2)**2:.1f}x")
-print(f"• Practical K speedup: typically achieves 10-30% of limit")
+print("• Practical K speedup: typically achieves 10-30% of limit")
 
 print("\n=== Additional Scaling Factors ===")
 print("• k-point calculations: O(N_k²) scaling favors OCCRI even more")
 print("• C extension: provides additional ~5-10x speedup")
 print("• Memory: OCCRI scales as O(N_occ) vs FFTDF O(N_AO)")
 
-print("\nExample completed! Try different basis sets (gth-szv, gth-dzvp, gth-cc-tzvp) to see scaling.")
+print(
+    "\nExample completed! Try different basis sets (gth-szv, gth-dzvp, gth-cc-tzvp) to see scaling."
+)

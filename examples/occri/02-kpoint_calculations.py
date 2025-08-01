@@ -16,22 +16,23 @@ Key features demonstrated:
 """
 
 import numpy
-from pyscf.pbc import gto, scf
+
 from pyscf.occri import OCCRI
+from pyscf.pbc import gto, scf
 
 print("=== OCCRI k-point Usage Examples ===")
 print("This example shows how to use OCCRI for different k-point calculations.\n")
 
 # Set up a simple diamond structure
 cell = gto.Cell()
-cell.atom = '''
+cell.atom = """
     C 0.000000 0.000000 0.000000
     C 0.890186 0.890186 0.890186
-'''
-cell.basis = 'gth-szv'          # Compact basis for faster demonstration
-cell.pseudo = 'gth-pbe'         # Pseudopotentials for efficiency
+"""
+cell.basis = "gth-szv"  # Compact basis for faster demonstration
+cell.pseudo = "gth-pbe"  # Pseudopotentials for efficiency
 cell.a = numpy.eye(3) * 3.5607  # Diamond lattice parameter
-cell.mesh = [20] * 3            # FFT mesh
+cell.mesh = [20] * 3  # FFT mesh
 cell.verbose = 0
 cell.build()
 
@@ -41,9 +42,9 @@ print(f"FFT mesh: {cell.mesh} (total {numpy.prod(cell.mesh)} points)")
 # =============================================================================
 # Example 1: Basic k-point setup
 # =============================================================================
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 1: Basic k-point Hartree-Fock")
-print("="*60)
+print("=" * 60)
 
 # Define k-point mesh - start with small mesh for demonstration
 kmesh = [2, 2, 2]
@@ -66,9 +67,9 @@ print(f"Converged: {mf.converged}")
 # =============================================================================
 # Example 2: Different SCF methods
 # =============================================================================
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 2: Different SCF methods with OCCRI")
-print("="*60)
+print("=" * 60)
 
 # RHF - Restricted (closed shell)
 print("\n2a. Restricted Hartree-Fock (RHF)")
@@ -87,7 +88,7 @@ print(f"    Energy: {e_uhf:.6f} Ha")
 # DFT with hybrid functional
 print("\n2c. DFT with PBE0 hybrid functional")
 mf_dft = scf.KRKS(cell, kpts)
-mf_dft.xc = 'pbe0'  # 25% exact exchange + PBE correlation
+mf_dft.xc = "pbe0"  # 25% exact exchange + PBE correlation
 mf_dft.with_df = OCCRI(mf_dft, kmesh=kmesh)
 e_dft = mf_dft.kernel()
 print(f"    Energy: {e_dft:.6f} Ha")
@@ -95,9 +96,9 @@ print(f"    Energy: {e_dft:.6f} Ha")
 # =============================================================================
 # Example 3: Configuration options
 # =============================================================================
-print("\n" + "="*60)  
+print("\n" + "=" * 60)
 print("Example 3: OCCRI configuration options")
-print("="*60)
+print("=" * 60)
 
 # Force Python implementation (useful for debugging)
 print("\n3a. Python implementation (disable_c=True)")
@@ -117,9 +118,9 @@ print(f"    Energy (C ext):  {e_c:.6f} Ha")
 # =============================================================================
 # Example 5: Gamma point vs k-point comparison
 # =============================================================================
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("Example 5: Gamma point vs k-point comparison")
-print("="*60)
+print("=" * 60)
 
 # Gamma point only (equivalent to molecular calculation)
 print("\n5a. Gamma point only")
@@ -136,11 +137,12 @@ print(f"    k-point correction: {e_rhf - e_gamma:.6f} Ha")
 # =============================================================================
 # Usage tips and best practices
 # =============================================================================
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("OCCRI Usage Tips")
-print("="*60)
+print("=" * 60)
 
-print("""
+print(
+    """
 Best practices for OCCRI k-point calculations:
 
 1. FFT mesh convergence (most important):
@@ -154,7 +156,7 @@ Best practices for OCCRI k-point calculations:
    - More k-points = higher accuracy but O(N_k²) cost scaling
 
 3. Performance:
-   - C extension provides ~5-10× speedup when available  
+   - C extension provides ~5-10× speedup when available
    - Use disable_c=True for debugging or if C extension fails
    - Memory usage scales as O(N_k × N_occ × N_grid)
    - OCCRI scales as O(N_occ²) vs FFTDF O(N_AO²)
@@ -169,6 +171,7 @@ Best practices for OCCRI k-point calculations:
    - If SCF doesn't converge, try different initial guess
    - For large energy differences, check mesh size and k-point convergence
    - Use standard PySCF as reference for validation
-""")
+"""
+)
 
 print("Example completed successfully!")
