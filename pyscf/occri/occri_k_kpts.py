@@ -8,73 +8,76 @@ This file defines:
     - utilities to build the full AO exchange matrix
 
 Key Functions:
-    - occri_get_k_opt: Calls the C implementation of OCCRI
-    - occri_get_k:      Calls the reference Python implementation
-    - occri.build_full_exchange: Contracts exchange contributions from AO basis
+    - occri_get_k_kpts_opt: Calls the C implementation of OCCRI
+    - occri_get_k_kpts: Calls the reference Python implementation
+    - build_full_exchange: Contracts exchange contributions from AO basis
 
 Used internally by the OCCRI class defined in __init__.py
 """
 
 import numpy
-import scipy
 from pyscf import lib
 from pyscf.pbc import tools
 from functools import reduce
 from pyscf import occri
 from pyscf.lib import logger
 
+def _ewald_exxdiv_for_G0(mydf, s, dms, vk):
+    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
+    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
+    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
+    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
+    # and 3D should use the ewald probe charge correction.
+    cell = mydf.cell
+    madelung = tools.pbc.madelung(cell, mydf.kpts)
+    nset = dms.shape[0]
+    nk = dms.shape[1]
+    for n in range(nset):
+        for k in range(nk):
+            vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k]))
 
-def make_natural_orbitals_kpts(cell, dms, kpts=numpy.zeros((1,3))):
+def build_full_exchange(S, Kao, mo_coeff):
     """
+    Construct full exchange matrix from occupied orbital components.
+    
+    This function builds the complete exchange matrix in the atomic orbital (AO)
+    basis from the occupied-occupied (Koo) and occupied-all (Koa) components
+    computed using the resolution of identity approximation.
+    
     Parameters:
     -----------
-    cell : pyscf.pbc.gto.Cell
-        Unit cell object containing atomic and basis set information
-    dms : ndarray
-        Density matrix or matrices in AO basis, shape (..., nao, nao)
-    kpts : ndarray, optional
-        k-point coordinates. If None, assumes Gamma point calculation
+    Sa : numpy.ndarray
+        Overlap matrix times MO coefficients (nao x nocc)
+    Kao : numpy.ndarray
+        Occupied-all exchange matrix components (nao x nocc)
+    Koo : numpy.ndarray
+        Occupied-occupied exchange matrix components (nocc x nocc)
         
     Returns:
     --------
-    tuple of ndarray
-        (mo_coeff, mo_occ) where:
-        - mo_coeff: Natural orbital coefficients, same shape as dms
-                  mo_occ[n, k, i] = occupation of orbital i at k-point k, spin n
-                  Real values ordered from highest to lowest occupation
+    numpy.ndarray
+        Full exchange matrix in AO basis (nao x nao)
         
-    k-point Specific Features:
-    --------------------------
-    - Handles complex overlap matrices for general k-points
-    - Automatic dtype detection: uses real arithmetic when |Im(dm)| < 1e-6
-    - Independent natural orbital construction at each k-point
-    - Preserves k-point symmetry and Bloch function properties
-    - Supports both collinear and non-collinear spin systems
+    Algorithm:
+    ----------
+    K_μν = Sa_μi * Koa_iν + Sa_νi * Koa_iμ - Sa_μi * Koo_ij * Sa_νj
+    
+    This corresponds to the resolution of identity expression:
+    K_μν ≈ Σ_P C_μP W_PP' C_νP' where C are fitting coefficients
     """
-    # Compute k-point dependent overlap matrices
-    sk = numpy.asarray(cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts))
-    if abs(dms.imag).max() < 1.e-6:
-        sk = sk.real
-        
-    # Ensure consistent dtype (PySCF sometimes returns float128)
-    sk = numpy.asarray(sk, dtype=dms.dtype)
-    mo_coeff = numpy.zeros_like(dms)
-    nao = cell.nao
-    nset = dms.shape[0]
-    nK = kpts.shape[0]
-    mo_occ = numpy.zeros((nset, nK, nao), numpy.float64 )
-    for i, dm in enumerate(dms):
-        for k, s in enumerate(sk):
-            # Diagonalize the DM in AO
-            A = lib.reduce(numpy.dot, (s, dm[k], s))
-            w, v = scipy.linalg.eigh(A, b=s)
 
-            # Flip since they're in increasing order
-            mo_occ[i][k] = numpy.flip(w)
-            mo_coeff[i][k] = numpy.flip(v, axis=1)
-
-    return mo_coeff, mo_occ
-
+    # Compute Sa = S @ mo_coeff.T once and reuse
+    Sa = S @ mo_coeff.T
+    
+    # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
+    Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order='C')
+    Kuv = Sa_Kao + Sa_Kao.T.conj()
+    
+    # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
+    Koo = mo_coeff.conj() @ Kao
+    Sa_Koo = numpy.matmul(Sa, Koo)
+    Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order='C')
+    return Kuv            
 
 def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
     """
@@ -135,18 +138,15 @@ def integrals_uu_kpts(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr)
     """
     ngrids = ao_mos[0].shape[1]
     nmo = ao_mos[k_prim].shape[0]
-    sqrt_ngrids = ngrids ** 0.5
-    inv_sqrt_ngrids = 1.0 / sqrt_ngrids
-    
-    rho1 = numpy.empty(ngrids, dtype=numpy.complex128)
+    rho1 = numpy.empty(ngrids, dtype=vR_dm.dtype)
     
     for i in range(nmo):
         i_Rg_exp = ao_mos[k_prim][i].conj() * expmikr
         numpy.multiply(i_Rg_exp, ao_mos[k][j], out=rho1)
         vG = tools.fft(rho1, mesh)
-        vG *= inv_sqrt_ngrids * coulG
+        vG *= coulG
         vR = tools.ifft(vG, mesh)
-        vR_dm[j] += vR * i_Rg_exp.conj() * (mo_occ[k_prim][i] * sqrt_ngrids)
+        vR_dm[j] += vR * i_Rg_exp.conj() * mo_occ[k_prim][i]
 
 
 def occri_get_k_kpts(mydf, dms, exxdiv=None):
@@ -202,46 +202,55 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     assert cell.dimension != 1
     coords = cell.gen_uniform_grids(mesh)
     ngrids = coords.shape[0]
-    
-    if getattr(dms, "mo_coeff", None) is not None:
-        mo_coeff = numpy.asarray(dms.mo_coeff)
-        mo_occ = numpy.asarray(dms.mo_occ)
-    else:
-        mo_coeff, mo_occ = make_natural_orbitals_kpts(cell, dms, mydf.kpts)
-    tol = 1.0e-6
-    is_occ = mo_occ > tol
-    nset = dms.shape[0]
-    kpts = mydf.kpts
-    nk = mydf.Nk
-    mo_coeff = [[numpy.asarray(mo_coeff[n][k][:, is_occ[n][k]].T, order='C') for k in range(nk)] for n in range(nset)]
-    mo_occ = [[numpy.ascontiguousarray(mo_occ[n][k][is_occ[n][k]]) for k in range(nk)] for n in range(nset)]
-    
+    nset, nk, nao = dms.shape[:3]
     mesh = cell.mesh
-    weight = ngrids/ cell.vol  / nk
-    nao = cell.nao
-    vk = numpy.empty((nset, nk, nao, nao), dms.dtype)
-    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
+    kpts = mydf.kpts
+    weight = cell.vol/ ngrids**0.5  / nk
+    mo_coeff = dms.mo_coeff
+    mo_occ = dms.mo_occ
 
+    # Evaluate AOs on the grid for each k-point
     aovals = mydf._numint.eval_ao(cell, coords, kpts=kpts)
-    aovals = [numpy.asarray(ao.T * (cell.vol / ngrids) ** 0.5, order='C') for ao in aovals]
-    ao_mos = [[numpy.matmul( mo_coeff[n][k], aovals[k], order='C') for k in range(nk)] for n in range(nset)]
+    aovals = [numpy.asarray(ao.T , order='C') for ao in aovals]
+    
+    # Transform to MO basis for each k-point and spin
+    ao_mos = [[lib.dot( mo_coeff[n][k], aovals[k]) for k in range(nk)] for n in range(nset)]
+    out_type = numpy.complex128 if [abs(ao.imag).max() > 1.e-6  for ao in aovals] else numpy.float64
+    aovals = [ao * weight for ao in aovals]
 
+    # Pre-allocate output arrays
+    vk = numpy.empty((nset, nk, nao, nao), out_type, order='C')
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
+    
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
+
+    coulG_cache = {}
+    expmikr_cache = {}
+    inv_sqrt = 1./ ngrids ** 0.5
+    for k in range(nk):
+        coulG_cache[k] = {}
+        expmikr_cache[k] = {}
+        for k_prim in range(nk):
+            dk = kpts[k] - kpts[k_prim]
+            coulG_cache[k][k_prim] = tools.get_coulG(cell, dk, False, mesh=mesh) * inv_sqrt
+            if numpy.allclose(dk, 0):
+                expmikr_cache[k][k_prim] = numpy.ones(1, dtype=out_type)
+            else:
+                expmikr_cache[k][k_prim] = numpy.exp(-1j * (coords @ dk))
 
     for n in range(nset):
         for k in range(nk):
             nmo = mo_coeff[n][k].shape[0]
-            vR_dm = numpy.zeros((nmo, ngrids), numpy.complex128)
+            vR_dm = numpy.zeros((nmo, ngrids), out_type)
             for j in range(nmo):
                 for k_prim in range(nk):
-                    coulG = tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh)
-                    expmikr = numpy.exp(-1j * (coords @ (kpts[k] - kpts[k_prim])))
+                    coulG = coulG_cache[k][k_prim]
+                    expmikr = expmikr_cache[k][k_prim]
                     integrals_uu_kpts(j, k, k_prim, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh, expmikr)
 
-            vR_dm *= weight
-            vk_j = aovals[k].conj() @ vR_dm.T
-            vk[n][k] = occri.build_full_exchange(s[k], vk_j, mo_coeff[n][k]).real
+            vk_j = lib.dot(aovals[k].conj(), vR_dm.T)
+            vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
 
             t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)'%k, *t1)
 
@@ -251,7 +260,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     return vk
 
 
-def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
+def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     """
     Production C-accelerated implementation of k-point OCCRI exchange matrix evaluation.
     
@@ -343,44 +352,34 @@ def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
     assert cell.dimension != 1
     coords = cell.gen_uniform_grids(mesh)
     ngrids = coords.shape[0]
-    
-    if getattr(dms, "mo_coeff", None) is not None:
-        mo_coeff = numpy.asarray(dms.mo_coeff)
-        mo_occ = numpy.asarray(dms.mo_occ)
-    else:
-        mo_coeff, mo_occ = make_natural_orbitals_kpts(cell, dms, mydf.kpts)
-    
-    # Optimize occupation number filtering
-    tol = 1.0e-6
-    is_occ = mo_occ > tol
-    nset = dms.shape[0]
+    nset, nk, nao = dms.shape[:3]
+    mesh = numpy.asarray(cell.mesh, numpy.int32)
     kpts = mydf.kpts
-    nk = mydf.Nk
-    mo_coeff = [[numpy.ascontiguousarray(mo_coeff[n][k][:, is_occ[n][k]].T) 
-                for k in range(nk)] for n in range(nset)]
-    mo_occ = [[numpy.ascontiguousarray(mo_occ[n][k][is_occ[n][k]]) 
-                for k in range(nk)] for n in range(nset)]
+    weight = cell.vol / ngrids / ngrids**0.5  / nk
+    mo_coeff = dms.mo_coeff
+    mo_occ = dms.mo_occ
 
     # Pre-allocate output arrays
-    mesh = numpy.asarray(cell.mesh, numpy.int32)
-    weight = ngrids / cell.vol / nk
-    nao = cell.nao
-    vk = numpy.zeros((nset, nk, nao, nao), numpy.complex128, order='C')
+    vk = numpy.empty((nset, nk, nao, nao), numpy.complex128, order='C')
     s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
     
     # Evaluate AOs on the grid for each k-point
     aovals = mydf._numint.eval_ao(cell, coords, kpts=kpts)
-    aovals = [numpy.ascontiguousarray(ao.T * (cell.vol / ngrids) ** 0.5) for ao in aovals]
+    aovals = [numpy.ascontiguousarray(ao.T) for ao in aovals]
     
     # Transform to MO basis for each k-point and spin
-    ao_mos = [[numpy.matmul( mo_coeff[n][k], aovals[k], order='C') for k in range(nk)] for n in range(nset)]
+    ao_mos = [[lib.dot( mo_coeff[n][k], aovals[k]) for k in range(nk)] for n in range(nset)]
+    aovals = [ao * weight for ao in aovals]
     
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
     
     # Import C extension components
     from pyscf.occri import occri_vR_kpts, _OCCRI_C_AVAILABLE
-    
+    inv_sqrt = 1./ ngrids ** 0.5
+    coulG_all = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
+    expmikr_all_real = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
+    expmikr_all_imag = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')    
     for n in range(nset):
 
         nmo_max = max(mo_coeff[n][k].shape[0] for k in range(nk))
@@ -406,12 +405,9 @@ def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
             vR_dm_imag = numpy.zeros(nmo[k] * ngrids, dtype=numpy.float64, order='C')
             
             # Prepare all Coulomb kernels for this k-point against all k_prim
-            coulG_all = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
-            expmikr_all_real = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
-            expmikr_all_imag = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')            
             for k_prim in range(nk):
-                coulG_all[k_prim] = tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh)
-                expmikr = numpy.exp(-1j * (coords @ (kpts[k] - kpts[k_prim])))
+                coulG_all[k_prim] = tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh) * inv_sqrt
+                expmikr = numpy.exp(-1j * coords @ (kpts[k] - kpts[k_prim]))
                 expmikr_all_real[k_prim] = expmikr.real
                 expmikr_all_imag[k_prim] = expmikr.imag
             
@@ -431,9 +427,8 @@ def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
             vR_dm = (vR_dm_real + 1j * vR_dm_imag).reshape(nmo[k], ngrids)
             
             # Contract back to AO basis
-            vR_dm *= weight
-            vk_j = aovals[k].conj() @ vR_dm.T
-            vk[n][k] = occri.build_full_exchange(s[k], vk_j, mo_coeff[n][k]).real
+            vk_j = lib.dot(aovals[k].conj(), vR_dm.T)
+            vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
             
             t1 = logger.timer_debug1(mydf, f'get_k_kpts_opt: k-point {k}', *t1)
     
@@ -442,17 +437,3 @@ def occri_get_k_opt_kpts(mydf, dms, exxdiv=None):
         _ewald_exxdiv_for_G0(mydf, s, dms, vk)
     
     return vk
-
-def _ewald_exxdiv_for_G0(mydf, s, dms, vk):
-    # Function _ewald_exxdiv_for_G0 to add back in the G=0 component to vk_kpts
-    # Note in the _ewald_exxdiv_for_G0 implementation, the G=0 treatments are
-    # different for 1D/2D and 3D systems.  The special treatments for 1D and 2D
-    # can only be used with AFTDF/GDF/MDF method.  In the FFTDF method, 1D, 2D
-    # and 3D should use the ewald probe charge correction.
-    cell = mydf.cell
-    madelung = tools.pbc.madelung(cell, mydf.kpts)
-    nset = dms.shape[0]
-    nk = dms.shape[1]
-    for n in range(nset):
-        for k in range(nk):
-            vk[n][k] += madelung * reduce(numpy.dot, (s[k], dms[n][k], s[k]))

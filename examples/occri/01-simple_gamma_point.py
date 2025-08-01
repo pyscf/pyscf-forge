@@ -1,19 +1,33 @@
 #!/usr/bin/env python
 
 """
-Simple OCCRI example: Gamma point calculations
+OCCRI Gamma Point Examples: Getting Started
 
 This example demonstrates the basic usage of OCCRI (Occupied Orbital Coulomb 
 Resolution of Identity) for efficient exact exchange evaluation in periodic 
-systems at the Gamma point.
+systems at the Gamma point (single k-point).
 
 OCCRI provides significant speedup over standard FFTDF while maintaining
 chemical accuracy for hybrid DFT and Hartree-Fock calculations.
+
+Key concepts covered:
+- Basic OCCRI setup and usage
+- Different SCF methods (RHF, UHF, RKS, UKS)
+- How to set up periodic systems
+- Performance and accuracy considerations
 """
 
 import numpy
 from pyscf.pbc import gto, scf
 from pyscf.occri import OCCRI
+
+print("=== OCCRI Gamma Point Tutorial ===")
+print("This example shows basic OCCRI usage for single k-point calculations.\n")
+
+# =============================================================================
+# System Setup
+# =============================================================================
+print("Setting up diamond structure...")
 
 # Set up diamond structure (2 carbon atoms per unit cell)
 cell = gto.Cell()
@@ -21,53 +35,164 @@ cell.atom = '''
     C 0.000000 0.000000 0.000000
     C 0.890186 0.890186 0.890186
 '''
-cell.basis = 'gth-szv'
-cell.pseudo = 'gth-pbe'
-cell.a = numpy.eye(3) * 3.5607  # 3.56 Å lattice parameter
-cell.mesh = [25] * 3  # Dense mesh for high accuracy
+cell.basis = 'gth-szv'           # Compact basis set
+cell.pseudo = 'gth-pbe'          # Pseudopotentials
+cell.a = numpy.eye(3) * 3.5607   # Diamond lattice parameter (Å)
+cell.mesh = [20] * 3             # FFT mesh - balance between speed and accuracy
 cell.build()
 
-print("=== OCCRI Gamma Point Examples ===")
 print(f"System: {' '.join(cell.atom_symbol(i) for i in range(cell.natm))} ({cell.natm} atoms)")
 print(f"Basis: {cell.basis}")
 print(f"Lattice parameter: {cell.a[0,0]:.3f} Å")
+print(f"FFT mesh: {cell.mesh} ({numpy.prod(cell.mesh)} total points)")
 
-# Example 1: Restricted Hartree-Fock (RHF)
-print("\n1. Restricted Hartree-Fock (RHF)")
+# =============================================================================
+# Example 1: Basic OCCRI usage
+# =============================================================================
+print("\n" + "="*50)
+print("Example 1: Basic OCCRI Setup")
+print("="*50)
+
+print("\n1a. Restricted Hartree-Fock (RHF)")
+print("    How to enable OCCRI for exact exchange:")
+
+# Standard syntax: attach OCCRI to mean-field object
 mf_rhf = scf.RHF(cell)
-mf_rhf.with_df = OCCRI(mf_rhf)
+mf_rhf.with_df = OCCRI(mf_rhf)  # This line enables OCCRI
 e_rhf = mf_rhf.kernel()
-print(f"   RHF energy: {e_rhf:.8f} Hartree")
 
-# Example 2: Unrestricted Hartree-Fock (UHF) 
-print("\n2. Unrestricted Hartree-Fock (UHF)")
+print(f"    Energy: {e_rhf:.6f} Hartree")
+print(f"    Converged: {mf_rhf.converged}")
+
+print("\n1b. Unrestricted Hartree-Fock (UHF)")
 mf_uhf = scf.UHF(cell)
 mf_uhf.with_df = OCCRI(mf_uhf)
 e_uhf = mf_uhf.kernel()
-print(f"   UHF energy: {e_uhf:.8f} Hartree")
-print(f"   RHF-UHF difference: {abs(e_rhf - e_uhf):.2e} Hartree (should be small for closed shell)")
+print(f"    Energy: {e_uhf:.6f} Hartree")
 
-# Example 3: Restricted Kohn-Sham with PBE0 hybrid functional
-print("\n3. Restricted Kohn-Sham with PBE0 (25% exact exchange)")
-mf_rks = scf.RKS(cell)
-mf_rks.xc = 'pbe0'
-mf_rks.with_df = OCCRI(mf_rks)
-e_rks = mf_rks.kernel()
-print(f"   RKS/PBE0 energy: {e_rks:.8f} Hartree")
+# =============================================================================
+# Example 2: Hybrid DFT calculations  
+# =============================================================================
+print("\n" + "="*50)
+print("Example 2: Hybrid DFT with OCCRI")
+print("="*50)
 
-# Example 4: Unrestricted Kohn-Sham with PBE0 hybrid functional
-print("\n4. Unrestricted Kohn-Sham with PBE0")
-mf_uks = scf.UKS(cell)
-mf_uks.xc = 'pbe0'
-mf_uks.with_df = OCCRI(mf_uks)
-e_uks = mf_uks.kernel()
-print(f"   UKS/PBE0 energy: {e_uks:.8f} Hartree")
-print(f"   RKS-UKS difference: {abs(e_rks - e_uks):.2e} Hartree")
+print("\n2a. PBE0 (25% exact exchange)")
+mf_pbe0 = scf.RKS(cell)
+mf_pbe0.xc = 'pbe0'
+mf_pbe0.with_df = OCCRI(mf_pbe0)  # OCCRI handles exact exchange
+e_pbe0 = mf_pbe0.kernel()
+print(f"    PBE0 energy: {e_pbe0:.6f} Hartree")
 
-print("\n=== Performance Note ===")
-print("OCCRI provides significant speedup over FFTDF, especially for systems")
-print("with many occupied orbitals. The C extension with FFTW provides optimal performance.")
+print("\n2b. HSE06 range-separated hybrid")  
+mf_hse = scf.RKS(cell)
+mf_hse.xc = 'hse06'  # 25% short-range exact exchange
+mf_hse.with_df = OCCRI(mf_hse)
+e_hse = mf_hse.kernel()
+print(f"    HSE06 energy: {e_hse:.6f} Hartree")
 
-print("\n=== Accuracy Note ===")
-print("OCCRI accuracy depends on FFT mesh density. Dense meshes (~1e-5 grid accuracy or higher)")
-print("are recommended for high-accuracy calculations.")
+# =============================================================================
+# Example 3: Configuration options
+# =============================================================================
+print("\n" + "="*50)
+print("Example 3: OCCRI Configuration")
+print("="*50)
+
+print("\n3a. Python implementation (for debugging)")
+mf_python = scf.RHF(cell)
+mf_python.with_df = OCCRI(mf_python, disable_c=True)
+e_python = mf_python.kernel()
+print(f"    Python: {e_python:.6f} Ha")
+
+print("\n3b. C extension (default, faster)")
+mf_c = scf.RHF(cell)  
+mf_c.with_df = OCCRI(mf_c, disable_c=False)
+e_c = mf_c.kernel()
+print(f"    C extension: {e_c:.6f} Ha")
+print(f"    Difference: {abs(e_python - e_c):.2e} Ha")
+
+# =============================================================================
+# Example 4: FFT mesh convergence study
+# =============================================================================
+print("\n" + "="*60)
+print("Example 4: FFT mesh convergence study")
+print("="*60)
+
+print("OCCRI accuracy depends on FFT mesh density. This example shows")
+print("how to converge the mesh size for reliable results.\n")
+
+# Test different mesh sizes - keep k-points fixed
+mesh_sizes = [25, 27, 29, 31]  # FFT mesh dimensions
+energies = []
+
+for mesh_size in mesh_sizes:
+    print(f"4.{mesh_size}: [{mesh_size}]³ mesh ({mesh_size**3} total points)")
+    
+    # Create new cell with different mesh
+    test_cell = cell.copy()
+    test_cell.mesh = [mesh_size] * 3
+    test_cell.build()
+    
+    mf_test = scf.RHF(test_cell)
+    mf_test.with_df = OCCRI(mf_test)
+    mf_test.verbose = 1  # Reduce output for cleaner display
+    
+    e_test = mf_test.kernel()
+    energies.append(e_test)
+    print(f"    Energy: {e_test:.8f} Ha")
+    
+    if len(energies) > 1:
+        diff = e_test - energies[-2]
+        print(f"    Change: {diff:.8f} Ha ({abs(diff)*1000:.2f} mHa)")
+        
+        # Check convergence
+        if abs(diff) < 1e-6:
+            print("    ✓ Converged to μHa accuracy")
+        elif abs(diff) < 5e-6:
+            print("    ✓ Converged to 5 μHa accuracy")
+        else:
+            print("    ⚠ Not yet converged")
+    print()
+
+print("Mesh convergence guidelines:")
+print("• Energy differences < 1-5 μHa/atom typically sufficient")
+print("• Denser meshes → higher accuracy but slower calculation")  
+
+# =============================================================================
+# Usage guide
+# =============================================================================
+print("\n" + "="*50)
+print("OCCRI Usage Guide")
+print("="*50)
+
+print("""
+Quick start:
+  mf = scf.RHF(cell)           # Create SCF object
+  mf.with_df = OCCRI(mf)       # Enable OCCRI
+  energy = mf.kernel()         # Run calculation
+
+When to use OCCRI:
+  • Hartree-Fock calculations (exact exchange)
+  • Hybrid functionals (PBE0, HSE06, etc.)
+  • When standard FFTDF is too slow
+  • Large basis sets (>~70 AOs)
+
+Configuration options:
+  OCCRI(mf)                    # Default (use C if available)
+  OCCRI(mf, disable_c=True)    # Force Python implementation
+  OCCRI(mf, disable_c=False)   # Force C implementation
+
+Compatible methods:
+  • scf.RHF, scf.UHF          # Hartree-Fock
+  • scf.RKS, scf.UKS          # DFT (any functional)
+  • Gamma point calculations only (use 02-kpoint for k-points)
+
+Performance tips:
+  • C extension ~5-10x faster than Python
+  • Converge FFT mesh: start low, increase until energy changes < 1-5 μHa/atom
+  • OCCRI scaling: O(N_occ²) vs FFTDF O(N_AO²)
+  • Use OCCRI for large basis sets (>~70 AOs), avoid for small basis (<~60 AOs)
+  • Most beneficial when N_AO >> N_occ (large basis, few electrons)
+""")
+
+print("Example completed successfully!")

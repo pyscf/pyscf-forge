@@ -1,91 +1,175 @@
 #!/usr/bin/env python
 
 """
-OCCRI with k-points: Multiple k-point sampling
+OCCRI with k-points: Usage Examples
 
-This example demonstrates OCCRI for k-point calculations, where Bloch functions
-and complex phase factors require special handling. OCCRI supports arbitrary
-k-point meshes with proper momentum conservation.
+This example demonstrates how to use OCCRI for k-point calculations.
+OCCRI provides efficient exact exchange evaluation for periodic systems
+with k-point sampling, making it ideal for band structure calculations
+and solid-state systems.
 
-The k-point implementation uses complex FFTs and handles phase factors 
-exp(-i(k-k')·r) for all k-point pair interactions.
+Key features demonstrated:
+- Setting up k-point calculations with OCCRI
+- Different SCF methods (RHF, UHF, RKS, UKS)
+- Configuration options (C extension vs Python, different k-meshes)
+- Performance considerations and best practices
 """
 
 import numpy
 from pyscf.pbc import gto, scf
 from pyscf.occri import OCCRI
 
-# Set up diamond structure with appropriate unit cell for k-point sampling
+print("=== OCCRI k-point Usage Examples ===")
+print("This example shows how to use OCCRI for different k-point calculations.\n")
+
+# Set up a simple diamond structure
 cell = gto.Cell()
 cell.atom = '''
     C 0.000000 0.000000 0.000000
     C 0.890186 0.890186 0.890186
 '''
-cell.basis = 'gth-szv'
-cell.pseudo = 'gth-pbe'
-cell.a = numpy.eye(3) * 3.5607
-cell.mesh = [25] * 3  # Dense mesh required for k-point accuracy
+cell.basis = 'gth-szv'          # Compact basis for faster demonstration
+cell.pseudo = 'gth-pbe'         # Pseudopotentials for efficiency
+cell.a = numpy.eye(3) * 3.5607  # Diamond lattice parameter
+cell.mesh = [20] * 3            # FFT mesh - adjust for accuracy vs speed trade-off
 cell.build()
 
-# Generate k-point mesh: 2×2×2 = 8 k-points
+print(f"System: Diamond structure with {cell.natm} atoms")
+print(f"FFT mesh: {cell.mesh} (total {numpy.prod(cell.mesh)} points)")
+
+# =============================================================================
+# Example 1: Basic k-point setup
+# =============================================================================
+print("\n" + "="*60)
+print("Example 1: Basic k-point Hartree-Fock")
+print("="*60)
+
+# Define k-point mesh - start with small mesh for demonstration
 kmesh = [2, 2, 2]
 kpts = cell.make_kpts(kmesh)
 
-print("=== OCCRI k-point Examples ===")
-print(f"System: {' '.join(cell.atom_symbol(i) for i in range(cell.natm))} ({cell.natm} atoms)")
-print(f"k-point mesh: {kmesh} ({len(kpts)} k-points)")
-print(f"k-points (first 3):")
-for i, kpt in enumerate(kpts[:3]):
-    print(f"   k{i+1}: [{kpt[0]:6.3f}, {kpt[1]:6.3f}, {kpt[2]:6.3f}]")
-if len(kpts) > 3:
-    print(f"   ... and {len(kpts)-3} more")
+print(f"k-point mesh: {kmesh} ({len(kpts)} k-points total)")
+print("k-point coordinates:")
+for i, kpt in enumerate(kpts):
+    print(f"  k{i+1}: [{kpt[0]:8.4f}, {kpt[1]:8.4f}, {kpt[2]:8.4f}]")
 
-# Example 1: k-point Restricted Hartree-Fock (KRHF)
-print("\n1. k-point Restricted Hartree-Fock (KRHF)")
-mf_krhf = scf.KRHF(cell, kpts)
-mf_krhf.with_df = OCCRI(mf_krhf, kmesh=kmesh)
-e_krhf = mf_krhf.kernel()
-print(f"   KRHF energy: {e_krhf:.8f} Hartree")
+# Set up KRHF calculation with OCCRI
+mf = scf.KRHF(cell, kpts)
+mf.with_df = OCCRI(mf, kmesh=kmesh)  # Specify kmesh for consistency
 
-# Example 2: k-point Unrestricted Hartree-Fock (KUHF)
-print("\n2. k-point Unrestricted Hartree-Fock (KUHF)")
-mf_kuhf = scf.KUHF(cell, kpts)
-mf_kuhf.with_df = OCCRI(mf_kuhf, kmesh=kmesh) 
-e_kuhf = mf_kuhf.kernel()
-print(f"   KUHF energy: {e_kuhf:.8f} Hartree")
-print(f"   KRHF-KUHF difference: {abs(e_krhf - e_kuhf):.2e} Hartree")
+print("\nRunning KRHF calculation...")
+energy = mf.kernel()
+print(f"KRHF energy: {energy:.6f} Hartree")
+print(f"Converged: {mf.converged}")
 
-# Example 3: k-point Restricted Kohn-Sham with PBE0
-print("\n3. k-point Restricted Kohn-Sham with PBE0")
-mf_krks = scf.KRKS(cell, kpts)
-mf_krks.xc = 'pbe0'
-mf_krks.with_df = OCCRI(mf_krks, kmesh=kmesh)
-e_krks = mf_krks.kernel()
-print(f"   KRKS/PBE0 energy: {e_krks:.8f} Hartree")
+# =============================================================================
+# Example 2: Different SCF methods
+# =============================================================================
+print("\n" + "="*60)
+print("Example 2: Different SCF methods with OCCRI")
+print("="*60)
 
-# Example 4: k-point Unrestricted Kohn-Sham with PBE0
-print("\n4. k-point Unrestricted Kohn-Sham with PBE0")
-mf_kuks = scf.KUKS(cell, kpts)
-mf_kuks.xc = 'pbe0'
-mf_kuks.with_df = OCCRI(mf_kuks, kmesh=kmesh)
-e_kuks = mf_kuks.kernel()
-print(f"   KUKS/PBE0 energy: {e_kuks:.8f} Hartree")
+# RHF - Restricted (closed shell)
+# Note, KRHF has bug in PySCF when tagging dm. 
+# Must diagonalize on initial pass.
+print("\n2a. Restricted Hartree-Fock (RHF)")
+mf_rhf = scf.KRHF(cell, kpts)
+mf_rhf.with_df = OCCRI(mf_rhf, kmesh=kmesh)
+e_rhf = mf_rhf.kernel()
+print(f"    Energy: {e_rhf:.6f} Ha")
 
-# Compare with Gamma point calculation to show k-point convergence
-print("\n=== k-point vs Gamma Point Comparison ===")
-mf_gamma = scf.RKS(cell)
-mf_gamma.xc = 'pbe0'
-mf_gamma.with_df = OCCRI(mf_gamma)
+# UHF - Unrestricted (open shell capable)
+print("\n2b. Unrestricted Hartree-Fock (UHF)")
+mf_uhf = scf.KUHF(cell, kpts)
+mf_uhf.with_df = OCCRI(mf_uhf, kmesh=kmesh)
+e_uhf = mf_uhf.kernel()
+print(f"    Energy: {e_uhf:.6f} Ha")
+
+# DFT with hybrid functional
+print("\n2c. DFT with PBE0 hybrid functional")
+mf_dft = scf.KRKS(cell, kpts)
+mf_dft.xc = 'pbe0'  # 25% exact exchange + PBE correlation
+mf_dft.with_df = OCCRI(mf_dft, kmesh=kmesh)
+e_dft = mf_dft.kernel()
+print(f"    Energy: {e_dft:.6f} Ha")
+
+# =============================================================================
+# Example 3: Configuration options
+# =============================================================================
+print("\n" + "="*60)  
+print("Example 3: OCCRI configuration options")
+print("="*60)
+
+# Force Python implementation (useful for debugging)
+print("\n3a. Python implementation (disable_c=True)")
+mf_python = scf.KRHF(cell, kpts)
+mf_python.with_df = OCCRI(mf_python, kmesh=kmesh, disable_c=True)
+e_python = mf_python.kernel()
+print(f"    Energy (Python): {e_python:.6f} Ha")
+
+# Use C extension if available (default)
+print("\n3b. C extension (default, disable_c=False)")
+mf_c = scf.KRHF(cell, kpts)
+mf_c.with_df = OCCRI(mf_c, kmesh=kmesh, disable_c=False)
+e_c = mf_c.kernel()
+print(f"    Energy (C ext):  {e_c:.6f} Ha")
+
+
+# =============================================================================
+# Example 5: Gamma point vs k-point comparison
+# =============================================================================
+print("\n" + "="*60)
+print("Example 5: Gamma point vs k-point comparison")
+print("="*60)
+
+# Gamma point only (equivalent to molecular calculation)
+print("\n5a. Gamma point only")
+mf_gamma = scf.RHF(cell)  # Note: RHF (not KRHF) for gamma point
+mf_gamma.with_df = OCCRI(mf_gamma)  # No kmesh needed for gamma point
 e_gamma = mf_gamma.kernel()
+print(f"    Gamma point energy: {e_gamma:.6f} Ha")
 
-print(f"Gamma point energy:  {e_gamma:.8f} Hartree")
-print(f"k-point energy:      {e_krks:.8f} Hartree")
-print(f"k-point correction:  {e_krks - e_gamma:.6f} Hartree")
+# k-point sampling
+print(f"\n5b. k-point sampling ({kmesh})")
+print(f"    k-point energy:     {e_rhf:.6f} Ha")
+print(f"    k-point correction: {e_rhf - e_gamma:.6f} Ha")
 
-print("\n=== k-point Technical Notes ===")
-print("• k-point OCCRI handles complex Bloch functions: ψ(k,r) = e^(ik·r) u(k,r)")
-print("• Complex FFTs evaluate exchange integrals with phase factors exp(-i(k-k')·r)")
-print("• All k-point pairs (k,k') contribute to exchange matrix at each k-point")
-print("• Computational cost scales as O(N_k^2) where N_k is number of k-points")
-print("• Dense FFT meshes recommended for production accuracy (ensure that the")
-print("  error from the finite plane-wave cutoff is less than 5 μHa per atom)")
+# =============================================================================
+# Usage tips and best practices
+# =============================================================================
+print("\n" + "="*60)
+print("OCCRI Usage Tips")
+print("="*60)
+
+print("""
+Best practices for OCCRI k-point calculations:
+
+1. FFT mesh convergence (most important):
+   - Increase mesh size until energy changes < 1-5 μHa/atom
+   - Example: [15]³ → [17]³ → [19]³ → [21]³
+   - Dense meshes improve accuracy but increase cost significantly
+
+2. k-point sampling:
+   - Start with 2×2×2 or 3×3×3 k-point mesh
+   - Increase until total energy converges
+   - More k-points = higher accuracy but O(N_k²) cost scaling
+
+3. Performance:
+   - C extension provides ~5-10× speedup when available  
+   - Use disable_c=True for debugging or if C extension fails
+   - Memory usage scales as O(N_k × N_occ × N_grid)
+   - OCCRI scales as O(N_occ²) vs FFTDF O(N_AO²)
+   - Preferable for large basis sets (>~100 AOs), slower for small basis (<~100 AOs)
+
+4. Method selection:
+   - KRHF: Fast, suitable for closed-shell systems
+   - KUHF: Handles open-shell systems, slightly more expensive
+   - KRKS/KUKS: Include electron correlation via DFT
+
+5. Troubleshooting:
+   - If SCF doesn't converge, try different initial guess
+   - For large energy differences, check mesh size and k-point convergence
+   - Use standard PySCF as reference for validation
+""")
+
+print("Example completed successfully!")

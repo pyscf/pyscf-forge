@@ -90,8 +90,9 @@ import pyscf
 import numpy
 import time
 import ctypes
+import scipy
 from pyscf import lib
-from pyscf.occri import occri_k, occri_k_kpts
+from pyscf.occri import occri_k_kpts
 from pyscf.lib import logger
 
 # Attempt to load the optimized C extension with FFTW, BLAS, and OpenMP
@@ -158,49 +159,59 @@ def log_mem(mydf):
     blksize = int(min(nao, max(1, (max_memory-mem_now)*1e6/16/4/ngrids/nao)))
     logger.debug1(mydf, 'fft_jk: get_k_kpts max_memory %s  blksize %d',
                   max_memory, blksize)
-    
-def build_full_exchange(S, Kao, mo_coeff):
+
+def make_natural_orbitals(mydf, dms):
     """
-    Construct full exchange matrix from occupied orbital components.
-    
-    This function builds the complete exchange matrix in the atomic orbital (AO)
-    basis from the occupied-occupied (Koo) and occupied-all (Koa) components
-    computed using the resolution of identity approximation.
-    
     Parameters:
     -----------
-    Sa : numpy.ndarray
-        Overlap matrix times MO coefficients (nao x nocc)
-    Kao : numpy.ndarray
-        Occupied-all exchange matrix components (nao x nocc)
-    Koo : numpy.ndarray
-        Occupied-occupied exchange matrix components (nocc x nocc)
+    cell : pyscf.pbc.gto.Cell
+        Unit cell object containing atomic and basis set information
+    dms : ndarray
+        Density matrix or matrices in AO basis, shape (..., nao, nao)
+    kpts : ndarray, optional
+        k-point coordinates. If None, assumes Gamma point calculation
         
     Returns:
     --------
-    numpy.ndarray
-        Full exchange matrix in AO basis (nao x nao)
+    tuple of ndarray
+        (mo_coeff, mo_occ) where:
+        - mo_coeff: Natural orbital coefficients, same shape as dms
+                  mo_occ[n, k, i] = occupation of orbital i at k-point k, spin n
+                  Real values ordered from highest to lowest occupation
         
-    Algorithm:
-    ----------
-    K_μν = Sa_μi * Koa_iν + Sa_νi * Koa_iμ - Sa_μi * Koo_ij * Sa_νj
-    
-    This corresponds to the resolution of identity expression:
-    K_μν ≈ Σ_P C_μP W_PP' C_νP' where C are fitting coefficients
+    k-point Specific Features:
+    --------------------------
+    - Handles complex overlap matrices for general k-points
+    - Automatic dtype detection: uses real arithmetic when |Im(dm)| < 1e-6
+    - Independent natural orbital construction at each k-point
+    - Preserves k-point symmetry and Bloch function properties
+    - Supports both collinear and non-collinear spin systems
     """
+    print("Building Orbitals")
+    cell = mydf.cell
+    kpts = mydf.kpts
+    nk = kpts.shape[0]
+    nao = cell.nao
+    nset = dms.shape[0]
 
-    # Compute Sa = S @ mo_coeff.T once and reuse
-    Sa = S @ mo_coeff.T
-    
-    # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
-    Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order='C')
-    Kuv = Sa_Kao + Sa_Kao.T.conj()
-    
-    # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
-    Koo = mo_coeff.conj() @ Kao
-    Sa_Koo = numpy.matmul(Sa, Koo)
-    Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order='C')
-    return Kuv    
+    # Compute k-point dependent overlap matrices
+    sk = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
+    if abs(dms.imag).max() < 1.e-6:
+        sk = [s.real.astype(numpy.float64) for s in sk]
+        
+    mo_coeff = numpy.zeros_like(dms)
+    mo_occ = numpy.zeros((nset, nk, nao), numpy.float64 )
+    for i, dm in enumerate(dms):
+        for k, s in enumerate(sk):
+            # Diagonalize the DM in AO
+            A = lib.reduce(numpy.dot, (s, dm[k], s))
+            w, v = scipy.linalg.eigh(A, b=s)
+
+            # Flip since they're in increasing order
+            mo_occ[i][k] = numpy.flip(w)
+            mo_coeff[i][k] = numpy.flip(v, axis=1)
+
+    return lib.tag_array(dms, mo_coeff=mo_coeff, mo_occ=mo_occ)
 
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
     """
@@ -255,6 +266,13 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         """
         
         mydf._is_mem_enough = lambda : False
+        #NOTE: PySCF calls get_jk -> get_jk passing dm.reshape(...), dropping the mo_coeff.
+        # As a work around, overwrite get_jk so orbitals aren't dropped
+        mydf.get_jk = self.get_jk
+        #BUG: Some PySCF methods have bugs when tagging initial guess dm. 
+        # For example, RKRS can modify dm without modifying mo_occ in the same way.
+        # As a work around, always diagonalize dm on first iteration.
+        self.scf_iter = 0
 
         self.method = mydf.__module__.rsplit('.', 1)[-1]
         assert self.method in ['hf', 'uhf', 'khf', 'kuhf', 'rks', 'uks', 'krks', 'kuks']
@@ -262,7 +280,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         self.StartTime = time.time()
         self.cell = mydf.cell
         self.kmesh = kmesh
-        self.Nk = numpy.prod(self.kmesh)
         self.kpts = self.cell.make_kpts(
             self.kmesh, space_group_symmetry=False, time_reversal_symmetry=False, wrap_around=True
         )        
@@ -274,19 +291,10 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         if _OCCRI_C_AVAILABLE and not disable_c and self.cell.verbose > 3:
             print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
 
-        if str(self.method[0]) == 'k':
-            # Choose k-point implementation based on C extension availability
-            # k-point methods handle complex Bloch functions and phase factors
-            if _OCCRI_C_AVAILABLE and not disable_c:
-                self.get_k = occri_k_kpts.occri_get_k_opt_kpts  # Optimized C k-point implementation with complex FFT
-            else:
-                self.get_k = occri_k_kpts.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
+        if _OCCRI_C_AVAILABLE and not disable_c:
+            self.get_k = occri_k_kpts.occri_get_k_kpts_opt  # Optimized C k-point implementation with complex FFT
         else:
-            # Choose implementation based on C extension availability
-            if _OCCRI_C_AVAILABLE and not disable_c:
-                self.get_k = occri_k.occri_get_k_opt  # Optimized C implementation
-            else:
-                self.get_k = occri_k.occri_get_k      # Pure Python fallback
+            self.get_k = occri_k_kpts.occri_get_k_kpts      # Pure Python k-point fallback with complex arithmetic
 
         # # Print all attributes
         # print()
@@ -297,14 +305,15 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
     def get_jk(
         self,
+        cell=None,
         dm=None,
         hermi=1,
         kpt=None,
         kpts_band=None,
-        with_j=None,
-        with_k=None,
+        with_j=True,
+        with_k=True,
         omega=None,
-        exxdiv=None,
+        exxdiv='ewald',
         **kwargs,
     ):
         """
@@ -347,20 +356,22 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         The method automatically reshapes input density matrices to handle
         both single matrices and batches of matrices consistently.
         """
+        if cell is None: cell = self.cell
+        if dm is None:
+            AttributeError("Overwriting get_jk. " \
+            "Pass dm to get_jk as keyword: get_jk(dm=dm, ...)")
+
         dm_shape = dm.shape
-        nK = self.Nk
-        mo_coeff, mo_occ = [None]* 2
-        if getattr(dm, "mo_coeff", None) is not None:
-            mo_coeff = numpy.asarray(dm.mo_coeff)
-            mo_occ = numpy.asarray(dm.mo_occ)
-        if str(self.method[0]) == 'k':
-            dm = dm.reshape(-1, nK, dm_shape[-2], dm_shape[-1])
+        nk = self.kpts.shape[0]
+        nao = cell.nao
+        if getattr(dm, "mo_coeff", None) is None or self.scf_iter==0:
+            dm = make_natural_orbitals(self, dm.reshape(-1, nk, nao, nao))
         else:
-            dm = dm.reshape(-1, dm_shape[-2], dm_shape[-1])
-        
-        if mo_coeff is not None:
-            dm = lib.tag_array(dm, mo_occ=mo_occ.reshape(dm.shape[0], self.Nk, self.cell.nao), mo_coeff=mo_coeff.reshape(dm.shape))
-        
+            mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)
+            mo_occ = numpy.asarray(dm.mo_occ).reshape(-1, nk, nao)
+            dm = lib.tag_array(dm.reshape(-1, nk, nao, nao), 
+                               mo_coeff=mo_coeff, mo_occ=mo_occ)
+
         if with_j:
             vj = self.get_j(self, dm, kpts=self.kpts)
             if abs(dm.imag).max() < 1.e-6:
@@ -370,12 +381,24 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
             vj = None
 
         if with_k:
+            
+            mo_coeff = dm.mo_coeff
+            mo_occ = dm.mo_occ
+            tol = 1.0e-6
+            is_occ = mo_occ > tol
+            nset = dm.shape[0]       
+            mo_coeff = [[numpy.ascontiguousarray(mo_coeff[n][k][:, is_occ[n][k]].T) for k in range(nk)] for n in range(nset)]
+            mo_occ = [[numpy.ascontiguousarray(mo_occ[n][k][is_occ[n][k]]) for k in range(nk)] for n in range(nset)]
+            dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
+            
             vk = self.get_k(self, dm, exxdiv)
             if abs(dm.imag).max() < 1.e-6:
-                vk = vk.real 
+                vk = vk.real
             vk = numpy.asarray(vk, dtype=dm.dtype).reshape(dm_shape)
         else:
             vk = None
+
+        self.scf_iter += 1
 
         return vj, vk
 

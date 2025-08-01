@@ -429,8 +429,6 @@ void integrals_uu_kpts(int j, int k, int k_prim,
                        double *expmikr_real, double *expmikr_imag, double *kpts, int mesh[3],
                        int *nmo, int ngrids, FFTWBuffersComplex *buf) {
     
-    const double sqn = sqrt(ngrids);
-    const double isqn = 1.0 / sqn;
     const int nmo_k_prim = nmo[k_prim];
     
     // Cache pointers for better compiler optimization
@@ -441,7 +439,7 @@ void integrals_uu_kpts(int j, int k, int k_prim,
     for (int i = 0; i < nmo_k_prim; i++) {
         double *ao_kprim_i_real = &ao_kprim_real[i * ngrids];
         double *ao_kprim_i_imag = &ao_kprim_imag[i * ngrids]; // take conjugate        
-        const double mo_occ_i = mo_occ_kprim[i] * isqn;
+        const double mo_occ_i = mo_occ_kprim[i];
 
         // Vectorizable loop: compute complex density with phase factor
         #pragma omp simd
@@ -463,11 +461,11 @@ void integrals_uu_kpts(int j, int k, int k_prim,
         for (int g = 0; g < ngrids; g++) {
             const double vG_real = vG_c[g][0];
             const double vG_imag = vG_c[g][1];
-            const double scale = coulG[g] * isqn;
+            const double cG = coulG[g];
             
             // Complex multiplication: vG * coulG
-            vG_c[g][0] = vG_real * scale;
-            vG_c[g][1] = vG_imag * scale;
+            vG_c[g][0] = vG_real * cG;
+            vG_c[g][1] = vG_imag * cG;
         }
 
         fftw_execute(buf->backward_c2c);

@@ -145,7 +145,7 @@ class TestOCCRI(unittest.TestCase):
         
         # OCCRI calculation
         df_occri = OCCRI(mf_ref)
-        _, vk_occri = df_occri.get_jk(dm, exxdiv=None, with_k=True)
+        _, vk_occri = df_occri.get_jk(dm=dm, exxdiv=None, with_k=True)
         
         # Check K matrix agreement  
         self.assertTrue(numpy.allclose(vk_ref, vk_occri, atol=1.e-10, rtol=1.e-10))
@@ -161,7 +161,7 @@ class TestOCCRI(unittest.TestCase):
         
         # OCCRI calculation
         df_occri = OCCRI(mf_ref)
-        _, vk_occri = df_occri.get_jk(dm, exxdiv=None, with_k=True)
+        _, vk_occri = df_occri.get_jk(dm=dm, exxdiv=None, with_k=True)
         
         # Check K matrices agreement
         self.assertTrue(numpy.allclose(vk_ref, vk_occri, atol=1.e-10, rtol=1.e-10))
@@ -177,7 +177,7 @@ class TestOCCRI(unittest.TestCase):
         
         # OCCRI calculation
         df_occri = OCCRI(mf_ref, kmesh=[2,2,2])
-        _, vk_occri = df_occri.get_jk(dms, kpts=kpts, exxdiv=None, with_k=True)
+        _, vk_occri = df_occri.get_jk(dm=dms, kpts=kpts, exxdiv=None, with_k=True)
         
         # Check data types
         self.assertTrue(vk_occri.dtype == numpy.complex128)
@@ -194,46 +194,24 @@ class TestOCCRI(unittest.TestCase):
         
         # OCCRI with and without Ewald correction
         df_occri = OCCRI(mf_ref)
-        _, vk1 = df_occri.get_jk(dm, exxdiv=None, with_k=True)
-        _, vk2 = df_occri.get_jk(dm, exxdiv='ewald', with_k=True)
+        _, vk1 = df_occri.get_jk(dm=dm, exxdiv=None, with_k=True)
+        _, vk2 = df_occri.get_jk(dm=dm, exxdiv='ewald', with_k=True)
         
         # K matrices should be different due to Ewald correction
         self.assertFalse(numpy.allclose(vk1, vk2, atol=1.e-10))
         
-        
     def test_natural_orbitals(self):
-        """Test natural orbital construction"""
-        from pyscf.occri.occri_k import make_natural_orbitals
-        
-        mf = scf.RHF(cell)
-        mf.kernel()
-        nao = cell.nao
-        dm = mf.make_rdm1().reshape(-1,nao,nao)
-        
-        # Construct natural orbitals
-        mo_coeff, mo_occ = make_natural_orbitals(cell, dm)
-        
-        # Check occupation numbers are sorted in descending order
-        self.assertTrue(numpy.all(mo_occ[:-1] >= mo_occ[1:]))
-        
-        # Check that natural orbitals give reasonable total occupation
-        # (Close to expected number of electrons)
-        s1e = mf.get_ovlp(cell)
-        ne = numpy.einsum("xij,ji->x", dm, s1e).real
-        nelec = cell.nelectron
-        self.assertAlmostEqual(ne, nelec, delta=0.01)
-        self.assertAlmostEqual(numpy.sum(mo_occ), nelec, delta=0.01)
-        
-    def test_natural_orbitals_kpts(self):
         """Test natural orbital construction with k-points"""
-        from pyscf.occri.occri_k_kpts import make_natural_orbitals_kpts
+        from pyscf.occri import make_natural_orbitals
         
         mf = scf.KRHF(cell_kpts, kpts)
         mf.kernel()
         dm = mf.make_rdm1().reshape(-1, kpts.shape[0], cell_kpts.nao, cell_kpts.nao)
         
         # Construct natural orbitals
-        mo_coeff, mo_occ = make_natural_orbitals_kpts(cell_kpts, dm, kpts)
+        dm = make_natural_orbitals(mf, dm)
+        mo_coeff = dm.mo_coeff
+        mo_occ = dm.mo_occ
         
         # Check dimensions
         nao = cell_kpts.nao
@@ -276,7 +254,7 @@ class TestOCCRI(unittest.TestCase):
         
     def test_build_full_exchange(self):
         """Test build_full_exchange function"""
-        from pyscf.occri import build_full_exchange
+        from pyscf.occri.occri_k_kpts import build_full_exchange
         
         # Setup test matrices
         nao = 10
@@ -311,11 +289,53 @@ class TestOCCRI(unittest.TestCase):
         # Initialize with RHF density
         dm_rhf = mf_rhf.make_rdm1()
         mf_uhf.init_guess = 'hcore'
-        mf_uhf.kernel(dm0=[dm_rhf/2, dm_rhf/2])
+        mf_uhf.kernel(dm0=numpy.asarray([dm_rhf/2, dm_rhf/2]))
         e_uhf = mf_uhf.e_tot
         
         # Should give similar energies for closed shell
         self.assertAlmostEqual(e_rhf, e_uhf, places=8)
+        
+    def test_standard_pyscf_krhf_kuhf_consistency(self):
+        """Verify that standard PySCF KRHF and KUHF give same results (without OCCRI)"""
+        # Standard KRHF calculation (no OCCRI)
+        mf_krhf_std = scf.KRHF(cell_kpts, kpts)
+        mf_krhf_std.kernel()
+        e_krhf_std = mf_krhf_std.e_tot
+        
+        # Standard KUHF calculation (no OCCRI)
+        mf_kuhf_std = scf.KUHF(cell_kpts, kpts)
+        dm_krhf = mf_krhf_std.make_rdm1()
+        dm_alpha = dm_krhf / 2
+        dm_beta = dm_krhf / 2
+        mf_kuhf_std.kernel(dm0=numpy.array([dm_alpha, dm_beta]))
+        e_kuhf_std = mf_kuhf_std.e_tot
+        
+        # Standard PySCF should give identical results
+        self.assertAlmostEqual(e_krhf_std, e_kuhf_std, places=8,
+                              msg=f"Standard PySCF KRHF-KUHF difference: {abs(e_krhf_std - e_kuhf_std):.2e} Ha")
+        
+    def test_consistency_krhf_kuhf(self):
+        """Test that KRHF and KUHF give same results for closed shell k-point systems"""
+        # KRHF calculation
+        mf_krhf = scf.KRHF(cell_kpts, kpts)
+        mf_krhf.with_df = OCCRI(mf_krhf, kmesh=[2,2,2], disable_c=True)
+        mf_krhf.kernel()
+        e_krhf = mf_krhf.e_tot
+        
+        # KUHF calculation with same initial density
+        mf_kuhf = scf.KUHF(cell_kpts, kpts)
+        mf_kuhf.with_df = OCCRI(mf_kuhf, kmesh=[2,2,2], disable_c=True)
+        # Initialize with symmetric alpha/beta densities from KRHF
+        dm_krhf = mf_krhf.make_rdm1()
+        dm_alpha = dm_krhf / 2
+        dm_beta = dm_krhf / 2
+        mf_kuhf.kernel(dm0=numpy.array([dm_alpha, dm_beta]))
+        e_kuhf = mf_kuhf.e_tot
+        
+        # Should give identical energies for closed shell k-point systems
+        # This test will currently FAIL due to the bug we identified
+        self.assertAlmostEqual(e_krhf, e_kuhf, places=6, 
+                              msg=f"KRHF-KUHF energy difference too large: {abs(e_krhf - e_kuhf):.2e} Ha")
         
     def test_small_system(self):
         """Test on very small system (H2)"""
