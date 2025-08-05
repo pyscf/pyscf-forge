@@ -215,14 +215,14 @@ class TestOCCRI(unittest.TestCase):
 
     def test_natural_orbitals(self):
         """Test natural orbital construction with k-points"""
-        from pyscf.occri import make_natural_orbitals
 
         mf = scf.KRHF(cell_kpts, kpts)
+        mf.with_df = OCCRI(mf, kmesh=[2, 2, 2])
         mf.kernel()
         dm = mf.make_rdm1().reshape(-1, kpts.shape[0], cell_kpts.nao, cell_kpts.nao)
 
         # Construct natural orbitals
-        dm = make_natural_orbitals(mf, dm)
+        dm = mf.with_df.make_natural_orbitals(dm)
         mo_coeff = dm.mo_coeff
         mo_occ = dm.mo_occ
 

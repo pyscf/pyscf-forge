@@ -124,35 +124,6 @@ def log_mem(mydf):
     )
 
 
-def make_natural_orbitals(mydf, dms):
-    """Construct natural orbitals from density matrix"""
-    # print("Building Orbitals")
-    cell = mydf.cell
-    kpts = mydf.kpts
-    nk = kpts.shape[0]
-    nao = cell.nao
-    nset = dms.shape[0]
-
-    # Compute k-point dependent overlap matrices
-    sk = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
-    if abs(dms.imag).max() < 1.0e-6:
-        sk = [s.real.astype(numpy.float64) for s in sk]
-
-    mo_coeff = numpy.zeros_like(dms)
-    mo_occ = numpy.zeros((nset, nk, nao), numpy.float64)
-    for i, dm in enumerate(dms):
-        for k, s in enumerate(sk):
-            # Diagonalize the DM in AO
-            A = lib.reduce(numpy.dot, (s, dm[k], s))
-            w, v = scipy.linalg.eigh(A, b=s)
-
-            # Flip since they're in increasing order
-            mo_occ[i][k] = numpy.flip(w)
-            mo_coeff[i][k] = numpy.flip(v, axis=1)
-
-    return lib.tag_array(dms, mo_coeff=mo_coeff, mo_occ=mo_occ)
-
-
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
     """Occupied Orbital Coulomb Resolution of Identity density fitting"""
 
@@ -238,7 +209,7 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         nao = cell.nao
         if with_k:
             if getattr(dm, "mo_coeff", None) is None or self.scf_iter == 0:
-                dm = make_natural_orbitals(self, dm.reshape(-1, nk, nao, nao))
+                dm = self.make_natural_orbitals(dm.reshape(-1, nk, nao, nao))
             else:
                 mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)
                 mo_occ = numpy.asarray(dm.mo_occ).reshape(-1, nk, nao)
@@ -284,6 +255,34 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         self.scf_iter += 1
 
         return vj, vk
+
+    def make_natural_orbitals(self, dms):
+        """Construct natural orbitals from density matrix"""
+        # print("Building Orbitals")
+        cell = self.cell
+        kpts = self.kpts
+        nk = kpts.shape[0]
+        nao = cell.nao
+        nset = dms.shape[0]
+
+        # Compute k-point dependent overlap matrices
+        sk = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
+        if abs(dms.imag).max() < 1.0e-6:
+            sk = [s.real.astype(numpy.float64) for s in sk]
+
+        mo_coeff = numpy.zeros_like(dms)
+        mo_occ = numpy.zeros((nset, nk, nao), numpy.float64)
+        for i, dm in enumerate(dms):
+            for k, s in enumerate(sk):
+                # Diagonalize the DM in AO
+                A = lib.reduce(numpy.dot, (s, dm[k], s))
+                w, v = scipy.linalg.eigh(A, b=s)
+
+                # Flip since they're in increasing order
+                mo_occ[i][k] = numpy.flip(w)
+                mo_coeff[i][k] = numpy.flip(v, axis=1)
+
+        return lib.tag_array(dms, mo_coeff=mo_coeff, mo_occ=mo_occ)
 
     def __del__(self):
         return

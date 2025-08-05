@@ -1,0 +1,1 @@
+# Placeholder for multigrid vs standard OCCRI comparison example
