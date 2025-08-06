@@ -27,6 +27,7 @@ from pyscf.occri import OCCRI
 
 from pyscf.gto.mole import decontract_basis
 from pyscf.gto import uncontract
+from pyscf.occri.multigrid.mg_grids import build_grids
 
 
 
@@ -73,16 +74,19 @@ class MultigridOccRI(OCCRI):
         self.rcut_epsilon=rcut_epsilon
         self.ke_epsilon=ke_epsilon
         self.incore=incore
+        self.k_grid_mesh=None
 
         # Print all attributes
-        print()
-        print("******** <class 'ISDFX'> ********", flush=True)
-        for key, value in vars(self).items():
-            if key not in  ['cell']:
-                print(f"{key}: {value}", flush=True)
+        if self.cell.verbose > 4:
+            print()
+            print("******** <class 'ISDFX'> ********", flush=True)
+            for key, value in vars(self).items():
+                if key in  ['method', 'kmesh', 'get_k', 'alpha_cutoff', 'rcut_epsilon', 'ke_epsilon', 'incore']:
+                    print(f"{key}: {value}", flush=True)
+            print()
 
         self.to_uncontracted_basis()
-        self.build_grids()
+        build_grids(self)
         
 
 
@@ -100,33 +104,24 @@ class MultigridOccRI(OCCRI):
         c = decontract_basis(cell, aggregate=True)[1]
         myisdf.c = c.astype(numpy.complex128) if nk > 1 else c.astype(numpy.float64)
 
-
-    def build_grids(self):
-
-        """Initialize multigrid components"""
-        """
-        Construct multi-grid system for ISDF calculations.
-        """
-        # Exchange grids
-        from pyscf.occri.multigrid.mg_grids import make_exchange_lists
-        mg_k, atomgrids_k = make_exchange_lists(self)
-        self.full_grids_k = mg_k
-        self.atom_grids_k = atomgrids_k
-
-        # The atom-centered grid points are assigned to each atom-grid.
-        get_atomgrid_coords(mydf, atomgrids, mg[-1])
-        # Non-zero functions are assigned to each atom-grid.
-        place_functions_on_atomgrids(mydf, atomgrids, mg[-1])
-
-    def primitive_gto_cutoff(cell, rcut_epsilon, shell_idx):
+    def primitive_gto_cutoff(self, shell_idx):
         """Cutoff raidus, above which each shell decays to a value less than the
         required precsion"""
         rcut = []
+        rcut_epsilon = self.rcut_epsilon
+        cell = self.cell_unc
         for ib in shell_idx:
             es = cell.bas_exp(ib)
             r = (-numpy.log(rcut_epsilon) / es) ** 0.5
-            rcut.append(r)
-        return rcut
+            rcut.extend(r)
+        return numpy.asarray(rcut, numpy.float64)
+    
+    def primitive_gto_exponent(self, rmin):
+        """
+        Calculate primitive Gaussian-type orbital exponent based on minimum radius and cutoff precision.
+        """
+        rcut_epsilon = self.rcut_epsilon
+        return -numpy.log(rcut_epsilon) / max(rmin**2, 1e-12)    
     
     def get_jk_kpts(self, dms, exxdiv=None):
         """
@@ -147,7 +142,3 @@ class MultigridOccRI(OCCRI):
         # TODO: Implement multigrid exchange evaluation
         # For now, fallback to standard OCCRI
         return self.get_k(dms, exxdiv)
-
-
-# Export main classes
-__all__ = ['MultigridOccRI', 'GridHierarchy', 'MGInterpolation']
