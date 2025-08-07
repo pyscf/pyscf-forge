@@ -60,15 +60,17 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     # Evaluate AOs on the grid for each k-point
     aovals = mydf._numint.eval_ao(cell, coords, kpts=kpts)
     aovals = [numpy.asarray(ao.T, order="C") for ao in aovals]
+    for k, kpt in enumerate(kpts):
+        if numpy.allclose(kpt,0):
+            aovals[k] = aovals[k].astype(numpy.double)
 
     # Transform to MO basis for each k-point and spin
     ao_mos = [[mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
     out_type = (
         numpy.complex128
-        if [abs(ao.imag).max() > 1.0e-6 for ao in aovals]
+        if any(abs(ao.imag).max() > 1.0e-6 for ao in aovals)
         else numpy.float64
     )
-    aovals = [ao * weight for ao in aovals]
 
     # Pre-allocate output arrays
     vk = numpy.empty((nset, nk, nao, nao), out_type, order="C")
@@ -77,36 +79,33 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
 
-    coulG_cache = {}
-    expmikr_cache = {}
     inv_sqrt = 1.0 / ngrids**0.5
-    for k in range(nk):
-        coulG_cache[k] = {}
-        expmikr_cache[k] = {}
-        for k_prim in range(nk):
-            dk = kpts[k] - kpts[k_prim]
-            coulG_cache[k][k_prim] = (
-                tools.get_coulG(cell, dk, False, mesh=mesh) * inv_sqrt
-            )
-            if numpy.allclose(dk, 0):
-                expmikr_cache[k][k_prim] = numpy.ones(1, dtype=out_type)
-            else:
-                expmikr_cache[k][k_prim] = numpy.exp(-1j * (coords @ dk))
-
+    rho1 = numpy.empty(ngrids, dtype=out_type)
     for n in range(nset):
         for k in range(nk):
-            nmo = mo_coeff[n][k].shape[0]
-            vR_dm = numpy.zeros((nmo, ngrids), out_type)
-            for j in range(nmo):
-                for k_prim in range(nk):
-                    coulG = coulG_cache[k][k_prim]
-                    expmikr = expmikr_cache[k][k_prim]
-                    integrals_uu(
-                        j, k, k_prim, ao_mos[n], vR_dm, coulG, mo_occ[n], mesh, expmikr
-                    )
+            nmo_k = mo_coeff[n][k].shape[0]
+            vR_dm = numpy.zeros((nmo_k, ngrids), out_type)
+            for k_prim in range(nk):
+                nmo_kprim = mo_coeff[n][k_prim].shape[0]
+                dk = kpts[k] - kpts[k_prim]
+                coulG = tools.get_coulG(cell, dk, False, mesh=mesh) * inv_sqrt
+                if numpy.allclose(dk, 0):
+                    expmikr = numpy.ones(1, dtype=out_type)
+                else:
+                    expmikr = numpy.exp(-1j * (coords @ dk))
+                
+                ao_phase = ao_mos[n][k_prim].conj() * expmikr
+                rho1 = numpy.einsum('ig,jg->ijg', ao_phase, ao_mos[n][k]) 
+                vG = tools.fft(rho1.reshape(-1,ngrids), mesh)
+                vG *= coulG
+                vR = tools.ifft(vG, mesh).reshape(nmo_kprim, nmo_k,ngrids)
+                if vR_dm.dtype == numpy.double:
+                    vR = vR.real
+                vR_dm += numpy.einsum('ijg,ig->jg', vR, ao_phase.conj() * mo_occ[n][k_prim][:, None])
 
-            vk_j = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
-            vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
+            vR_dm *= weight
+            vkao = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
+            vk[n][k] = build_full_exchange(s[k], vkao, mo_coeff[n][k])
 
             t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
 

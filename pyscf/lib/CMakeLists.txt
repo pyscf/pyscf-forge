@@ -67,7 +67,6 @@ if (MKL)
 endif (MKL)
 #link_directories ($ENV{LD_LIBRARY_PATH})
 
-# BLAS is required for some components, but made optional for OCCRI
 find_package(BLAS REQUIRED)
 #find_package (LAPACK REQUIRED)
 
@@ -123,8 +122,8 @@ set_target_properties (clib_pdft PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "pdft")
 
-# Build the occri library (optional - depends on availability of FFTW, BLAS, OpenMP)
-option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, BLAS, OpenMP)" ON)
+# Build the occri library (optional - depends on availability of FFTW, OpenMP)
+option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, OpenMP)" ON)
 
 if(BUILD_OCCRI)
     set(OCCRI_SOURCE_FILES
@@ -145,13 +144,6 @@ if(BUILD_OCCRI)
         set(OCCRI_DEPS_FOUND FALSE)
     endif()
     
-    # Find BLAS (optional)
-    find_package(BLAS)
-    if(NOT BLAS_FOUND)
-        message(STATUS "BLAS not found - OCCRI C extension will not be built")
-        set(OCCRI_DEPS_FOUND FALSE)
-    endif()
-    
     # Find OpenMP (optional)
     find_package(OpenMP)
     if(NOT OPENMP_FOUND)
@@ -160,7 +152,7 @@ if(BUILD_OCCRI)
     endif()
     
     if(OCCRI_DEPS_FOUND)
-        message(STATUS "Building OCCRI C extension with FFTW, BLAS, and OpenMP")
+        message(STATUS "Building OCCRI C extension with FFTW and OpenMP")
         add_library(occri SHARED ${OCCRI_SOURCE_FILES})
         
         # Add include directories
@@ -169,7 +161,6 @@ if(BUILD_OCCRI)
         
         # Link against FFTW, BLAS, and OpenMP
         target_link_libraries(occri
-            ${BLAS_LIBRARIES}
             ${OPENMP_C_PROPERTIES}
             ${FFTW3_LIBRARY}
             ${FFTW3_THREADS_LIBRARY}

@@ -72,7 +72,7 @@ if MULTIGRID_AVAILABLE:
     print("=" * 50)
     
     # Example 1: Basic multigrid with default parameters
-    print("\n1. Basic multigrid (3 levels, factor 2)")
+    print("\n1. Basic multigrid")
     mf_mg1 = scf.RHF(cell)
     mf_mg1.with_df = MultigridOccRI(mf_mg1)
 #     e_mg1 = mf_mg1.kernel()
