@@ -55,7 +55,7 @@ def tearDownModule():
     del kpts_sym
 
 
-class TestSymmetry(unittest.TestCase):
+class KnownValues(unittest.TestCase):
     def test_get_rho(self):
         global mf, cell, kpts_sym
         C_ks = [coeff.copy() for coeff in mf.mo_coeff]

@@ -1,3 +1,22 @@
+#!/usr/bin/env python
+# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Hong-Zhou Ye <osirpt.sun@gmail.com>
+# Author: Kyle Bystrom <kylebystrom@gmail.com>
+#
+
 """ Helper functions for PW SCF
 """
 
@@ -12,6 +31,7 @@ from pyscf.pbc import tools, df
 from pyscf.pbc.dft import rks
 from pyscf.pbc.lib.kpts_helper import gamma_point
 from pyscf import lib
+from pyscf.lib.diis import DIIS
 from pyscf.lib import logger
 
 
@@ -31,6 +51,7 @@ class PWBasis:
             energy smaller than cutoff
         ke: The kinetic energy of each plane-wave given
             by the indexes
+        Gk: The plane-wave G-vectors for each index
     """
     def __init__(self, mesh, cutoff, indexes, ke, Gk):
         self.mesh = mesh
@@ -529,13 +550,38 @@ class _Mixing:
         else:
             return f
 
-    def _next_step(self, mf, f, ferr):
+    def _next_step(self, mf, f, ferr, i=0):
         raise NotImplementedError
 
     def next_step(self, mf, f, flast):
         ferr = f - flast
         kwargs = self._extract_kwargs(f)
         return self._tag(self._next_step(mf, f, ferr), kwargs)
+
+    def next_step(self, mf, f, flast):
+        if not self._ks:
+            return self._next_step(mf, f, f - flast)
+        kwargs = self._extract_kwargs(f)
+        kwargslast = self._extract_kwargs(flast)
+        f_list = [f, kwargs["vxc_R"].ravel()]
+        ferr = f - flast
+        fxc_err = kwargs["vxc_R"].ravel() - kwargslast["vxc_R"].ravel()
+        ferr_list = [ferr, fxc_err]
+        kw = "vtau_R"
+        if kw in kwargs and kwargs[kw] is not None:
+            f_list.append(kwargs[kw].ravel())
+            ferr_list.append(kwargs[kw].ravel() - kwargslast[kw].ravel())
+        sizes = [x.size for x in f_list]
+        f_list = np.concatenate(f_list)
+        ferr_list = np.concatenate(ferr_list)
+        result = self._next_step(mf, f_list, ferr_list)
+        tagged_result = result[0 : sizes[0]]
+        start = sizes[0]
+        mid = start + sizes[1]
+        kwargs["vxc_R"] = result[start:mid]
+        if kw in kwargs and kwargs[kw] is not None:
+            kwargs[kw] = result[mid:]
+        return self._tag(tagged_result, kwargs)
 
 
 class SimpleMixing(_Mixing):
@@ -545,21 +591,20 @@ class SimpleMixing(_Mixing):
 
     def _next_step(self, mf, f, ferr):
         self.cycle += 1
-
         return f - ferr * self.beta
 
-    def next_step(self, mf, f, flast):
-        ferr = f - flast
-        kwargs = self._extract_kwargs(f)
-        kwargslast = self._extract_kwargs(flast)
-        for kw in ["vxc_R", "vtau_R"]:
-            if kw in kwargs and kwargs[kw] is not None:
-                kwargs[kw] = self._next_step(
-                    mf, kwargs[kw].ravel(), (kwargs[kw] - kwargslast[kw]).ravel()
-                ).reshape(kwargs[kw].shape)
-        return self._tag(self._next_step(mf, f, ferr), kwargs)
+    #def next_step(self, mf, f, flast):
+    #    ferr = f - flast
+    #    kwargs = self._extract_kwargs(f)
+    #    kwargslast = self._extract_kwargs(flast)
+    #    for kw in ["vxc_R", "vtau_R"]:
+    #        if kw in kwargs and kwargs[kw] is not None:
+    #            kwargs[kw] = self._next_step(
+    #                mf, kwargs[kw].ravel(), (kwargs[kw] - kwargslast[kw]).ravel()
+    #            ).reshape(kwargs[kw].shape)
+    #    return self._tag(self._next_step(mf, f, ferr), kwargs)
 
-from pyscf.lib.diis import DIIS
+
 class AndersonMixing(_Mixing):
     def __init__(self, mf, ndiis=10, diis_start=1):
         super().__init__(mf)
@@ -569,5 +614,5 @@ class AndersonMixing(_Mixing):
 
     def _next_step(self, mf, f, ferr):
         self.cycle += 1
-
         return self.diis.update(f, ferr)
+

@@ -1,5 +1,23 @@
-""" J/K builder for PW-SCF
-"""
+#!/usr/bin/env python
+# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Hong-Zhou Ye <osirpt.sun@gmail.com>
+#
+
+'''J/K builder for PW-SCF
+'''
 
 import tempfile
 import numpy as np
@@ -72,7 +90,7 @@ def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
     nkpts = len(kpts)
     fac = ngrids**2./(cell.vol*nkpts)
     if basis_ks is None:
-        basis_ks = [None] * len(C_ks)
+        basis_ks = [None] * len(mocc_ks)
 
     Cbar_k = np.zeros_like(C_k)
     if C_k_R is None: C_k_R = wf_ifft(C_k, mesh, basis=basis)
