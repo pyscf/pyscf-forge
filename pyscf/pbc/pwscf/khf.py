@@ -1452,7 +1452,7 @@ class PWKRHF(pbc_hf.KSCF):
     @property
     def madelung(self):
         return self._madelung
-    @etot_shift_ewald.setter
+    @madelung.setter
     def madelung(self, x):
         raise RuntimeError("Cannot set madelung directly")
 

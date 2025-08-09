@@ -561,26 +561,30 @@ class _Mixing:
     def next_step(self, mf, f, flast):
         if not self._ks:
             return self._next_step(mf, f, f - flast)
+        ferr = f - flast
         kwargs = self._extract_kwargs(f)
         kwargslast = self._extract_kwargs(flast)
-        f_list = [f, kwargs["vxc_R"].ravel()]
-        ferr = f - flast
-        fxc_err = kwargs["vxc_R"].ravel() - kwargslast["vxc_R"].ravel()
+        fxc_err = (kwargs["vxc_R"] - kwargslast["vxc_R"]).ravel()
+        f_list = [f, kwargs["vxc_R"]]
         ferr_list = [ferr, fxc_err]
         kw = "vtau_R"
         if kw in kwargs and kwargs[kw] is not None:
-            f_list.append(kwargs[kw].ravel())
-            ferr_list.append(kwargs[kw].ravel() - kwargslast[kw].ravel())
+            f_list.append(kwargs[kw])
+            ferr_list.append((kwargs[kw] - kwargslast[kw]).ravel())
         sizes = [x.size for x in f_list]
-        f_list = np.concatenate(f_list)
+        shapes = [x.shape for x in f_list]
+        f_list = np.concatenate([f.ravel() for f in f_list])
         ferr_list = np.concatenate(ferr_list)
         result = self._next_step(mf, f_list, ferr_list)
         tagged_result = result[0 : sizes[0]]
+        tagged_result.shape = shapes[0]
         start = sizes[0]
         mid = start + sizes[1]
         kwargs["vxc_R"] = result[start:mid]
+        kwargs["vxc_R"].shape = shapes[1]
         if kw in kwargs and kwargs[kw] is not None:
             kwargs[kw] = result[mid:]
+            kwargs[kw].shape = shapes[2]
         return self._tag(tagged_result, kwargs)
 
 
@@ -592,17 +596,6 @@ class SimpleMixing(_Mixing):
     def _next_step(self, mf, f, ferr):
         self.cycle += 1
         return f - ferr * self.beta
-
-    #def next_step(self, mf, f, flast):
-    #    ferr = f - flast
-    #    kwargs = self._extract_kwargs(f)
-    #    kwargslast = self._extract_kwargs(flast)
-    #    for kw in ["vxc_R", "vtau_R"]:
-    #        if kw in kwargs and kwargs[kw] is not None:
-    #            kwargs[kw] = self._next_step(
-    #                mf, kwargs[kw].ravel(), (kwargs[kw] - kwargslast[kw]).ravel()
-    #            ).reshape(kwargs[kw].shape)
-    #    return self._tag(self._next_step(mf, f, ferr), kwargs)
 
 
 class AndersonMixing(_Mixing):
