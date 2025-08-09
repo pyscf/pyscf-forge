@@ -18,7 +18,7 @@ import unittest
 
 
 class KnownValues(unittest.TestCase):
-    def _run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv):
+    def _run_test(self, atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv):
         # cell
         cell = gto.Cell(
             atom=atom,
@@ -28,7 +28,7 @@ class KnownValues(unittest.TestCase):
             ke_cutoff=ke_cutoff
         )
         cell.build()
-        cell.verbose = 6
+        cell.verbose = 0
         kpts = cell.make_kpts(kmesh)
         nkpts = len(kpts)
 

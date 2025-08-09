@@ -60,7 +60,7 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         erifile: str, h5py File or h5py Group
             The file to store the ERIs. If not given, the ERIs are held in memory.
     """
-    cput0 = (time.clock(), time.time())
+    cput0 = (logger.process_clock(), logger.perf_counter())
 
     nkpts = len(kpts)
     mesh = cell.mesh
@@ -123,7 +123,7 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         p0,p1 = mo_slices[0]
         C_k1_R = get_kcomp(C_ks_R, k1, occ=mo_ranges[0])
         for k2 in range(nkpts):
-            tick[:] = time.clock(), time.time()
+            tick[:] = (logger.process_clock(), logger.perf_counter())
 
             kpt2 = kpts[k2]
             kpt12 = kpt2 - kpt1
@@ -138,7 +138,7 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
                 v_pq_k12[ip] = tools.ifft(tools.fft(C_k1_R[ip].conj() * C_k2_R,
                                           mesh) * coulG_k12, mesh)
 
-            tock[:] = time.clock(), time.time()
+            tock[:] = (logger.process_clock(), logger.perf_counter())
             tspans[1] += tock - tick
 
             for k3 in range(nkpts):
@@ -168,10 +168,10 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
                 if not incore:
                     deri[k1,k2,k3,:] = vpqrs
                     vpqrs = None
-            tick[:] = time.clock(), time.time()
+            tick[:] = (logger.process_clock(), logger.perf_counter())
             tspans[2] += tick - tock
 
-        tock[:] = time.clock(), time.time()
+        tock[:] = (logger.process_clock(), logger.perf_counter())
         cput1 = logger.timer(cell, 'kpt %d (%6.3f %6.3f %6.3f)'%(k1,*kpt1),
                              *cput1)
 

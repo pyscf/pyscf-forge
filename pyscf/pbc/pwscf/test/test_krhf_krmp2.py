@@ -43,7 +43,6 @@ class KnownValues(unittest.TestCase):
         pwmf.nvir = 10 # request 10 virtual states
         pwmf.chkfile = chkfile
         pwmf.kernel(save_ccecp_kb=True)
-        print(pwmf.e_tot, e_tot0)
         assert(abs(pwmf.e_tot - e_tot0) < 1.e-6)
 
         # krhf init from chkfile
@@ -58,7 +57,6 @@ class KnownValues(unittest.TestCase):
         # krmp2
         pwmp = pwscf.KMP2(pwmf)
         pwmp.kernel()
-        print(pwmp.e_corr)
         assert(abs(pwmp.e_corr - e_corr0) < 1.e-4)
 
     def test_alle(self):

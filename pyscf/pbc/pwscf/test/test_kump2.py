@@ -19,7 +19,7 @@ import unittest
 
 
 class KnownValues(unittest.TestCase):
-    def test_krmp2(self):
+    def test_kump2(self):
         kmesh = [1,1,1]
         ke_cutoff = 50
         pseudo = "gth-pade"
@@ -37,7 +37,7 @@ class KnownValues(unittest.TestCase):
             spin=2
         )
         cell.build()
-        cell.verbose = 5
+        cell.verbose = 0
         kpts = cell.make_kpts(kmesh)
         nkpts = len(kpts)
 
@@ -45,8 +45,6 @@ class KnownValues(unittest.TestCase):
         gmf = scf.UHF(cell, kpts)
         gmf.exxdiv = exxdiv
         gmf.kernel()
-        # gmp = mp.KMP2(gmf)
-        from pyscf import mp
         gmp = mp.UMP2(gmf)
         gmp.kernel()
 
@@ -54,8 +52,6 @@ class KnownValues(unittest.TestCase):
         pmf = pw_helper.gtomf2pwmf(gmf)
         pmp = kump2.PWKUMP2(pmf)
         pmp.kernel()
-        print(pmp.e_corr)
-        print(gmp.e_corr)
         assert(abs(gmp.e_corr - pmp.e_corr) < 1.e-6)
 
 

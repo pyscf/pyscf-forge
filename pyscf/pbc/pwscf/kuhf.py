@@ -143,7 +143,9 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
                 gth_pseudo[atm] = "gth-pade-q%d"%q
         log.debug("Using the GTH-PP for init guess: %s", gth_pseudo)
         cell.pseudo = gth_pseudo
-        cell.ecp = cell._ecp = cell._ecpbas = None
+        cell.ecp = {}
+        cell._ecp = {}
+        cell._ecpbas = []
     else:
         cell.pseudo = pseudo
     cell.ke_cutoff = cell0.ke_cutoff

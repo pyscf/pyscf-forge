@@ -23,7 +23,7 @@ def make_cell(atom, a, pseudo, ke_cutoff, mesh=None):
         mesh=mesh,
     )
     cell.build()
-    cell.verbose = 6
+    cell.verbose = 0
     return cell
 
 
@@ -66,17 +66,14 @@ class KnownValues(unittest.TestCase):
 
         # run ke1
         mfs[1].kernel()
-        print(mfs[1].e_tot, erefs[1])
         assert(abs(mfs[1].e_tot-erefs[1]) < 1e-5)
         # run ke0 with ke1 init guess (projection down)
         mfs[0].init_guess = "chk"
         mfs[0].kernel()
-        print(mfs[0].e_tot, erefs[0])
         assert(abs(mfs[0].e_tot-erefs[0]) < 1e-5)
         # run ke2 with ke0 init guess (projection up)
         mfs[2].init_guess = "chk"
         mfs[2].kernel()
-        print(mfs[2].e_tot, erefs[2])
         assert(abs(mfs[2].e_tot-erefs[2]) < 1e-5)
 
 

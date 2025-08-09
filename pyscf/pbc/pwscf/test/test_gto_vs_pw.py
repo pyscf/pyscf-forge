@@ -75,8 +75,6 @@ class KnownValues(unittest.TestCase):
         maxe_imag = np.max(np.abs(moe_comp_ks.imag - moe_comp_ks_pw.imag))
         ace_maxe_real = np.max(np.abs(moe_comp_ks.real - ace_moe_comp_ks_pw.real))
         ace_maxe_imag = np.max(np.abs(moe_comp_ks.imag - ace_moe_comp_ks_pw.imag))
-        print(maxe_real, maxe_imag)
-        print(ace_maxe_real, ace_maxe_imag)
 
         assert(maxe_real < 1e-6)
         assert(maxe_imag < 1e-6)
@@ -104,7 +102,7 @@ class KnownValues(unittest.TestCase):
             ke_cutoff=ke_cutoff
         )
         cell.build()
-        cell.verbose = 5
+        cell.verbose = 0
         kpts = cell.make_kpts(kmesh)
         self._run_test(cell, kpts, exxdiv)
 

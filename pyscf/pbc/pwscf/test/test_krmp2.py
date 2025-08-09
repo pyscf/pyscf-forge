@@ -36,9 +36,8 @@ class KnownValues(unittest.TestCase):
             ke_cutoff=ke_cutoff
         )
         cell.build()
-        cell.verbose = 5
+        cell.verbose = 0
         kpts = cell.make_kpts(kmesh)
-        nkpts = len(kpts)
 
         # GTO
         gmf = scf.KRHF(cell, kpts)
@@ -51,8 +50,6 @@ class KnownValues(unittest.TestCase):
         pmf = pw_helper.gtomf2pwmf(gmf)
         pmp = kmp2.PWKRMP2(pmf)
         pmp.kernel()
-        print(pmp.e_corr)
-        print(gmp.e_corr)
         assert(abs(gmp.e_corr - pmp.e_corr) < 1.e-6)
 
 

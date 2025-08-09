@@ -1772,7 +1772,6 @@ if __name__ == "__main__":
     exit()
     print()
     print()
-    print()
 
     ets = []
     for ecut in [25, 50, 75, 100]:

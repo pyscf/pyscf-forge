@@ -19,11 +19,10 @@ def get_mf_and_kpts():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
+        verbose=0,
     )
-    # cell.mesh = [28, 28, 28]
     cell.mesh = [24, 24, 24]
     cell.build()
-    # kmesh = (4, 4, 4)
     kmesh = (3, 3, 3)
     kpts = cell.make_kpts(kmesh)
 
@@ -65,20 +64,12 @@ class KnownValues(unittest.TestCase):
         rho_R = jk.get_rho_R(C_ks, mocc_ks, cell.mesh)
         t1 = time.monotonic()
         Csym_ks = [C_ks[k_bz].copy() for k_bz in kpts_sym.ibz2bz]
-        print(len(Csym_ks))
         moccsym_ks = [mocc_ks[k_bz] for k_bz in kpts_sym.ibz2bz]
         t2 = time.monotonic()
         rhosym_R = kpt_symm.get_rho_R_ksym(Csym_ks, moccsym_ks, cell.mesh, kpts_sym)
         t3 = time.monotonic()
-        print(rho_R.sum())
-        print(rhosym_R.sum())
-        print(np.linalg.norm(rhosym_R - rho_R))
-        print(np.abs(rhosym_R - rho_R).sum() / rho_R.sum())
-        print(np.max(np.abs(rhosym_R - rho_R)) / np.mean(rho_R))
         assert np.max(np.abs(rhosym_R - rho_R)) / np.mean(rho_R) < 1e-4
-        print(t1 - t0, t3 - t2, len(C_ks), len(Csym_ks))
-        print("DONE")
-        print()
+        print("TIMES", t1 - t0, t3 - t2, len(C_ks), len(Csym_ks))
 
         mf2 = kpt_symm.KsymAdaptedPWKRKS(cell, kpts_sym)
         mf2 = smearing_(mf2, sigma=0.01, method='gauss')
@@ -89,11 +80,6 @@ class KnownValues(unittest.TestCase):
 
         rho1 = mf.get_rho_for_xc("LDA", C_ks, mocc_ks)
         rho2 = mf2.get_rho_for_xc("LDA", Csym_ks, moccsym_ks)
-        print(rho1.sum() * cell.vol, rho2.sum() * cell.vol)
-        print(np.abs(rho1 - rho2).mean() * cell.vol)
-
-        print(mf.scf_summary, mf2.scf_summary)
-        print(eref, epred)
         assert_almost_equal(np.abs(rho1 - rho2).mean() * cell.vol, 0, 6)
         assert_almost_equal(epred, eref, 6)
     
@@ -113,12 +99,6 @@ class KnownValues(unittest.TestCase):
             assert_almost_equal(rdot1[:2, :2], rdot2[:2, :2], 6)
             assert_almost_equal(rdot1[:2], rdot2[:2], 4)
             assert_almost_equal(rdot1, rdot3, 6)
-            print(k)
-            print(moe)
-            print(np.abs(dot1).sum(), np.abs(np.diag(dot1))**2)
-            print(np.abs(dot2).sum(), np.abs(np.diag(dot2))**2)
-            print(np.abs(dot3).sum(), np.abs(np.diag(dot3))**2)
-            print()
             k += 1
     
     def test_get_wf_real(self):
@@ -137,15 +117,9 @@ class KnownValues(unittest.TestCase):
             rdot1 = np.abs(dot1)
             rdot2 = np.abs(dot2)
             rdot3 = np.abs(dot3)
-            print(k)
-            print(moe)
-            print(np.abs(dot1).sum(), np.abs(np.diag(dot1))**2)
-            print(np.abs(dot2).sum(), np.abs(np.diag(dot2))**2)
-            print(np.abs(dot3).sum(), np.abs(np.diag(dot3))**2)
             assert_almost_equal(rdot1[:2, :2], rdot2[:2, :2], 6)
             assert_almost_equal(rdot1[:2], rdot2[:2], 4)
             assert_almost_equal(rdot1, rdot3, 6)
-            print()
             k += 1
 
     def test_hf_symm(self):
@@ -170,9 +144,6 @@ class KnownValues(unittest.TestCase):
         t2 = time.monotonic()
         mf_sym.kernel()
         t3 = time.monotonic()
-        print(mf.scf_summary)
-        print(mf_sym.scf_summary)
-        print(mf.e_tot, mf_sym.e_tot, mf.e_tot - mf_sym.e_tot)
         assert_almost_equal(mf_sym.e_tot, mf.e_tot, 5)
         print(t1 - t0, t3 - t2)
 

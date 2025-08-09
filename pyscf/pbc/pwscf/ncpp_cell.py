@@ -82,7 +82,7 @@ if __name__ == "__main__":
     ecuts = [18.38235294, 22.05882353, 25.73529412, 29.41176471, 33.08823529,
              36.76470588, 44.11764706, 55.14705882, 73.52941176, 91.91176471]
     for ecut in ecuts:
-        print("\n\n\n")
+        print("\n")
         print("ECUT", ecut)
         mf = PWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
         # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
@@ -104,7 +104,6 @@ if __name__ == "__main__":
         mf2.kernel()
         ens2.append(mf2.e_tot)
         mf2.dump_scf_summary()
-    print()
     print()
     for ens in [ens1, ens2]:
         print(ens)

@@ -20,6 +20,7 @@ def setUpModule():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
+        verbose=0,
     )
     CELL.mesh = [13, 13, 13]
     # CELL.mesh = [27, 27, 27]
@@ -35,6 +36,7 @@ def setUpModule():
         ke_cutoff=50,
         pseudo="gth-pade",
         spin=2,
+        verbose=0,
     )
     ATOM.mesh = [25, 25, 25]
     ATOM.build()

@@ -38,7 +38,7 @@ class KnownValues(unittest.TestCase):
             mesh=[10, 10, 10],
         )
         cell.build()
-        cell.verbose = 6
+        cell.verbose = 0
 
         # kpts
         kpts = cell.make_kpts(kmesh)
@@ -54,8 +54,6 @@ class KnownValues(unittest.TestCase):
         mf.dump_moe(moe_ks, mocc_ks)
         mmp = pwscf.KMP2(mf)
         mmp.kernel()
-        mmp.dump_mp2_summary()
-        print(mmp.e_corr)
         assert(abs(mmp.e_corr - -0.215895180360867) < 1.e-6)
 
 
