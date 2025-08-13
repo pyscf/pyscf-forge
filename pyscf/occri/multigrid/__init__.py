@@ -118,42 +118,6 @@ class MultigridOccRI(OCCRI):
         """
         rcut_epsilon = self.rcut_epsilon
         return -numpy.log(rcut_epsilon) / max(rmin**2, 1e-12)    
-    
-    def get_jk(        self,
-        cell=None,
-        dm=None,
-        hermi=1,
-        kpt=None,
-        kpts_band=None,
-        with_j=True,
-        with_k=True,
-        omega=None,
-        exxdiv="ewald",
-        **kwargs,
-    ):
-        """
-        Multigrid exchange matrix evaluation
-        
-        Parameters:
-        -----------
-        dms : array_like
-            Density matrices with orbital information
-        exxdiv : str
-            Ewald divergence treatment
-            
-        Returns:
-        --------
-        vk : ndarray
-            Exchange matrices
-        """
-        """Compute J and K matrices using OCCRI"""
-        if cell is None:
-            cell = self.cell
-        if dm is None:
-            AttributeError(
-                "Overwriting get_jk. "
-                "Pass dm to get_jk as keyword: get_jk(dm=dm, ...)"
-            )
 
     def get_jk(
         self,
