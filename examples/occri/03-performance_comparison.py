@@ -20,6 +20,7 @@ import numpy
 
 from pyscf.occri import OCCRI
 from pyscf.pbc import df, gto, scf
+from pyscf.pbc.tools.pbc import super_cell
 
 # Set up a moderately sized system for performance comparison
 cell = gto.Cell()
@@ -41,6 +42,7 @@ cell.a = numpy.array(
 cell.mesh = [25] * 3
 cell.verbose = 0
 cell.build()
+cell = super_cell(cell, [1,1,1])
 
 print("=== OCCRI Performance Comparison ===")
 print(

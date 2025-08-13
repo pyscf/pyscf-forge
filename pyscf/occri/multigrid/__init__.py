@@ -7,8 +7,6 @@ dense k-point sampling.
 
 Main classes:
     MultigridOccRI: Main multigrid-enabled OCCRI class
-    GridHierarchy: Manages coarse/fine grid relationships
-    MGInterpolation: Handles restriction/prolongation operators
 
 Usage:
     from pyscf.occri.multigrid import MultigridOccRI
@@ -87,8 +85,6 @@ class MultigridOccRI(OCCRI):
 
         self.to_uncontracted_basis()
         build_grids(self)
-        
-
 
     def to_uncontracted_basis(myisdf):
         cell = myisdf.cell
@@ -123,7 +119,18 @@ class MultigridOccRI(OCCRI):
         rcut_epsilon = self.rcut_epsilon
         return -numpy.log(rcut_epsilon) / max(rmin**2, 1e-12)    
     
-    def get_jk_kpts(self, dms, exxdiv=None):
+    def get_jk(        self,
+        cell=None,
+        dm=None,
+        hermi=1,
+        kpt=None,
+        kpts_band=None,
+        with_j=True,
+        with_k=True,
+        omega=None,
+        exxdiv="ewald",
+        **kwargs,
+    ):
         """
         Multigrid exchange matrix evaluation
         
@@ -139,6 +146,89 @@ class MultigridOccRI(OCCRI):
         vk : ndarray
             Exchange matrices
         """
-        # TODO: Implement multigrid exchange evaluation
-        # For now, fallback to standard OCCRI
-        return self.get_k(dms, exxdiv)
+        """Compute J and K matrices using OCCRI"""
+        if cell is None:
+            cell = self.cell
+        if dm is None:
+            AttributeError(
+                "Overwriting get_jk. "
+                "Pass dm to get_jk as keyword: get_jk(dm=dm, ...)"
+            )
+
+    def get_jk(
+        self,
+        cell=None,
+        dm=None,
+        hermi=1,
+        kpt=None,
+        kpts_band=None,
+        with_j=True,
+        with_k=True,
+        omega=None,
+        exxdiv="ewald",
+        **kwargs,
+    ):
+        """Compute J and K matrices using OCCRI"""
+        if cell is None:
+            cell = self.cell
+        if dm is None:
+            AttributeError(
+                "Overwriting get_jk. "
+                "Pass dm to get_jk as keyword: get_jk(dm=dm, ...)"
+            )
+
+        dm_shape = dm.shape
+        nk = self.kpts.shape[0]
+        nao = cell.nao
+        if with_k:
+            if getattr(dm, "mo_coeff", None) is None or self.scf_iter == 0:
+                dm = self.make_natural_orbitals(dm.reshape(-1, nk, nao, nao))
+            else:
+                mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)
+                mo_occ = numpy.asarray(dm.mo_occ).reshape(-1, nk, nao)
+                dm = lib.tag_array(
+                    dm.reshape(-1, nk, nao, nao), mo_coeff=mo_coeff, mo_occ=mo_occ
+                )
+
+        if with_j:
+            vj = self.get_j(self, dm, kpts=self.kpts)
+            if abs(dm.imag).max() < 1.0e-6:
+                vj = vj.real
+            vj = numpy.asarray(vj, dtype=dm.dtype).reshape(dm_shape)
+        else:
+            vj = None
+
+        if with_k:
+            is_contracted_basis = self.cell.nao != self.cell_unc.nao
+            mo_coeff = dm.mo_coeff
+            mo_occ = dm.mo_occ
+            tol = 1.0e-6
+            is_occ = mo_occ > tol
+            nset = dm.shape[0]
+            if is_contracted_basis:
+                mo_coeff = [self.c @ coeff for coeff in mo_coeff]
+            mo_coeff = [
+                [
+                    numpy.ascontiguousarray(mo_coeff[n][k][:, is_occ[n][k]].T)
+                    for k in range(nk)
+                ]
+                for n in range(nset)
+            ]
+            mo_occ = [
+                [numpy.ascontiguousarray(mo_occ[n][k][is_occ[n][k]]) for k in range(nk)]
+                for n in range(nset)
+            ]
+            dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
+
+            vk = self.get_k(self, dm, exxdiv)
+            if abs(dm.imag).max() < 1.0e-6:
+                vk = vk.real
+            if is_contracted_basis:
+                    vk = [[self.c.T @ k_nk @ self.c for k_nk in k_n] for k_n in vk]
+            vk = numpy.asarray(vk, dtype=dm.dtype).reshape(dm_shape)
+        else:
+            vk = None
+
+        self.scf_iter += 1
+
+        return vj, vk
