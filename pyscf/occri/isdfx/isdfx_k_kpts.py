@@ -76,8 +76,9 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
         else numpy.float64
     )
 
+    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
+    out_type = numpy.complex128 if any(sk.dtype==numpy.complex128 for sk in s) else numpy.float64
     vk = numpy.empty((nset, nk, nao, nao), dtype=out_type, order='C')
-    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)    
     for n in range(nset):
         ao_mos = [mo_coeff[n][k] @ aovals[k] for k in range(nk)]
         rho1 = [(ao_mos[k].T * mo_occ[n][k]) @ ao_mos[k].conj() for k in range(nk)]

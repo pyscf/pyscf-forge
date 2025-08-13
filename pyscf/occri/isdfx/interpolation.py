@@ -96,17 +96,17 @@ def get_fitting_functions(mydf, ao_indices=None):
     Rg = mydf.pivots
     
     phiLocalR = aovals if ao_indices is None else [ao[ao_indices] for ao in aovals]
-    X_Rg_Rg = numpy.sum(numpy.matmul(aok[:, Rg].T, aok[:, Rg].conj()) for aok in phiLocalR)
+    X_Rg_Rg = sum(numpy.matmul(aok[:, Rg].T, aok[:, Rg].conj()) for aok in phiLocalR)
     if ao_indices is None:
         X_Rg_Rg *= X_Rg_Rg
     else:
-        X_Rg_Rg *= numpy.sum(numpy.matmul(aok[:, Rg].T.conj(), aok[:, Rg]) for aok in aovals)
+        X_Rg_Rg *= sum(numpy.matmul(aok[:, Rg].T.conj(), aok[:, Rg]) for aok in aovals)
 
-    X_Rg_R = numpy.sum(numpy.matmul(aok[:, Rg].T, aok.conj()) for aok in phiLocalR)
+    X_Rg_R = sum(numpy.matmul(aok[:, Rg].T, aok.conj()) for aok in phiLocalR)
     if ao_indices is None:
         X_Rg_R *= X_Rg_R
     else:
-        X_Rg_R *= numpy.sum(numpy.matmul(aok[:, Rg].T.conj(), aok) for aok in aovals)
+        X_Rg_R *= sum(numpy.matmul(aok[:, Rg].T.conj(), aok) for aok in aovals)
 
     mydf.aovals = [numpy.asarray(ao[:,Rg], order='C') for ao in aovals]
     # Give expected symmetry??
@@ -288,31 +288,27 @@ def get_thc_potential(mydf, fitting_functions):
         modulated_functions = fitting_functions * phase_factors[numpy.newaxis, :]
         
         # Step 2: Forward FFT to momentum space
-        fft_functions = tools.fft(modulated_functions, mesh)
+        vG = tools.fft(modulated_functions, mesh)
         
         # Step 3: Apply Coulomb kernel G(k) = 4π/|k|²
-        coulomb_kernel = tools.get_coulG(cell, kpt, mesh=mesh)
-        if coulomb_kernel.ndim == 1:
-            coulomb_kernel = coulomb_kernel.reshape(1, -1)
-        
-        fft_functions *= coulomb_kernel
+        coulG = tools.get_coulG(cell, kpt, mesh=mesh).reshape(1, -1)
+        vG *= coulG
         
         # Step 4: Inverse FFT back to position space  
-        ifft_functions = tools.ifft(fft_functions, mesh)
+        vR = tools.ifft(vG, mesh)
         
         # Step 5: Apply conjugate phase factors and integrate
-        conjugate_phase = phase_factors.conj()
-        ifft_functions *= conjugate_phase[numpy.newaxis, :]
+        vR *= phase_factors.conj()
         
         # Matrix multiplication: W_μν = ∫ χ_μ(r) O(r) χ_ν*(r) dr
-        numpy.matmul(ifft_functions, fitting_functions.conj().T, out=thc_potential[k])
+        numpy.matmul(vR, fitting_functions.conj().T, out=thc_potential[k])
     
     # Apply normalization and complex conjugation
     thc_potential = thc_potential.conj()
     thc_potential *= volume_factor
     
     # Transform to k-space representation for efficient convolution
-    thc_potential_k = hfftn(
+    thc_potential = hfftn(
         thc_potential.reshape(*mydf.kmesh, npivots, npivots), 
         s=tuple(mydf.kmesh), 
         axes=[0, 1, 2], 
@@ -320,4 +316,4 @@ def get_thc_potential(mydf, fitting_functions):
     )
     
     # Store result in ISDF object
-    mydf.W = thc_potential_k
+    mydf.W = thc_potential
