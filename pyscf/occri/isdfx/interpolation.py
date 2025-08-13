@@ -14,6 +14,7 @@ from pyscf.pbc import tools
 from scipy.spatial.distance import cdist
 from scipy.linalg.lapack import dpstrf
 from scipy.linalg import solve
+from scipy.fft import hfftn
 
 def _pivoted_cholesky_decomposition(mydf, aovals, ao_indices=None):
     """
@@ -108,7 +109,7 @@ def get_fitting_functions(mydf, ao_indices=None):
     else:
         X_Rg_R *= numpy.sum(numpy.matmul(aok[:, Rg].T.conj(), aok) for aok in aovals)
 
-    mydf.aovals = phiLocalR
+    mydf.aovals = [numpy.asarray(ao[:,Rg], order='C') for ao in aovals]
     # Give expected symmetry??
     return solve( X_Rg_Rg, X_Rg_R, overwrite_a=True, overwrite_b=True, check_finite=False).real
 
@@ -238,3 +239,26 @@ def get_pivots(mydf):
                 len(mydf.pivots), ngrids, 100 * len(mydf.pivots) / ngrids)
     cput0 = log.timer('Pivot selection', *cput0)
 
+def get_thc_potential(mydf, fitting_fxns):
+    cell = mydf.cell
+    nk = mydf.kpts.shape[0]
+    npivots, ngrids = fitting_fxns.shape
+    f = ngrids / cell.vol * 1.0 / nk
+    kpts = mydf.kpts
+    mesh = mydf.mesh
+    coords = cell.gen_uniform_grids(mydf.mesh)
+    W = numpy.empty((nk, npivots, npivots), numpy.complex128)
+    for kpt, Wk in zip(kpts, W):
+        expmikr = numpy.exp(-1.0j * (coords @ kpt))
+        V = fitting_fxns * expmikr
+        V = tools.fft( V, mesh)
+        V *= tools.get_coulG(cell, kpt, mesh=mesh).reshape(1, -1)
+        V = tools.ifft( V, mesh)
+        V *= expmikr.conj()
+        numpy.matmul(V, fitting_fxns.T.conj(), Wk)
+    W = W.conj()
+    W *= f
+    W = hfftn(
+        W.reshape(*mydf.kmesh, npivots, npivots), s=(mydf.kmesh), axes=[0, 1, 2], overwrite_x=True
+    )
+    mydf.W = W

@@ -164,14 +164,13 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
         self.get_j = pyscf.pbc.df.fft_jk.get_j_kpts
 
-        if _OCCRI_C_AVAILABLE and not disable_c and self.cell.verbose > 3:
-            print("OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
-
         if _OCCRI_C_AVAILABLE and not disable_c:
+            logger.info(self, "OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
             self.get_k = (
                 occri_k_kpts.occri_get_k_kpts_opt
             )  # Optimized C k-point implementation with complex FFT
         else:
+            logger.info(self, "OCCRI: Using python implementation")
             self.get_k = (
                 occri_k_kpts.occri_get_k_kpts
             )  # Pure Python k-point fallback with complex arithmetic
@@ -284,6 +283,22 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
         return lib.tag_array(dms, mo_coeff=mo_coeff, mo_occ=mo_occ)
 
+    def build_full_exchange(self, S, Kao, mo_coeff):
+        """Build full exchange matrix from occupied orbital components"""
+
+        # Compute Sa = S @ mo_coeff.T once and reuse
+        Sa = S @ mo_coeff.T
+
+        # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
+        Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order="C")
+        Kuv = Sa_Kao + Sa_Kao.T.conj()
+
+        # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
+        Koo = mo_coeff.conj() @ Kao
+        Sa_Koo = numpy.matmul(Sa, Koo)
+        Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order="C")
+        return Kuv    
+    
     def __del__(self):
         return
 

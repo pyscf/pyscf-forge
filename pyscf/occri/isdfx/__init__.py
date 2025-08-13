@@ -20,6 +20,8 @@ import numpy
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.occri import OCCRI
+from scipy.fft import hfftn, ifftn
+from pyscf.occri.isdfx.isdfx_k_kpts import isdfx_get_k_kpts
 
 # Import submodules for better organization
 from pyscf.occri.isdfx import interpolation
@@ -75,6 +77,19 @@ class ISDF(OCCRI):
         self.isdf_pts_from_gamma_point = False
         self.build()
 
+        self.get_k = isdfx_get_k_kpts
+
+    def convolve_with_W(self, U):
+        W = self.W
+        kmesh = self.kmesh
+        n0, n1 = W.shape[-2], W.shape[-1]
+        Nk = numpy.prod(kmesh)
+        U_fft = hfftn(
+            U.reshape(*kmesh, n0, n1), s=(kmesh), axes=[0, 1, 2], overwrite_x=True
+        ).astype(numpy.complex128)
+        U_fft *= W
+        U[:] = ifftn(U_fft, axes=[0, 1, 2], overwrite_x=True).reshape(Nk, n0, n1)
+
 
     def build(self):
         """Build ISDF interpolation structures."""
@@ -86,6 +101,10 @@ class ISDF(OCCRI):
         
         # Step 2: Build fitting functions
         logger.debug(self, 'Building ISDF fitting functions') 
-        self.Chi_g = interpolation.get_fitting_functions(self)
+        fitting_fxns = interpolation.get_fitting_functions(self)
+
+        # Step 3: Calculate THC Potential
+        logger.debug(self, 'Calculations THC potential') 
+        interpolation.get_thc_potential(self, fitting_fxns)
         
         return self
