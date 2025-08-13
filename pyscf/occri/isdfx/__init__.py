@@ -91,20 +91,25 @@ class ISDF(OCCRI):
         U[:] = ifftn(U_fft, axes=[0, 1, 2], overwrite_x=True).reshape(Nk, n0, n1)
 
 
-    def build(self):
+    def build(self):  
         """Build ISDF interpolation structures."""
         logger.info(self, 'Doing ISDF with threshold %.2e', self.isdf_thresh)
-        
+        cput0 = (logger.process_clock(), logger.perf_counter())
+        log = logger.Logger(self.stdout, self.verbose) 
+
         # Step 1: Get pivot points  
         logger.debug(self, 'Selecting ISDF pivot points')
         interpolation.get_pivots(self)
+        cput0 = log.timer('Pivot selection', *cput0)
         
         # Step 2: Build fitting functions
         logger.debug(self, 'Building ISDF fitting functions') 
         fitting_fxns = interpolation.get_fitting_functions(self)
+        cput0 = log.timer('Build fitting functions', *cput0)
 
         # Step 3: Calculate THC Potential
-        logger.debug(self, 'Calculations THC potential') 
+        logger.debug(self, 'Calculating THC potential') 
         interpolation.get_thc_potential(self, fitting_fxns)
+        cput0 = log.timer('Calculate THC potential', *cput0)
         
         return self

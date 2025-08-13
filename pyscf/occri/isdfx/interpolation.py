@@ -8,7 +8,6 @@ This module contains the core interpolation functions for the ISDF method:
 """
 
 import numpy
-from pyscf import lib
 from pyscf.lib import logger
 from pyscf.pbc import tools
 from scipy.spatial.distance import cdist
@@ -194,8 +193,6 @@ def get_pivots(mydf):
         Modifies mydf.pivots and mydf.aovals in-place
     """
     cell = mydf.cell
-    cput0 = (logger.process_clock(), logger.perf_counter())
-    log = logger.Logger(mydf.stdout, mydf.verbose)
     
     # Evaluate AOs on grid
     coords = cell.gen_uniform_grids(mydf.mesh)
@@ -237,28 +234,95 @@ def get_pivots(mydf):
     
     logger.info(mydf, '  ISDF selected %d/%d grid points (%.2f%% compression)', 
                 len(mydf.pivots), ngrids, 100 * len(mydf.pivots) / ngrids)
-    cput0 = log.timer('Pivot selection', *cput0)
 
-def get_thc_potential(mydf, fitting_fxns):
+def get_thc_potential(mydf, fitting_functions):
+    """
+    Calculate the THC (Tensor Hypercontraction) potential for ISDF exchange evaluation.
+    
+    This function computes the potential W_μν(k) from the fitting functions
+    that appears in the tensor hypercontraction representation of the exchange matrix.
+    
+    Parameters:
+    -----------
+    mydf : ISDF
+        ISDF object with pivot points and mesh information
+    fitting_functions : ndarray
+        ISDF fitting functions χ_g with shape (npivots, ngrids)
+        
+    Returns:
+    --------
+    None
+        Modifies mydf.W in-place with the THC potential
+        
+    Notes:
+    ------
+    The THC potential is computed as:
+    W_μν(k) = ∫ χ_μ(r) v(r-r') χ_ν(r') e^{ik·(r-r')} dr dr'
+    where v(r) is the Coulomb interaction and χ_μ are fitting functions.
+    
+    The calculation involves:
+    1. Phase factor application: χ_μ(r) e^{-ik·r}
+    2. Forward FFT to k-space
+    3. Multiplication by Coulomb kernel G(k)
+    4. Inverse FFT back to r-space
+    5. Integration with conjugate phase factors
+    """
     cell = mydf.cell
+    npivots, ngrids = fitting_functions.shape
     nk = mydf.kpts.shape[0]
-    npivots, ngrids = fitting_fxns.shape
-    f = ngrids / cell.vol * 1.0 / nk
+    
+    # Physical constants and normalization
+    volume_factor = ngrids / cell.vol / nk
     kpts = mydf.kpts
     mesh = mydf.mesh
-    coords = cell.gen_uniform_grids(mydf.mesh)
-    W = numpy.empty((nk, npivots, npivots), numpy.complex128)
-    for kpt, Wk in zip(kpts, W):
-        expmikr = numpy.exp(-1.0j * (coords @ kpt))
-        V = fitting_fxns * expmikr
-        V = tools.fft( V, mesh)
-        V *= tools.get_coulG(cell, kpt, mesh=mesh).reshape(1, -1)
-        V = tools.ifft( V, mesh)
-        V *= expmikr.conj()
-        numpy.matmul(V, fitting_fxns.T.conj(), Wk)
-    W = W.conj()
-    W *= f
-    W = hfftn(
-        W.reshape(*mydf.kmesh, npivots, npivots), s=(mydf.kmesh), axes=[0, 1, 2], overwrite_x=True
+    coords = cell.gen_uniform_grids(mesh)
+    
+    # Initialize THC potential tensor
+    thc_potential = numpy.empty((nk, npivots, npivots), dtype=numpy.complex128)
+    
+    # Compute THC potential for each k-point
+    for k, kpt in enumerate(kpts):
+        
+        # Step 1: Apply phase factors e^{-ik·r}
+        phase_factors = numpy.exp(-1.0j * numpy.dot(coords, kpt))
+        modulated_functions = fitting_functions * phase_factors[numpy.newaxis, :]
+        
+        # Step 2: Forward FFT to momentum space
+        fft_functions = tools.fft(modulated_functions, mesh)
+        
+        # Step 3: Apply Coulomb kernel G(k) = 4π/|k|²
+        coulomb_kernel = tools.get_coulG(cell, kpt, mesh=mesh)
+        if coulomb_kernel.ndim == 1:
+            coulomb_kernel = coulomb_kernel.reshape(1, -1)
+        
+        fft_functions *= coulomb_kernel
+        
+        # Step 4: Inverse FFT back to position space  
+        ifft_functions = tools.ifft(fft_functions, mesh)
+        
+        # Step 5: Apply conjugate phase factors and integrate
+        conjugate_phase = numpy.conj(phase_factors)
+        ifft_functions *= conjugate_phase[numpy.newaxis, :]
+        
+        # Matrix multiplication: W_μν = ∫ χ_μ(r) O(r) χ_ν*(r) dr
+        numpy.matmul(ifft_functions, numpy.conj(fitting_functions.T), out=thc_potential[k])
+    
+    # Apply normalization and complex conjugation
+    thc_potential = numpy.conj(thc_potential)
+    thc_potential *= volume_factor
+    
+    # Transform to k-space representation for efficient convolution
+    logger.debug1(mydf, 'Transforming THC potential to k-space via FFT')
+        
+    thc_potential_k = hfftn(
+        thc_potential.reshape(*mydf.kmesh, npivots, npivots), 
+        s=tuple(mydf.kmesh), 
+        axes=[0, 1, 2], 
+        overwrite_x=True
     )
-    mydf.W = W
+    
+    # Store result in ISDF object
+    mydf.W = thc_potential_k
+    
+    logger.info(mydf, 'THC potential computed successfully: shape %s', str(thc_potential_k.shape))
+    logger.info(mydf, 'THC potential norm: %.6e', numpy.linalg.norm(thc_potential_k))
