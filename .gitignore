@@ -135,6 +135,3 @@ dmypy.json
 
 # MacOS
 .DS_Store
-
-# wip folders
-pyscf/occri/benchmark*

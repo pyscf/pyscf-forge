@@ -47,6 +47,6 @@ print("\n1a. Restricted Hartree-Fock (RHF)")
 print("    How to enable OCCRI for exact exchange:")
 
 # Standard syntax: attach OCCRI to mean-field object
-mf_rhf = scf.RHF(cell)
+mf_rhf = scf.UHF(cell)
 mf_rhf.with_df = ISDF(mf_rhf)  # This line enables OCCRI
 e_rhf = mf_rhf.kernel()

@@ -43,18 +43,18 @@ def _pivoted_cholesky_decomposition(mydf, aovals, ao_indices=None):
     nk = mydf.kpts.shape[0]
     
     # Compute G†G = Σ_k φ_k† φ_k
-    GG1 = sum(numpy.conj(ao_k.T) @ ao_k for ao_k in aovals)
+    GRR = sum(ao_k.conj().T @ ao_k for ao_k in aovals)
     
     if ao_indices is None:
         # No AO restriction - use full overlap
-        LL1 = GG1
+        LRR = GRR
     else:
         # Compute restricted overlap L†L for selected AOs
         local_aos = [ao_k[ao_indices] for ao_k in aovals]
-        LL1 = sum(numpy.conj(ao_k.T) @ ao_k for ao_k in local_aos)
+        LRR = sum(ao_k.T @ ao_k.conj() for ao_k in local_aos)
     
     # Construct Cholesky matrix: Z = (L†L ⊙ G†G) / nk²
-    Z = ((LL1 * GG1) / nk**2).real
+    Z = ((LRR * GRR) / nk**2).real
     Z = numpy.asarray(Z, dtype=numpy.float64)
     
     # Pivoted Cholesky decomposition with threshold
@@ -301,19 +301,17 @@ def get_thc_potential(mydf, fitting_functions):
         ifft_functions = tools.ifft(fft_functions, mesh)
         
         # Step 5: Apply conjugate phase factors and integrate
-        conjugate_phase = numpy.conj(phase_factors)
+        conjugate_phase = phase_factors.conj()
         ifft_functions *= conjugate_phase[numpy.newaxis, :]
         
         # Matrix multiplication: W_μν = ∫ χ_μ(r) O(r) χ_ν*(r) dr
-        numpy.matmul(ifft_functions, numpy.conj(fitting_functions.T), out=thc_potential[k])
+        numpy.matmul(ifft_functions, fitting_functions.conj().T, out=thc_potential[k])
     
     # Apply normalization and complex conjugation
-    thc_potential = numpy.conj(thc_potential)
+    thc_potential = thc_potential.conj()
     thc_potential *= volume_factor
     
     # Transform to k-space representation for efficient convolution
-    logger.debug1(mydf, 'Transforming THC potential to k-space via FFT')
-        
     thc_potential_k = hfftn(
         thc_potential.reshape(*mydf.kmesh, npivots, npivots), 
         s=tuple(mydf.kmesh), 
@@ -323,6 +321,3 @@ def get_thc_potential(mydf, fitting_functions):
     
     # Store result in ISDF object
     mydf.W = thc_potential_k
-    
-    logger.info(mydf, 'THC potential computed successfully: shape %s', str(thc_potential_k.shape))
-    logger.info(mydf, 'THC potential norm: %.6e', numpy.linalg.norm(thc_potential_k))

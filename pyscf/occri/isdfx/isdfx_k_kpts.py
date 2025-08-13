@@ -67,28 +67,32 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
     nao = cell.nao
     kpts = mydf.kpts
     nset, nk = dms.shape[:2]
-    mo_coeff = dms.mo_coeff[0]
+    mo_coeff = dms.mo_coeff
     mo_occ = dms.mo_occ
     aovals = mydf.aovals  # AO values at ISDF interpolation points
-    out_type = numpy.complex128 if any(abs(ao_k.imag).max() > 1e-6 for ao_k in aovals) else numpy.float64
+    out_type = (
+        numpy.complex128
+        if any(abs(ao.imag).max() > 1.0e-6 for ao in aovals)
+        else numpy.float64
+    )
 
-    ao_mos = [mo_coeff[k] @ ao_k for k, ao_k in enumerate(aovals)]
-    rho1 = [(ao_mo_k.T * mo_occ[k]) @ ao_mo_k.conj() for k, ao_mo_k in enumerate(ao_mos)]
-    rho1 = numpy.asarray(rho1, dtype=numpy.complex128, order='C')
-    mydf.convolve_with_W(rho1)
-    vR = rho1
-    if out_type == numpy.float64:
-        vR = vR.real
-
-    t1 = (logger.process_clock(), logger.perf_counter())
     vk = numpy.empty((nset, nk, nao, nao), dtype=out_type, order='C')
-    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
-    n = 0  # Currently handling first spin component
-    for k in range(nk):
-        vR_dm = numpy.matmul(vR[k], ao_mos[k].T, order='C')
-        vkao = numpy.matmul(aovals[k].conj(), vR_dm, order='C')
-        vk[n][k] = mydf.build_full_exchange(s[k], vkao, mo_coeff[k])
-        t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
+    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)    
+    for n in range(nset):
+        ao_mos = [mo_coeff[n][k] @ aovals[k] for k in range(nk)]
+        rho1 = [(ao_mos[k].T * mo_occ[n][k]) @ ao_mos[k].conj() for k in range(nk)]
+        rho1 = numpy.asarray(rho1, dtype=numpy.complex128, order='C')
+        mydf.convolve_with_W(rho1)
+        vR = rho1
+        if out_type == numpy.float64:
+            vR = vR.real
+
+        t1 = (logger.process_clock(), logger.perf_counter())
+        for k in range(nk):
+            vR_dm = numpy.matmul(vR[k], ao_mos[k].T, order='C')
+            vkao = numpy.matmul(aovals[k].conj(), vR_dm, order='C')
+            vk[n][k] = mydf.build_full_exchange(s[k], vkao, mo_coeff[n][k])
+            t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
     
     if exxdiv == "ewald" and cell.dimension != 0:
         _ewald_exxdiv_for_G0(cell, kpts, dms, vk)
