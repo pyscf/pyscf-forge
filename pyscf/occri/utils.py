@@ -1,31 +1,32 @@
 """
 Utility functions for OCCRI
 
-This module contains pure mathematical operations and algorithms that are 
+This module contains pure mathematical operations and algorithms that are
 reused across different contexts.
 """
 
 import numpy
 import scipy.linalg
+
 from pyscf import lib
 
 
 def make_natural_orbitals(cell, kpts, dms):
     """
     Construct natural orbitals from density matrix.
-    
+
     This is a pure mathematical operation that performs eigenvalue decomposition
     of density matrices to obtain natural orbitals and their occupations.
-    
+
     Parameters:
     -----------
     cell : Cell
         PySCF cell object
     kpts : ndarray
-        K-point coordinates  
+        K-point coordinates
     dms : ndarray
         Density matrices with shape (nset, nk, nao, nao)
-        
+
     Returns:
     --------
     ndarray
@@ -42,7 +43,7 @@ def make_natural_orbitals(cell, kpts, dms):
 
     mo_coeff = numpy.zeros_like(dms)
     mo_occ = numpy.zeros((nset, nk, nao), numpy.float64)
-    
+
     for i, dm in enumerate(dms):
         for k, s in enumerate(sk):
             # Diagonalize the DM in AO basis: S^{1/2} * DM * S^{1/2}
@@ -59,20 +60,20 @@ def make_natural_orbitals(cell, kpts, dms):
 def build_full_exchange(S, Kao, mo_coeff):
     """
     Build full exchange matrix from occupied orbital components.
-    
+
     This implements the exchange matrix construction:
     K_uv = Sa @ Kao.T + (Sa @ Kao.T).T - Sa @ (mo_coeff @ Kao) @ Sa.T
     where Sa = S @ mo_coeff.T
-    
+
     Parameters:
     -----------
     S : ndarray
         Overlap matrix or similar transformation matrix
-    Kao : ndarray  
+    Kao : ndarray
         AO values for occupied orbitals
     mo_coeff : ndarray
         Molecular orbital coefficients
-        
+
     Returns:
     --------
     ndarray
@@ -89,5 +90,5 @@ def build_full_exchange(S, Kao, mo_coeff):
     Koo = mo_coeff.conj() @ Kao
     Sa_Koo = numpy.matmul(Sa, Koo)
     Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order="C")
-    
+
     return Kuv

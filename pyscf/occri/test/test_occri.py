@@ -87,7 +87,7 @@ class TestOCCRI(unittest.TestCase):
 
         # Check convergence and energy agreement
         self.assertTrue(mf_occri.converged)
-        self.assertLess(abs(e_ref - e_occri)/abs(e_ref), 1e-6)
+        self.assertLess(abs(e_ref - e_occri) / abs(e_ref), 1e-6)
 
     def test_krhf(self):
         """Test KRHF with k-points against FFTDF reference"""

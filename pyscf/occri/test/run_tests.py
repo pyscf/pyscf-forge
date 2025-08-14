@@ -31,21 +31,23 @@ def main():
         # Run only main functional tests
         loader = unittest.TestLoader()
         suite = unittest.TestSuite()
-        
+
         try:
             from test_occri import TestOCCRI
+
             suite.addTests(loader.loadTestsFromTestCase(TestOCCRI))
             print("Loaded OCCRI functional tests")
         except ImportError as e:
             print(f"Could not load OCCRI tests: {e}")
-            
+
         # Load ISDFX functional tests
         try:
-            from test_isdfx import (TestUtilityFunctions, TestCholeskyDecomposition, 
-                                   TestISDFX, TestPivotSelection, TestFittingFunctions,
-                                   TestTHCPotential, TestExchangeMatrixEvaluation,
-                                   TestISdfxIntegration)
-            
+            from test_isdfx import (TestCholeskyDecomposition,
+                                    TestExchangeMatrixEvaluation,
+                                    TestFittingFunctions, TestISDFX,
+                                    TestISdfxIntegration, TestPivotSelection,
+                                    TestTHCPotential, TestUtilityFunctions)
+
             suite.addTests(loader.loadTestsFromTestCase(TestUtilityFunctions))
             suite.addTests(loader.loadTestsFromTestCase(TestCholeskyDecomposition))
             suite.addTests(loader.loadTestsFromTestCase(TestISDFX))
@@ -64,40 +66,43 @@ def main():
         # Run only performance tests
         loader = unittest.TestLoader()
         suite = unittest.TestSuite()
-        
+
         # Set flag for expensive tests
         sys.modules[__name__].RUN_PERFORMANCE_TESTS = True
-        
+
         try:
             from test_performance import TestPerformance
+
             suite.addTests(loader.loadTestsFromTestCase(TestPerformance))
             print("Loaded OCCRI performance tests")
         except ImportError as e:
             print(f"Could not load OCCRI performance tests: {e}")
-        
+
         # Load ISDFX energy tests with expensive k-point tests
         try:
             from test_isdfx_energy import TestISdfxEnergyComparison
+
             suite.addTests(loader.loadTestsFromTestCase(TestISdfxEnergyComparison))
             print("Loaded ISDFX energy performance tests")
         except ImportError as e:
             print(f"Could not load ISDFX energy tests: {e}")
-            
+
         # Load ISDFX k-point tests (expensive)
         try:
             from test_isdfx import TestISdfxKpoints
+
             suite.addTests(loader.loadTestsFromTestCase(TestISdfxKpoints))
             print("Loaded ISDFX k-point performance tests")
         except ImportError as e:
             print(f"Could not load ISDFX k-point tests: {e}")
-            
+
         print("Running OCCRI performance tests...")
 
     else:
         # Run all tests
         loader = unittest.TestLoader()
         suite = unittest.TestSuite()
-        
+
         # Set flag for expensive tests (needed for some ISDFX energy tests)
         sys.modules[__name__].RUN_PERFORMANCE_TESTS = True
 
@@ -113,18 +118,20 @@ def main():
         # Load performance tests
         try:
             from test_performance import TestPerformance
+
             suite.addTests(loader.loadTestsFromTestCase(TestPerformance))
             print("Loaded performance tests")
         except ImportError as e:
             print(f"Could not load performance tests: {e}")
 
-        # Load ISDFX functional tests  
+        # Load ISDFX functional tests
         try:
-            from test_isdfx import (TestUtilityFunctions, TestCholeskyDecomposition, 
-                                   TestISDFX, TestPivotSelection, TestFittingFunctions,
-                                   TestTHCPotential, TestExchangeMatrixEvaluation,
-                                   TestISdfxIntegration)
-            
+            from test_isdfx import (TestCholeskyDecomposition,
+                                    TestExchangeMatrixEvaluation,
+                                    TestFittingFunctions, TestISDFX,
+                                    TestISdfxIntegration, TestPivotSelection,
+                                    TestTHCPotential, TestUtilityFunctions)
+
             suite.addTests(loader.loadTestsFromTestCase(TestUtilityFunctions))
             suite.addTests(loader.loadTestsFromTestCase(TestCholeskyDecomposition))
             suite.addTests(loader.loadTestsFromTestCase(TestISDFX))
@@ -140,6 +147,7 @@ def main():
         # Load ISDFX energy tests (standard tests only)
         try:
             from test_isdfx_energy import TestISdfxEnergyComparison
+
             suite.addTests(loader.loadTestsFromTestCase(TestISdfxEnergyComparison))
             print("Loaded ISDFX energy tests")
         except ImportError as e:

@@ -150,9 +150,11 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         if kpts is None:
             kpts = numpy.zeros(3, numpy.float64)
         kpts = kpts.round(6)
-        self.kmesh = [numpy.unique(kpts[:,0]).shape[0],
-                 numpy.unique(kpts[:,1]).shape[0],
-                 numpy.unique(kpts[:,2]).shape[0]]
+        self.kmesh = [
+            numpy.unique(kpts[:, 0]).shape[0],
+            numpy.unique(kpts[:, 1]).shape[0],
+            numpy.unique(kpts[:, 2]).shape[0],
+        ]
         self.kpts = self.cell.make_kpts(
             self.kmesh,
             space_group_symmetry=False,
@@ -254,8 +256,9 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
     def make_natural_orbitals(self, dms):
         """Construct natural orbitals from density matrix"""
         from .utils import make_natural_orbitals
+
         return make_natural_orbitals(self.cell, self.kpts, dms)
-    
+
     def __del__(self):
         return
 
