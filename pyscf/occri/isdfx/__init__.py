@@ -22,6 +22,7 @@ from pyscf.lib import logger
 from pyscf.occri import OCCRI
 from scipy.fft import hfftn, ifftn
 from pyscf.occri.isdfx.isdfx_k_kpts import isdfx_get_k_kpts
+from .utils import get_fitting_functions
 
 # Import submodules for better organization
 from pyscf.occri.isdfx import interpolation
@@ -104,7 +105,7 @@ class ISDFX(OCCRI):
         
         # Step 2: Build fitting functions
         logger.debug(self, 'Building ISDFX fitting functions') 
-        fitting_fxns = interpolation.get_fitting_functions(self)
+        fitting_fxns = get_fitting_functions(self)
         cput0 = log.timer('Build fitting functions', *cput0)
 
         # Step 3: Calculate THC Potential

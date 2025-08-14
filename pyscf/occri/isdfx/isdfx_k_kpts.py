@@ -10,9 +10,9 @@ Main functions:
 """
 
 import numpy
-from pyscf import lib
 from pyscf.lib import logger
 from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
+from pyscf.occri.utils import build_full_exchange
 
 def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
     """
@@ -87,7 +87,7 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
         for k in range(nk):
             vR_dm = numpy.matmul(vR[k], ao_mos[k].T, order='C')
             vkao = numpy.matmul(aovals[k].conj(), vR_dm, order='C')
-            vk[n][k] = mydf.build_full_exchange(s[k], vkao, mo_coeff[n][k])
+            vk[n][k] = build_full_exchange(s[k], vkao, mo_coeff[n][k])
             t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
     
     if exxdiv == "ewald" and cell.dimension != 0:

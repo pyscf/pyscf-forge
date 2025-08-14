@@ -9,6 +9,8 @@ from pyscf import occri
 from pyscf.lib import logger
 from pyscf.pbc import tools
 
+from .utils import build_full_exchange
+
 
 def integrals_uu(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
     """Compute k-point exchange integrals using complex FFT"""
@@ -81,7 +83,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
 
             vR_dm *= weight
             vkao = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
-            vk[n][k] = mydf.build_full_exchange(s[k], vkao, mo_coeff[n][k])
+            vk[n][k] = build_full_exchange(s[k], vkao, mo_coeff[n][k])
 
             t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
 
@@ -190,7 +192,7 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
 
             # Contract back to AO basis
             vk_j = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
-            vk[n][k] = mydf.build_full_exchange(s[k], vk_j, mo_coeff[n][k])
+            vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
 
             t1 = logger.timer_debug1(mydf, f"get_k_kpts_opt: k-point {k}", *t1)
 

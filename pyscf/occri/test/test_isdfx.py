@@ -13,10 +13,10 @@ import numpy
 from pyscf.pbc import gto, scf
 
 from pyscf.occri.isdfx import ISDFX
-from pyscf.occri.isdfx.interpolation import (
-    _pivoted_cholesky_decomposition,
-    _voronoi_partition,
-    _init_ao_indices
+from pyscf.occri.isdfx.utils import (
+    pivoted_cholesky_decomposition,
+    voronoi_partition,
+    ao_indices_by_atom
 )
 
 
@@ -69,7 +69,7 @@ class TestUtilityFunctions(unittest.TestCase):
         mydf = ISDFX(mf)
         
         # Test basic partitioning
-        coords_by_atom = _voronoi_partition(mydf)
+        coords_by_atom = voronoi_partition(mydf)
         
         # Should have one list per atom
         self.assertEqual(len(coords_by_atom), cell_h2.natm)
@@ -93,7 +93,7 @@ class TestUtilityFunctions(unittest.TestCase):
         mf = scf.RHF(cell_diamond)
         mydf = ISDFX(mf)
         
-        ao_indices = _init_ao_indices(mydf)
+        ao_indices = ao_indices_by_atom(mydf.cell)
         
         # Should have one array per atom
         self.assertEqual(len(ao_indices), cell_diamond.natm)
@@ -128,7 +128,7 @@ class TestCholeskyDecomposition(unittest.TestCase):
         aovals = [numpy.random.rand(nao, ngrids) + 0.1j * numpy.random.rand(nao, ngrids)]
         
         # Test without AO restriction
-        pivots = _pivoted_cholesky_decomposition(self.mydf, aovals)
+        pivots = pivoted_cholesky_decomposition(self.mydf, aovals)
         
         self.assertIsInstance(pivots, numpy.ndarray)
         self.assertEqual(pivots.dtype, numpy.int32)
@@ -145,7 +145,7 @@ class TestCholeskyDecomposition(unittest.TestCase):
         
         # Test with AO subset
         ao_subset = numpy.array([0, 2, 4], dtype=numpy.int32)
-        pivots = _pivoted_cholesky_decomposition(self.mydf, aovals, ao_subset)
+        pivots = pivoted_cholesky_decomposition(self.mydf, aovals, ao_subset)
         
         self.assertIsInstance(pivots, numpy.ndarray)
         self.assertEqual(pivots.dtype, numpy.int32)

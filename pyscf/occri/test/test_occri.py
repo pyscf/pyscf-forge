@@ -253,7 +253,7 @@ class TestOCCRI(unittest.TestCase):
 
     def test_build_full_exchange(self):
         """Test build_full_exchange function"""
-        from pyscf.occri.occri_k_kpts import build_full_exchange
+        from pyscf.occri.utils import build_full_exchange
 
         # Setup test matrices
         nao = 10
