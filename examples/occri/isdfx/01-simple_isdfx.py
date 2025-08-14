@@ -5,7 +5,7 @@
 
 import numpy
 
-from pyscf.occri.isdfx import ISDF
+from pyscf.occri.isdfx import ISDFX
 from pyscf.pbc import gto, scf
 
 print("=== OCCRI Gamma Point Tutorial ===")
@@ -48,5 +48,5 @@ print("    How to enable OCCRI for exact exchange:")
 
 # Standard syntax: attach OCCRI to mean-field object
 mf_rhf = scf.UHF(cell)
-mf_rhf.with_df = ISDF(mf_rhf)  # This line enables OCCRI
+mf_rhf.with_df = ISDFX(mf_rhf)  # This line enables OCCRI
 e_rhf = mf_rhf.kernel()

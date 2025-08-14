@@ -36,9 +36,27 @@ def main():
 
     elif args.perf:
         # Run only performance tests
-        from test_performance import TestPerformance
-
-        suite = unittest.TestLoader().loadTestsFromTestCase(TestPerformance)
+        loader = unittest.TestLoader()
+        suite = unittest.TestSuite()
+        
+        # Set flag for expensive tests
+        sys.modules[__name__].RUN_PERFORMANCE_TESTS = True
+        
+        try:
+            from test_performance import TestPerformance
+            suite.addTests(loader.loadTestsFromTestCase(TestPerformance))
+            print("Loaded OCCRI performance tests")
+        except ImportError as e:
+            print(f"Could not load OCCRI performance tests: {e}")
+        
+        # Load ISDFX energy tests with expensive k-point tests
+        try:
+            from test_isdfx_energy import TestISdfxEnergyComparison
+            suite.addTests(loader.loadTestsFromTestCase(TestISdfxEnergyComparison))
+            print("Loaded ISDFX energy performance tests")
+        except ImportError as e:
+            print(f"Could not load ISDFX energy tests: {e}")
+            
         print("Running OCCRI performance tests...")
 
     else:
@@ -58,11 +76,18 @@ def main():
         # Load performance tests
         try:
             from test_performance import TestPerformance
-
             suite.addTests(loader.loadTestsFromTestCase(TestPerformance))
             print("Loaded performance tests")
         except ImportError as e:
             print(f"Could not load performance tests: {e}")
+
+        # Load ISDFX energy tests (standard tests only)
+        try:
+            from test_isdfx_energy import TestISdfxEnergyComparison
+            suite.addTests(loader.loadTestsFromTestCase(TestISdfxEnergyComparison))
+            print("Loaded ISDFX energy tests")
+        except ImportError as e:
+            print(f"Could not load ISDFX energy tests: {e}")
 
         print("Running all OCCRI tests...")
 

@@ -137,9 +137,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         """Initialize OCCRI density fitting object"""
 
         mydf._is_mem_enough = lambda: False
-        # NOTE: PySCF calls get_jk -> get_jk passing dm.reshape(...), dropping the mo_coeff.
-        # As a work around, overwrite get_jk so orbitals aren't dropped
-        mydf.get_jk = self.get_jk
         # BUG: Some PySCF methods have bugs when tagging initial guess dm.
         # For example, RKRS can modify dm without modifying mo_occ in the same way.
         # As a work around, always diagonalize dm on first iteration. See 02-kpoint...
@@ -165,12 +162,10 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         self.get_j = pyscf.pbc.df.fft_jk.get_j_kpts
 
         if _OCCRI_C_AVAILABLE and not disable_c:
-            logger.info(self, "OCCRI: Using optimized C implementation with FFTW, BLAS, and OpenMP")
             self.get_k = (
                 occri_k_kpts.occri_get_k_kpts_opt
             )  # Optimized C k-point implementation with complex FFT
         else:
-            logger.info(self, "OCCRI: Using python implementation")
             self.get_k = (
                 occri_k_kpts.occri_get_k_kpts
             )  # Pure Python k-point fallback with complex arithmetic
@@ -183,7 +178,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
     def get_jk(
         self,
-        cell=None,
         dm=None,
         hermi=1,
         kpt=None,
@@ -195,19 +189,14 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         **kwargs,
     ):
         """Compute J and K matrices using OCCRI"""
-        if cell is None:
-            cell = self.cell
-        if dm is None:
-            AttributeError(
-                "Overwriting get_jk. "
-                "Pass dm to get_jk as keyword: get_jk(dm=dm, ...)"
-            )
-
+        cell = self.cell
         dm_shape = dm.shape
         nk = self.kpts.shape[0]
         nao = cell.nao
         if with_k:
-            if getattr(dm, "mo_coeff", None) is None or self.scf_iter == 0:
+            if self.scf_iter == 0:
+                dm = numpy.asarray(dm)
+            if getattr(dm, "mo_coeff", None) is None:
                 dm = self.make_natural_orbitals(dm.reshape(-1, nk, nao, nao))
             else:
                 mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)

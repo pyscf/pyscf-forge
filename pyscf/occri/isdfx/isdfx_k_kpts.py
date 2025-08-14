@@ -26,7 +26,7 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
     
     Parameters:
     -----------
-    mydf : ISDF
+    mydf : ISDFX
         ISDFX object containing precomputed interpolation data:
         - pivots: Selected interpolation grid points
         - aovals: AO values at interpolation points
@@ -69,12 +69,7 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
     nset, nk = dms.shape[:2]
     mo_coeff = dms.mo_coeff
     mo_occ = dms.mo_occ
-    aovals = mydf.aovals  # AO values at ISDF interpolation points
-    out_type = (
-        numpy.complex128
-        if any(abs(ao.imag).max() > 1.0e-6 for ao in aovals)
-        else numpy.float64
-    )
+    aovals = mydf.aovals  # AO values at ISDFX interpolation points
 
     s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
     out_type = numpy.complex128 if any(sk.dtype==numpy.complex128 for sk in s) else numpy.float64

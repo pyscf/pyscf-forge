@@ -1,7 +1,7 @@
 """
-ISDF Interpolation Functions
+ISDFX Interpolation Functions
 
-This module contains the core interpolation functions for the ISDF method:
+This module contains the core interpolation functions for the ISDFX method:
 - Voronoi partitioning of grid points
 - Pivot point selection via Cholesky decomposition  
 - Fitting function construction
@@ -20,12 +20,12 @@ def _pivoted_cholesky_decomposition(mydf, aovals, ao_indices=None):
     Select interpolation points using pivoted Cholesky decomposition.
     
     This function performs pivoted Cholesky decomposition on the product of
-    overlap matrices to select the most important grid points for ISDF interpolation.
+    overlap matrices to select the most important grid points for ISDFX interpolation.
     
     Parameters:
     -----------
-    mydf : ISDF
-        ISDF object containing threshold settings
+    mydf : ISDFX
+        ISDFX object containing threshold settings
     aovals : list of ndarray
         AO values on grid for each k-point (shape: nao x ngrids for each k-point)
     ao_indices : ndarray, optional
@@ -70,7 +70,7 @@ def _pivoted_cholesky_decomposition(mydf, aovals, ao_indices=None):
 
 def get_fitting_functions(mydf, ao_indices=None):
     """
-    Construct ISDF fitting functions at selected pivot points.
+    Construct ISDFX fitting functions at selected pivot points.
     
     This function solves the linear system χ_g = (X^(Rg,Rg))^(-1) X^(Rg,R)
     to obtain interpolation coefficients that allow reconstruction of AO
@@ -78,8 +78,8 @@ def get_fitting_functions(mydf, ao_indices=None):
     
     Parameters:
     -----------
-    mydf : ISDF
-        ISDF object with pivot points already determined
+    mydf : ISDFX
+        ISDFX object with pivot points already determined
     ao_indices : ndarray, optional
         Subset of AO indices for restricted fitting (default: None, use all AOs)
         
@@ -118,12 +118,12 @@ def _voronoi_partition(mydf):
     Partition universal grid points using Voronoi tessellation.
 
     Each grid point is assigned to the nearest atom (including periodic images).
-    This creates atom-centered regions for efficient local ISDF operations.
+    This creates atom-centered regions for efficient local ISDFX operations.
 
     Parameters:
     -----------
-    mydf : ISDF
-        ISDF object to be modified in-place
+    mydf : ISDFX
+        ISDFX object to be modified in-place
 
     Returns:
     --------
@@ -172,7 +172,7 @@ def _init_ao_indices(mydf):
 
 def get_pivots(mydf):
     """
-    Determine ISDF pivot points using hierarchical Cholesky decomposition.
+    Determine ISDFX pivot points using hierarchical Cholesky decomposition.
     
     This function performs a two-stage process:
     1. Local pivot selection within each Voronoi region  
@@ -184,8 +184,8 @@ def get_pivots(mydf):
     
     Parameters:
     -----------
-    mydf : ISDF
-        ISDF object to be modified in-place
+    mydf : ISDFX
+        ISDFX object to be modified in-place
         
     Returns:
     --------
@@ -199,9 +199,8 @@ def get_pivots(mydf):
     ngrids = coords.shape[0]
     volume_element = (cell.vol / ngrids) ** 0.5
     kpts = mydf.kpts
-    aovals = []
-    for ao_k in mydf._numint.eval_ao(cell, coords, kpts=kpts):
-        aovals.append(numpy.asarray(ao_k.T * volume_element, order='C'))
+    aovals = [numpy.asarray(ao.T * volume_element, order='C')
+                for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)]
         
     local_pivots = []
     coords_by_atom = _voronoi_partition(mydf)
@@ -222,7 +221,7 @@ def get_pivots(mydf):
         
     local_pivots = numpy.array(local_pivots, dtype=numpy.int32)
     
-    logger.info(mydf, '  Partitioned ISDF: %d candidate pivots from %d grid points (%.2f%% compression)',
+    logger.info(mydf, '  Partitioned ISDFX: %d candidate pivots from %d grid points (%.2f%% compression)',
                 len(local_pivots), ngrids, 100 * len(local_pivots) / ngrids)
         
     aovals_on_pivots = [ao_k[:, local_pivots] for ao_k in aovals]
@@ -232,22 +231,22 @@ def get_pivots(mydf):
     mydf.pivots = numpy.sort(local_pivots[global_pivots])
     mydf.aovals = aovals
     
-    logger.info(mydf, '  ISDF selected %d/%d grid points (%.2f%% compression)', 
+    logger.info(mydf, '  ISDFX selected %d/%d grid points (%.2f%% compression)', 
                 len(mydf.pivots), ngrids, 100 * len(mydf.pivots) / ngrids)
 
 def get_thc_potential(mydf, fitting_functions):
     """
-    Calculate the THC (Tensor Hypercontraction) potential for ISDF exchange evaluation.
+    Calculate the THC (Tensor Hypercontraction) potential for ISDFX exchange evaluation.
     
     This function computes the potential W_μν(k) from the fitting functions
     that appears in the tensor hypercontraction representation of the exchange matrix.
     
     Parameters:
     -----------
-    mydf : ISDF
-        ISDF object with pivot points and mesh information
+    mydf : ISDFX
+        ISDFX object with pivot points and mesh information
     fitting_functions : ndarray
-        ISDF fitting functions χ_g with shape (npivots, ngrids)
+        ISDFX fitting functions χ_g with shape (npivots, ngrids)
         
     Returns:
     --------
@@ -315,5 +314,5 @@ def get_thc_potential(mydf, fitting_functions):
         overwrite_x=True
     )
     
-    # Store result in ISDF object
+    # Store result in ISDFX object
     mydf.W = thc_potential

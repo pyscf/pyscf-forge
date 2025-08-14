@@ -46,15 +46,11 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
 
     # Transform to MO basis for each k-point and spin
     ao_mos = [[mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
-    out_type = (
-        numpy.complex128
-        if any(abs(ao.imag).max() > 1.0e-6 for ao in aovals)
-        else numpy.float64
-    )
 
     # Pre-allocate output arrays
-    vk = numpy.empty((nset, nk, nao, nao), out_type, order="C")
     s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
+    out_type = numpy.complex128 if any(sk.dtype==numpy.complex128 for sk in s) else numpy.float64
+    vk = numpy.empty((nset, nk, nao, nao), out_type, order="C")
 
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
@@ -115,8 +111,8 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
 
     # Evaluate AOs on the grid for each k-point
-    aovals = mydf._numint.eval_ao(cell, coords, kpts=kpts)
-    aovals = [numpy.ascontiguousarray(ao.T) for ao in aovals]
+    aovals = [numpy.asarray(ao.T, order='C')
+                for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)]
 
     # Transform to MO basis for each k-point and spin
     ao_mos = [[mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
