@@ -5,7 +5,7 @@ OCCRI exchange matrix evaluation for k-point calculations
 import numpy
 from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
 
-from pyscf import occri
+from pyscf import occri, lib
 from pyscf.lib import logger
 from pyscf.pbc import tools
 
@@ -28,7 +28,7 @@ def integrals_uu(j, k, k_prim, ao_mos, vR_dm, coulG, mo_occ, mesh, expmikr):
 
 
 def occri_get_k_kpts(mydf, dms, exxdiv=None):
-    """Reference Python implementation of k-point exchange matrix evaluation"""
+    """Reference Python implementation of k-point exchange matrix evaluation with MO blocking"""
     cell = mydf.cell
     mesh = mydf.mesh
     assert cell.low_dim_ft_type != "inf_vacuum"
@@ -42,12 +42,19 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     mo_coeff = dms.mo_coeff
     mo_occ = dms.mo_occ
 
+    # Calculate MO block size for memory management (following PySCF pattern)
+    mem_now = lib.current_memory()[0]
+    max_memory = mydf.max_memory - mem_now
+    # Memory estimate: blksize * max_nmo * ngrids * 16 bytes (complex128) for main arrays
+    max_nmo = max(mo_coeff[n][k].shape[0] for n in range(nset) for k in range(nk))
+    mo_blksize = int(min(max_nmo, max(1, (max_memory-mem_now)*1e6/16/4/ngrids/max_nmo)))
+    
+    logger.debug1(mydf, 'OCCRI MO blocking: max_memory %d MB, mo_blksize %d', 
+                  max_memory, mo_blksize)
+
     # Evaluate AOs on the grid for each k-point
     aovals = [numpy.asarray(ao.T, order='C')
                 for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)]
-
-    # Transform to MO basis for each k-point and spin
-    ao_mos = [[mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
 
     # Pre-allocate output arrays
     s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
@@ -58,28 +65,45 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     t1 = (logger.process_clock(), logger.perf_counter())
 
     inv_sqrt = 1.0 / ngrids**0.5
-    rho1 = numpy.empty(ngrids, dtype=out_type)
+    
     for n in range(nset):
         for k in range(nk):
             nmo_k = mo_coeff[n][k].shape[0]
             vR_dm = numpy.zeros((nmo_k, ngrids), out_type)
+            
             for k_prim in range(nk):
                 nmo_kprim = mo_coeff[n][k_prim].shape[0]
                 dk = kpts[k] - kpts[k_prim]
                 coulG = tools.get_coulG(cell, dk, False, mesh=mesh) * inv_sqrt
+                
                 if numpy.allclose(dk, 0):
                     expmikr = numpy.ones(1, dtype=out_type)
                 else:
                     expmikr = numpy.exp(-1j * (coords @ dk))
                 
-                ao_phase = ao_mos[n][k_prim].conj() * expmikr
-                rho1 = numpy.einsum('ig,jg->ijg', ao_phase, ao_mos[n][k]) 
-                vG = tools.fft(rho1.reshape(-1,ngrids), mesh)
-                vG *= coulG
-                vR = tools.ifft(vG, mesh).reshape(nmo_kprim, nmo_k,ngrids)
-                if vR_dm.dtype == numpy.double:
-                    vR = vR.real
-                vR_dm += numpy.einsum('ijg,ig->jg', vR, ao_phase.conj() * mo_occ[n][k_prim][:, None])
+                # Transform AOs to MO basis for k_prim (full set needed for contraction)
+                ao_mo_kprim = mo_coeff[n][k_prim] @ aovals[k_prim]
+                ao_phase = ao_mo_kprim.conj() * expmikr
+                
+                # Block over MOs at k-point k (following PySCF pattern)
+                for p0, p1 in lib.prange(0, nmo_k, mo_blksize):
+                    # Transform AOs to MO basis for this MO block
+                    ao_mo_k_blk = mo_coeff[n][k][p0:p1] @ aovals[k]
+                    
+                    # Compute density and exchange for this MO block
+                    rho1 = numpy.einsum('ig,jg->ijg', ao_phase, ao_mo_k_blk) 
+                    vG = tools.fft(rho1.reshape(-1, ngrids), mesh)
+                    rho1 = None  # Free memory like PySCF
+                    vG *= coulG
+                    vR = tools.ifft(vG, mesh).reshape(nmo_kprim, p1-p0, ngrids)
+                    vG = None  # Free memory like PySCF
+                    
+                    if vR_dm.dtype == numpy.double:
+                        vR = vR.real
+                    
+                    # Accumulate into the appropriate slice of vR_dm
+                    vR_dm[p0:p1] += numpy.einsum('ijg,ig->jg', vR, ao_phase.conj() * mo_occ[n][k_prim][:, None])
+                    vR = None  # Free memory like PySCF
 
             vR_dm *= weight
             vkao = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
