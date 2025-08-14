@@ -131,7 +131,7 @@ class TestPerformance(unittest.TestCase):
 
         start_time = time.time()
         mf_kpts = scf.KRHF(cell, kpts)
-        mf_kpts.with_df = OCCRI(mf_kpts, kmesh=[2, 2, 1])
+        mf_kpts.with_df = OCCRI(mf_kpts)
         mf_kpts.kernel()
         kpts_time = time.time() - start_time
 

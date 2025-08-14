@@ -74,7 +74,7 @@ fftdf_k_time = time.time() - start_time
 # # Time OCCRI K matrix construction only
 # print("   Timing OCCRI K matrix construction...")
 # mf_occri = scf.KRHF(cell, kpts=kpts)
-# mf_occri.with_df = OCCRI(mf_occri, disable_c=True, kmesh=kmesh)
+# mf_occri.with_df = OCCRI(mf_occri, disable_c=True)
 # mf_occri.with_df.scf_iter = 1  # Don't rebuild MOs for timing
 
 # start_time = time.time()

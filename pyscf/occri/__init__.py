@@ -130,7 +130,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
     def __init__(
         self,
         mydf,
-        kmesh=[1, 1, 1],
         disable_c=False,
         **kwargs,
     ):
@@ -147,7 +146,13 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
 
         self.StartTime = time.time()
         self.cell = mydf.cell
-        self.kmesh = kmesh
+        kpts = mydf.kpts
+        if kpts is None:
+            kpts = numpy.zeros(3, numpy.float64)
+        kpts = kpts.round(6)
+        self.kmesh = [numpy.unique(kpts[:,0]).shape[0],
+                 numpy.unique(kpts[:,1]).shape[0],
+                 numpy.unique(kpts[:,2]).shape[0]]
         self.kpts = self.cell.make_kpts(
             self.kmesh,
             space_group_symmetry=False,
@@ -190,6 +195,8 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
     ):
         """Compute J and K matrices using OCCRI"""
         cell = self.cell
+        if isinstance(dm, list):
+            dm = numpy.asarray(dm)
         dm_shape = dm.shape
         nk = self.kpts.shape[0]
         nao = cell.nao

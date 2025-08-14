@@ -98,7 +98,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation - use same initial guess as reference
         mf_occri = scf.KRHF(cell, kpts)
-        mf_occri.with_df = OCCRI(mf_occri, kmesh=[2, 2, 2])
+        mf_occri.with_df = OCCRI(mf_occri)
         # Start from reference MO coefficients to ensure same state
         mf_occri.kernel(dm0=mf_ref.make_rdm1())
         e_occri = mf_occri.e_tot
@@ -119,7 +119,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation
         mf_occri = scf.KUHF(cell, kpts)
-        mf_occri.with_df = OCCRI(mf_occri, kmesh=[2, 2, 2])
+        mf_occri.with_df = OCCRI(mf_occri)
         mf_occri.kernel()
         e_occri = mf_occri.e_tot
 
@@ -171,7 +171,7 @@ class TestOCCRI(unittest.TestCase):
         _, vk_ref = df_ref.get_jk(dms, kpts=kpts, exxdiv=None, with_k=True)
 
         # OCCRI calculation
-        df_occri = OCCRI(mf_ref, kmesh=[2, 2, 2])
+        df_occri = OCCRI(mf_ref)
         _, vk_occri = df_occri.get_jk(dm=dms, kpts=kpts, exxdiv=None, with_k=True)
 
         # Check data types
@@ -203,7 +203,7 @@ class TestOCCRI(unittest.TestCase):
         """Test natural orbital construction with k-points"""
 
         mf = scf.KRHF(cell, kpts)
-        mf.with_df = OCCRI(mf, kmesh=[2, 2, 2])
+        mf.with_df = OCCRI(mf)
         mf.kernel()
         dm = mf.make_rdm1().reshape(-1, kpts.shape[0], cell.nao, cell.nao)
 
@@ -321,13 +321,13 @@ class TestOCCRI(unittest.TestCase):
         """Test that KRHF and KUHF give same results for closed shell k-point systems"""
         # KRHF calculation
         mf_krhf = scf.KRHF(cell, kpts)
-        mf_krhf.with_df = OCCRI(mf_krhf, kmesh=[2, 2, 2], disable_c=True)
+        mf_krhf.with_df = OCCRI(mf_krhf, disable_c=True)
         mf_krhf.kernel()
         e_krhf = mf_krhf.e_tot
 
         # KUHF calculation with same initial density
         mf_kuhf = scf.KUHF(cell, kpts)
-        mf_kuhf.with_df = OCCRI(mf_kuhf, kmesh=[2, 2, 2], disable_c=True)
+        mf_kuhf.with_df = OCCRI(mf_kuhf, disable_c=True)
         # Initialize with symmetric alpha/beta densities from KRHF
         dm_krhf = mf_krhf.make_rdm1()
         dm_alpha = dm_krhf / 2

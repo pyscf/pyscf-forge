@@ -57,7 +57,7 @@ for i, kpt in enumerate(kpts):
 
 # Set up KRHF calculation with OCCRI
 mf = scf.KRHF(cell, kpts)
-mf.with_df = OCCRI(mf, kmesh=kmesh)  # Specify kmesh
+mf.with_df = OCCRI(mf)  # Specify kmesh
 
 print("\nRunning KRHF calculation...")
 energy = mf.kernel()
@@ -74,14 +74,14 @@ print("=" * 60)
 # RHF - Restricted (closed shell)
 print("\n2a. Restricted Hartree-Fock (RHF)")
 mf_rhf = scf.KRHF(cell, kpts)
-mf_rhf.with_df = OCCRI(mf_rhf, kmesh=kmesh)
+mf_rhf.with_df = OCCRI(mf_rhf)
 e_rhf = mf_rhf.kernel()
 print(f"    Energy: {e_rhf:.6f} Ha")
 
 # UHF - Unrestricted (open shell capable)
 print("\n2b. Unrestricted Hartree-Fock (UHF)")
 mf_uhf = scf.KUHF(cell, kpts)
-mf_uhf.with_df = OCCRI(mf_uhf, kmesh=kmesh)
+mf_uhf.with_df = OCCRI(mf_uhf)
 e_uhf = mf_uhf.kernel()
 print(f"    Energy: {e_uhf:.6f} Ha")
 
@@ -89,7 +89,7 @@ print(f"    Energy: {e_uhf:.6f} Ha")
 print("\n2c. DFT with PBE0 hybrid functional")
 mf_dft = scf.KRKS(cell, kpts)
 mf_dft.xc = "pbe0"  # 25% exact exchange + PBE correlation
-mf_dft.with_df = OCCRI(mf_dft, kmesh=kmesh)
+mf_dft.with_df = OCCRI(mf_dft)
 e_dft = mf_dft.kernel()
 print(f"    Energy: {e_dft:.6f} Ha")
 
@@ -103,14 +103,14 @@ print("=" * 60)
 # Force Python implementation (useful for debugging)
 print("\n3a. Python implementation (disable_c=True)")
 mf_python = scf.KRHF(cell, kpts)
-mf_python.with_df = OCCRI(mf_python, kmesh=kmesh, disable_c=True)
+mf_python.with_df = OCCRI(mf_python, disable_c=True)
 e_python = mf_python.kernel()
 print(f"    Energy (Python): {e_python:.6f} Ha")
 
 # Use C extension if available (default)
 print("\n3b. C extension (default, disable_c=False)")
 mf_c = scf.KRHF(cell, kpts)
-mf_c.with_df = OCCRI(mf_c, kmesh=kmesh, disable_c=False)
+mf_c.with_df = OCCRI(mf_c, disable_c=False)
 e_c = mf_c.kernel()
 print(f"    Energy (C ext):  {e_c:.6f} Ha")
 

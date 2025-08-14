@@ -54,7 +54,7 @@ class ISDFX(OCCRI):
         ISDFX fitting coefficients for interpolation
     """
     
-    def __init__(self, mydf, kmesh=[1, 1, 1], isdf_thresh=1e-6, disable_c=False, **kwargs):
+    def __init__(self, mydf, isdf_thresh=1e-6, disable_c=False, **kwargs):
         """
         Initialize ISDFX density fitting object.
         
@@ -72,7 +72,7 @@ class ISDFX(OCCRI):
         **kwargs : dict
             Additional arguments passed to parent OCCRI class
         """
-        super().__init__(mydf, kmesh=kmesh, disable_c=disable_c, **kwargs)
+        super().__init__(mydf, disable_c=disable_c, **kwargs)
         self.isdf_thresh = isdf_thresh
 
         self.isdf_pts_from_gamma_point = False

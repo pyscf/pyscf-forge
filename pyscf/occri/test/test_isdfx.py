@@ -172,7 +172,7 @@ class TestISDFX(unittest.TestCase):
     def test_isdf_with_kpoints(self):
         """Test ISDFX with k-point sampling"""
         mf = scf.KRHF(cell_diamond, kpts_2x2x2)
-        mydf = ISDFX(mf, isdf_thresh=1e-5, kmesh=[2, 2, 2])
+        mydf = ISDFX(mf, isdf_thresh=1e-5)
         
         # Check k-point handling
         self.assertEqual(len(mydf.kpts), len(kpts_2x2x2))
@@ -328,7 +328,7 @@ class TestISdfxKpoints(unittest.TestCase):
         kmesh = [2, 2, 1]
         kpts = cell_diamond.make_kpts(kmesh)  # Reduced for testing
         mf = scf.KRHF(cell_diamond, kpts=kpts)
-        mydf = ISDFX(mf, isdf_thresh=1e-3, kmesh=kmesh)  # Looser threshold for speed
+        mydf = ISDFX(mf, isdf_thresh=1e-3)  # Looser threshold for speed
         
         mf.with_df = mydf
         mf.max_cycle = 3  # Just a few iterations for testing
