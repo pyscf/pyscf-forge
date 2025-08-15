@@ -212,45 +212,125 @@ def _scf_to_trexio(mf, trexio_file):
 
     # 2.3 Periodic boundary calculations (pbc group)
     if isinstance(mol, pbc.gto.Cell):
-        kpt = mf.kpt
-        kpt = mol.get_scaled_kpts(kpt)
-        if np.all(np.array(kpt) == 0.0):
-            # gamma point PBC. Real wavefunction
+        kpts = np.array(mf.kpts)
+        kpts = mol.get_scaled_kpts(kpts)
+        nk = len(mf.kpts)
+        weights = np.full(nk, 1.0/nk)
+
+        if nk == 1:
             trexio.write_pbc_k_point_num(trexio_file, 1)
-            trexio.write_pbc_k_point(trexio_file, [kpt])
-            trexio.write_pbc_k_point_weight(trexio_file, [1.0])
+            trexio.write_pbc_k_point(trexio_file, kpts)
+            trexio.write_pbc_k_point_weight(trexio_file, weights[np.newaxis])
         else:
-            # general point PBC. Complex wavefunction
-            raise NotImplementedError("Complex WF is not yet implemented.")
+            trexio.write_pbc_k_point_num(trexio_file, nk)
+            trexio.write_pbc_k_point(trexio_file, kpts)
+            trexio.write_pbc_k_point_weight(trexio_file, weights)
 
-    # 4.2 Molecular orbitals (mo group)
-    if isinstance(mf, scf.uhf.UHF):
-        mo_energy = np.ravel(mf.mo_energy)
-        mo_up, mo_dn = mf.mo_coeff
-        idx = _order_ao_index(mf.mol)
-        mo_up = mo_up[idx].T
-        mo_dn = mo_dn[idx].T
-        mo=np.concatenate([mo_up, mo_dn], axis=0)
-        mo_occ = np.ravel(mf.mo_occ)
-        spin = np.zeros(mo_energy.size, dtype=int)
-        spin[mf.mo_energy[0].size:] = 1
-        mo_type = 'UHF'
+        # stack k-dependent molecular orbitals
+        mo_k_point_pbc = []
+        mo_num_pbc = 0
+        mo_energy_pbc = []
+        mo_coefficient_real_pbc = []
+        mo_coefficient_imag_pbc = []
+        mo_occ_pbc= []
+        mo_spin_pbc = []
+
+        if isinstance(mf, scf.uhf.UHF):
+            mo_type = 'UHF'
+            for i_k, k in enumerate(kpts):
+                mo_energy = np.ravel(mf.mo_energy)
+                mo_num = mo_energy.size
+                mo_up, mo_dn = mf.mo_coeff
+                idx = _order_ao_index(mf.mol)
+                mo_up = mo_up[idx].T
+                mo_dn = mo_dn[idx].T
+                mo=np.concatenate([mo_up, mo_dn], axis=0) # dim (num_mo, num_ao) but it is f-contiguous
+                mo_coefficient_real = np.ascontiguousarray(mo.real) # dim (num_mo, num_ao) and it is c-contiguous
+                mo_coefficient_imag = np.ascontiguousarray(mo.imag) # dim (num_mo, num_ao) and it is c-contiguous
+                mo_occ = np.ravel(mf.mo_occ)
+                mo_spin = np.zeros(mo_energy.size, dtype=int)
+                mo_spin[mf.mo_energy[0].size:] = 1
+
+                mo_k_point_pbc += [i_k] * mo_energy.size
+                mo_num_pbc += mo_energy.size
+                mo_energy_pbc.append(mo_energy)
+                mo_coefficient_real_pbc.append(mo_coefficient_real)
+                mo_coefficient_imag_pbc.append(mo_coefficient_imag)
+                mo_occ_pbc.append(mo_occ)
+                mo_spin_pbc.append(mo_spin)
+
+        else:
+            mo_type = 'RHF'
+            for i_k, k in enumerate(kpts):
+                mo_energy = mf.mo_energy[i_k]
+                mo = mf.mo_coeff[i_k]
+                idx = _order_ao_index(mf.mol)
+                mo = mo[idx].T
+                mo_coefficient_real = np.ascontiguousarray(mo.real) # dim (num_mo, num_ao) and it is c-contiguous
+                mo_coefficient_imag = np.ascontiguousarray(mo.imag) # dim (num_mo, num_ao) and it is c-contiguous
+                mo_occ = np.ravel(mf.mo_occ[i_k])
+                mo_spin = np.zeros(mo_energy.size, dtype=int)
+
+                mo_k_point_pbc += [i_k] * mo_energy.size
+                mo_num_pbc += mo_energy.size
+                mo_energy_pbc.append(mo_energy)
+                mo_coefficient_real_pbc.append(mo_coefficient_real)
+                mo_coefficient_imag_pbc.append(mo_coefficient_imag)
+                mo_occ_pbc.append(mo_occ)
+                mo_spin_pbc.append(mo_spin)
+
+        # stack the results
+        mo_k_point_pbc = np.array(mo_k_point_pbc)
+        mo_energy_pbc = np.concatenate(mo_energy_pbc)
+        mo_coefficient_real_pbc = np.ascontiguousarray(np.vstack(mo_coefficient_real_pbc))
+        mo_coefficient_imag_pbc = np.ascontiguousarray(np.vstack(mo_coefficient_imag_pbc))
+        mo_occ_pbc = np.concatenate(mo_occ_pbc)
+        mo_spin_pbc = np.concatenate(mo_spin_pbc)
+
+        # write to a TREXIO file
+        trexio.write_mo_type(trexio_file, mo_type)
+        trexio.write_mo_num(trexio_file, mo_num_pbc)
+        trexio.write_mo_k_point(trexio_file, mo_k_point_pbc)
+        trexio.write_mo_energy(trexio_file, mo_energy_pbc)
+        trexio.write_mo_coefficient(trexio_file, mo_coefficient_real_pbc)
+        trexio.write_mo_coefficient_im(trexio_file, mo_coefficient_imag_pbc)
+        trexio.write_mo_occupation(trexio_file, mo_occ_pbc)
+        trexio.write_mo_spin(trexio_file, mo_spin_pbc)
+
+    # 2.3 without PBC (for open systems)
     else:
-        mo_energy = mf.mo_energy
-        mo = mf.mo_coeff
-        idx = _order_ao_index(mf.mol)
-        mo = mo[idx].T
-        mo_occ = mf.mo_occ
-        spin = np.zeros(mo_energy.size, dtype=int)
-        mo_type = 'RHF'
+        # 4.2 Molecular orbitals (mo group)
+        if isinstance(mf, scf.uhf.UHF):
+            mo_type = 'UHF'
+            mo_energy = np.ravel(mf.mo_energy)
+            mo_num = mo_energy.size
+            mo_up, mo_dn = mf.mo_coeff
+            idx = _order_ao_index(mf.mol)
+            mo_up = mo_up[idx].T
+            mo_dn = mo_dn[idx].T
+            mo=np.concatenate([mo_up, mo_dn], axis=0) # dim (num_mo, num_ao) but it is f-contiguous
+            mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
+            mo_occ = np.ravel(mf.mo_occ)
+            mo_spin = np.zeros(mo_energy.size, dtype=int)
+            mo_spin[mf.mo_energy[0].size:] = 1
+        else:
+            mo_type = 'RHF'
+            mo_energy = mf.mo_energy
+            mo_num = mo_energy.size
+            mo = mf.mo_coeff
+            idx = _order_ao_index(mf.mol)
+            mo = mo[idx].T # dim (num_mo, num_ao) but it is f-contiguous
+            mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
+            mo_occ = mf.mo_occ
+            mo_spin = np.zeros(mo_energy.size, dtype=int)
 
-    # write to a TREXIO file
-    trexio.write_mo_type(trexio_file, mo_type)
-    trexio.write_mo_num(trexio_file, mo_energy.size)
-    trexio.write_mo_coefficient(trexio_file, mo.ravel())
-    trexio.write_mo_energy(trexio_file, mo_energy)
-    trexio.write_mo_occupation(trexio_file, mo_occ)
-    trexio.write_mo_spin(trexio_file, spin)
+        # write to a TREXIO file
+        trexio.write_mo_type(trexio_file, mo_type)
+        trexio.write_mo_num(trexio_file, mo_num)
+        trexio.write_mo_coefficient(trexio_file, mo_coefficient)
+        trexio.write_mo_energy(trexio_file, mo_energy)
+        trexio.write_mo_occupation(trexio_file, mo_occ)
+        trexio.write_mo_spin(trexio_file, mo_spin)
 
 def _cc_to_trexio(cc_obj, trexio_file):
     raise NotImplementedError
