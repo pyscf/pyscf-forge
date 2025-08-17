@@ -15,6 +15,7 @@ import re
 import math
 import numpy as np
 import scipy.linalg
+from collections import defaultdict
 
 import pyscf
 from pyscf import lib
@@ -262,24 +263,92 @@ def mol_from_trexio(filename):
     mol = gto.Mole()
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         assert trexio.read_basis_type(tf) == 'Gaussian'
-        if trexio.has_ecp(tf):
-            raise NotImplementedError
         labels = trexio.read_nucleus_label(tf)
         coords = trexio.read_nucleus_coord(tf)
         elements = [s+str(i) for i, s in enumerate(labels)]
         mol.atom = list(zip(elements, coords))
         mol.unit = 'Bohr'
+
+        if trexio.has_ecp(tf):
+            # --- read TREXIO ECP arrays ---
+            z_core      = trexio.read_ecp_z_core(tf)                 # shape (natm,)
+            max_l1_arr  = trexio.read_ecp_max_ang_mom_plus_1(tf)     # shape (natm,)
+            nuc_idx     = trexio.read_ecp_nucleus_index(tf)          # shape (ecp_num,)
+            ang_mom_enc = trexio.read_ecp_ang_mom(tf)                # shape (ecp_num,)
+            coeff_arr   = trexio.read_ecp_coefficient(tf)            # shape (ecp_num,)
+            exp_arr     = trexio.read_ecp_exponent(tf)               # shape (ecp_num,)
+            power_arr   = trexio.read_ecp_power(tf)                  # shape (ecp_num,)
+
+            # --- aggregate primitives per (nucleus, l); decode local channel to l = -1 ---
+            per_atom = defaultdict(lambda: defaultdict(list))  # per_atom[n][l] -> [(power, exp, coeff), ...]
+            for k in range(len(nuc_idx)):
+                n   = int(nuc_idx[k])
+                l_e = int(ang_mom_enc[k])
+                # local channel was encoded as max_l1_arr[n]; decode to l = -1
+                l_d = -1 if l_e == int(max_l1_arr[n]) else l_e
+                p   = int(power_arr[k])                # stored as r-2 on write
+                e   = float(exp_arr[k])
+                c   = float(coeff_arr[k])
+                per_atom[n][l_d].append((p, e, c))
+
+            def _is_dummy_ul_s(items):
+                # H/He dummy record injected at write time: (power=0, exp=1.0, coeff=0.0)
+                return (len(items) == 1 and items[0][0] == 0
+                        and abs(items[0][1] - 1.0) < 1e-12 and abs(items[0][2]) < 1e-300)
+
+            ecp_dict = {}
+            for n, raw_sym in enumerate(labels):
+                # skip ghosts: ECP not applied to 'X-*' atoms
+                if re.match(r"X-.*", raw_sym):
+                    continue
+
+                zc   = int(z_core[n]) if n < len(z_core) else 0
+                lmap = dict(per_atom.get(n, {}))
+
+                # drop intentional dummy ul-s for H/He if present
+                if 0 in lmap and _is_dummy_ul_s(lmap[0]):
+                    lmap.pop(0)
+
+                # nothing to assign if no channels and no core reduction
+                if not lmap and zc == 0:
+                    continue
+
+                # Build PySCF format for this atom:
+                # for each l, buckets[r] holds (exp, coeff), where r = power + 2
+                at_list = []
+                # ordering is not strictly required, but keep nonlocal (l>=0) then local (l=-1) last
+                for l in sorted(lmap.keys(), key=lambda x: (x == -1, x)):
+                    items = lmap[l]
+                    if not items:
+                        continue
+                    r_list = [p + 2 for p, _, _ in items]
+                    max_r  = max(r_list)
+                    buckets = [[] for _ in range(max_r + 1)]  # r in [0..max_r]
+                    for (p, e, c), r in zip(items, r_list):
+                        if r < 0:
+                            # should not happen if power = r-2 and r>=0
+                            continue
+                        buckets[r].append((e, c))
+                    at_list.append([int(l), buckets])
+
+                # ★ Use the exact same per-atom label as in mol.atom / mol._basis
+                key = elements[n]
+                ecp_dict[key] = (zc, at_list)
+
+            if ecp_dict:
+                mol.ecp = ecp_dict
+
         if trexio.has_ao_cartesian(tf):
             mol.cart = trexio.read_ao_cartesian(tf) == 1
 
         if trexio.has_nucleus_point_group(tf):
             mol.symmetry = trexio.read_nucleus_point_group(tf)
 
-        nuc_idx = trexio.read_basis_nucleus_index(tf)
-        ls = trexio.read_basis_shell_ang_mom(tf)
-        prim2sh = trexio.read_basis_shell_index(tf)
-        exps = trexio.read_basis_exponent(tf)
-        coef = trexio.read_basis_coefficient(tf)
+        nuc_idx = trexio.read_basis_nucleus_index(tf).astype(int).tolist()
+        ls = trexio.read_basis_shell_ang_mom(tf).astype(int).tolist()
+        prim2sh = trexio.read_basis_shell_index(tf).astype(int).tolist()
+        exps = trexio.read_basis_exponent(tf).astype(float).tolist()
+        coef = trexio.read_basis_coefficient(tf).astype(float).tolist()
 
     basis = {}
     exps = _group_by(exps, prim2sh)
@@ -387,7 +456,7 @@ def _mode(code):
 
 def _group_by(a, keys):
     '''keys must be sorted'''
-    assert all(keys[:-1] <= keys[1:])
+    assert all(a <= b for a, b in zip(keys, keys[1:]))
     idx = np.unique(keys, return_index=True)[1]
     return np.split(a, idx[1:])
 
