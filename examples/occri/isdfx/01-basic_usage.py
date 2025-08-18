@@ -22,7 +22,7 @@ cell_diamond.basis = 'gth-dzvp'
 cell_diamond.pseudo = 'gth-pbe'
 cell_diamond.a = np.eye(3) * 3.57
 cell_diamond.mesh = [15] * 3 # See Example 4 in occri/01-simple_gamma_point.py for mesh selection.
-cell_diamond.verbose = 4
+cell_diamond.verbose = 0
 cell_diamond.build()
 
 # Standard RHF with ISDFX
@@ -43,7 +43,7 @@ cell_graphite.basis = 'gth-dzvp'
 cell_graphite.pseudo = 'gth-pbe'
 cell_graphite.a = [[2.46, 0, 0], [-1.23, 2.13, 0], [0, 0, 6.70]]
 cell_graphite.mesh = [15] * 3 # See Example 4 in occri/01-simple_gamma_point.py for mesh selection.
-cell_graphite.verbose = 4
+cell_graphite.verbose = 0
 cell_graphite.build()
 
 # UHF for potential magnetic ordering
@@ -65,7 +65,7 @@ cell_si.basis = 'gth-dzvp'
 cell_si.pseudo = 'gth-pbe'
 cell_si.a = np.eye(3) * 5.43
 cell_si.mesh = [15] * 3 # See Example 4 in occri/01-simple_gamma_point.py for mesh selection.
-cell_si.verbose = 4
+cell_si.verbose = 0
 cell_si.build()
 
 # DFT with exact exchange via ISDFX
@@ -88,7 +88,7 @@ cell_al.pseudo = 'gth-pbe'
 cell_al.a = np.eye(3) * 4.05  # FCC lattice
 cell_al.spin = 1  # Avoid closed-shell for odd electrons
 cell_al.mesh = [15] * 3 # See Example 4 in occri/01-simple_gamma_point.py for mesh selection.
-cell_al.verbose = 4
+cell_al.verbose = 0
 cell_al.build()
 
 # RKS for metallic system

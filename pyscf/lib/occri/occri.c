@@ -23,9 +23,22 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdint.h>
+#include <string.h>
 #include <fftw3.h>
 #include <omp.h>
 #include "vhf/fblas.h"
+
+// Global plan caches
+static FFTWBuffers **g_real_buffers = NULL;
+static int g_real_cached_mesh[3] = {0, 0, 0};
+static int g_real_cached_nthreads = 0;
+
+static FFTWBuffersComplex **g_complex_buffers = NULL;
+static int g_complex_cached_mesh[3] = {0, 0, 0};
+static int g_complex_cached_nthreads = 0;
+
+// Thread safety for cache access
+static omp_lock_t g_cache_lock;
 
 double max(int *vals, int size)
 {
@@ -36,21 +49,81 @@ double max(int *vals, int size)
     return maxVal;
 }
 
+void init_cache_lock() {
+    static int lock_initialized = 0;
+    if (!lock_initialized) {
+        omp_init_lock(&g_cache_lock);
+        lock_initialized = 1;
+    }
+}
+
+// Get cached real FFTW buffers or create new ones
+FFTWBuffers **get_cached_real_buffers(int mesh[3], int nthreads) {
+    init_cache_lock();
+    
+    omp_set_lock(&g_cache_lock);
+    
+    // Check if we need to recreate buffers
+    int need_new = (!g_real_buffers || 
+                    memcmp(g_real_cached_mesh, mesh, 3 * sizeof(int)) != 0 ||
+                    g_real_cached_nthreads != nthreads);
+    
+    if (need_new) {
+        // Clean up old buffers
+        if (g_real_buffers) {
+            free_thread_fftw_buffers(g_real_buffers, g_real_cached_nthreads);
+        }
+        
+        // Create new buffers
+        g_real_buffers = allocate_thread_fftw_buffers(mesh, nthreads);
+        memcpy(g_real_cached_mesh, mesh, 3 * sizeof(int));
+        g_real_cached_nthreads = nthreads;
+    }
+    
+    FFTWBuffers **result = g_real_buffers;
+    omp_unset_lock(&g_cache_lock);
+    return result;
+}
+
+// Get cached complex FFTW buffers or create new ones
+FFTWBuffersComplex **get_cached_complex_buffers(int mesh[3], int nthreads) {
+    init_cache_lock();
+    
+    omp_set_lock(&g_cache_lock);
+    
+    // Check if we need to recreate buffers
+    int need_new = (!g_complex_buffers || 
+                    memcmp(g_complex_cached_mesh, mesh, 3 * sizeof(int)) != 0 ||
+                    g_complex_cached_nthreads != nthreads);
+    
+    if (need_new) {
+        // Clean up old buffers
+        if (g_complex_buffers) {
+            free_thread_fftw_buffers_complex(g_complex_buffers, g_complex_cached_nthreads);
+        }
+        
+        // Create new buffers  
+        g_complex_buffers = allocate_thread_fftw_buffers_complex(mesh, nthreads);
+        memcpy(g_complex_cached_mesh, mesh, 3 * sizeof(int));
+        g_complex_cached_nthreads = nthreads;
+    }
+    
+    FFTWBuffersComplex **result = g_complex_buffers;
+    omp_unset_lock(&g_cache_lock);
+    return result;
+}
+
 FFTWBuffers *init_fftw_buffers(int mesh[3]) {
     const int ngrids = mesh[0] * mesh[1] * mesh[2];
     const int ncomplex = mesh[0] * mesh[1] * (mesh[2]/2 + 1);
 
     FFTWBuffers *buf = malloc(sizeof(FFTWBuffers));
-    // Use FFTW_ALLOC_MAXIMUM_ALIGNMENT for better vectorization
     buf->rho = fftw_malloc(sizeof(double) * ngrids);
     buf->vG  = fftw_malloc(sizeof(fftw_complex) * ncomplex);
     buf->vR  = fftw_malloc(sizeof(double) * ngrids);
 
-    // Use FFTW_PATIENT for first thread, then copy plans for others
-    // This provides better performance while keeping setup cost reasonable
     buf->forward = fftw_plan_dft_r2c_3d(mesh[0], mesh[1], mesh[2],
                                         buf->rho, buf->vG, FFTW_PATIENT);
-
     buf->backward = fftw_plan_dft_c2r_3d(mesh[0], mesh[1], mesh[2],
                                          buf->vG, buf->vR, FFTW_PATIENT);
     return buf;
@@ -65,24 +138,22 @@ void destroy_fftw_buffers(FFTWBuffers *buf) {
     free(buf);
 }
 
+
+
 FFTWBuffers **allocate_thread_fftw_buffers(int mesh[3], int nthreads) {
     FFTWBuffers **buffers = (FFTWBuffers **)malloc(sizeof(FFTWBuffers *) * nthreads);
     
-    // Create master plan with FFTW_PATIENT for optimal performance
-    FFTWBuffers *master = init_fftw_buffers(mesh);
-    buffers[0] = master;
-    
-    // For additional threads, create buffers but reuse plan wisdom
     const int ngrids = mesh[0] * mesh[1] * mesh[2];
     const int ncomplex = mesh[0] * mesh[1] * (mesh[2]/2 + 1);
     
-    for (int i = 1; i < nthreads; ++i) {
+    // Use consistent FFTW_ESTIMATE strategy for all threads for better performance
+    for (int i = 0; i < nthreads; ++i) {
         FFTWBuffers *buf = malloc(sizeof(FFTWBuffers));
         buf->rho = fftw_malloc(sizeof(double) * ngrids);
         buf->vG  = fftw_malloc(sizeof(fftw_complex) * ncomplex);
         buf->vR  = fftw_malloc(sizeof(double) * ngrids);
         
-        // Use FFTW_ESTIMATE since we have wisdom from master plan
+        // Use FFTW_ESTIMATE consistently for all threads
         buf->forward = fftw_plan_dft_r2c_3d(mesh[0], mesh[1], mesh[2],
                                             buf->rho, buf->vG, FFTW_ESTIMATE);
         buf->backward = fftw_plan_dft_c2r_3d(mesh[0], mesh[1], mesh[2],
@@ -145,7 +216,7 @@ void integrals_uu(int i, double *ao_mos, double *vR_dm, double *coulG, int nmo,
 }
 
 
-void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
+int occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
                double *coulG, double *overlap, int mesh[3], int nmo, int nao, 
                int ngrids, const double weight) {
     /*
@@ -178,13 +249,6 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
     
     const int nthreads = omp_get_max_threads();
 
-    // Initialize FFTW multithreading support
-    if (!fftw_init_threads()) {
-        fprintf(stderr, "FFTW thread init failed\n");
-        exit(1);
-    }
-    fftw_plan_with_nthreads(1);
-
     // Allocate aligned arrays for intermediate results
     double *ao_mos = fftw_malloc(sizeof(double) * nmo * ngrids);
     double *vR_dm = fftw_malloc(sizeof(double) * nmo * ngrids);
@@ -194,7 +258,7 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
     
     if (!ao_mos || !vR_dm || !Sa || !vk_j || !Koo) {
         fprintf(stderr, "Memory allocation failed\n");
-        exit(1);
+        return -2;
     }
 
     // Step 1: Compute ao_mos = mo_coeff @ aovals
@@ -217,8 +281,9 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
         vR_dm[i] = 0.0;
     }
 
-    // Step 3: Compute exchange integrals using existing integrals_uu function
-    FFTWBuffers **fftw_buffers_array = allocate_thread_fftw_buffers(mesh, nthreads);
+    // Step 3: Use simple, safe buffer allocation
+    // Use cached buffer allocation for better performance
+    FFTWBuffers **fftw_buffers_array = get_cached_real_buffers(mesh, nthreads);
 
     #pragma omp parallel
     {
@@ -231,7 +296,7 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
         }
     }
 
-    free_thread_fftw_buffers(fftw_buffers_array, nthreads);
+    // Don't free cached buffers - they will be reused
 
     // Step 4: Compute vk_j = aovals @ vR_dm.T
     // aovals is [nao x ngrids], vR_dm is [nmo x ngrids], result is [nao x nmo]
@@ -307,7 +372,7 @@ void occri_vR(double *vk_out, double *mo_coeff, double *mo_occ, double *aovals,
     fftw_free(Sa);
     fftw_free(vk_j);
     fftw_free(Koo);
-    fftw_cleanup_threads();
+    return 0;
 }
 
 
@@ -338,23 +403,28 @@ void destroy_fftw_buffers_complex(FFTWBuffersComplex *buf) {
     free(buf);
 }
 
+
+void free_thread_fftw_buffers_complex(FFTWBuffersComplex **buffers, int nthreads) {
+    for (int i = 0; i < nthreads; ++i) {
+        destroy_fftw_buffers_complex(buffers[i]);
+    }
+    free(buffers);
+}
+
+
 FFTWBuffersComplex **allocate_thread_fftw_buffers_complex(int mesh[3], int nthreads) {
     FFTWBuffersComplex **buffers = (FFTWBuffersComplex **)malloc(sizeof(FFTWBuffersComplex *) * nthreads);
     
-    // Create master plan with FFTW_PATIENT for optimal performance
-    FFTWBuffersComplex *master = init_fftw_buffers_complex(mesh);
-    buffers[0] = master;
-    
-    // For additional threads, create buffers but reuse plan wisdom
     const int ngrids = mesh[0] * mesh[1] * mesh[2];
     
-    for (int i = 1; i < nthreads; ++i) {
+    // Use consistent FFTW_ESTIMATE strategy for all threads for better performance
+    for (int i = 0; i < nthreads; ++i) {
         FFTWBuffersComplex *buf = malloc(sizeof(FFTWBuffersComplex));
         buf->rho_c = fftw_malloc(sizeof(fftw_complex) * ngrids);
         buf->vG_c  = fftw_malloc(sizeof(fftw_complex) * ngrids);
         buf->vR_c  = fftw_malloc(sizeof(fftw_complex) * ngrids);
         
-        // Use FFTW_ESTIMATE since we have wisdom from master plan
+        // Use FFTW_ESTIMATE consistently for all threads
         buf->forward_c2c = fftw_plan_dft_3d(mesh[0], mesh[1], mesh[2],
                                             buf->rho_c, buf->vG_c, FFTW_FORWARD, FFTW_ESTIMATE);
         buf->backward_c2c = fftw_plan_dft_3d(mesh[0], mesh[1], mesh[2],
@@ -364,12 +434,6 @@ FFTWBuffersComplex **allocate_thread_fftw_buffers_complex(int mesh[3], int nthre
     return buffers;
 }
 
-void free_thread_fftw_buffers_complex(FFTWBuffersComplex **buffers, int nthreads) {
-    for (int i = 0; i < nthreads; ++i) {
-        destroy_fftw_buffers_complex(buffers[i]);
-    }
-    free(buffers);
-}
 
 /*
  * Compute k-point exchange integrals between occupied orbitals using complex FFT.
@@ -421,6 +485,7 @@ void free_thread_fftw_buffers_complex(FFTWBuffersComplex **buffers, int nthreads
  * - Vectorized loops with OpenMP SIMD directives for performance
  * - Thread-safe when called with separate buffer instances
  */
+
 void integrals_uu_kpts(int j, int k, int k_prim, 
                        double *ao_k_j_real, double *ao_k_j_imag,
                        double *ao_kprim_real, double *ao_kprim_imag,
@@ -565,7 +630,7 @@ void integrals_uu_kpts(int j, int k, int k_prim,
  * Function is thread-safe when called from different threads with different
  * output arrays. Internal OpenMP parallelization handles synchronization.
  */
-void occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag, 
+int occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag, 
                    double *mo_occ, double *coulG_all, int mesh[3], 
                    double *expmikr_all_real, double *expmikr_all_imag, 
                    double *kpts, double *ao_real, double *ao_imag,
@@ -576,14 +641,6 @@ void occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag,
     double *ao_k_real = &ao_real[k_idx * nmo_max * ngrids];
     double *ao_k_imag = &ao_imag[k_idx * nmo_max * ngrids];
     const int nthreads = omp_get_max_threads();
-    
-    // Initialize FFTW multithreading support
-    if (!fftw_init_threads()) {
-        fprintf(stderr, "FFTW thread init failed\n");
-        exit(1);
-    }
-    
-    fftw_plan_with_nthreads(1);
 
     // Pre-zero the output arrays
     #pragma omp parallel for simd
@@ -592,12 +649,13 @@ void occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag,
         vR_dm_imag[i] = 0.0;
     }
     
-    FFTWBuffersComplex **fftw_buffers_array = allocate_thread_fftw_buffers_complex(mesh, nthreads);
+    // Get both real and complex buffers for mixed operations
+    FFTWBuffersComplex **complex_buffers_array = get_cached_complex_buffers(mesh, nthreads);
     
     #pragma omp parallel
     {
         const int tid = omp_get_thread_num();
-        FFTWBuffersComplex *buf = fftw_buffers_array[tid];
+        FFTWBuffersComplex *complex_buf = complex_buffers_array[tid];
         
         // Parallelize over j (orbital index)
         #pragma omp for schedule(dynamic)
@@ -618,16 +676,18 @@ void occri_vR_kpts(double *vR_dm_real, double *vR_dm_imag,
                 double *mo_occ_kprim = &mo_occ[k_prim * nmo_max];
                 
                 integrals_uu_kpts(j, k_idx, k_prim, 
-                                 ao_k_j_real, ao_k_j_imag,
-                                 ao_kprim_real, ao_kprim_imag,
-                                 vR_dm_real, vR_dm_imag,
-                                 coulG, mo_occ_kprim,
-                                 expmikr_real, expmikr_imag, kpts, mesh,
-                                 nmo, ngrids, buf);
+                                    ao_k_j_real, ao_k_j_imag,
+                                    ao_kprim_real, ao_kprim_imag,
+                                    vR_dm_real, vR_dm_imag,
+                                    coulG, mo_occ_kprim,
+                                    expmikr_real, expmikr_imag, kpts, mesh,
+                                    nmo, ngrids, complex_buf);
+
             }
         }
     }
     
-    free_thread_fftw_buffers_complex(fftw_buffers_array, nthreads);
-    fftw_cleanup_threads();
+    // Don't free cached buffers - they will be reused
+    return 0;
 }
+

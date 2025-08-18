@@ -56,13 +56,25 @@ for i, kpt in enumerate(kpts):
     print(f"  k{i+1}: [{kpt[0]:8.4f}, {kpt[1]:8.4f}, {kpt[2]:8.4f}]")
 
 # Set up KRHF calculation with OCCRI
+import time
 mf = scf.KRHF(cell, kpts)
 mf.with_df = OCCRI(mf)  # Specify kmesh
 
 print("\nRunning KRHF calculation...")
+t0 = time.time()
 energy = mf.kernel()
 print(f"KRHF energy: {energy:.6f} Hartree")
 print(f"Converged: {mf.converged}")
+print(f"Time (w/ c-code): {time.time()-t0}")
+
+mf = scf.KRHF(cell, kpts)
+mf.with_df = OCCRI(mf, disable_c=True)  # Specify kmesh
+
+print("\nRunning KRHF calculation...")
+t0 = time.time()
+energy = mf.kernel()
+print(f"KRHF energy: {energy:.6f} Hartree")
+print(f"Time (w/o c-code): {time.time()-t0}")
 
 # =============================================================================
 # Example 2: Different SCF methods
@@ -133,45 +145,3 @@ print(f"    Gamma point energy: {e_gamma:.6f} Ha")
 print(f"\n5b. k-point sampling ({kmesh})")
 print(f"    k-point energy:     {e_rhf:.6f} Ha")
 print(f"    k-point correction: {e_rhf - e_gamma:.6f} Ha")
-
-# =============================================================================
-# Usage tips and best practices
-# =============================================================================
-print("\n" + "=" * 60)
-print("OCCRI Usage Tips")
-print("=" * 60)
-
-print(
-    """
-Best practices for OCCRI k-point calculations:
-
-1. FFT mesh convergence (most important):
-   - Increase mesh size until energy changes < 1-5 μHa/atom
-   - Example: [15]³ → [17]³ → [19]³ → [21]³
-   - Dense meshes improve accuracy but increase cost significantly
-
-2. k-point sampling:
-   - Start with 2×2×2 or 3×3×3 k-point mesh
-   - Increase until total energy converges
-   - More k-points = higher accuracy but O(N_k²) cost scaling
-
-3. Performance:
-   - C extension provides ~5-10× speedup when available
-   - Use disable_c=True for debugging or if C extension fails
-   - Memory usage scales as O(N_k × N_occ × N_grid)
-   - OCCRI scales as O(N_occ²) vs FFTDF O(N_AO²)
-   - Preferable for large basis sets (>~100 AOs), slower for small basis (<~100 AOs)
-
-4. Method selection:
-   - KRHF: Fast, suitable for closed-shell systems
-   - KUHF: Handles open-shell systems, slightly more expensive
-   - KRKS/KUKS: Include electron correlation via DFT
-
-5. Troubleshooting:
-   - If SCF doesn't converge, try different initial guess
-   - For large energy differences, check mesh size and k-point convergence
-   - Use standard PySCF as reference for validation
-"""
-)
-
-print("Example completed successfully!")

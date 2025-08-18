@@ -193,10 +193,9 @@ Compatible methods:
   • Gamma point calculations (use 02-kpoint for k-points)
 
 Performance tips:
-  • C extension ~5-10x faster than Python
+  • C extension faster than Python
   • Converge FFT mesh: start low, increase until energy changes < 1-5 μHa/atom
   • OCCRI scaling: O(N_occ²) vs FFTDF O(N_AO²)
-  • Use OCCRI for large basis sets (>~70 AOs), avoid for small basis (<~60 AOs)
   • Most beneficial when N_AO >> N_occ (large basis, few electrons)
 """
 )

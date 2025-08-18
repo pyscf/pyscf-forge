@@ -186,24 +186,6 @@ if len(nk_scaling) >= 3:
 else:
     print("Need at least 3 data points for reliable scaling analysis")
 
-# === Summary ===
-print(f"\n=== Summary ===")
-
-# Current average speedup
-avg_speedup = np.mean([results['time_fftdf'][i]/results['time_isdfx'][i] 
-                      for i in range(len(results['time_isdfx']))])
-print(f"Average ISDFX speedup: {avg_speedup:.2f}x")
-
-if len(nk_scaling) >= 3:
-    print(f"ISDFX scaling: O(Nk^{isdfx_scaling:.2f})")
-    print(f"FFTDF scaling: O(Nk^{fftdf_scaling:.2f})")
-    print(f"BUILD scaling: O(Nk^{build_scaling:.2f})")
-    
-    if isdfx_scaling < fftdf_scaling:
-        print(f"✓ ISDFX shows superior scaling for large k-point sets")
-    else:
-        print(f"⚠ May need larger k-point sets to see ISDFX scaling advantage")
-
 print(f"\n=== ISDFX Scaling Notes ===")
 print("• Log-log analysis reveals computational scaling behavior")
 print("• Scaling exponents determine efficiency for large systems")

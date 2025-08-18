@@ -28,7 +28,7 @@ try:
     ndpointer = numpy.ctypeslib.ndpointer
 
     occri_vR = liboccri.occri_vR
-    occri_vR.restype = None
+    occri_vR.restype = ctypes.c_int
     occri_vR.argtypes = [
         ndpointer(
             ctypes.c_double, flags="C_CONTIGUOUS"
@@ -59,7 +59,7 @@ try:
 
     # k-point exchange function with complex FFT support
     occri_vR_kpts = liboccri.occri_vR_kpts
-    occri_vR_kpts.restype = None
+    occri_vR_kpts.restype = ctypes.c_int
     occri_vR_kpts.argtypes = [
         ndpointer(
             ctypes.c_double, flags="C_CONTIGUOUS"

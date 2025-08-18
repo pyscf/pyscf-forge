@@ -165,9 +165,8 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
 
-    # Import C extension components
-    from pyscf.occri import _OCCRI_C_AVAILABLE, occri_vR_kpts
-
+    from pyscf.occri import occri_vR_kpts
+    
     inv_sqrt = 1.0 / ngrids**0.5
     coulG_all = numpy.empty((nk, ngrids), dtype=numpy.float64, order="C")
     expmikr_all_real = numpy.empty((nk, ngrids), dtype=numpy.float64, order="C")
@@ -207,27 +206,27 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
                 expmikr_all_imag[k_prim] = expmikr.imag
 
             # Call optimized C function
-            if _OCCRI_C_AVAILABLE and occri_vR_kpts is not None:
-                occri_vR_kpts(
-                    vR_dm_real,
-                    vR_dm_imag,
-                    mo_occ_flat,
-                    coulG_all.ravel(),
-                    mesh,
-                    expmikr_all_real.ravel(),
-                    expmikr_all_imag.ravel(),
-                    kpts.ravel(),
-                    ao_mos_real.ravel(),
-                    ao_mos_imag.ravel(),
-                    nmo,
-                    ngrids,
-                    nk,
-                    k,
-                )
-            else:
-                raise RuntimeError(
-                    "occri_get_k_opt_kpts called but C extension not available."
-                )
+            error_code = occri_vR_kpts(
+                vR_dm_real,
+                vR_dm_imag,
+                mo_occ_flat,
+                coulG_all.ravel(),
+                mesh,
+                expmikr_all_real.ravel(),
+                expmikr_all_imag.ravel(),
+                kpts.ravel(),
+                ao_mos_real.ravel(),
+                ao_mos_imag.ravel(),
+                nmo,
+                ngrids,
+                nk,
+                k,
+            )
+            if error_code != 0:
+                if error_code == -1:
+                    raise RuntimeError("FFTW thread initialization failed")
+                else:
+                    raise RuntimeError(f"OCCRI computation failed with error code {error_code}")
 
             # Reshape and apply weight - only take the first nmo orbitals
             vR_dm = (vR_dm_real + 1j * vR_dm_imag).reshape(nmo[k], ngrids)
