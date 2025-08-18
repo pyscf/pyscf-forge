@@ -380,11 +380,11 @@ def mol_from_trexio(filename):
         if trexio.has_nucleus_point_group(tf):
             mol.symmetry = trexio.read_nucleus_point_group(tf)
 
-        nuc_idx = trexio.read_basis_nucleus_index(tf).astype(int).tolist()
-        ls = trexio.read_basis_shell_ang_mom(tf).astype(int).tolist()
-        prim2sh = trexio.read_basis_shell_index(tf).astype(int).tolist()
-        exps = trexio.read_basis_exponent(tf).astype(float).tolist()
-        coef = trexio.read_basis_coefficient(tf).astype(float).tolist()
+        nuc_idx = trexio.read_basis_nucleus_index(tf).tolist()
+        ls = trexio.read_basis_shell_ang_mom(tf).tolist()
+        prim2sh = trexio.read_basis_shell_index(tf).tolist()
+        exps = trexio.read_basis_exponent(tf).tolist()
+        coef = trexio.read_basis_coefficient(tf).tolist()
 
     basis = {}
     exps = _group_by(exps, prim2sh)
