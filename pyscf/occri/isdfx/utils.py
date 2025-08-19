@@ -133,7 +133,7 @@ def ao_indices_by_atom(cell):
     return ao_index_by_atom
 
 
-def get_fitting_functions(mydf, ao_indices=None):
+def get_fitting_functions(mydf, aovals, ao_indices=None):
     """
     Construct ISDFX fitting functions at selected pivot points.
 
@@ -157,7 +157,6 @@ def get_fitting_functions(mydf, ao_indices=None):
     - X^(Rg,Rg) = Σ_k φ_μ^k(Rg)* φ_ν^k(Rg) : overlap at pivot points
     - X^(Rg,R) = Σ_k φ_μ^k(Rg)* φ_ν^k(R) : cross-overlap pivot to all points
     """
-    aovals = mydf.aovals
     Rg = mydf.pivots
 
     phiLocalR = aovals if ao_indices is None else [ao[ao_indices] for ao in aovals]
@@ -173,7 +172,6 @@ def get_fitting_functions(mydf, ao_indices=None):
     else:
         X_Rg_R *= sum(numpy.matmul(aok[:, Rg].T.conj(), aok) for aok in aovals)
 
-    mydf.aovals = [numpy.asarray(ao[:, Rg], order="C") for ao in aovals]
     # Give expected symmetry??
     return solve(
         X_Rg_Rg, X_Rg_R, overwrite_a=True, overwrite_b=True, check_finite=False

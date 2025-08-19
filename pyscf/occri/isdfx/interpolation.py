@@ -88,10 +88,6 @@ def get_pivots(mydf):
     aovals_on_pivots = [ao_k[:, local_pivots] for ao_k in aovals]
     global_pivots = pivoted_cholesky_decomposition(mydf, aovals_on_pivots)
 
-    # Store results
-    mydf.pivots = numpy.sort(local_pivots[global_pivots])
-    mydf.aovals = aovals
-
     logger.info(
         mydf,
         "  ISDFX selected %d/%d grid points (%.2f%% compression)",
@@ -99,6 +95,8 @@ def get_pivots(mydf):
         ngrids,
         100 * len(mydf.pivots) / ngrids,
     )
+
+    return numpy.sort(local_pivots[global_pivots]), aovals
 
 
 def get_thc_potential(mydf, fitting_functions):
@@ -181,5 +179,4 @@ def get_thc_potential(mydf, fitting_functions):
         overwrite_x=True,
     )
 
-    # Store result in ISDFX object
-    mydf.W = thc_potential
+    return thc_potential

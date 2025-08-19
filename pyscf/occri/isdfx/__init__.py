@@ -101,17 +101,23 @@ class ISDFX(OCCRI):
 
         # Step 1: Get pivot points
         logger.debug(self, "Selecting ISDFX pivot points")
-        interpolation.get_pivots(self)
+        pivots, aovals = interpolation.get_pivots(self)
+        self.pivots = pivots
         cput0 = log.timer("Pivot selection", *cput0)
 
         # Step 2: Build fitting functions
         logger.debug(self, "Building ISDFX fitting functions")
-        fitting_fxns = get_fitting_functions(self)
+        fitting_fxns = get_fitting_functions(self, aovals)
         cput0 = log.timer("Build fitting functions", *cput0)
+
+        # Store AOs on pivots
+        self.aovals = [numpy.asarray(ao[:, pivots], order="C") for ao in aovals]
+        aovals = None
 
         # Step 3: Calculate THC Potential
         logger.debug(self, "Calculating THC potential")
-        interpolation.get_thc_potential(self, fitting_fxns)
+        W = interpolation.get_thc_potential(self, fitting_fxns)
+        self.W = W
         cput0 = log.timer("Calculate THC potential", *cput0)
 
         return self

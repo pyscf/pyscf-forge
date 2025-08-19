@@ -13,6 +13,7 @@ import pyscf
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.occri import occri_k_kpts
+from pyscf.pbc.tools.k2gamma import kpts_to_kmesh
 
 # Attempt to load the optimized C extension with FFTW, BLAS, and OpenMP
 # Fall back to pure Python implementation if unavailable
@@ -148,19 +149,16 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         self.cell = mydf.cell
         kpts = mydf.kpts
         if kpts is None:
-            kpts = numpy.zeros(3, numpy.float64)
-        kpts = kpts.round(6)
-        self.kmesh = [
-            numpy.unique(kpts[:, 0]).shape[0],
-            numpy.unique(kpts[:, 1]).shape[0],
-            numpy.unique(kpts[:, 2]).shape[0],
-        ]
-        self.kpts = self.cell.make_kpts(
-            self.kmesh,
-            space_group_symmetry=False,
-            time_reversal_symmetry=False,
-            wrap_around=True,
-        )
+            self.kpts = numpy.zeros(3, numpy.float64)
+            self.kmesh = [1,1,1]
+        else:
+            self.kmesh = kpts_to_kmesh(self.cell, kpts, precision=None, rcut=None)
+            self.kpts = self.cell.make_kpts(
+                self.kmesh,
+                space_group_symmetry=False,
+                time_reversal_symmetry=False,
+                wrap_around=True,
+            )
         super().__init__(
             cell=self.cell, kpts=self.kpts
         )  # Need this for pyscf's eval_ao function
@@ -258,9 +256,6 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         from .utils import make_natural_orbitals
 
         return make_natural_orbitals(self.cell, self.kpts, dms)
-
-    def __del__(self):
-        return
 
     def copy(self):
         """Create a shallow copy"""
