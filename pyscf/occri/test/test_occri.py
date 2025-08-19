@@ -64,7 +64,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation
         mf_occri = scf.RHF(cell)
-        mf_occri.with_df = OCCRI(mf_occri)
+        mf_occri.with_df = OCCRI.from_mf(mf_occri)
         mf_occri.kernel()
         e_occri = mf_occri.e_tot
 
@@ -81,7 +81,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation
         mf_occri = scf.UHF(cell)
-        mf_occri.with_df = OCCRI(mf_occri)
+        mf_occri.with_df = OCCRI.from_mf(mf_occri)
         mf_occri.kernel()
         e_occri = mf_occri.e_tot
 
@@ -98,7 +98,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation - use same initial guess as reference
         mf_occri = scf.KRHF(cell, kpts)
-        mf_occri.with_df = OCCRI(mf_occri)
+        mf_occri.with_df = OCCRI.from_mf(mf_occri)
         # Start from reference MO coefficients to ensure same state
         mf_occri.kernel(dm0=mf_ref.make_rdm1())
         e_occri = mf_occri.e_tot
@@ -119,7 +119,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation
         mf_occri = scf.KUHF(cell, kpts)
-        mf_occri.with_df = OCCRI(mf_occri)
+        mf_occri.with_df = OCCRI.from_mf(mf_occri)
         mf_occri.kernel()
         e_occri = mf_occri.e_tot
 
@@ -139,7 +139,7 @@ class TestOCCRI(unittest.TestCase):
         _, vk_ref = df_ref.get_jk(dm, exxdiv=None, with_k=True)
 
         # OCCRI calculation
-        df_occri = OCCRI(mf_ref)
+        df_occri = OCCRI.from_mf(mf_ref)
         _, vk_occri = df_occri.get_jk(dm=dm, exxdiv=None, with_k=True)
 
         # Check K matrix agreement
@@ -155,7 +155,7 @@ class TestOCCRI(unittest.TestCase):
         _, vk_ref = df_ref.get_jk(dm, exxdiv=None, with_k=True)
 
         # OCCRI calculation
-        df_occri = OCCRI(mf_ref)
+        df_occri = OCCRI.from_mf(mf_ref)
         _, vk_occri = df_occri.get_jk(dm=dm, exxdiv=None, with_k=True)
 
         # Check K matrices agreement
@@ -171,7 +171,7 @@ class TestOCCRI(unittest.TestCase):
         _, vk_ref = df_ref.get_jk(dms, kpts=kpts, exxdiv=None, with_k=True)
 
         # OCCRI calculation
-        df_occri = OCCRI(mf_ref)
+        df_occri = OCCRI.from_mf(mf_ref)
         _, vk_occri = df_occri.get_jk(dm=dms, kpts=kpts, exxdiv=None, with_k=True)
 
         # Check data types
@@ -192,7 +192,7 @@ class TestOCCRI(unittest.TestCase):
         dm = mf_ref.get_init_guess()
 
         # OCCRI with and without Ewald correction
-        df_occri = OCCRI(mf_ref)
+        df_occri = OCCRI.from_mf(mf_ref)
         _, vk1 = df_occri.get_jk(dm=dm, exxdiv=None, with_k=True)
         _, vk2 = df_occri.get_jk(dm=dm, exxdiv="ewald", with_k=True)
 
@@ -203,7 +203,7 @@ class TestOCCRI(unittest.TestCase):
         """Test natural orbital construction with k-points"""
 
         mf = scf.KRHF(cell, kpts)
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         mf.kernel()
         dm = mf.make_rdm1().reshape(-1, kpts.shape[0], cell.nao, cell.nao)
 
@@ -227,13 +227,13 @@ class TestOCCRI(unittest.TestCase):
         """Test fallback to Python implementation"""
         # Test with C extension disabled
         mf_python = scf.RHF(cell)
-        mf_python.with_df = OCCRI(mf_python, disable_c=True)
+        mf_python.with_df = OCCRI.from_mf(mf_python, disable_c=True)
         mf_python.kernel()
         e_python = mf_python.e_tot
 
         # Test with C extension enabled (if available)
         mf_c = scf.RHF(cell)
-        mf_c.with_df = OCCRI(mf_c, disable_c=False)
+        mf_c.with_df = OCCRI.from_mf(mf_c, disable_c=False)
         mf_c.kernel()
         e_c = mf_c.e_tot
 
@@ -246,7 +246,7 @@ class TestOCCRI(unittest.TestCase):
 
         # Create OCCRI object
         mf = scf.RHF(cell)
-        df = OCCRI(mf)
+        df = OCCRI.from_mf(mf)
 
         # This should not raise an exception
         log_mem(df)
@@ -278,13 +278,13 @@ class TestOCCRI(unittest.TestCase):
         """Test that RHF and UHF give same results for closed shell"""
         # RHF calculation
         mf_rhf = scf.RHF(cell)
-        mf_rhf.with_df = OCCRI(mf_rhf)
+        mf_rhf.with_df = OCCRI.from_mf(mf_rhf)
         mf_rhf.kernel()
         e_rhf = mf_rhf.e_tot
 
         # UHF calculation with same density
         mf_uhf = scf.UHF(cell)
-        mf_uhf.with_df = OCCRI(mf_uhf)
+        mf_uhf.with_df = OCCRI.from_mf(mf_uhf)
         # Initialize with RHF density
         dm_rhf = mf_rhf.make_rdm1()
         mf_uhf.init_guess = "hcore"
@@ -321,13 +321,13 @@ class TestOCCRI(unittest.TestCase):
         """Test that KRHF and KUHF give same results for closed shell k-point systems"""
         # KRHF calculation
         mf_krhf = scf.KRHF(cell, kpts)
-        mf_krhf.with_df = OCCRI(mf_krhf, disable_c=True)
+        mf_krhf.with_df = OCCRI.from_mf(mf_krhf, disable_c=True)
         mf_krhf.kernel()
         e_krhf = mf_krhf.e_tot
 
         # KUHF calculation with same initial density
         mf_kuhf = scf.KUHF(cell, kpts)
-        mf_kuhf.with_df = OCCRI(mf_kuhf, disable_c=True)
+        mf_kuhf.with_df = OCCRI.from_mf(mf_kuhf, disable_c=True)
         # Initialize with symmetric alpha/beta densities from KRHF
         dm_krhf = mf_krhf.make_rdm1()
         dm_alpha = dm_krhf / 2
@@ -362,7 +362,7 @@ class TestOCCRI(unittest.TestCase):
 
         # OCCRI calculation
         mf_occri = scf.RHF(h2_cell)
-        mf_occri.with_df = OCCRI(mf_occri)
+        mf_occri.with_df = OCCRI.from_mf(mf_occri)
         mf_occri.kernel()
         e_occri = mf_occri.e_tot
 

@@ -52,7 +52,7 @@ class TestRegression(unittest.TestCase):
         en_fftdf = -43.9399339901445
 
         mf = scf.RHF(self.cell)
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         en = mf.kernel()
 
         en_diff = abs(en - en_fftdf) / self.cell.natm
@@ -66,7 +66,7 @@ class TestRegression(unittest.TestCase):
         en_fftdf = -43.9399339901445
 
         mf = scf.UHF(self.cell)
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         en = mf.kernel()
 
         en_diff = abs(en - en_fftdf) / self.cell.natm
@@ -81,7 +81,7 @@ class TestRegression(unittest.TestCase):
 
         mf = scf.RKS(self.cell)
         mf.xc = "pbe0"
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         en = mf.kernel()
 
         en_diff = abs(en - en_fftdf) / self.cell.natm
@@ -96,7 +96,7 @@ class TestRegression(unittest.TestCase):
 
         mf = scf.UKS(self.cell)
         mf.xc = "pbe0"
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         en = mf.kernel()
 
         en_diff = abs(en - en_fftdf) / self.cell.natm
@@ -128,7 +128,7 @@ class TestRegression(unittest.TestCase):
 
         # OCCRI calculation
         mf = scf.RHF(h2_cell)
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         en = mf.kernel()
 
         # Should be very close for small system
@@ -138,7 +138,7 @@ class TestRegression(unittest.TestCase):
     def test_convergence_properties(self):
         """Test that calculations properly converge"""
         mf = scf.RHF(self.cell)
-        mf.with_df = OCCRI(mf)
+        mf.with_df = OCCRI.from_mf(mf)
         mf.kernel()
 
         # Check convergence

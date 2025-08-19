@@ -59,7 +59,7 @@ class TestPerformance(unittest.TestCase):
         # Python implementation
         start_time = time.time()
         mf_python = scf.RHF(cell)
-        mf_python.with_df = OCCRI(mf_python, disable_c=True)
+        mf_python.with_df = OCCRI.from_mf(mf_python, disable_c=True)
         mf_python.kernel()
         python_time = time.time() - start_time
         e_python = mf_python.e_tot
@@ -67,7 +67,7 @@ class TestPerformance(unittest.TestCase):
         # C implementation
         start_time = time.time()
         mf_c = scf.RHF(cell)
-        mf_c.with_df = OCCRI(mf_c, disable_c=False)
+        mf_c.with_df = OCCRI.from_mf(mf_c, disable_c=False)
         mf_c.kernel()
         c_time = time.time() - start_time
         e_c = mf_c.e_tot
@@ -98,14 +98,14 @@ class TestPerformance(unittest.TestCase):
 
         mem_start = lib.current_memory()[0]
         mf_small = scf.RHF(small_cell)
-        mf_small.with_df = OCCRI(mf_small)
+        mf_small.with_df = OCCRI.from_mf(mf_small)
         mf_small.kernel()
         mem_small = lib.current_memory()[0] - mem_start
 
         # Larger system
         mem_start = lib.current_memory()[0]
         mf_large = scf.RHF(cell)
-        mf_large.with_df = OCCRI(mf_large)
+        mf_large.with_df = OCCRI.from_mf(mf_large)
         mf_large.kernel()
         mem_large = lib.current_memory()[0] - mem_start
 
@@ -131,14 +131,14 @@ class TestPerformance(unittest.TestCase):
 
         start_time = time.time()
         mf_kpts = scf.KRHF(cell, kpts)
-        mf_kpts.with_df = OCCRI(mf_kpts)
+        mf_kpts.with_df = OCCRI.from_mf(mf_kpts)
         mf_kpts.kernel()
         kpts_time = time.time() - start_time
 
         # Gamma point for comparison
         start_time = time.time()
         mf_gamma = scf.RHF(cell)
-        mf_gamma.with_df = OCCRI(mf_gamma)
+        mf_gamma.with_df = OCCRI.from_mf(mf_gamma)
         mf_gamma.kernel()
         gamma_time = time.time() - start_time
 
@@ -161,7 +161,7 @@ class TestPerformance(unittest.TestCase):
         for seed in range(5):
             numpy.random.seed(seed)
             mf = scf.RHF(cell)
-            mf.with_df = OCCRI(mf)
+            mf.with_df = OCCRI.from_mf(mf)
             mf.kernel()
 
             self.assertTrue(mf.converged, f"SCF failed to converge with seed {seed}")

@@ -126,28 +126,37 @@ def log_mem(mydf):
 
 
 class OCCRI(pyscf.pbc.df.fft.FFTDF):
-    """Occupied Orbital Coulomb Resolution of Identity density fitting"""
+    """
+    Occupied Orbital Coulomb Resolution of Identity density fitting
+    Defaults to incore algorithm if memory is sufficient.
+    To require OCCRI method, set mf._is_mem_enough = lambda: False 
+    """
 
     def __init__(
         self,
-        mydf,
+        cell,
+        kpts=None,
         disable_c=False,
         **kwargs,
     ):
-        """Initialize OCCRI density fitting object"""
-
-        mydf._is_mem_enough = lambda: False
+        """Initialize OCCRI density fitting object
+        
+        Parameters
+        ----------
+        cell : pyscf.pbc.gto.Cell
+            Unit cell object
+        kpts : ndarray, optional
+            k-points for periodic boundary conditions
+        disable_c : bool, optional
+            If True, use pure Python implementation
+        """
         # BUG: Some PySCF methods have bugs when tagging initial guess dm.
         # For example, RKRS can modify dm without modifying mo_occ in the same way.
         # As a work around, always diagonalize dm on first iteration. See 02-kpoint...
         self.scf_iter = 0
 
-        self.method = mydf.__module__.rsplit(".", 1)[-1]
-        assert self.method in ["hf", "uhf", "khf", "kuhf", "rks", "uks", "krks", "kuks"]
-
         self.StartTime = time.time()
-        self.cell = mydf.cell
-        kpts = mydf.kpts
+        self.cell = cell
         if kpts is None:
             self.kpts = numpy.zeros(3, numpy.float64)
             self.kmesh = [1,1,1]
@@ -175,11 +184,74 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
                 occri_k_kpts.occri_get_k_kpts
             )  # Pure Python k-point fallback with complex arithmetic
 
-        # # Print all attributes
-        # print()
-        # print("******** <class 'OCCRI'> ********", flush=True)
-        # for key, value in vars(self).items():
-        #     print(f"{key}: {value}", flush=True)
+        self.dump_flags()
+
+    def dump_flags(self, verbose=None):
+        log = logger.new_logger(self, verbose)
+        log.info('******** %s ********', self.__class__)
+        log.info('get_k = %s', self.get_k)
+        log.info('kmesh = %s', self.kmesh)
+        return self
+
+    @classmethod
+    def from_mf(cls, mf, disable_c=False, **kwargs):
+        """Create OCCRI instance from mean-field object
+        
+        Parameters
+        ----------
+        mf : pyscf mean-field object
+            Mean-field instance (RHF, UHF, RKS, UKS, etc.)
+        disable_c : bool, optional
+            If True, use pure Python implementation
+        **kwargs
+            Additional arguments passed to OCCRI constructor
+            
+        Returns
+        -------
+        OCCRI
+            OCCRI density fitting instance configured for the given mean-field methods
+
+
+        Example
+        -------        
+        from pyscf.pbc import gto, scf
+        from pyscf.occri import OCCRI
+        
+        # Set up cell
+        cell = gto.Cell()
+        cell.atom = 'H 0 0 0; H 0 0 1'
+        cell.basis = 'sto3g'
+        cell.build()
+
+        # Create mean-field object
+        mf = scf.RHF(cell)
+
+        # Use factory method to create OCCRI
+        mf.with_df = OCCRI.from_mf(mf)
+
+        # Run calculation
+        energy = mf.kernel()
+
+        Alternative direct construction:
+
+        # You can also create OCCRI directly if you have cell and kpts
+        # However! It will default to the incore algo if memory is sufficient
+        occri = OCCRI(cell, kpts=None)  # Direct construction
+        mf.with_df = occri            
+        """
+        # Validate mean-field instance
+        mf._is_mem_enough = lambda: False
+        
+        # Extract method information
+        method = mf.__module__.rsplit(".", 1)[-1]
+        assert method in ["hf", "uhf", "khf", "kuhf", "rks", "uks", "krks", "kuks"], \
+            f"Unsupported mean-field method: {method}"
+        
+        # Create OCCRI instance
+        occri = cls(mf.cell, mf.kpts, disable_c=disable_c, **kwargs)
+        occri.method = method
+        
+        return occri
 
     def get_jk(
         self,

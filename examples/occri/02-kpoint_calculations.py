@@ -11,7 +11,7 @@ and solid-state systems.
 Key features demonstrated:
 - Setting up k-point calculations with OCCRI
 - Different SCF methods (RHF, UHF, RKS, UKS)
-- Configuration options (C extension vs Python, different k-meshes)
+- Configuration options
 - Performance considerations and best practices
 """
 
@@ -56,25 +56,21 @@ for i, kpt in enumerate(kpts):
     print(f"  k{i+1}: [{kpt[0]:8.4f}, {kpt[1]:8.4f}, {kpt[2]:8.4f}]")
 
 # Set up KRHF calculation with OCCRI
-import time
 mf = scf.KRHF(cell, kpts)
-mf.with_df = OCCRI(mf)  # Specify kmesh
+mf.with_df = OCCRI.from_mf(mf)
 
 print("\nRunning KRHF calculation...")
-t0 = time.time()
 energy = mf.kernel()
 print(f"KRHF energy: {energy:.6f} Hartree")
-print(f"Converged: {mf.converged}")
-print(f"Time (w/ c-code): {time.time()-t0}")
+
 
 mf = scf.KRHF(cell, kpts)
-mf.with_df = OCCRI(mf, disable_c=True)  # Specify kmesh
+mf.with_df = OCCRI.from_mf(mf, disable_c=True)
 
 print("\nRunning KRHF calculation...")
-t0 = time.time()
 energy = mf.kernel()
 print(f"KRHF energy: {energy:.6f} Hartree")
-print(f"Time (w/o c-code): {time.time()-t0}")
+
 
 # =============================================================================
 # Example 2: Different SCF methods
@@ -86,14 +82,14 @@ print("=" * 60)
 # RHF - Restricted (closed shell)
 print("\n2a. Restricted Hartree-Fock (RHF)")
 mf_rhf = scf.KRHF(cell, kpts)
-mf_rhf.with_df = OCCRI(mf_rhf)
+mf_rhf.with_df = OCCRI.from_mf(mf_rhf)
 e_rhf = mf_rhf.kernel()
 print(f"    Energy: {e_rhf:.6f} Ha")
 
 # UHF - Unrestricted (open shell capable)
 print("\n2b. Unrestricted Hartree-Fock (UHF)")
 mf_uhf = scf.KUHF(cell, kpts)
-mf_uhf.with_df = OCCRI(mf_uhf)
+mf_uhf.with_df = OCCRI.from_mf(mf_uhf)
 e_uhf = mf_uhf.kernel()
 print(f"    Energy: {e_uhf:.6f} Ha")
 
@@ -101,7 +97,7 @@ print(f"    Energy: {e_uhf:.6f} Ha")
 print("\n2c. DFT with PBE0 hybrid functional")
 mf_dft = scf.KRKS(cell, kpts)
 mf_dft.xc = "pbe0"  # 25% exact exchange + PBE correlation
-mf_dft.with_df = OCCRI(mf_dft)
+mf_dft.with_df = OCCRI.from_mf(mf_dft)
 e_dft = mf_dft.kernel()
 print(f"    Energy: {e_dft:.6f} Ha")
 
@@ -112,19 +108,25 @@ print("\n" + "=" * 60)
 print("Example 3: OCCRI configuration options")
 print("=" * 60)
 
-# Force Python implementation (useful for debugging)
+import time
+
+# Force Python implementation
 print("\n3a. Python implementation (disable_c=True)")
 mf_python = scf.KRHF(cell, kpts)
-mf_python.with_df = OCCRI(mf_python, disable_c=True)
+mf_python.with_df = OCCRI.from_mf(mf_python, disable_c=True)
+t0 = time.time()
 e_python = mf_python.kernel()
 print(f"    Energy (Python): {e_python:.6f} Ha")
+print(f"    Time (Python): {time.time()-t0}")
 
 # Use C extension if available (default)
 print("\n3b. C extension (default, disable_c=False)")
 mf_c = scf.KRHF(cell, kpts)
-mf_c.with_df = OCCRI(mf_c, disable_c=False)
+mf_c.with_df = OCCRI.from_mf(mf_c, disable_c=False)
+t0 = time.time()
 e_c = mf_c.kernel()
 print(f"    Energy (C ext):  {e_c:.6f} Ha")
+print(f"    Time (C ext): {time.time()-t0}")
 
 
 # =============================================================================
@@ -137,7 +139,7 @@ print("=" * 60)
 # Gamma point only (equivalent to molecular calculation)
 print("\n5a. Gamma point only")
 mf_gamma = scf.RHF(cell)  # Note: RHF (not KRHF) for gamma point
-mf_gamma.with_df = OCCRI(mf_gamma)  # No kmesh needed for gamma point
+mf_gamma.with_df = OCCRI.from_mf(mf_gamma)
 e_gamma = mf_gamma.kernel()
 print(f"    Gamma point energy: {e_gamma:.6f} Ha")
 
