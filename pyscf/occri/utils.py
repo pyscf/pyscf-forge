@@ -7,7 +7,6 @@ reused across different contexts.
 
 import numpy
 import scipy.linalg
-
 from pyscf import lib
 
 
@@ -37,7 +36,7 @@ def make_natural_orbitals(cell, kpts, dms):
     nset = dms.shape[0]
 
     # Compute k-point dependent overlap matrices
-    sk = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
+    sk = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
     if abs(dms.imag).max() < 1.0e-6:
         sk = [s.real.astype(numpy.float64) for s in sk]
 
@@ -83,12 +82,12 @@ def build_full_exchange(S, Kao, mo_coeff):
     Sa = S @ mo_coeff.T
 
     # First and second terms: Sa @ Kao.T + (Sa @ Kao.T).T
-    Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order="C")
+    Sa_Kao = numpy.matmul(Sa, Kao.T.conj(), order='C')
     Kuv = Sa_Kao + Sa_Kao.T.conj()
 
     # Third term: -Sa @ (mo_coeff @ Kao) @ Sa.T
     Koo = mo_coeff.conj() @ Kao
     Sa_Koo = numpy.matmul(Sa, Koo)
-    Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order="C")
+    Kuv -= numpy.matmul(Sa_Koo, Sa.T.conj(), order='C')
 
     return Kuv

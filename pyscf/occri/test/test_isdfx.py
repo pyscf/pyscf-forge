@@ -11,7 +11,6 @@ Tests the ISDFX implementation including:
 import unittest
 
 import numpy
-
 from pyscf.occri.isdfx import ISDFX
 from pyscf.occri.isdfx.utils import (ao_indices_by_atom,
                                      pivoted_cholesky_decomposition,

@@ -9,7 +9,6 @@ existing test case in test_get_k.py.
 import unittest
 
 import numpy
-
 from pyscf.occri import OCCRI
 from pyscf.pbc import gto as pbcgto
 from pyscf.pbc import scf
@@ -23,7 +22,7 @@ class TestRegression(unittest.TestCase):
     def setUp(self):
         """Setup diamond structure test system"""
         self.cell = pbcgto.Cell()
-        self.cell.atom = """ 
+        self.cell.atom = """
             C 0.000000 0.000000 1.780373
             C 0.890186 0.890186 2.670559
             C 0.000000 1.780373 0.000000

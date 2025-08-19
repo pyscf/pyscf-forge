@@ -17,14 +17,14 @@ Usage:
 """
 
 import numpy
-from scipy.fft import hfftn, ifftn
-
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.occri import OCCRI
+
 # Import submodules for better organization
 from pyscf.occri.isdfx import interpolation
 from pyscf.occri.isdfx.isdfx_k_kpts import isdfx_get_k_kpts
+from scipy.fft import hfftn, ifftn
 
 from .utils import get_fitting_functions
 
@@ -78,7 +78,7 @@ class ISDFX(OCCRI):
         **kwargs : dict
             Additional arguments passed to parent OCCRI class
         """
-        
+
         self.isdf_thresh = isdf_thresh
         self.isdf_pts_from_gamma_point = True
         super().__init__(cell, kpts, disable_c=disable_c, **kwargs)
@@ -90,12 +90,12 @@ class ISDFX(OCCRI):
         log.info('******** %s ********', self.__class__)
         log.info('isdf_threshold = %s', self.isdf_thresh)
         log.info('from_gamma_point = %s', self.isdf_pts_from_gamma_point)
-        return self        
+        return self
 
     @classmethod
     def from_mf(cls, mf, isdf_thresh=1e-6, disable_c=False, **kwargs):
         """Create ISDFX instance from mean-field object
-        
+
         Parameters
         ----------
         mf : pyscf mean-field object
@@ -107,38 +107,46 @@ class ISDFX(OCCRI):
             If True, use pure Python implementation
         **kwargs
             Additional arguments passed to ISDFX constructor
-            
+
         Returns
         -------
         ISDFX
             ISDFX density fitting instance configured for the given mean-field method
-            
+
         Examples
         --------
         >>> from pyscf.pbc import gto, scf
         >>> from pyscf.occri.isdfx import ISDFX
-        >>> 
+        >>>
         >>> cell = gto.Cell()
         >>> cell.atom = 'H 0 0 0; H 0 0 1'
         >>> cell.basis = 'sto3g'
         >>> cell.build()
-        >>> 
+        >>>
         >>> mf = scf.KRHF(cell, cell.make_kpts([2,2,2]))
         >>> mf.with_df = ISDFX.from_mf(mf, isdf_thresh=1e-6)
         >>> energy = mf.kernel()
         """
         # Validate mean-field instance
         mf._is_mem_enough = lambda: False
-        
+
         # Extract method information
-        method = mf.__module__.rsplit(".", 1)[-1]
-        assert method in ["hf", "uhf", "khf", "kuhf", "rks", "uks", "krks", "kuks"], \
-            f"Unsupported mean-field method: {method}"
-        
+        method = mf.__module__.rsplit('.', 1)[-1]
+        assert method in [
+            'hf',
+            'uhf',
+            'khf',
+            'kuhf',
+            'rks',
+            'uks',
+            'krks',
+            'kuks',
+        ], f'Unsupported mean-field method: {method}'
+
         # Create ISDFX instance
         isdfx = cls(mf.cell, mf.kpts, isdf_thresh=isdf_thresh, disable_c=disable_c, **kwargs)
         isdfx.method = method
-        
+
         return isdfx
 
     def convolve_with_W(self, U):
@@ -146,9 +154,7 @@ class ISDFX(OCCRI):
         kmesh = self.kmesh
         n0, n1 = W.shape[-2], W.shape[-1]
         Nk = numpy.prod(kmesh)
-        U_fft = hfftn(
-            U.reshape(*kmesh, n0, n1), s=(kmesh), axes=[0, 1, 2], overwrite_x=True
-        ).astype(numpy.complex128)
+        U_fft = hfftn(U.reshape(*kmesh, n0, n1), s=(kmesh), axes=[0, 1, 2], overwrite_x=True).astype(numpy.complex128)
         U_fft *= W
         U[:] = ifftn(U_fft, axes=[0, 1, 2], overwrite_x=True).reshape(Nk, n0, n1)
 
@@ -159,32 +165,32 @@ class ISDFX(OCCRI):
         log = logger.Logger(self.stdout, self.verbose)
 
         # Step 1: Get pivot points
-        logger.debug(self, "Selecting ISDFX pivot points")
+        logger.debug(self, 'Selecting ISDFX pivot points')
         pivots, aovals = interpolation.get_pivots(self)
         self.pivots = pivots
-        cput0 = log.timer("Pivot selection", *cput0)
+        cput0 = log.timer('Pivot selection', *cput0)
         ngrids = self.grids.coords.shape[0]
         logger.info(
             self,
-            "  ISDFX selected %d/%d grid points (%.2f%% compression)",
+            '  ISDFX selected %d/%d grid points (%.2f%% compression)',
             len(self.pivots),
             ngrids,
             100 * len(self.pivots) / ngrids,
         )
 
         # Step 2: Build fitting functions
-        logger.debug(self, "Building ISDFX fitting functions")
+        logger.debug(self, 'Building ISDFX fitting functions')
         fitting_fxns = get_fitting_functions(self, aovals)
-        cput0 = log.timer("Build fitting functions", *cput0)
+        cput0 = log.timer('Build fitting functions', *cput0)
 
         # Store AOs on pivots
-        self.aovals = [numpy.asarray(ao[:, pivots], order="C") for ao in aovals]
+        self.aovals = [numpy.asarray(ao[:, pivots], order='C') for ao in aovals]
         aovals = None
 
         # Step 3: Calculate THC Potential
-        logger.debug(self, "Calculating THC potential")
+        logger.debug(self, 'Calculating THC potential')
         W = interpolation.get_thc_potential(self, fitting_fxns)
         self.W = W
-        cput0 = log.timer("Calculate THC potential", *cput0)
+        cput0 = log.timer('Calculate THC potential', *cput0)
 
         return self

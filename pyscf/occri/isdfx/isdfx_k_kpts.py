@@ -10,10 +10,9 @@ Main functions:
 """
 
 import numpy
-from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
-
 from pyscf.lib import logger
 from pyscf.occri.utils import build_full_exchange
+from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
 
 
 def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
@@ -64,7 +63,7 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
     5. Apply Ewald correction if requested
     """
     cell = mydf.cell
-    assert cell.low_dim_ft_type != "inf_vacuum"
+    assert cell.low_dim_ft_type != 'inf_vacuum'
     assert cell.dimension != 1
     nao = cell.nao
     kpts = mydf.kpts
@@ -73,17 +72,13 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
     mo_occ = dms.mo_occ
     aovals = mydf.aovals  # AO values at ISDFX interpolation points
 
-    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
-    out_type = (
-        numpy.complex128
-        if any(sk.dtype == numpy.complex128 for sk in s)
-        else numpy.float64
-    )
-    vk = numpy.empty((nset, nk, nao, nao), dtype=out_type, order="C")
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
+    out_type = numpy.complex128 if any(sk.dtype == numpy.complex128 for sk in s) else numpy.float64
+    vk = numpy.empty((nset, nk, nao, nao), dtype=out_type, order='C')
     for n in range(nset):
         ao_mos = [mo_coeff[n][k] @ aovals[k] for k in range(nk)]
         rho1 = [(ao_mos[k].T * mo_occ[n][k]) @ ao_mos[k].conj() for k in range(nk)]
-        rho1 = numpy.asarray(rho1, dtype=numpy.complex128, order="C")
+        rho1 = numpy.asarray(rho1, dtype=numpy.complex128, order='C')
         mydf.convolve_with_W(rho1)
         vR = rho1
         if out_type == numpy.float64:
@@ -91,12 +86,12 @@ def isdfx_get_k_kpts(mydf, dms, exxdiv=None):
 
         t1 = (logger.process_clock(), logger.perf_counter())
         for k in range(nk):
-            vR_dm = numpy.matmul(vR[k], ao_mos[k].T, order="C")
-            vkao = numpy.matmul(aovals[k].conj(), vR_dm, order="C")
+            vR_dm = numpy.matmul(vR[k], ao_mos[k].T, order='C')
+            vkao = numpy.matmul(aovals[k].conj(), vR_dm, order='C')
             vk[n][k] = build_full_exchange(s[k], vkao, mo_coeff[n][k])
-            t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
+            t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)' % k, *t1)
 
-    if exxdiv == "ewald" and cell.dimension != 0:
+    if exxdiv == 'ewald' and cell.dimension != 0:
         _ewald_exxdiv_for_G0(cell, kpts, dms, vk)
 
     return vk

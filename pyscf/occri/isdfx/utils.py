@@ -6,12 +6,11 @@ reused across different contexts.
 """
 
 import numpy
+from pyscf.lib import logger
+from pyscf.pbc import tools
 from scipy.linalg import solve
 from scipy.linalg.lapack import dpstrf
 from scipy.spatial.distance import cdist
-
-from pyscf.lib import logger
-from pyscf.pbc import tools
 
 
 def pivoted_cholesky_decomposition(mydf, aovals, ao_indices=None):
@@ -62,7 +61,7 @@ def pivoted_cholesky_decomposition(mydf, aovals, ao_indices=None):
 
     logger.debug1(
         mydf,
-        "Cholesky selected %d/%d points (thresh=%.2e)",
+        'Cholesky selected %d/%d points (thresh=%.2e)',
         nfit,
         Z.shape[0],
         mydf.isdf_thresh,
@@ -89,7 +88,7 @@ def voronoi_partition(mydf):
         Modifies mydf.coords_by_atom in-place with coordinate indices for each atom
     """
     cell = mydf.cell
-    logger.debug1(mydf, "Starting Voronoi partitioning for %d atoms", cell.natm)
+    logger.debug1(mydf, 'Starting Voronoi partitioning for %d atoms', cell.natm)
 
     # Get atom positions including periodic boundary conditions (3x3x3 = 27 images)
     atom_coords_pbc = tools.pbc.cell_plus_imgs(cell, [1, 1, 1]).atom_coords()
@@ -99,7 +98,7 @@ def voronoi_partition(mydf):
     coords = cell.gen_uniform_grids(mydf.mesh)
 
     # Find nearest atom (including PBC images) for each grid point
-    distances = cdist(coords, atom_coords_pbc, metric="euclidean")
+    distances = cdist(coords, atom_coords_pbc, metric='euclidean')
     nearest_atom_indices = numpy.argmin(distances, axis=1)
 
     # Group grid points by atom (accounting for 27 periodic images per atom)
@@ -112,9 +111,7 @@ def voronoi_partition(mydf):
         mask = numpy.isin(nearest_atom_indices, atom_image_indices)
         grid_indices = numpy.flatnonzero(mask).astype(numpy.int32)
         coords_by_atom.append(grid_indices)
-        logger.debug1(
-            mydf, "Atom %d assigned %d grid points", atom_id, len(grid_indices)
-        )
+        logger.debug1(mydf, 'Atom %d assigned %d grid points', atom_id, len(grid_indices))
 
     return coords_by_atom
 
@@ -173,6 +170,4 @@ def get_fitting_functions(mydf, aovals, ao_indices=None):
         X_Rg_R *= sum(numpy.matmul(aok[:, Rg].T.conj(), aok) for aok in aovals)
 
     # Give expected symmetry??
-    return solve(
-        X_Rg_Rg, X_Rg_R, overwrite_a=True, overwrite_b=True, check_finite=False
-    ).real.astype(numpy.float64)
+    return solve(X_Rg_Rg, X_Rg_R, overwrite_a=True, overwrite_b=True, check_finite=False).real.astype(numpy.float64)

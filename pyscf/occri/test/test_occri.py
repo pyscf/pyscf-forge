@@ -16,11 +16,10 @@
 import unittest
 
 import numpy
-from pyscf.pbc.df import fft
-
 from pyscf.occri import OCCRI
 from pyscf.pbc import gto as pgto
 from pyscf.pbc import scf
+from pyscf.pbc.df import fft
 
 
 def setUpModule():

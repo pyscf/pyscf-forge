@@ -3,11 +3,10 @@ OCCRI exchange matrix evaluation for k-point calculations
 """
 
 import numpy
-from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
-
 from pyscf import lib, occri
 from pyscf.lib import logger
 from pyscf.pbc import tools
+from pyscf.pbc.df.df_jk import _ewald_exxdiv_for_G0
 
 from .utils import build_full_exchange
 
@@ -33,7 +32,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     """
     cell = mydf.cell
     mesh = mydf.mesh
-    assert cell.low_dim_ft_type != "inf_vacuum"
+    assert cell.low_dim_ft_type != 'inf_vacuum'
     assert cell.dimension != 1
     coords = cell.gen_uniform_grids(mesh)
     ngrids = coords.shape[0]
@@ -49,31 +48,22 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
     max_memory = mydf.max_memory - mem_now
     # Memory estimate: blksize * max_nmo * ngrids * 16 bytes (complex128) for main arrays
     max_nmo = max(mo_coeff[n][k].shape[0] for n in range(nset) for k in range(nk))
-    mo_blksize = int(
-        min(max_nmo, max(1, (max_memory - mem_now) * 1e6 / 16 / 4 / ngrids / max_nmo))
-    )
+    mo_blksize = int(min(max_nmo, max(1, (max_memory - mem_now) * 1e6 / 16 / 4 / ngrids / max_nmo)))
 
     logger.debug1(
         mydf,
-        "OCCRI MO blocking: max_memory %d MB, mo_blksize %d",
+        'OCCRI MO blocking: max_memory %d MB, mo_blksize %d',
         max_memory,
         mo_blksize,
     )
 
     # Evaluate AOs on the grid for each k-point
-    aovals = [
-        numpy.asarray(ao.T, order="C")
-        for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)
-    ]
+    aovals = [numpy.asarray(ao.T, order='C') for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)]
 
     # Pre-allocate output arrays
-    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
-    out_type = (
-        numpy.complex128
-        if any(sk.dtype == numpy.complex128 for sk in s)
-        else numpy.float64
-    )
-    vk = numpy.empty((nset, nk, nao, nao), out_type, order="C")
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
+    out_type = numpy.complex128 if any(sk.dtype == numpy.complex128 for sk in s) else numpy.float64
+    vk = numpy.empty((nset, nk, nao, nao), out_type, order='C')
 
     occri.log_mem(mydf)
     t1 = (logger.process_clock(), logger.perf_counter())
@@ -105,7 +95,7 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
                     ao_mo_k_blk = mo_coeff[n][k][p0:p1] @ aovals[k]
 
                     # Compute density and exchange for this MO block
-                    rho1 = numpy.einsum("ig,jg->ijg", ao_phase, ao_mo_k_blk)
+                    rho1 = numpy.einsum('ig,jg->ijg', ao_phase, ao_mo_k_blk)
                     vG = tools.fft(rho1.reshape(-1, ngrids), mesh)
                     rho1 = None  # Free memory like PySCF
                     vG *= coulG
@@ -116,18 +106,16 @@ def occri_get_k_kpts(mydf, dms, exxdiv=None):
                         vR = vR.real
 
                     # Accumulate into the appropriate slice of vR_dm
-                    vR_dm[p0:p1] += numpy.einsum(
-                        "ijg,ig->jg", vR, ao_phase.conj() * mo_occ[n][k_prim][:, None]
-                    )
+                    vR_dm[p0:p1] += numpy.einsum('ijg,ig->jg', vR, ao_phase.conj() * mo_occ[n][k_prim][:, None])
                     vR = None  # Free memory like PySCF
 
             vR_dm *= weight
-            vkao = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
+            vkao = numpy.matmul(aovals[k].conj(), vR_dm.T, order='C')
             vk[n][k] = build_full_exchange(s[k], vkao, mo_coeff[n][k])
 
-            t1 = logger.timer_debug1(mydf, "get_k_kpts: make_kpt (%d,*)" % k, *t1)
+            t1 = logger.timer_debug1(mydf, 'get_k_kpts: make_kpt (%d,*)' % k, *t1)
 
-    if exxdiv == "ewald" and cell.dimension != 0:
+    if exxdiv == 'ewald' and cell.dimension != 0:
         _ewald_exxdiv_for_G0(cell, kpts, dms, vk)
 
     return vk
@@ -137,7 +125,7 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     """Optimized C implementation of k-point exchange matrix evaluation"""
     cell = mydf.cell
     mesh = mydf.mesh
-    assert cell.low_dim_ft_type != "inf_vacuum"
+    assert cell.low_dim_ft_type != 'inf_vacuum'
     assert cell.dimension != 1
     coords = cell.gen_uniform_grids(mesh)
     ngrids = coords.shape[0]
@@ -149,14 +137,11 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     mo_occ = dms.mo_occ
 
     # Pre-allocate output arrays
-    vk = numpy.empty((nset, nk, nao, nao), numpy.complex128, order="C")
-    s = cell.pbc_intor("int1e_ovlp", hermi=1, kpts=kpts)
+    vk = numpy.empty((nset, nk, nao, nao), numpy.complex128, order='C')
+    s = cell.pbc_intor('int1e_ovlp', hermi=1, kpts=kpts)
 
     # Evaluate AOs on the grid for each k-point
-    aovals = [
-        numpy.asarray(ao.T, order="C")
-        for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)
-    ]
+    aovals = [numpy.asarray(ao.T, order='C') for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)]
 
     # Transform to MO basis for each k-point and spin
     ao_mos = [[mo_coeff[n][k] @ aovals[k] for k in range(nk)] for n in range(nset)]
@@ -166,19 +151,18 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
     t1 = (logger.process_clock(), logger.perf_counter())
 
     from pyscf.occri import occri_vR_kpts
-    
-    inv_sqrt = 1.0 / ngrids**0.5
-    coulG_all = numpy.empty((nk, ngrids), dtype=numpy.float64, order="C")
-    expmikr_all_real = numpy.empty((nk, ngrids), dtype=numpy.float64, order="C")
-    expmikr_all_imag = numpy.empty((nk, ngrids), dtype=numpy.float64, order="C")
-    for n in range(nset):
 
+    inv_sqrt = 1.0 / ngrids**0.5
+    coulG_all = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
+    expmikr_all_real = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
+    expmikr_all_imag = numpy.empty((nk, ngrids), dtype=numpy.float64, order='C')
+    for n in range(nset):
         nmo_max = max(mo_coeff[n][k].shape[0] for k in range(nk))
 
         # Flatten AO data for all k-points - pad to nmo_max for consistent indexing
-        ao_mos_real = numpy.zeros((nk, nmo_max, ngrids), dtype=numpy.float64, order="C")
-        ao_mos_imag = numpy.zeros((nk, nmo_max, ngrids), dtype=numpy.float64, order="C")
-        mo_occ_flat = numpy.zeros((nk, nmo_max), dtype=numpy.float64, order="C")
+        ao_mos_real = numpy.zeros((nk, nmo_max, ngrids), dtype=numpy.float64, order='C')
+        ao_mos_imag = numpy.zeros((nk, nmo_max, ngrids), dtype=numpy.float64, order='C')
+        mo_occ_flat = numpy.zeros((nk, nmo_max), dtype=numpy.float64, order='C')
 
         nmo = []
         for k in range(nk):
@@ -192,15 +176,12 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
 
         for k in range(nk):
             # Prepare arrays for C function
-            vR_dm_real = numpy.zeros(nmo[k] * ngrids, dtype=numpy.float64, order="C")
-            vR_dm_imag = numpy.zeros(nmo[k] * ngrids, dtype=numpy.float64, order="C")
+            vR_dm_real = numpy.zeros(nmo[k] * ngrids, dtype=numpy.float64, order='C')
+            vR_dm_imag = numpy.zeros(nmo[k] * ngrids, dtype=numpy.float64, order='C')
 
             # Prepare all Coulomb kernels for this k-point against all k_prim
             for k_prim in range(nk):
-                coulG_all[k_prim] = (
-                    tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh)
-                    * inv_sqrt
-                )
+                coulG_all[k_prim] = tools.get_coulG(cell, kpts[k] - kpts[k_prim], False, mesh=mesh) * inv_sqrt
                 expmikr = numpy.exp(-1j * coords @ (kpts[k] - kpts[k_prim]))
                 expmikr_all_real[k_prim] = expmikr.real
                 expmikr_all_imag[k_prim] = expmikr.imag
@@ -224,21 +205,21 @@ def occri_get_k_kpts_opt(mydf, dms, exxdiv=None):
             )
             if error_code != 0:
                 if error_code == -1:
-                    raise RuntimeError("FFTW thread initialization failed")
+                    raise RuntimeError('FFTW thread initialization failed')
                 else:
-                    raise RuntimeError(f"OCCRI computation failed with error code {error_code}")
+                    raise RuntimeError(f'OCCRI computation failed with error code {error_code}')
 
             # Reshape and apply weight - only take the first nmo orbitals
             vR_dm = (vR_dm_real + 1j * vR_dm_imag).reshape(nmo[k], ngrids)
 
             # Contract back to AO basis
-            vk_j = numpy.matmul(aovals[k].conj(), vR_dm.T, order="C")
+            vk_j = numpy.matmul(aovals[k].conj(), vR_dm.T, order='C')
             vk[n][k] = build_full_exchange(s[k], vk_j, mo_coeff[n][k])
 
-            t1 = logger.timer_debug1(mydf, f"get_k_kpts_opt: k-point {k}", *t1)
+            t1 = logger.timer_debug1(mydf, f'get_k_kpts_opt: k-point {k}', *t1)
 
     # Apply Ewald correction if requested
-    if exxdiv == "ewald" and cell.dimension != 0:
+    if exxdiv == 'ewald' and cell.dimension != 0:
         _ewald_exxdiv_for_G0(cell, kpts, dms, vk)
 
     return vk

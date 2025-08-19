@@ -8,13 +8,11 @@ This module contains the core interpolation functions for the ISDFX method:
 """
 
 import numpy
-from scipy.fft import hfftn
-
 from pyscf.lib import logger
 from pyscf.pbc import tools
+from scipy.fft import hfftn
 
-from .utils import (ao_indices_by_atom, pivoted_cholesky_decomposition,
-                    voronoi_partition)
+from .utils import ao_indices_by_atom, pivoted_cholesky_decomposition, voronoi_partition
 
 
 def get_pivots(mydf):
@@ -46,10 +44,7 @@ def get_pivots(mydf):
     ngrids = coords.shape[0]
     volume_element = (cell.vol / ngrids) ** 0.5
     kpts = mydf.kpts
-    aovals = [
-        numpy.asarray(ao.T * volume_element, order="C")
-        for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)
-    ]
+    aovals = [numpy.asarray(ao.T * volume_element, order='C') for ao in mydf._numint.eval_ao(cell, coords, kpts=kpts)]
 
     local_pivots = []
     coords_by_atom = voronoi_partition(mydf)
@@ -62,14 +57,12 @@ def get_pivots(mydf):
         local_aovals = [ao_k[:, grid_indices] for ao_k in aovals]
 
         # Select local pivots using Cholesky decomposition
-        local_pivot_indices = grid_indices[
-            pivoted_cholesky_decomposition(mydf, local_aovals, ao_indices)
-        ]
+        local_pivot_indices = grid_indices[pivoted_cholesky_decomposition(mydf, local_aovals, ao_indices)]
         local_pivots.extend(local_pivot_indices)
 
         logger.debug1(
             mydf,
-            "Atom %d: selected %d/%d local pivots",
+            'Atom %d: selected %d/%d local pivots',
             atom_id,
             len(local_pivot_indices),
             len(grid_indices),
@@ -79,7 +72,7 @@ def get_pivots(mydf):
 
     logger.info(
         mydf,
-        "  Partitioned ISDFX: %d candidate pivots from %d grid points (%.2f%% compression)",
+        '  Partitioned ISDFX: %d candidate pivots from %d grid points (%.2f%% compression)',
         len(local_pivots),
         ngrids,
         100 * len(local_pivots) / ngrids,
@@ -137,7 +130,6 @@ def get_thc_potential(mydf, fitting_functions):
 
     # Compute THC potential for each k-point
     for k, kpt in enumerate(kpts):
-
         # Step 1: Apply phase factors e^{-ik·r}
         phase_factors = numpy.exp(-1.0j * numpy.dot(coords, kpt))
         modulated_functions = fitting_functions * phase_factors[numpy.newaxis, :]

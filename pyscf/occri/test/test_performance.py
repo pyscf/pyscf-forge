@@ -12,7 +12,6 @@ import time
 import unittest
 
 import numpy
-
 from pyscf.occri import _OCCRI_C_AVAILABLE, OCCRI
 from pyscf.pbc import gto as pgto
 from pyscf.pbc import scf

@@ -19,7 +19,6 @@ import sys
 import unittest
 
 import numpy
-
 from pyscf.occri.isdfx import ISDFX
 from pyscf.pbc import gto, scf
 
