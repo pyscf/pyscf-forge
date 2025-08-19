@@ -1,0 +1,1 @@
+xgaussope.c: calc_pbc_overlaps_f01 calc_pbc_overlaps02x_f01  gto_ps_pp_int01.py has DBGNG section.. PLS grep dbgng_libf01 in output log
