@@ -24,12 +24,13 @@ from pyscf import scf
 from pyscf import pbc
 from pyscf import mcscf
 from pyscf import fci
+from pyscf.pbc import gto as pbcgto
 
 import trexio
 
 def to_trexio(obj, filename, backend='h5', ci_threshold=None, chunk_size=None):
     with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
-        if isinstance(obj, gto.Mole):
+        if isinstance(obj, gto.Mole) or isinstance(obj, pbcgto.Cell):
             _mol_to_trexio(obj, tf)
         elif isinstance(obj, scf.hf.SCF):
             _scf_to_trexio(obj, tf)
@@ -211,7 +212,6 @@ def _mol_to_trexio(mol, trexio_file):
     trexio.write_ao_shell(trexio_file, ao_shell)
     trexio.write_ao_normalization(trexio_file, ao_normalization)
 
-
 def _scf_to_trexio(mf, trexio_file):
     mol = mf.mol
     _mol_to_trexio(mol, trexio_file)
@@ -222,16 +222,20 @@ def _scf_to_trexio(mf, trexio_file):
         kpts = mol.get_scaled_kpts(kpts)
         nk = len(mf.kpts)
         weights = np.full(nk, 1.0/nk)
-
         if nk == 1:
             trexio.write_pbc_k_point_num(trexio_file, 1)
             trexio.write_pbc_k_point(trexio_file, kpts)
             trexio.write_pbc_k_point_weight(trexio_file, weights[np.newaxis])
+            multi_k = False
         else:
             trexio.write_pbc_k_point_num(trexio_file, nk)
             trexio.write_pbc_k_point(trexio_file, kpts)
             trexio.write_pbc_k_point_weight(trexio_file, weights)
+            multi_k = True
+    else:
+        multi_k = False
 
+    if multi_k:
         # stack k-dependent molecular orbitals
         mo_k_point_pbc = []
         mo_num_pbc = 0
@@ -243,7 +247,7 @@ def _scf_to_trexio(mf, trexio_file):
 
         if isinstance(mf, scf.uhf.UHF):
             mo_type = 'UHF'
-            for i_k, k in enumerate(kpts):
+            for i_k, _ in enumerate(kpts):
                 mo_energy = np.ravel(mf.mo_energy)
                 mo_num = mo_energy.size
                 mo_up, mo_dn = mf.mo_coeff
@@ -267,7 +271,7 @@ def _scf_to_trexio(mf, trexio_file):
 
         else:
             mo_type = 'RHF'
-            for i_k, k in enumerate(kpts):
+            for i_k, _ in enumerate(kpts):
                 mo_energy = mf.mo_energy[i_k]
                 mo = mf.mo_coeff[i_k]
                 idx = _order_ao_index(mf.mol)
@@ -373,17 +377,32 @@ def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
 
     total_elec_cas = sum(cas_obj.nelecas)
 
-    det_to_trexio(cas_obj, ncas, total_elec_cas, trexio_file, ci_threshold, chunk_size)
+    _det_to_trexio(cas_obj, ncas, total_elec_cas, trexio_file, ci_threshold, chunk_size)
 
 def mol_from_trexio(filename):
-    mol = gto.Mole()
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         assert trexio.read_basis_type(tf) == 'Gaussian'
+        pbc_periodic = trexio.read_pbc_periodic(tf)
         labels = trexio.read_nucleus_label(tf)
         coords = trexio.read_nucleus_coord(tf)
         elements = [s+str(i) for i, s in enumerate(labels)]
+
+        if pbc_periodic:
+            mol = pbcgto.Cell()
+            mol.unit = 'Bohr'
+            a = np.asarray(trexio.read_cell_a(tf), dtype=float)
+            b = np.asarray(trexio.read_cell_b(tf), dtype=float)
+            c = np.asarray(trexio.read_cell_c(tf), dtype=float)
+            mol.a = np.vstack([a, b, c])
+        else:
+            mol = gto.Mole()
+            mol.unit = 'Bohr'
+
         mol.atom = list(zip(elements, coords))
-        mol.unit = 'Bohr'
+        up_num = trexio.read_electron_up_num(tf)
+        dn_num = trexio.read_electron_dn_num(tf)
+        spin = up_num - dn_num
+        mol.spin = spin
 
         if trexio.has_ecp(tf):
             # --- read TREXIO ECP arrays ---
@@ -466,40 +485,85 @@ def mol_from_trexio(filename):
         exps = trexio.read_basis_exponent(tf).tolist()
         coef = trexio.read_basis_coefficient(tf).tolist()
 
-    basis = {}
-    exps = _group_by(exps, prim2sh)
-    coef = _group_by(coef, prim2sh)
-    p1 = 0
-    for ia, at_ls in enumerate(_group_by(ls, nuc_idx)):
-        p0, p1 = p1, p1 + at_ls.size
-        at_basis = [[l, *zip(e, c)]
-                    for l, e, c in zip(ls[p0:p1], exps[p0:p1], coef[p0:p1])]
-        basis[elements[ia]] = at_basis
+        basis = {}
+        exps = _group_by(exps, prim2sh)
+        coef = _group_by(coef, prim2sh)
+        p1 = 0
+        for ia, at_ls in enumerate(_group_by(ls, nuc_idx)):
+            p0, p1 = p1, p1 + at_ls.size
+            at_basis = [[l, *zip(e, c)]
+                        for l, e, c in zip(ls[p0:p1], exps[p0:p1], coef[p0:p1])]
+            basis[elements[ia]] = at_basis
 
-    # To avoid the mol.build() sort the basis, disable mol.basis and set the
-    # internal data _basis directly.
-    mol.basis = {}
-    mol._basis = basis
-    return mol.build()
+        # To avoid the mol.build() sort the basis, disable mol.basis and set the
+        # internal data _basis directly.
+        mol.basis = {}
+        mol._basis = basis
+        return mol.build()
 
 def scf_from_trexio(filename):
     mol = mol_from_trexio(filename)
+
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
+        num_mo    = trexio.read_mo_num(tf)
         mo_energy = trexio.read_mo_energy(tf)
-        mo        = trexio.read_mo_coefficient(tf)
+        mo_coeff  = trexio.read_mo_coefficient(tf)
         mo_occ    = trexio.read_mo_occupation(tf)
+        mo_spin    = trexio.read_mo_spin(tf)
 
-    nao = mol.nao
-    assert mo.shape == (nao, nao) # RHF only
-    mf = mol.RHF()
-    mf.mo_coeff = np.empty_like(mo).T
-    idx = _order_ao_index(mol)
-    mf.mo_coeff[idx] = mo.T
-    mf.mo_energy = mo_energy
-    mf.mo_occ = mo_occ
-    return mf
+        if isinstance(mol, pbcgto.Cell):
+            # PBC case
+            k_point_num = trexio.read_pbc_k_point_num(tf)
+            kpts = trexio.read_pbc_k_point(tf)
+            weights = trexio.read_pbc_k_point_weight(tf)
+        else:
+            k_point_num = 1
 
-def write_eri(eri, filename, backend='h5'):
+    if k_point_num == 1:
+        # Non-periodic case or single k-point PBC case
+        nao = mol.nao
+        idx = _order_ao_index(mol)
+
+        uniq = np.unique(mo_spin)
+
+        # UHF
+        if set(uniq.tolist()) == {0, 1}:
+            i_up = np.where(mo_spin == 0)[0]
+            i_dn = np.where(mo_spin == 1)[0]
+
+            mo_up_out = mo_coeff[i_up, :]  # (nmo_up, nao)
+            mo_dn_out = mo_coeff[i_dn, :]  # (nmo_dn, nao)
+
+            mo_up_pyscf = np.empty((nao, mo_up_out.shape[0]), dtype=mo_coeff.dtype)
+            mo_dn_pyscf = np.empty((nao, mo_dn_out.shape[0]), dtype=mo_coeff.dtype)
+            mo_up_pyscf[idx, :] = mo_up_out.T
+            mo_dn_pyscf[idx, :] = mo_dn_out.T
+
+            mf = mol.UHF()
+            mf.mo_coeff  = (mo_up_pyscf, mo_dn_pyscf)
+            mf.mo_energy = (mo_energy[i_up], mo_energy[i_dn])
+            mf.mo_occ    = (mo_occ[i_up],   mo_occ[i_dn])
+            return mf
+
+        # RHF
+        elif set(uniq.tolist()) == {0} or set(uniq.tolist()) == {1}:
+            mf = mol.RHF()
+            mf.mo_coeff = np.empty((nao, num_mo), dtype=mo_coeff.dtype)
+            mf.mo_coeff[idx, :] = mo_coeff.T
+            mf.mo_energy = mo_energy
+            mf.mo_occ    = mo_occ
+            return mf
+
+        else:
+            raise ValueError(f'Unknown spin multiplicity {uniq}')
+
+    else:
+        raise NotImplementedError(
+            f'PBC with {k_point_num} k-points is not supported yet. '
+            'Please use a single k-point PBC calculation.'
+        )
+
+def write_mo_2e_int_eri(eri, filename, backend='h5'):
     num_integrals = eri.size
     if eri.ndim == 4:
         n = eri.shape[0]
@@ -520,6 +584,8 @@ def write_eri(eri, filename, backend='h5'):
         idx[:,:,:2] = idx_pair[:,None,:]
         idx[:,:,2:] = idx_pair[None,:,:]
         idx = idx[np.tril_indices(npair)]
+    else:
+        raise ValueError(f'ERI array must be 1, 2 or 4-dimensional, got {eri.ndim}')
 
     # Physicist notation
     idx=idx.reshape((num_integrals,4))
@@ -531,7 +597,7 @@ def write_eri(eri, filename, backend='h5'):
     with trexio.File(filename, 'w', back_end=_mode(backend)) as tf:
         trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
 
-def read_eri(filename):
+def read_mo_2e_int_eri(filename):
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         nmo = trexio.read_mo_num(tf)
         nao_pair = nmo * (nmo+1) // 2
@@ -582,7 +648,7 @@ def _group_by(a, keys):
     idx = np.unique(keys, return_index=True)[1]
     return np.split(a, idx[1:])
 
-def get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
+def _get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
     ci_coeff = mcscf.ci
     num_determinants = int(np.sum(np.abs(ci_coeff) > ci_threshold))
     occslst = fci.cistring.gen_occslst(range(norb), nelec // 2)
@@ -608,13 +674,13 @@ def get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
+def _det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
     from trexio_tools.group_tools import determinant as trexio_det
 
     ncore = mcscf.ncore
     int64_num = trexio.get_int64_num(trexio_file)
 
-    occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
+    occsa, occsb, ci_values, num_determinants = _get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
 
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
