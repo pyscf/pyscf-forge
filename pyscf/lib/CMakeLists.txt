@@ -112,16 +112,6 @@ else ()
   set(CMAKE_INSTALL_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
 endif ()
 
-# Build the PDFT library
-set (PDFT_SOURCE_FILES "../mcpdft/nr_numint.c")
-add_library (clib_pdft SHARED ${PDFT_SOURCE_FILES})
-#FIXME: LD_LIBRARY_PATH
-target_link_libraries (clib_pdft dft ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-set_target_properties (clib_pdft PROPERTIES
-    CLEAN_DIRECT_OUTPUT 1
-    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_NAME "pdft")
-
 # Build the LibXC interface v2 library
 set (LIBXC_ITRF2_SOURCE_FILES "dft/libxc_itrf2.c")
 add_library (clib_libxc_itrf2 SHARED ${LIBXC_ITRF2_SOURCE_FILES})
