@@ -112,7 +112,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
 
         # ISDFX calculation
         mf_isdfx = method_class(cell, **scf_kwargs)
-        mf_isdfx.with_df = ISDFX(mf_isdfx, **isdf_kwargs)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx, **isdf_kwargs)
         mf_isdfx.max_cycle = 30
         mf_isdfx.conv_tol = 1e-8
         e_isdfx = mf_isdfx.kernel()
@@ -231,7 +231,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
         from pyscf.occri.isdfx import ISDFX
 
         mf_isdfx = scf.KRHF(self.cell_diamond, kpts=kpts)
-        mf_isdfx.with_df = ISDFX(mf_isdfx)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
         mf_isdfx.max_cycle = 20
         mf_isdfx.conv_tol = 1e-7
         e_isdfx = mf_isdfx.kernel()
@@ -264,7 +264,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
         from pyscf.occri.isdfx import ISDFX
 
         mf_isdfx = scf.KRHF(self.cell_diamond, kpts=kpts)
-        mf_isdfx.with_df = ISDFX(mf_isdfx)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
         mf_isdfx.max_cycle = 15
         mf_isdfx.conv_tol = 1e-6
         e_isdfx = mf_isdfx.kernel()
@@ -297,7 +297,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
         from pyscf.occri.isdfx import ISDFX
 
         mf_isdfx = scf.KRHF(self.cell_h2, kpts=kpts)
-        mf_isdfx.with_df = ISDFX(mf_isdfx)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
         mf_isdfx.max_cycle = 12
         mf_isdfx.conv_tol = 1e-6
         e_isdfx = mf_isdfx.kernel()
@@ -337,7 +337,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
 
         mf_isdfx = scf.KUKS(cell_test, kpts=kpts)
         mf_isdfx.xc = "pbe,pbe"
-        mf_isdfx.with_df = ISDFX(mf_isdfx)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
         mf_isdfx.max_cycle = 12
         mf_isdfx.conv_tol = 1e-6
         e_isdfx = mf_isdfx.kernel()
@@ -379,7 +379,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
         from pyscf.occri.isdfx import ISDFX
 
         mf_isdfx = scf.KRHF(cell, kpts=kpts)
-        mf_isdfx.with_df = ISDFX(mf_isdfx)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
         mf_isdfx.max_cycle = 10
         mf_isdfx.conv_tol = 1e-7
         e_isdfx = mf_isdfx.kernel()
@@ -423,7 +423,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
         from pyscf.occri.isdfx import ISDFX
 
         mf_isdfx = scf.KRHF(cell, kpts=kpts)
-        mf_isdfx.with_df = ISDFX(mf_isdfx)
+        mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
         mf_isdfx.max_cycle = 15
         mf_isdfx.conv_tol = 1e-6
         e_isdfx = mf_isdfx.kernel()
@@ -523,7 +523,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
 
         for thresh in thresholds:
             mf_isdfx = scf.RHF(self.cell_lih)
-            mf_isdfx.with_df = ISDFX(mf_isdfx, isdf_thresh=thresh)
+            mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx, isdf_thresh=thresh)
             mf_isdfx.max_cycle = 20
             e_isdfx = mf_isdfx.kernel()
 

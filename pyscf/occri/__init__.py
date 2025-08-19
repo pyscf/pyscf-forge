@@ -129,7 +129,8 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
     """
     Occupied Orbital Coulomb Resolution of Identity density fitting
     Defaults to incore algorithm if memory is sufficient.
-    To require OCCRI method, set mf._is_mem_enough = lambda: False 
+    To require OCCRI method, set mf._is_mem_enough = lambda: False or
+    use OCCRI.from_mf(mf) method.
     """
 
     def __init__(

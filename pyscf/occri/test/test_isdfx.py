@@ -64,7 +64,7 @@ class TestUtilityFunctions(unittest.TestCase):
     def test_voronoi_partition(self):
         """Test Voronoi partitioning of grid points"""
         mf = scf.RHF(cell_h2)
-        mydf = ISDFX(mf)
+        mydf = ISDFX.from_mf(mf)
 
         # Test basic partitioning
         coords_by_atom = voronoi_partition(mydf)
@@ -89,7 +89,7 @@ class TestUtilityFunctions(unittest.TestCase):
     def test_init_ao_indices(self):
         """Test AO index initialization by atom"""
         mf = scf.RHF(cell_diamond)
-        mydf = ISDFX(mf)
+        mydf = ISDFX.from_mf(mf)
 
         ao_indices = ao_indices_by_atom(mydf.cell)
 
@@ -114,7 +114,7 @@ class TestCholeskyDecomposition(unittest.TestCase):
     def setUp(self):
         """Setup ISDFX object for testing"""
         mf = scf.RHF(cell_h2)
-        self.mydf = ISDFX(mf, isdf_thresh=1e-4)  # Looser threshold for testing
+        self.mydf = ISDFX.from_mf(mf, isdf_thresh=1e-4)  # Looser threshold for testing
 
     def test_cholesky_basic(self):
         """Test basic Cholesky decomposition functionality"""
@@ -159,7 +159,7 @@ class TestISDFX(unittest.TestCase):
     def test_isdf_initialization(self):
         """Test ISDFX object initialization"""
         mf = scf.RHF(cell_h2)
-        mydf = ISDFX(mf, isdf_thresh=1e-6)
+        mydf = ISDFX.from_mf(mf, isdf_thresh=1e-6)
 
         # Check basic attributes
         self.assertEqual(mydf.cell, mf.mol)
@@ -173,7 +173,7 @@ class TestISDFX(unittest.TestCase):
     def test_isdf_with_kpoints(self):
         """Test ISDFX with k-point sampling"""
         mf = scf.KRHF(cell_diamond, kpts_2x2x2)
-        mydf = ISDFX(mf, isdf_thresh=1e-5)
+        mydf = ISDFX.from_mf(mf, isdf_thresh=1e-5)
 
         # Check k-point handling
         self.assertEqual(len(mydf.kpts), len(kpts_2x2x2))
@@ -193,10 +193,10 @@ class TestISDFX(unittest.TestCase):
         mf = scf.RHF(cell_h2)
 
         # Valid thresholds should work
-        mydf1 = ISDFX(mf, isdf_thresh=1e-6)
+        mydf1 = ISDFX.from_mf(mf, isdf_thresh=1e-6)
         self.assertEqual(mydf1.isdf_thresh, 1e-6)
 
-        mydf2 = ISDFX(mf, isdf_thresh=1e-3)
+        mydf2 = ISDFX.from_mf(mf, isdf_thresh=1e-3)
         self.assertEqual(mydf2.isdf_thresh, 1e-3)
 
 
@@ -206,7 +206,7 @@ class TestPivotSelection(unittest.TestCase):
     def setUp(self):
         """Setup for pivot selection tests"""
         mf = scf.RHF(cell_h2)
-        self.mydf = ISDFX(mf, isdf_thresh=1e-4)
+        self.mydf = ISDFX.from_mf(mf, isdf_thresh=1e-4)
 
     def test_get_pivots_execution(self):
         """Test that get_pivots executes without error"""
@@ -248,7 +248,7 @@ class TestFittingFunctions(unittest.TestCase):
     def setUp(self):
         """Setup for fitting function tests"""
         mf = scf.RHF(cell_h2)
-        self.mydf = ISDFX(mf, isdf_thresh=1e-4)
+        self.mydf = ISDFX.from_mf(mf, isdf_thresh=1e-4)
 
     def test_get_fitting_functions_execution(self):
         """Test fitting function construction"""
@@ -267,7 +267,7 @@ class TestTHCPotential(unittest.TestCase):
     def setUp(self):
         """Setup for THC potential tests"""
         mf = scf.RHF(cell_h2)
-        self.mydf = ISDFX(mf, isdf_thresh=1e-4)
+        self.mydf = ISDFX.from_mf(mf, isdf_thresh=1e-4)
 
     def test_thc_potential_exists(self):
         """Test that THC potential was computed"""
@@ -290,7 +290,7 @@ class TestExchangeMatrixEvaluation(unittest.TestCase):
     def setUp(self):
         """Setup for exchange matrix tests"""
         mf = self.mf = scf.RHF(cell_h2)
-        self.mydf = ISDFX(mf, isdf_thresh=1e-4)
+        self.mydf = ISDFX.from_mf(mf, isdf_thresh=1e-4)
 
         # Run SCF to get density matrices with orbitals
         mf.with_df = self.mydf
@@ -334,7 +334,7 @@ class TestISdfxKpoints(unittest.TestCase):
         kmesh = [2, 2, 1]
         kpts = cell_diamond.make_kpts(kmesh)  # Reduced for testing
         mf = scf.KRHF(cell_diamond, kpts=kpts)
-        mydf = ISDFX(mf, isdf_thresh=1e-3)  # Looser threshold for speed
+        mydf = ISDFX.from_mf(mf, isdf_thresh=1e-3)  # Looser threshold for speed
 
         mf.with_df = mydf
         mf.max_cycle = 3  # Just a few iterations for testing
@@ -357,7 +357,7 @@ class TestISdfxIntegration(unittest.TestCase):
     def test_scf_convergence(self):
         """Test that SCF converges with ISDFX"""
         mf = scf.RHF(cell_h2)
-        mydf = ISDFX(mf, isdf_thresh=1e-4)
+        mydf = ISDFX.from_mf(mf, isdf_thresh=1e-4)
 
         mf.with_df = mydf
         mf.max_cycle = 10
@@ -373,13 +373,13 @@ class TestISdfxIntegration(unittest.TestCase):
     def test_energy_consistency(self):
         """Test energy consistency between runs"""
         mf1 = scf.RHF(cell_h2)
-        mydf1 = ISDFX(mf1, isdf_thresh=1e-5)
+        mydf1 = ISDFX.from_mf(mf1, isdf_thresh=1e-5)
         mf1.with_df = mydf1
         mf1.max_cycle = 8
         e1 = mf1.kernel()
 
         mf2 = scf.RHF(cell_h2)
-        mydf2 = ISDFX(mf2, isdf_thresh=1e-5)
+        mydf2 = ISDFX.from_mf(mf2, isdf_thresh=1e-5)
         mf2.with_df = mydf2
         mf2.max_cycle = 8
         e2 = mf2.kernel()

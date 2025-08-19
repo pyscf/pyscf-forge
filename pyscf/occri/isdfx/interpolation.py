@@ -87,15 +87,6 @@ def get_pivots(mydf):
 
     aovals_on_pivots = [ao_k[:, local_pivots] for ao_k in aovals]
     global_pivots = pivoted_cholesky_decomposition(mydf, aovals_on_pivots)
-
-    logger.info(
-        mydf,
-        "  ISDFX selected %d/%d grid points (%.2f%% compression)",
-        len(mydf.pivots),
-        ngrids,
-        100 * len(mydf.pivots) / ngrids,
-    )
-
     return numpy.sort(local_pivots[global_pivots]), aovals
 
 

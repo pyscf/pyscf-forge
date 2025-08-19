@@ -73,7 +73,7 @@ for kmesh in kmesh_list:
     # ISDFX calculation
     mf_isdfx = scf.KRHF(cell, kpts=kpts)
     t0 = time.time()
-    mf_isdfx.with_df = ISDFX(mf_isdfx)
+    mf_isdfx.with_df = ISDFX.from_mf(mf_isdfx)
     mf_isdfx.with_df.scf_iter = 1
     t_build = time.time() - t0
 

@@ -12,7 +12,7 @@ Usage:
     from pyscf.occri.isdfx import ISDFX
 
     mf = scf.KRHF(cell, kpts)
-    mf.with_df = ISDFX(mf, isdf_thresh=1e-6)
+    mf.with_df = ISDFX.from_mf(mf, isdf_thresh=1e-6)
     energy = mf.kernel()
 """
 
@@ -37,6 +37,10 @@ class ISDFX(OCCRI):
     Separable Density Fitting (ISDFX) methods to reduce computational cost
     through adaptive grid point selection and interpolation.
 
+    Defaults to incore algorithm if memory is sufficient.
+    To require ISDFX method, set mf._is_mem_enough = lambda: False or
+    use ISDFX.from_mf(mf) method.
+
     Attributes:
     -----------
     isdf_thresh : float
@@ -56,16 +60,16 @@ class ISDFX(OCCRI):
         ISDFX fitting coefficients for interpolation
     """
 
-    def __init__(self, mydf, isdf_thresh=1e-6, disable_c=False, **kwargs):
+    def __init__(self, cell, kpts=None, isdf_thresh=1e-6, disable_c=False, **kwargs):
         """
         Initialize ISDFX density fitting object.
 
         Parameters:
         -----------
-        mydf : SCF object
-            Mean field object to attach ISDFX to
-        kmesh : list of int
-            k-point mesh dimensions (default: [1,1,1])
+        cell : pyscf.pbc.gto.Cell
+            Unit cell object
+        kpts : ndarray, optional
+            k-points for periodic boundary conditions
         isdf_thresh : float
             ISDFX interpolation threshold (default: 1e-6)
             Larger values select fewer interpolation points but reduce accuracy
@@ -74,13 +78,68 @@ class ISDFX(OCCRI):
         **kwargs : dict
             Additional arguments passed to parent OCCRI class
         """
-        super().__init__(mydf, disable_c=disable_c, **kwargs)
+        
         self.isdf_thresh = isdf_thresh
-
-        self.isdf_pts_from_gamma_point = False
+        self.isdf_pts_from_gamma_point = True
+        super().__init__(cell, kpts, disable_c=disable_c, **kwargs)
         self.build()
-
         self.get_k = isdfx_get_k_kpts
+
+    def dump_flags(self, verbose=None):
+        log = logger.new_logger(self, verbose)
+        log.info('******** %s ********', self.__class__)
+        log.info('isdf_threshold = %s', self.isdf_thresh)
+        log.info('from_gamma_point = %s', self.isdf_pts_from_gamma_point)
+        return self        
+
+    @classmethod
+    def from_mf(cls, mf, isdf_thresh=1e-6, disable_c=False, **kwargs):
+        """Create ISDFX instance from mean-field object
+        
+        Parameters
+        ----------
+        mf : pyscf mean-field object
+            Mean-field instance (RHF, UHF, RKS, UKS, etc.)
+        isdf_thresh : float, optional
+            ISDFX interpolation threshold (default: 1e-6)
+            Larger values select fewer interpolation points but reduce accuracy
+        disable_c : bool, optional
+            If True, use pure Python implementation
+        **kwargs
+            Additional arguments passed to ISDFX constructor
+            
+        Returns
+        -------
+        ISDFX
+            ISDFX density fitting instance configured for the given mean-field method
+            
+        Examples
+        --------
+        >>> from pyscf.pbc import gto, scf
+        >>> from pyscf.occri.isdfx import ISDFX
+        >>> 
+        >>> cell = gto.Cell()
+        >>> cell.atom = 'H 0 0 0; H 0 0 1'
+        >>> cell.basis = 'sto3g'
+        >>> cell.build()
+        >>> 
+        >>> mf = scf.KRHF(cell, cell.make_kpts([2,2,2]))
+        >>> mf.with_df = ISDFX.from_mf(mf, isdf_thresh=1e-6)
+        >>> energy = mf.kernel()
+        """
+        # Validate mean-field instance
+        mf._is_mem_enough = lambda: False
+        
+        # Extract method information
+        method = mf.__module__.rsplit(".", 1)[-1]
+        assert method in ["hf", "uhf", "khf", "kuhf", "rks", "uks", "krks", "kuks"], \
+            f"Unsupported mean-field method: {method}"
+        
+        # Create ISDFX instance
+        isdfx = cls(mf.cell, mf.kpts, isdf_thresh=isdf_thresh, disable_c=disable_c, **kwargs)
+        isdfx.method = method
+        
+        return isdfx
 
     def convolve_with_W(self, U):
         W = self.W
@@ -95,7 +154,7 @@ class ISDFX(OCCRI):
 
     def build(self):
         """Build ISDFX interpolation structures."""
-        logger.info(self, "Doing ISDFX with threshold %.2e", self.isdf_thresh)
+        self.dump_flags()
         cput0 = (logger.process_clock(), logger.perf_counter())
         log = logger.Logger(self.stdout, self.verbose)
 
@@ -104,6 +163,14 @@ class ISDFX(OCCRI):
         pivots, aovals = interpolation.get_pivots(self)
         self.pivots = pivots
         cput0 = log.timer("Pivot selection", *cput0)
+        ngrids = self.grids.coords.shape[0]
+        logger.info(
+            self,
+            "  ISDFX selected %d/%d grid points (%.2f%% compression)",
+            len(self.pivots),
+            ngrids,
+            100 * len(self.pivots) / ngrids,
+        )
 
         # Step 2: Build fitting functions
         logger.debug(self, "Building ISDFX fitting functions")

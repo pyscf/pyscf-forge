@@ -22,12 +22,12 @@ cell_diamond.basis = 'gth-dzvp'
 cell_diamond.pseudo = 'gth-pbe'
 cell_diamond.a = np.eye(3) * 3.57
 cell_diamond.mesh = [15] * 3 # See Example 4 in occri/01-simple_gamma_point.py for mesh selection.
-cell_diamond.verbose = 0
+cell_diamond.verbose = 3
 cell_diamond.build()
 
 # Standard RHF with ISDFX
 mf = scf.RHF(cell_diamond)
-mf.with_df = ISDFX(mf)
+mf.with_df = ISDFX.from_mf(mf)
 e_diamond = mf.kernel()
 print(f"Diamond RHF energy: {e_diamond:.6f} Ha")
 
@@ -49,7 +49,7 @@ cell_graphite.build()
 # UHF for potential magnetic ordering
 kpts = cell_graphite.make_kpts([1,1,2])  # 2D material
 mf = scf.KUHF(cell_graphite, kpts=kpts)
-mf.with_df = ISDFX(mf)
+mf.with_df = ISDFX.from_mf(mf)
 e_graphite = mf.kernel()
 print(f"Graphite UHF energy: {e_graphite:.6f} Ha")
 
@@ -72,7 +72,7 @@ cell_si.build()
 kpts = cell_si.make_kpts([1,1,2])
 mf = scf.KUKS(cell_si, kpts=kpts)
 mf.xc = 'pbe0'  # Hybrid functional
-mf.with_df = ISDFX(mf)
+mf.with_df = ISDFX.from_mf(mf)
 e_si = mf.kernel()
 print(f"Silicon PBE0 energy: {e_si:.6f} Ha")
 
@@ -95,7 +95,7 @@ cell_al.build()
 kpts = cell_al.make_kpts([1,1,2])
 mf = scf.KRKS(cell_al, kpts=kpts)  
 mf.xc = 'b3lyp'  # Hybrid functional
-mf.with_df = ISDFX(mf)
+mf.with_df = ISDFX.from_mf(mf)
 e_al = mf.kernel()
 print(f"Aluminum B3LYP energy: {e_al:.6f} Ha")
 
