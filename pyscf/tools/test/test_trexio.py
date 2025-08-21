@@ -146,25 +146,6 @@ def test_mf_rhf_ae_6_31g(cart):
         eri1 = trexio.read_mo_2e_int_eri(filename)
         assert abs(eri0 - eri1).max() < DIFF_TOL
 
-## PBC, k=gamma, segment contraction (6-31g), all-electron, RHF
-@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
-def test_mf_k_gamma_rhf_ae_6_31g(cart):
-    with tempfile.TemporaryDirectory() as d:
-        filename = os.path.join(d, 'test.h5')
-        cell0 = pyscf.pbc.gto.Cell()
-        cell0.cart = cart
-        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
-        mf0 = pyscf.pbc.scf.RKS(cell0)
-        mf0.xc = 'LDA'
-        mf0.run()
-        eri0 = mf0._eri
-        trexio.to_trexio(mf0, filename)
-        mf1 = trexio.scf_from_trexio(filename)
-        assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
-
 ## molecule, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
 def test_mf_uhf_ae_6_31g(cart):
@@ -195,6 +176,131 @@ def test_mf_rhf_ccecp_ccpvqz(cart):
         trexio.write_mo_2e_int_eri(eri0, filename)
         eri1 = trexio.read_mo_2e_int_eri(filename)
         assert abs(eri0 - eri1).max() < DIFF_TOL
+
+## PBC, k=gamma, segment contraction (6-31g), all-electron, RHF
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_gamma_rhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, 'test.h5')
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pyscf.pbc.scf.RKS(cell0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        eri0 = mf0._eri
+        trexio.to_trexio(mf0, filename)
+        mf1 = trexio.scf_from_trexio(filename)
+        assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
+        #trexio.write_mo_2e_int_eri(eri0, filename)
+        #eri1 = trexio.read_mo_2e_int_eri(filename)
+        #assert abs(eri0 - eri1).max() < DIFF_TOL
+
+## PBC, k=general, segment contraction (6-31g), all-electron, RHF
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_general_rhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, 'test.h5')
+        kfrac = (0.25, 0.25, 0.25)
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        kpt0 = cell0.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf0 = pyscf.pbc.scf.RKS(cell0, kpt=kpt0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        trexio.to_trexio(mf0, filename)
+        mf1 = trexio.scf_from_trexio(filename)
+        assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
+        #trexio.write_mo_2e_int_eri(eri0, filename)
+        #eri1 = trexio.read_mo_2e_int_eri(filename)
+        #assert abs(eri0 - eri1).max() < DIFF_TOL
+
+## PBC, k=grid, segment contraction (6-31g), all-electron, RHF
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_grid_rhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        kmesh = (1, 1, 2)
+        filename = os.path.join(d, 'test.h5')
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        kpts0 = cell0.make_kpts(kmesh)
+        trexio.to_trexio(cell0, filename)
+        mf0 = pyscf.pbc.scf.KRKS(cell0, kpts=kpts0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        eri0 = mf0._eri
+        trexio.to_trexio(mf0, filename)
+        mf1 = trexio.scf_from_trexio(filename)
+        assert abs(np.asarray(mf1.mo_coeff) - np.asarray(mf0.mo_coeff)).max() < DIFF_TOL
+        #trexio.write_mo_2e_int_eri(eri0, filename)
+        #eri1 = trexio.read_mo_2e_int_eri(filename)
+        #assert abs(eri0 - eri1).max() < DIFF_TOL
+
+## PBC, k=gamma, segment contraction (6-31g), all-electron, UHF
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_gamma_uhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, 'test.h5')
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pyscf.pbc.scf.UKS(cell0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        eri0 = mf0._eri
+        trexio.to_trexio(mf0, filename)
+        mf1 = trexio.scf_from_trexio(filename)
+        assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
+        #trexio.write_mo_2e_int_eri(eri0, filename)
+        #eri1 = trexio.read_mo_2e_int_eri(filename)
+        #assert abs(eri0 - eri1).max() < DIFF_TOL
+
+## PBC, k=general, segment contraction (6-31g), all-electron, UHF
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_general_uhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, 'test.h5')
+        kfrac = (0.25, 0.25, 0.25)
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        kpt0 = cell0.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf0 = pyscf.pbc.scf.UKS(cell0, kpt=kpt0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        trexio.to_trexio(mf0, filename)
+        mf1 = trexio.scf_from_trexio(filename)
+        assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
+        #trexio.write_mo_2e_int_eri(eri0, filename)
+        #eri1 = trexio.read_mo_2e_int_eri(filename)
+        #assert abs(eri0 - eri1).max() < DIFF_TOL
+
+## PBC, k=grid, segment contraction (6-31g), all-electron, UHF
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_grid_uhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        kmesh = (1, 1, 2)
+        filename = os.path.join(d, 'test.h5')
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        kpts0 = cell0.make_kpts(kmesh)
+        trexio.to_trexio(cell0, filename)
+        mf0 = pyscf.pbc.scf.KUKS(cell0, kpts=kpts0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        eri0 = mf0._eri
+        trexio.to_trexio(mf0, filename)
+        mf1 = trexio.scf_from_trexio(filename)
+        assert abs(np.asarray(mf1.mo_coeff) - np.asarray(mf0.mo_coeff)).max() < DIFF_TOL
+        #trexio.write_mo_2e_int_eri(eri0, filename)
+        #eri1 = trexio.read_mo_2e_int_eri(filename)
+        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 #################################################################
 # reading/writing `mol` from/to trexio file + SCF run.
@@ -250,6 +356,54 @@ def test_cell_k_gamma_scf_uhf_ae_6_31g(cart):
         e0 = mf0.e_tot
         cell1 = trexio.mol_from_trexio(filename)
         mf1 = pyscf.pbc.scf.UKS(cell1)
+        mf1.xc = 'LDA'
+        mf1.run()
+        e1 = mf1.e_tot
+        assert abs(e0 - e1).max() < DIFF_TOL
+
+
+## PBC, k=general, segment contraction (6-31g), all-electron, RKS
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_cell_k_general_scf_rhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, 'test.h5')
+        kfrac = (0.25, 0.25, 0.25)
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        trexio.to_trexio(cell0, filename)
+        kpt0 = cell0.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf0 = pyscf.pbc.scf.RKS(cell0, kpt=kpt0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        e0 = mf0.e_tot
+        cell1 = trexio.mol_from_trexio(filename)
+        kpt1 = cell1.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf1 = pyscf.pbc.scf.RKS(cell1, kpt=kpt1)
+        mf1.xc = 'LDA'
+        mf1.run()
+        e1 = mf1.e_tot
+        assert abs(e0 - e1).max() < DIFF_TOL
+
+## PBC, k=general, segment contraction (6-31g), all-electron, UKS
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_cell_k_general_scf_uhf_ae_6_31g(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, 'test.h5')
+        kfrac = (0.25, 0.25, 0.25)
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
+        trexio.to_trexio(cell0, filename)
+        kpt0 = cell0.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf0 = pyscf.pbc.scf.UKS(cell0, kpt=kpt0)
+        mf0.xc = 'LDA'
+        mf0.run()
+        e0 = mf0.e_tot
+        cell1 = trexio.mol_from_trexio(filename)
+        kpt1 = cell1.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf1 = pyscf.pbc.scf.UKS(cell1, kpt=kpt1)
         mf1.xc = 'LDA'
         mf1.run()
         e1 = mf1.e_tot
