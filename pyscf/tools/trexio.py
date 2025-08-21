@@ -11,6 +11,12 @@ Installation instruction:
     https://github.com/TREX-CoE/trexio/blob/master/python/README.md
 '''
 
+# TODO
+## read UHF with a k grid
+## 2e AO
+## 1e MO
+## 1e AO
+
 import re
 import math
 import numpy as np
@@ -635,7 +641,46 @@ def scf_from_trexio(filename):
 
             # UHF
             if set(uniq.tolist()) == {0, 1}:
-                raise NotImplementedError
+                mo_energy_all_k = []
+                mo_occ_all_k = []
+                mo_coeff_all_k = []
+
+                for i_k in range(k_point_num):
+                    mask = (mo_k_point == i_k)
+                    mo_energy_k = mo_energy[mask]
+                    mo_occ_k    = mo_occ[mask]
+                    mo_spin_k   = mo_spin[mask]
+                    mo_coeff_k = mo_coeff[mask, :]
+                    mo_coeff_k_imag = mo_coeff_imag[mask, :]
+
+                    mask_up = (mo_spin_k == 0)   # alpha
+                    mask_dn = (mo_spin_k == 1)   # beta
+
+                    mo_energy_k_up = mo_energy_k[mask_up]
+                    mo_occ_k_up    = mo_occ_k[mask_up]
+                    mo_coeff_k_up  = mo_coeff_k[mask_up, :]
+                    mo_coeff_k_imag_up = mo_coeff_k_imag[mask_up, :]
+
+                    mo_energy_k_dn = mo_energy_k[mask_dn]
+                    mo_occ_k_dn    = mo_occ_k[mask_dn]
+                    mo_coeff_k_dn  = mo_coeff_k[mask_dn, :]
+                    mo_coeff_k_imag_dn = mo_coeff_k_imag[mask_dn, :]
+
+                    mo_coeff_k_up_ = np.empty((nao, len(mo_energy_k_up)), dtype=(mo_coeff_k_up + 1j * mo_coeff_k_imag_up).dtype)
+                    mo_coeff_k_up_[idx, :] = mo_coeff_k_up.T + 1j * mo_coeff_k_imag_up.T
+
+                    mo_coeff_k_dn_ = np.empty((nao, len(mo_energy_k_dn)), dtype=(mo_coeff_k_dn + 1j * mo_coeff_k_imag_dn).dtype)
+                    mo_coeff_k_dn_[idx, :] = mo_coeff_k_dn.T + 1j * mo_coeff_k_imag_dn.T
+
+                    mo_energy_all_k.append((mo_energy_k_up, mo_energy_k_dn))
+                    mo_occ_all_k.append((mo_occ_k_up, mo_occ_k_dn))
+                    mo_coeff_all_k.append((mo_coeff_k_up_, mo_coeff_k_dn_))
+
+                mf = mol.KUHF(kpts=kpts)
+                mf.mo_coeff = mo_coeff_all_k
+                mf.mo_energy = mo_energy_all_k
+                mf.mo_occ = mo_occ_all_k
+                return mf
 
             # RHF
             elif set(uniq.tolist()) == {0} or set(uniq.tolist()) == {1}:
@@ -651,7 +696,7 @@ def scf_from_trexio(filename):
                     mo_coeff_k = mo_coeff[mask, :]
                     mo_coeff_k_imag = mo_coeff_imag[mask, :]
 
-                    mo_coeff_k_ = np.empty((nao, int(num_mo/k_point_num)), dtype=(mo_coeff_k + 1j * mo_coeff_k_imag).dtype)
+                    mo_coeff_k_ = np.empty((nao, len(mo_energy_k)), dtype=(mo_coeff_k + 1j * mo_coeff_k_imag).dtype)
                     mo_coeff_k_[idx, :] = mo_coeff_k.T + 1j * mo_coeff_k_imag.T
 
                     mo_energy_all_k.append(mo_energy_k)
