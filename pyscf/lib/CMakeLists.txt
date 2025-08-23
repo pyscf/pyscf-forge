@@ -134,7 +134,7 @@ if(BUILD_OCCRI)
     # Check for required dependencies
     set(OCCRI_DEPS_FOUND TRUE)
     
-    # Find FFTW (optional)
+    # Find FFTW
     find_library(FFTW3_LIBRARY fftw3)
     find_library(FFTW3_THREADS_LIBRARY fftw3_threads)
     find_path(FFTW3_INCLUDE_DIR fftw3.h)
@@ -144,7 +144,7 @@ if(BUILD_OCCRI)
         set(OCCRI_DEPS_FOUND FALSE)
     endif()
     
-    # Find OpenMP (optional)
+    # Find OpenMP
     find_package(OpenMP)
     if(NOT OPENMP_FOUND)
         message(STATUS "OpenMP not found - OCCRI C extension will not be built")
@@ -159,7 +159,7 @@ if(BUILD_OCCRI)
         target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
         target_include_directories(occri PRIVATE ${FFTW3_INCLUDE_DIR})
         
-        # Link against FFTW, BLAS, and OpenMP
+        # Link against FFTW and OpenMP
         target_link_libraries(occri
             ${OPENMP_C_PROPERTIES}
             ${FFTW3_LIBRARY}

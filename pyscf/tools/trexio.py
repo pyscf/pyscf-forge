@@ -21,16 +21,21 @@ from pyscf import lib
 from pyscf import gto
 from pyscf import scf
 from pyscf import pbc
+from pyscf import mcscf
 from pyscf import fci
 
 import trexio
 
-def to_trexio(obj, filename, backend='h5'):
+def to_trexio(obj, filename, backend='h5', ci_threshold=None, chunk_size=None):
     with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
         if isinstance(obj, gto.Mole):
             _mol_to_trexio(obj, tf)
         elif isinstance(obj, scf.hf.SCF):
             _scf_to_trexio(obj, tf)
+        elif isinstance(obj, mcscf.casci.CASCI) or isinstance(obj, mcscf.CASSCF):
+            ci_threshold = ci_threshold if ci_threshold is not None else 0.
+            chunk_size = chunk_size if chunk_size is not None else 100000
+            _mcscf_to_trexio(obj, tf, ci_threshold=ci_threshold, chunk_size=chunk_size)
         else:
             raise NotImplementedError(f'Conversion function for {obj.__class__}')
 
@@ -255,8 +260,39 @@ def _scf_to_trexio(mf, trexio_file):
 def _cc_to_trexio(cc_obj, trexio_file):
     raise NotImplementedError
 
-def _mcscf_to_trexio(cas_obj, trexio_file):
-    raise NotImplementedError
+def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
+    mol = cas_obj.mol
+    _mol_to_trexio(mol, trexio_file)
+    mo_energy_cas = cas_obj.mo_energy
+    mo_cas = cas_obj.mo_coeff
+    num_mo = mo_energy_cas.size
+    spin_cas = np.zeros(mo_energy_cas.size, dtype=int)
+    mo_type_cas = 'CAS'
+    trexio.write_mo_type(trexio_file, mo_type_cas)
+    idx = _order_ao_index(mol)
+    trexio.write_mo_num(trexio_file, num_mo)
+    trexio.write_mo_coefficient(trexio_file, mo_cas[idx].T.ravel())
+    trexio.write_mo_energy(trexio_file, mo_energy_cas)
+    trexio.write_mo_spin(trexio_file, spin_cas)
+
+    ncore = cas_obj.ncore
+    ncas = cas_obj.ncas
+    mo_classes = np.array(["Virtual"] * num_mo, dtype=str)  # Initialize all MOs as Virtual
+    mo_classes[:ncore] = "Core"
+    mo_classes[ncore:ncore + ncas] = "Active"
+    trexio.write_mo_class(trexio_file, list(mo_classes))
+
+    occupation = np.zeros(num_mo)
+    occupation[:ncore] = 2.0
+    rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
+    natural_occ = np.linalg.eigh(rdm1)[0]
+    occupation[ncore:ncore + ncas] = natural_occ[::-1]
+    occupation[ncore + ncas:] = 0.0
+    trexio.write_mo_occupation(trexio_file, occupation)
+
+    total_elec_cas = sum(cas_obj.nelecas)
+
+    det_to_trexio(cas_obj, ncas, total_elec_cas, trexio_file, ci_threshold, chunk_size)
 
 def mol_from_trexio(filename):
     mol = gto.Mole()
@@ -336,19 +372,25 @@ def write_eri(eri, filename, backend='h5'):
         idx[:,:,2:] = idx_pair[None,:,:]
         idx = idx[np.tril_indices(npair)]
 
+    # Physicist notation
+    idx=idx.reshape((num_integrals,4))
+    for i in range(num_integrals):
+        idx[i,1],idx[i,2]=idx[i,2],idx[i,1]
+
+    idx=idx.flatten()
+
     with trexio.File(filename, 'w', back_end=_mode(backend)) as tf:
         trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
 
 def read_eri(filename):
-    '''Read ERIs in AO basis, 8-fold symmetry is assumed'''
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
         nmo = trexio.read_mo_num(tf)
         nao_pair = nmo * (nmo+1) // 2
         eri_size = nao_pair * (nao_pair+1) // 2
         idx, data, n_read, eof_flag = trexio.read_mo_2e_int_eri(tf, 0, eri_size)
     eri = np.zeros(eri_size)
-    x = idx[:,0]*(idx[:,0]+1)//2 + idx[:,1]
-    y = idx[:,2]*(idx[:,2]+1)//2 + idx[:,3]
+    x = idx[:,0]*(idx[:,0]+1)//2 + idx[:,2]
+    y = idx[:,1]*(idx[:,1]+1)//2 + idx[:,3]
     eri[x*(x+1)//2+y] = data
     return eri
 
@@ -417,20 +459,19 @@ def get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., chunk_size=100000):
-    from trexio_tools.group_tools import determinant as trexio_det
+def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
+    ncore = mcscf.ncore
+    int64_num = trexio.get_int64_num(trexio_file)
 
-    mo_num = norb
-    int64_num = int((mo_num - 1) / 64) + 1
     occsa, occsb, ci_values, num_determinants = get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
 
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
-        occsa_upshifted = [orb + 1 for orb in a]
-        occsb_upshifted = [orb + 1 for orb in b]
+        occsa_upshifted = [orb for orb in range(ncore)] + [orb+ncore for orb in a]
+        occsb_upshifted = [orb for orb in range(ncore)] + [orb+ncore for orb in b]
         det_tmp = []
-        det_tmp += trexio_det.to_determinant_list(occsa_upshifted, int64_num)
-        det_tmp += trexio_det.to_determinant_list(occsb_upshifted, int64_num)
+        det_tmp += trexio.to_bitfield_list(int64_num, occsa_upshifted)
+        det_tmp += trexio.to_bitfield_list(int64_num, occsb_upshifted)
         det_list.append(det_tmp)
 
     if num_determinants > chunk_size:
@@ -438,24 +479,19 @@ def det_to_trexio(mcscf, norb, nelec, filename, backend='h5', ci_threshold=0., c
     else:
         n_chunks = 1
 
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
-        if trexio.has_determinant(tf):
-            trexio.delete_determinant(tf)
-        trexio.write_mo_num(tf, mo_num)
-        trexio.write_electron_up_num(tf, len(a))
-        trexio.write_electron_dn_num(tf, len(b))
-        trexio.write_electron_num(tf, len(a) + len(b))
+    if trexio.has_determinant(trexio_file):
+        trexio.delete_determinant(trexio_file)
 
-        offset_file = 0
-        for i in range(n_chunks):
-            start = i * chunk_size
-            end = min((i + 1) * chunk_size, num_determinants)
-            current_chunk_size = end - start
+    offset_file = 0
+    for i in range(n_chunks):
+        start = i * chunk_size
+        end = min((i + 1) * chunk_size, num_determinants)
+        current_chunk_size = end - start
 
-            if current_chunk_size > 0:
-                trexio.write_determinant_list(tf, offset_file, current_chunk_size, det_list[start:end])
-                trexio.write_determinant_coefficient(tf, offset_file, current_chunk_size, ci_values[start:end])
-                offset_file += current_chunk_size
+        if current_chunk_size > 0:
+            trexio.write_determinant_list(trexio_file, offset_file, current_chunk_size, det_list[start:end])
+            trexio.write_determinant_coefficient(trexio_file, offset_file, current_chunk_size, ci_values[start:end])
+            offset_file += current_chunk_size
 
 def read_det_trexio(filename):
     with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:

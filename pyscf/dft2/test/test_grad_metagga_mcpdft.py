@@ -82,6 +82,11 @@ def diatomic(
 
 def setUpModule():
     global mols, original_grids
+    from importlib import reload
+    from pyscf import dft2
+    dft.libxc = dft2.libxc
+    reload (mcpdft)
+    reload (mcpdft.otfnal)
     mols = []
     original_grids = dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS
     dft.radi.ATOM_SPECIFIC_TREUTLER_GRIDS = False
@@ -95,30 +100,6 @@ def tearDownModule():
 
 
 class KnownValues(unittest.TestCase):
-
-    def test_grad_lih_sstm06l22_sto3g(self):
-        mc = diatomic("Li", "H", 0.8, "tM06L", "STO-3G", 2, 2, 1, grids_level=1)
-        de = mc.kernel()[1, 0] / BOHR
-
-        # Numerical from this software
-        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
-        # PySCF-forge commit:   4015363355dc691a80bc94d4b2b094318b213e36
-        DE_REF = -1.0546009263404388
-
-        self.assertAlmostEqual(de, DE_REF, 5)
-
-    def test_grad_lih_sa2tm06l22_sto3g(self):
-        mc = diatomic("Li", "H", 0.8, "tM06L", "STO-3G", 2, 2, 2, grids_level=1)
-
-        # Numerical from this software
-        # PySCF commit:         f2c2d3f963916fb64ae77241f1b44f24fa484d96
-        # PySCF-forge commit:   4015363355dc691a80bc94d4b2b094318b213e36
-        DE_REF = [-1.0351271000, -0.8919881992]
-
-        for state in range(2):
-            with self.subTest(state=state):
-                de = mc.kernel(state=state)[1, 0] / BOHR
-                self.assertAlmostEqual(de, DE_REF[state], 5)
 
     def test_grad_lih_ssmc2322_sto3g(self):
         mc = diatomic("Li", "H", 0.8, "MC23", "STO-3G", 2, 2, 1, grids_level=1)

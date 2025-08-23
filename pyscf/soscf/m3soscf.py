@@ -561,26 +561,27 @@ class M3SOSCF:
         log.info("Index:        Energy [ha]:                        Occupation:    Symmetry:")
         if self.method in ['uhf', 'uks']:
             for index, mo_e in enumerate(self.mf.mo_energy[0]):
-                label = "A  " * (self.mf.mo_occ[0,index] > 0)
                 s = f"{index} (A){(9 - len(str(index))) * ' '}{mo_e}{' ' * (36 - len(str(mo_e)))}"
-                s += f"{label}"
+                if self.mf.mo_occ[0,index] > 0:
+                    s += "A  "
                 s += f"{' ' * (65 - len(s))}{irreps[0][index]}"
                 s +=f"{(f' (FORCED, Overlap: {round(symm_overlap[0][index], 5)})') * forced_irreps}"
                 log.info(s)
 
                 mo_e = self.mf.mo_energy[1, index]
-                label = "  B" * (self.mf.mo_occ[1,index] > 0)
                 s = f"{index} (B){(9 - len(str(index))) * ' '}{mo_e}{' ' * (36 - len(str(mo_e)))}"
-                s += f"{label}"
+                if self.mf.mo_occ[1,index] > 0:
+                    s += "  B"
                 s += f"{' ' * (65 - len(s))}{irreps[1][index]}"
                 s +=f"{(f' (FORCED, Overlap: {round(symm_overlap[1][index], 5)})') * forced_irreps}"
                 log.info(s)
         else:
             for index, mo_e in enumerate(self.mf.mo_energy):
-                label = "A B" if self.mf.mo_occ[index] > 1 else "A" if self.mf.mo_occ[index] > 0 \
-                        else ""
                 s = f"{index}{(13 - len(str(index))) * ' '}{mo_e}{' ' * (36 - len(str(mo_e)))}"
-                s += f"{label}"
+                if self.mf.mo_occ[index] > 1:
+                    s += "A B"
+                elif self.mf.mo_occ[index] > 0:
+                    s += "A"
                 s += f"{' ' * (65 - len(s))}{irreps[index]}"
                 s += f"{(f' (FORCED, Overlap: {round(symm_overlap[index], 5)})') * forced_irreps}"
                 log.info(s)
