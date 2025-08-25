@@ -106,9 +106,8 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         disable_c : bool, optional
             If True, use pure Python implementation
         """
-        # BUG: Some PySCF methods have bugs when tagging initial guess dm.
-        # For example, RKRS can modify dm without modifying mo_occ in the same way.
-        # As a work around, always diagonalize dm on first iteration. See 02-kpoint...
+        # NOTE: Some PySCF methods (see RKRS) do not modify mo_occ like dm on initial guess build.
+        # As a work around, always diagonalize dm on first iteration. See 02-kpoint_calculations.py.
         self.scf_iter = 0
 
         self.StartTime = time.time()
