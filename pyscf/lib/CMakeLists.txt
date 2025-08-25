@@ -112,6 +112,16 @@ else ()
   set(CMAKE_INSTALL_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
 endif ()
 
+# Build the PDFT library
+set (PDFT_SOURCE_FILES "../mcpdft/nr_numint.c")
+add_library (clib_pdft SHARED ${PDFT_SOURCE_FILES})
+#FIXME: LD_LIBRARY_PATH
+target_link_libraries (clib_pdft dft ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
+set_target_properties (clib_pdft PROPERTIES
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "pdft")
+
 # Build the occri library (optional - depends on availability of FFTW, OpenMP)
 option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, OpenMP)" ON)
 
@@ -124,7 +134,7 @@ if(BUILD_OCCRI)
     # Check for required dependencies
     set(OCCRI_DEPS_FOUND TRUE)
     
-    # Find FFTW (optional)
+    # Find FFTW
     find_library(FFTW3_LIBRARY fftw3)
     find_library(FFTW3_THREADS_LIBRARY fftw3_threads)
     find_path(FFTW3_INCLUDE_DIR fftw3.h)
@@ -134,7 +144,7 @@ if(BUILD_OCCRI)
         set(OCCRI_DEPS_FOUND FALSE)
     endif()
     
-    # Find OpenMP (optional)
+    # Find OpenMP
     find_package(OpenMP)
     if(NOT OPENMP_FOUND)
         message(STATUS "OpenMP not found - OCCRI C extension will not be built")
@@ -149,7 +159,7 @@ if(BUILD_OCCRI)
         target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
         target_include_directories(occri PRIVATE ${FFTW3_INCLUDE_DIR})
         
-        # Link against FFTW, BLAS, and OpenMP
+        # Link against FFTW and OpenMP
         target_link_libraries(occri
             ${OPENMP_C_PROPERTIES}
             ${FFTW3_LIBRARY}
