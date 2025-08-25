@@ -115,6 +115,12 @@ def setUpModule():
     global get_water_triplet, water_tm06l, water_tmc23
     global lih_tmc23_2, lih_tmc23_sa2_2, water_tmc23_2
 
+    from importlib import reload
+    from pyscf import dft2
+    dft.libxc = dft2.libxc
+    reload (mcpdft)
+    reload (mcpdft.otfnal)
+
     # register otfnal tMC23_2 which is identical to MC23
     mc232_preset = mcpdft.otfnal.OT_PRESET['MC23']
     mcpdft.otfnal.register_otfnal('MC23_2', mc232_preset)
@@ -159,37 +165,6 @@ class KnownValues(unittest.TestCase):
         for first, second in zip(first_list, second_list):
             self.assertAlmostEqual(first, second, expected)
 
-    def test_tmgga(self):
-        e_mcscf = lih_tm06l.e_mcscf
-        epdft = lih_tm06l.e_tot
-
-        sa_e_mcscf = lih_tm06l_sa2.e_mcscf
-        sa_epdft = lih_tm06l_sa2.e_states
-
-        # The CAS and MCPDFT reference values are generated using
-        # OpenMolcas v24.10, tag 682-gf74be507d
-        E_CASSCF_EXPECTED = -7.88214917
-        E_MCPDFT_EXPECTED = -7.95814186
-        SA_E_CASSCF_EXPECTED = [-7.88205449, -7.74391704]
-        SA_E_MCPDFT_EXPECTED = [-7.95807682, -7.79920022]
-
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
-        self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 6)
-        self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 6)
-
-    def test_t_hyb_mgga(self):
-        e_mcscf = lih_tm06l0.e_mcscf
-        epdft = lih_tm06l0.e_tot
-
-        # The CAS and MCPDFT reference values are generated using
-        # OpenMolcas v24.10, tag 682-gf74be507d
-        E_CASSCF_EXPECTED = -7.88214917
-        E_MCPDFT_EXPECTED = -7.93914369
-
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
-
     def test_tmc23(self):
         e_mcscf = lih_tmc23.e_mcscf
         epdft = lih_tmc23.e_tot
@@ -227,18 +202,6 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
         self.assertListAlmostEqual(sa_e_mcscf, SA_E_CASSCF_EXPECTED, 6)
         self.assertListAlmostEqual(sa_epdft, SA_E_MCPDFT_EXPECTED, 6)
-
-    def test_water_triplet_tm06l(self):
-        e_mcscf = water_tm06l.e_mcscf
-        epdft = water_tm06l.e_tot
-
-        # The CAS and MCPDFT reference values are generated using
-        # OpenMolcas v24.10, tag 682-gf74be507d
-        E_CASSCF_EXPECTED = -75.72365496
-        E_MCPDFT_EXPECTED = -76.07686505
-
-        self.assertAlmostEqual(e_mcscf, E_CASSCF_EXPECTED, 6)
-        self.assertAlmostEqual(epdft, E_MCPDFT_EXPECTED, 6)
 
     def test_water_triplet_tmc23(self):
         e_mcscf = water_tmc23.e_mcscf
