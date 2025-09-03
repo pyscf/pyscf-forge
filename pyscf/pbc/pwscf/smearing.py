@@ -78,10 +78,10 @@ class _SmearingPWKSCF(_SmearingKSCF):
             assert nocc == cell.nelectron / 2.0
         if moe_ks is not None:
             mocc_ks = self.get_occ(mo_energy_kpts=np.array(moe_ks))
-            if self.istype("KUHF") or self.istype("PWKUHF"):
+            if self.istype("PWKUHF"):
                 mocc_ks = [[2 * occ for occ in mocc_ks[0]], [2 * occ for occ in mocc_ks[1]]]
         elif C_ks is not None:
-            if self.istype("KUHF") or self.istype("PWKUHF"):
+            if self.istype("PWKUHF"):
                 mocc_ks = [_occ_from_C(C_ks[0]), _occ_from_C(C_ks[1])]
             else:
                 mocc_ks = _occ_from_C(C_ks)
@@ -89,6 +89,11 @@ class _SmearingPWKSCF(_SmearingKSCF):
             raise RuntimeError
 
         return mocc_ks
+
+    def istype(self, type_code):
+        if not type_code.startswith("PW"):
+            type_code = "PW" + type_code
+        return super().istype(type_code)
 
     def energy_tot(self, C_ks, mocc_ks, moe_ks=None, mesh=None, Gv=None,
                    vj_R=None, exxdiv=None):

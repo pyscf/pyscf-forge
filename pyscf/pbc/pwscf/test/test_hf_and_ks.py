@@ -52,7 +52,6 @@ def tearDownModule():
 
 
 class KnownValues(unittest.TestCase):
-
     def _get_calc(self, cell, kpts, spinpol=False, xc=None, run=True, **kwargs):
         if xc is None:
             if not spinpol:
@@ -75,6 +74,7 @@ class KnownValues(unittest.TestCase):
             mf.kernel()
             assert mf.converged
         mo_energy, mo_occ = mf.get_mo_energy(mf.mo_coeff, mf.mo_occ)
+        assert_allclose(mo_energy, mf.mo_energy, rtol=1e-8, atol=1e-8)
         # mo_energy, mo_occ = mf.mo_energy, mf.mo_occ
         delta = 1e-5
         cell = mf.cell

@@ -992,7 +992,6 @@ def ewald_correction(moe_ks, mocc_ks, madelung):
         moe_ks_new = [None] * nkpts
         for k in range(nkpts):
             moe_ks_new[k] = moe_ks[k].copy()
-            # moe_ks_new[k][mocc_ks[k]>THR_OCC] -= 0.5 * mocc_ks[k] * madelung
             moe_ks_new[k][:] -= 0.5 * mocc_ks[k] * madelung
     else:                               # UHF
         ncomp = len(moe_ks)
@@ -1023,7 +1022,6 @@ def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
         Cbar_k = mf.apply_Fock_kpt(C_k, kpt, mocc_ks, mesh, Gv, vj_R,
                                    exxdiv, comp=comp, ret_E=False)
         if full_ham:
-            # moe_k = np.einsum("ig,jg->ij", C_k.conj(), Cbar_k)
             moe_k = np.dot(C_k.conj(), Cbar_k.T)
         else:
             moe_k = np.einsum("ig,ig->i", C_k.conj(), Cbar_k)
@@ -1098,7 +1096,6 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
             e1_comp = mf.apply_hcore_kpt(Co_k, kpt, mesh, Gv, mf.with_pp,
                                          ret_E=True)[1]
             e_ks[k] = np.sum(e1_comp) * 0.5 + np.sum(moe_ks[k][occ])
-    # e_scf = np.sum(e_ks) / nkpts
     e_scf = np.dot(e_ks, wts)
 
     if moe_ks is None and exxdiv == "ewald":
@@ -1323,8 +1320,6 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
     return e_tot, moe_ks, mocc_ks
 
 
-# class PWKRHF(lib.StreamObject):
-# class PWKRHF(mol_hf.SCF):
 class PWKRHF(pbc_hf.KSCF):
     '''PWKRHF base class. non-relativistic RHF using PW basis.
     '''
@@ -1621,7 +1616,7 @@ class PWKRHF(pbc_hf.KSCF):
         if self.wf_mesh is None:
             mesh = None
         else:
-            mesh = self.wf_mesh  # [13, 13, 13]
+            mesh = self.wf_mesh
         return pw_pseudo.pseudopotential(self, with_pp=with_pp, mesh=mesh,
                                          outcore=self.outcore, **kwargs)
 
