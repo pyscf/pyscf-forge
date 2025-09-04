@@ -26,14 +26,15 @@ from pyscf import __config__, lib
 from pyscf.lib import logger
 import numpy as np
 
+from pyscf.pbc.lib.kpts_helper import member
+
 
 def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
                    out=None):
-    mocc_ks = np.asarray(mocc_ks)
-    if mocc_ks.ndim == 2:
+    if mocc_ks[0][0].ndim == 0:
         spin = 0
     else:
-        assert mocc_ks.ndim == 3
+        assert mocc_ks[0][0].ndim == 1
         spin = 1
     cell = mf.cell
     if mesh is None: mesh = mf.wf_mesh
@@ -48,7 +49,7 @@ def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
         nrho = 0
     else:
         raise ValueError(f"Unsupported xctype {xctype}")
-    if spin > 0:
+    if spin != 0:
         nspin = len(C_ks)
         assert nspin > 0
     else:
@@ -69,8 +70,8 @@ def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
                 drho_G = 1j * Gv[:, v] * rho_G
                 rhovec_R[s, v + 1] = tools.ifft(drho_G, mesh).real
     if nrho > 4:
-        dC_ks = [np.empty_like(C_k) for C_k in C_ks[0]]
         for s in range(nspin):
+            dC_ks = [np.empty_like(C_k) for C_k in C_ks[s]]
             rhovec_R[s, 4] = 0
             const = 1j * np.sqrt(0.5)
             for v in range(3):
@@ -135,6 +136,8 @@ def eval_xc(mf, xc_code, rhovec_R, xctype):
 def vxc_from_vxcvec(rhovec_R, vxcvec_R, xctype, mesh, Gv, dv):
     nspin = vxcvec_R.shape[0]
     vxc_R = vxcvec_R[:, 0].copy()
+    if rhovec_R.ndim == 2:
+        rhovec_R = rhovec_R[None, :, :]
     vxcdot = 0
     for s in range(nspin):
         if xctype in ["GGA", "MGGA"]:
@@ -161,6 +164,13 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
     """
     log = logger.Logger(mf.stdout, mf.verbose)
 
+    if mocc_ks is None:
+        mocc_k = 2
+    else:
+        k = member(kpt, mf.kpts)[0]
+        mocc_k = mocc_ks[k][:C_k.shape[0]]
+    Cto_k = C_k.conj() * mocc_k[:, None]
+
     tspans = np.zeros((3,2))
     es = np.zeros(3, dtype=np.complex128)
     ni = mf._numint
@@ -174,7 +184,7 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     tmp = with_jk.apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R, basis=basis)
     Cbar_k = tmp * 2.
-    es[0] = np.einsum("ig,ig->", C_k.conj(), tmp) * 2.
+    es[0] = np.einsum("ig,ig->", Cto_k, tmp)
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = np.asarray(tock - tick).reshape(1,2)
 
@@ -182,7 +192,7 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
         tmp = -hyb * with_jk.apply_k_kpt(C_k, kpt, mesh=mesh, Gv=Gv, exxdiv=exxdiv,
                                          comp=comp, basis=basis)
         Cbar_k += tmp
-        es[1] = np.einsum("ig,ig->", C_k.conj(), tmp)
+        es[1] = 0.5 * np.einsum("ig,ig->", Cto_k, tmp)
     else:
         es[1] = 0.0
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
@@ -257,8 +267,13 @@ class PWKohnShamDFT(rks.KohnShamDFT):
 
     def coarse_to_dense_grid(self, func_xR, out_xr=None):
         # TODO use real FFTs here since the real-space density is real
-        ratio = np.prod(self.xc_mesh) / np.prod(self.wf_mesh)
+        xshape = func_xR.shape[:-1]
+        small_size = np.prod(self.wf_mesh)
+        big_size = np.prod(self.xc_mesh)
+        ratio = big_size / small_size
         invr = 1 / ratio
+        func_xR = func_xR.view()
+        func_xR.shape = (-1, small_size)
         rhovec_G = tools.fft(func_xR, self.wf_mesh)
         dense_size = np.prod(self.xc_mesh)
         if func_xR.ndim == 1:
@@ -275,6 +290,7 @@ class PWKohnShamDFT(rks.KohnShamDFT):
             rhovec_r = out_xr
             rhovec_r[:] = tools.ifft(rhovec_g, self.xc_mesh).real
         rhovec_r[:] *= ratio
+        rhovec_r.shape = xshape + (big_size,)
         return rhovec_r
 
     def dense_to_coarse_grid(self, func_xr, out_xR=None):
@@ -359,16 +375,19 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         )
         return vj_R
 
+    def _get_xcdiff(self, vj_R):
+        return vj_R.exc - 0.5 * vj_R.vxcdot
+
     to_gpu = lib.to_gpu
 
 
 class PWKRKS(PWKohnShamDFT, khf.PWKRHF):
     
     def __init__(self, cell, kpts=np.zeros((1,3)), xc='LDA,VWN',
-                 ekincut=None, ecut_xc=None,
+                 ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_SCF_exxdiv', 'ewald')):
-        khf.PWKRHF.__init__(self, cell, kpts, ekincut=ekincut, ecut_xc=ecut_xc,
-                            exxdiv=exxdiv)
+        khf.PWKRHF.__init__(self, cell, kpts, ecut_wf=ecut_wf,
+                            ecut_rho=ecut_rho, exxdiv=exxdiv)
         PWKohnShamDFT.__init__(self, xc)
 
     def dump_flags(self, verbose=None):
@@ -391,17 +410,22 @@ class PWKRKS(PWKohnShamDFT, khf.PWKRHF):
             moe_ks = res[0]
         else:
             moe_ks = res
-        moe_ks[0] = lib.tag_array(moe_ks[0], xcdiff=vj_R.exc-vj_R.vxcdot)
+        moe_ks[0] = lib.tag_array(moe_ks[0], xcdiff=self._get_xcdiff(vj_R))
         return res
 
     def energy_elec(self, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                     vj_R=None, exxdiv=None):
+        if moe_ks is not None:
+            # Need xcdiff to compute energy from moe_ks
+            if vj_R is None and not hasattr(moe_ks[0], "xcdiff"):
+                moe_ks = None
         e_scf = khf.PWKRHF.energy_elec(self, C_ks, mocc_ks, moe_ks=moe_ks,
                                        mesh=mesh, Gv=Gv, vj_R=vj_R,
                                        exxdiv=exxdiv)
         # When energy is computed from the orbitals, we need to account for
         # the different between \int vxc rho and \int exc rho.
         if moe_ks is not None:
+            print("XCDIFF", moe_ks[0].xcdiff)
             e_scf += moe_ks[0].xcdiff
         return e_scf
 
@@ -447,8 +471,8 @@ if __name__ == "__main__":
     for ecut in ecuts:
         print("\n\n\n")
         print("ECUT", ecut)
-        mf = PWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
-        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
+        mf = PWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
+        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
         
         # nxc = 49
         # mf.set_meshes(xc_mesh=[nxc, nxc, nxc])

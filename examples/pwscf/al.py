@@ -57,14 +57,14 @@ else:
     if sym:
         ks = cell.make_kpts([3,3,3], time_reversal_symmetry=True, space_group_symmetry=True)
         if spinpol:
-            kmf = kpt_symm.KsymAdaptedPWKUKS(cell, ks, ekincut=ecut)
+            kmf = kpt_symm.KsymAdaptedPWKUKS(cell, ks, ecut_wf=ecut)
         else:
-            kmf = kpt_symm.KsymAdaptedPWKRKS(cell, ks, ekincut=ecut)
+            kmf = kpt_symm.KsymAdaptedPWKRKS(cell, ks, ecut_wf=ecut)
     else:
         if spinpol:
-            kmf = kuks.PWKUKS(cell, kpts, ekincut=ecut)
+            kmf = kuks.PWKUKS(cell, kpts, ecut_wf=ecut)
         else:
-            kmf = krks.PWKRKS(cell, kpts, ekincut=ecut)
+            kmf = krks.PWKRKS(cell, kpts, ecut_wf=ecut)
     kmf = smearing_(kmf, sigma=0.01, method='gauss')
     kmf.xc = "PBE"
     kmf.nvir = 3

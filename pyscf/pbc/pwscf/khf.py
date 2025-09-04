@@ -861,6 +861,8 @@ def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
 
     if mocc_ks is None:
         mocc_k = 2
+    elif isinstance(mocc_ks, np.ndarray) and mocc_ks.ndim == 1:
+        mocc_k = mocc_ks
     else:
         k = member(kpt, mf.kpts)[0]
         mocc_k = mocc_ks[k][:C_k.shape[0]]
@@ -876,7 +878,8 @@ def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = tock - tick
 
-    if C_k_R is None: raise NotImplementedError  # C_k_R = tools.ifft(C_k, mesh)
+    if C_k_R is None:
+        C_k_R = pw_helper.wf_ifft(C_k, mesh, mf.get_basis_kpt(kpt))
     tmp = with_pp.apply_vppl_kpt(C_k, mesh=mesh, C_k_R=C_k_R, basis=basis)
     Cbar_k += tmp
     es[1] = (np.einsum("ig,ig->i", C_k.conj(), tmp) * mocc_k).sum()
@@ -1065,7 +1068,6 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
     nkpts = len(kpts)
 
     wts = mf.weights
-
     e_ks = np.zeros(nkpts)
     if moe_ks is None:
         if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
@@ -1078,7 +1080,6 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                                          vj_R, exxdiv, ret_E=True)[1]
             e_ks[k] = np.sum(e_comp_k)
             e_comp += e_comp_k * wts[k]
-        # e_comp /= nkpts
 
         if exxdiv == "ewald":
             e_comp[mf.scf_summary["e_comp_name_lst"].index("ex")] += \
@@ -1087,15 +1088,15 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
         for comp,e in zip(mf.scf_summary["e_comp_name_lst"], e_comp):
             mf.scf_summary[comp] = e
     else:
-        raise NotImplementedError
-        # TODO does not handle occupations correctly
         for k in range(nkpts):
             kpt = kpts[k]
             occ = np.where(mocc_ks[k] > THR_OCC)[0]
             Co_k = get_kcomp(C_ks, k, occ=occ)
+            mocc_k = mocc_ks[k][occ]
             e1_comp = mf.apply_hcore_kpt(Co_k, kpt, mesh, Gv, mf.with_pp,
-                                         ret_E=True)[1]
-            e_ks[k] = np.sum(e1_comp) * 0.5 + np.sum(moe_ks[k][occ])
+                                         mocc_ks=mocc_k, ret_E=True)[1]
+            e_ks[k] = 0.5 * np.sum(e1_comp)
+            e_ks[k] += 0.5 * np.sum(moe_ks[k][occ] * mocc_k)
     e_scf = np.dot(e_ks, wts)
 
     if moe_ks is None and exxdiv == "ewald":
@@ -1344,7 +1345,7 @@ class PWKRHF(pbc_hf.KSCF):
     check_convergence = None
     callback = None
 
-    def __init__(self, cell, kpts=np.zeros((1,3)), ekincut=None, ecut_xc=None,
+    def __init__(self, cell, kpts=np.zeros((1,3)), ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_PWKRHF_exxdiv', 'ewald')):
 
         if not cell._built:
@@ -1354,14 +1355,14 @@ class PWKRHF(pbc_hf.KSCF):
         self.cell = cell
         mol_hf.SCF.__init__(self, cell)
 
-        if ekincut is None:
-            self._ekincut = None
-            self._ecut_xc = None
+        if ecut_wf is None:
+            self._ecut_wf = None
+            self._ecut_rho = None
         else:
-            self._ekincut = ekincut
-            if ecut_xc is None:
-                ecut_xc = 4 * ekincut
-            self._ecut_xc = ecut_xc
+            self._ecut_wf = ecut_wf
+            if ecut_rho is None:
+                ecut_rho = 4 * ecut_wf
+            self._ecut_rho = ecut_rho
 
         self.kpts = kpts
         self.exxdiv = exxdiv
@@ -1399,14 +1400,14 @@ class PWKRHF(pbc_hf.KSCF):
 
     def set_meshes(self, wf_mesh=None, xc_mesh=None):
         self._wf_mesh, self._xc_mesh, self._wf2xc, self._basis_data = (
-            pw_helper.get_basis_data(self.cell, self.kpts, self._ekincut,
+            pw_helper.get_basis_data(self.cell, self.kpts, self._ecut_wf,
                                      wf_mesh=wf_mesh, xc_mesh=xc_mesh)
         )
         self.with_jk = None
 
     @property
-    def ekincut(self):
-        return self._ekincut
+    def ecut_wf(self):
+        return self._ecut_wf
     
     def get_basis_kpt(self, kpt):
         if self._basis_data is None:
@@ -1429,7 +1430,7 @@ class PWKRHF(pbc_hf.KSCF):
         self._kpts = np.reshape(x, (-1,3))
         # update madelung constant and energy shift for exxdiv
         self._set_madelung()
-        if self._ekincut is None:
+        if self._ecut_wf is None:
             self._wf_mesh = None
             self._xc_mesh = None
             self._wf2xc = None
@@ -1717,7 +1718,7 @@ if __name__ == "__main__":
     kmesh = [2, 2, 2]
     kpts = cell.make_kpts(kmesh)
 
-    mf = PWKRHF(cell, kpts, ekincut=None)
+    mf = PWKRHF(cell, kpts, ecut_wf=None)
     mf.damp_type = "simple"
     mf.damp_factor = 0.7
     mf.nvir = 4 # converge first 4 virtual bands
@@ -1732,11 +1733,11 @@ if __name__ == "__main__":
     elists = []
     for ng in ng_list:
         print("NGRID", ng)
-        mf2 = PWKRHF(cell, kpts, ekincut=1000)
+        mf2 = PWKRHF(cell, kpts, ecut_wf=1000)
         mf2.set_meshes(wf_mesh=[ng, ng, ng], xc_mesh=[ngx, ngx, ngx])
         # cell.mesh = [ng, ng, ng]
         # cell.build()
-        # mf2 = PWKRHF(cell, kpts, ekincut=None)
+        # mf2 = PWKRHF(cell, kpts, ecut_wf=None)
         if False:
             mf2.damp_type = "simple"
             mf2.damp_factor = 0.7
@@ -1770,9 +1771,8 @@ if __name__ == "__main__":
 
     ets = []
     for ecut in [25, 50, 75, 100]:
-        mf2 = PWKRHF(cell, kpts, ekincut=ecut)
+        mf2 = PWKRHF(cell, kpts, ecut_wf=ecut)
         mf2.xc_mesh = MESH
-        print("HI", mf2.wf_mesh)
         mf2.damp_type = "simple"
         mf2.damp_factor = 0.7
         mf2.nvir = 4 # converge first 4 virtual bands
@@ -1792,7 +1792,7 @@ if __name__ == "__main__":
     print(ets)
     exit()
 
-    mf2 = PWKRHF(cell, kpts, ekincut=100)
+    mf2 = PWKRHF(cell, kpts, ecut_wf=100)
     print(mf2.wf_mesh)
     mf2.damp_type = "simple"
     mf2.damp_factor = 0.7

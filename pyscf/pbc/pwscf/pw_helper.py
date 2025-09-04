@@ -65,22 +65,22 @@ class PWBasis:
         return self.ke.size
     
 
-def get_basis_data(cell, kpts, ekincut, wf_mesh=None, xc_mesh=None,
+def get_basis_data(cell, kpts, ecut_wf, wf_mesh=None, xc_mesh=None,
                    sphere=True):
     latvec = cell.lattice_vectors()
     if wf_mesh is None:
         use_small_inner_mesh = True
-        if ekincut is None:
+        if ecut_wf is None:
             wf_mesh = cell.mesh
         else:
-            wf_mesh = tools.cutoff_to_mesh(latvec, 4 * ekincut)
+            wf_mesh = tools.cutoff_to_mesh(latvec, 4 * ecut_wf)
     else:
         use_small_inner_mesh = False
     if xc_mesh is None:
-        if ekincut is None:
+        if ecut_wf is None:
             xc_mesh = wf_mesh
         else:
-            xc_mesh = tools.cutoff_to_mesh(latvec, 16 * ekincut)
+            xc_mesh = tools.cutoff_to_mesh(latvec, 16 * ecut_wf)
     if not sphere:
         if use_small_inner_mesh:
             inner_mesh = [((((m + 1) // 2) - 1) // 2) * 2 + 1 for m in wf_mesh]
@@ -93,10 +93,10 @@ def get_basis_data(cell, kpts, ekincut, wf_mesh=None, xc_mesh=None,
     for kpt in kpts:
         kinetic = get_kinetic(kpt, Gv)
         if sphere:
-            indexes = np.where(kinetic < ekincut)[0]
+            indexes = np.where(kinetic < ecut_wf)[0]
         basis_data.append(PWBasis(
             wf_mesh,
-            ekincut,
+            ecut_wf,
             np.asarray(indexes, dtype=np.uintp, order="C"),
             np.asarray(kinetic[indexes], dtype=np.float64, order="C"),
             np.asarray((kpt + Gv)[indexes, :], dtype=np.float64, order="C"),

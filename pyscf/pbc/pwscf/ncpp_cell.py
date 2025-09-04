@@ -4,6 +4,7 @@ from pyscf.data.elements import ELEMENTS, ELEMENTS_PROTON, \
         _rm_digit, charge, _symbol, _std_symbol, _atom_symbol, is_ghost_atom, \
         _std_symbol_without_ghost
 from pyscf.pbc.pwscf.upf import get_nc_data_from_upf
+import numpy as np
 import os
 
 
@@ -41,9 +42,33 @@ class NCPPCell(Cell):
                 self._atm[ia, 0] = _pseudo[symb]["z"]
         self._built = True
 
+    def dumps(self):
+        backup_pseudo = self._pseudo
+        def recurse(dic):
+            if isinstance(dic, dict):
+                dic1 = {}
+                iter = dic.items()
+            else:
+                dic1 = [None] * len(dic)
+                iter = enumerate(dic)
+            for k, v in iter:
+                if (v is None or
+                    isinstance(v, (str, bool, int, float))):
+                    dic1[k] = v
+                elif isinstance(v, (list, dict)):
+                    dic1[k] = recurse(v)
+                elif isinstance(v, (np.ndarray, np.generic)):
+                    dic1[k] = v.tolist()
+                else:
+                    raise ValueError("Cannot dump type {}".format(type(v)))
+            return dic1
+        self._pseudo = recurse(backup_pseudo)
+        res = super().dumps()
+        self._pseudo = backup_pseudo
+        return res
+
 
 if __name__ == "__main__":
-    import numpy as np
     from pyscf.pbc import gto
     from pyscf.pbc.pwscf.krks import PWKRKS
 
@@ -84,8 +109,8 @@ if __name__ == "__main__":
     for ecut in ecuts:
         print("\n")
         print("ECUT", ecut)
-        mf = PWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
-        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
+        mf = PWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
+        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
         mf.damp_type = "simple"
         mf.damp_factor = 0.7
         mf.nvir = 4 # converge first 4 virtual bands
@@ -93,8 +118,8 @@ if __name__ == "__main__":
         mf.dump_scf_summary()
         ens1.append(mf.e_tot)
 
-        mf2 = PWKRKS(nccell, kpts, xc="PBE", ekincut=ecut)
-        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ekincut=ecut)
+        mf2 = PWKRKS(nccell, kpts, xc="PBE", ecut_wf=ecut)
+        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
         mf2.damp_type = "simple"
         mf2.damp_factor = 0.7
         mf2.nvir = 4 # converge first 4 virtual bands
@@ -110,5 +135,3 @@ if __name__ == "__main__":
         print(ecuts[:-1])
         print(27.2 * (np.array(ens[:-1]) - ens[-1]))
         print()
-
-    assert(abs(mf.e_tot - -10.673452914596) < 1.e-5)

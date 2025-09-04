@@ -397,7 +397,7 @@ def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
     G_phi[:] = G_phi % (2 * np.pi)
     lmax = np.max([[proj["l"] for proj in pp["projectors"]]
                   for pp in cell._pseudo.values()])
-    G_ylm = np.empty(((lmax + 1) * (lmax + 1), ngrids), dtype=np.float64)
+    G_ylm = np.empty(((lmax + 1) * (lmax + 1), ngrids), dtype=np.complex128)
     lm = 0
     for l in range(lmax + 1):
         for m in range(2 * l + 1):

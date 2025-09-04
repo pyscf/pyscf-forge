@@ -60,7 +60,7 @@ def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
                   vj_R=None, ret_mocc=True, full_ham=False):
     cell = mf.cell
     if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
-    if mesh is None: mesh = cell.mesh
+    if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
     if exxdiv is None: exxdiv = mf.exxdiv
 
@@ -129,8 +129,12 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
     if basis is None: basis = cell0.basis
     if pseudo is None: pseudo = cell0.pseudo
     cell = cell0.copy()
+    if cell.__class__ != gto.Cell:
+        cell.__class__ = gto.Cell
+        cell.pseudo = None
+        cell._pseudo = None
     cell.basis = basis
-    if len(cell._ecp) > 0:  # use GTH to avoid the slow init time of ECP
+    if len(cell._ecp) > 0 or pseudo == "SG15":  # use GTH to avoid the slow init time of ECP
         gth_pseudo = {}
         for iatm in range(cell0.natm):
             atm = cell0.atom_symbol(iatm)
@@ -193,7 +197,7 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
 
         C_ks = get_spin_component(out, s)
         pw_helper.get_C_ks_G(cell, kpts, mo_coeff[s], ntot_ks, out=C_ks,
-                             verbose=cell0.verbose)
+                             verbose=cell0.verbose, mesh=mesh)
         mocc_ks = [mo_occ[s][k][:ntot_ks[k]] for k in range(nkpts)]
 
         C_ks = khf.orth_mo(cell0, C_ks, mocc_ks)
@@ -290,13 +294,14 @@ def eig_subspace(mf, C_ks, mocc_ks, mesh=None, Gv=None, vj_R=None, exxdiv=None,
 def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                 vj_R=None, exxdiv=None):
     cell = mf.cell
-    if mesh is None: mesh = cell.mesh
+    if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
     if exxdiv is None: exxdiv = mf.exxdiv
 
     kpts = mf.kpts
     nkpts = len(kpts)
 
+    wts = mf.weights
     e_ks = np.zeros(nkpts)
     if moe_ks is None:
         if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
@@ -312,8 +317,8 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                                              ret_E=True)[1]
                 e_comp_k *= 0.5
                 e_ks[k] += np.sum(e_comp_k)
-                e_comp += e_comp_k
-        e_comp /= nkpts
+                e_comp += e_comp_k * wts[k]
+        # e_comp /= nkpts
 
         if exxdiv == "ewald":
             e_comp[mf.scf_summary["e_comp_name_lst"].index("ex")] += \
@@ -322,18 +327,19 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
         for comp,e in zip(mf.scf_summary["e_comp_name_lst"],e_comp):
             mf.scf_summary[comp] = e
     else:
-        for s in [0,1]:
+        for s in [0, 1]:
             C_ks_s = get_spin_component(C_ks, s)
-            moe_ks_s = moe_ks[s]
             for k in range(nkpts):
                 kpt = kpts[k]
                 occ = np.where(mocc_ks[s][k] > khf.THR_OCC)[0]
+                mocc_k = 0.5 * mocc_ks[s][k][occ]
                 Co_k = get_kcomp(C_ks_s, k, occ=occ)
                 e1_comp = mf.apply_hcore_kpt(Co_k, kpt, mesh, Gv, mf.with_pp,
-                                             comp=s, ret_E=True)[1]
-                e1_comp *= 0.5
-                e_ks[k] += np.sum(e1_comp) * 0.5 + np.sum(moe_ks_s[k][occ]) * 0.5
-    e_scf = np.sum(e_ks) / nkpts
+                                             comp=s, ret_E=True,
+                                             mocc_ks=mocc_k)[1]
+                e_ks[k] += 0.5 * np.sum(e1_comp)
+                e_ks[k] += 0.5 * np.sum(moe_ks[s][k][occ] * mocc_k)
+    e_scf = np.dot(e_ks, wts)
 
     if moe_ks is None and exxdiv == "ewald":
         # Note: ewald correction is not needed if e_tot is computed from moe_ks
@@ -376,14 +382,15 @@ def converge_band(mf, C_ks, mocc_ks, kpts, Cout_ks=None,
 
 
 class PWKUHF(khf.PWKRHF):
-
-    def __init__(self, cell, kpts=np.zeros((1,3)), ekincut=None,
+    def __init__(self, cell, kpts=np.zeros((1,3)),
+                 ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_PWKUHF_exxdiv', 'ewald')):
 
-        khf.PWKRHF.__init__(self, cell, kpts=kpts, exxdiv=exxdiv)
-
+        khf.PWKRHF.__init__(self, cell, kpts, ecut_wf=ecut_wf,
+                            ecut_rho=ecut_rho, exxdiv=exxdiv)
         self.nvir = [0,0]
         self.nvir_extra = [1,1]
+        self._nelec = None
 
     def get_init_guess_key(self, cell=None, kpts=None, basis=None, pseudo=None,
                            nvir=None, key="hcore", out=None):
@@ -394,10 +401,19 @@ class PWKUHF(khf.PWKRHF):
         if key in ["h1e","hcore","cycle1","scf"]:
             C_ks, mocc_ks = get_init_guess(cell, kpts,
                                            basis=basis, pseudo=pseudo,
-                                           nvir=nvir, key=key, out=out)
+                                           nvir=nvir, key=key, out=out,
+                                           mesh=self.wf_mesh)
         else:
             logger.warn(self, "Unknown init guess %s", key)
             raise RuntimeError
+
+        if self._basis_data is not None:
+            Cspin_ks = C_ks
+            for C_ks in Cspin_ks:
+                for k, kpt in enumerate(self.kpts):
+                    inds = self.get_basis_kpt(kpt).indexes
+                    set_kcomp(np.ascontiguousarray(C_ks[k][:, inds]), C_ks, k)
+            C_ks = Cspin_ks
 
         return C_ks, mocc_ks
 
@@ -442,6 +458,25 @@ class PWKUHF(khf.PWKRHF):
 
     def get_vj_R(self, C_ks, mocc_ks, mesh=None, Gv=None):
         return self.with_jk.get_vj_R(C_ks, mocc_ks, mesh=mesh, Gv=Gv, ncomp=2)
+
+    @property
+    def nelec(self):
+        if self._nelec is not None:
+            return self._nelec
+        else:
+            cell = self.cell
+            nkpts = len(self.kpts)
+            ne = cell.tot_electrons(nkpts)
+            nalpha = (ne + cell.spin) // 2
+            nbeta = nalpha - cell.spin
+            if nalpha + nbeta != ne:
+                raise RuntimeError('Electron number %d and spin %d are not consistent\n'
+                                   'Note cell.spin = 2S = Nalpha - Nbeta, not 2S+1' %
+                                   (ne, cell.spin))
+            return nalpha, nbeta
+    @nelec.setter
+    def nelec(self, x):
+        self._nelec = x
 
     get_nband = get_nband
     dump_moe = dump_moe

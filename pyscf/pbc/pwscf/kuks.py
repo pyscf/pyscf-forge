@@ -27,10 +27,11 @@ import numpy as np
 
 
 class PWKUKS(krks.PWKohnShamDFT, kuhf.PWKUHF):
-
     def __init__(self, cell, kpts=np.zeros((1,3)), xc='LDA,VWN',
+                 ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_SCF_exxdiv', 'ewald')):
-        kuhf.PWKUHF.__init__(self, cell, kpts, exxdiv=exxdiv)
+        kuhf.PWKUHF.__init__(self, cell, kpts, ecut_wf=ecut_wf, ecut_rho=ecut_rho,
+                             exxdiv=exxdiv)
         krks.PWKohnShamDFT.__init__(self, xc)
 
     def dump_flags(self, verbose=None):
@@ -53,11 +54,15 @@ class PWKUKS(krks.PWKohnShamDFT, kuhf.PWKUHF):
             moe_ks = res[0]
         else:
             moe_ks = res
-        moe_ks[0][0] = lib.tag_array(moe_ks[0][0], xcdiff=vj_R.exc-vj_R.vxcdot)
+        moe_ks[0][0] = lib.tag_array(moe_ks[0][0], xcdiff=self._get_xcdiff(vj_R))
         return res
 
     def energy_elec(self, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                     vj_R=None, exxdiv=None):
+        if moe_ks is not None:
+            # Need xcdiff to compute energy from moe_ks
+            if vj_R is None and not hasattr(moe_ks[0][0], "xcdiff"):
+                moe_ks = None
         e_scf = kuhf.PWKUHF.energy_elec(self, C_ks, mocc_ks, moe_ks=moe_ks,
                                         mesh=mesh, Gv=Gv, vj_R=vj_R,
                                         exxdiv=exxdiv)

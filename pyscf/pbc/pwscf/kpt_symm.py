@@ -519,7 +519,7 @@ class KsymMixin:
         self._kpts = kpts
         # update madelung constant and energy shift for exxdiv
         self._set_madelung()
-        if self._ekincut is None:
+        if self._ecut_wf is None:
             self._wf_mesh = None
             self._xc_mesh = None
             self._wf2xc = None
@@ -607,7 +607,7 @@ if __name__ == "__main__":
         time_reversal_symmetry=True,
     )
 
-    mf = PWKRHF(cell, kpts, ekincut=50)
+    mf = PWKRHF(cell, kpts, ecut_wf=50)
     mf.damp_type = "simple"
     mf.damp_factor = 0.7
     mf.nvir = 4 # converge first 4 virtual bands
@@ -615,7 +615,7 @@ if __name__ == "__main__":
     mf.kernel()
     t1 = time.monotonic()
 
-    mf2 = KsymAdaptedPWKRHF(cell, skpts, ekincut=50)
+    mf2 = KsymAdaptedPWKRHF(cell, skpts, ecut_wf=50)
     mf2.damp_type = "simple"
     mf2.damp_factor = 0.7
     mf2.nvir = 4 # converge first 4 virtual bands

@@ -3,7 +3,9 @@ import tempfile
 import numpy as np
 from pyscf.pbc import gto as pbcgto
 from pyscf.pbc import dft as pbcdft
+from pyscf.pbc.pwscf.smearing import smearing_
 from pyscf.pbc.pwscf import khf, kuhf, krks, kuks
+from pyscf.pbc.pwscf.ncpp_cell import NCPPCell
 import pyscf.pbc
 from numpy.testing import assert_allclose
 pyscf.pbc.DEBUG = False
@@ -20,7 +22,7 @@ def setUpModule():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        verbose=0,
+        verbose=4,
     )
     CELL.mesh = [13, 13, 13]
     # CELL.mesh = [27, 27, 27]
@@ -35,11 +37,23 @@ def setUpModule():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        spin=2,
-        verbose=0,
+        spin=-2,
+        verbose=4,
     )
     ATOM.mesh = [25, 25, 25]
     ATOM.build()
+
+    """
+    ATOM = NCPPCell(
+        atom = "C 0 0 0",
+        a = np.eye(3) * 4,
+        basis="gth-szv",
+        ke_cutoff=50,
+        spin=2,
+        verbose=4,
+    )
+    ATOM.build(sg15_path="/mnt/home/kbystrom/gpaw_data/sg15_oncv_upf_2020-02-06")
+    """
 
     nk = 1
     kmesh = (nk,)*3
@@ -53,16 +67,24 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
     def _get_calc(self, cell, kpts, spinpol=False, xc=None, run=True, **kwargs):
+        ecut_wf = kwargs.pop("ecut_wf", None)
+        ecut_rho = kwargs.pop("ecut_rho", None)
         if xc is None:
             if not spinpol:
-                mf = khf.PWKRHF(cell, kpts)
+                mf = khf.PWKRHF(cell, kpts, ecut_wf=ecut_wf, ecut_rho=ecut_rho)
             else:
-                mf = kuhf.PWKUHF(cell, kpts)
+                mf = kuhf.PWKUHF(
+                    cell, kpts, ecut_wf=ecut_wf, ecut_rho=ecut_rho
+                )
         else:
             if not spinpol:
-                mf = krks.PWKRKS(cell, kpts, xc=xc)
+                mf = krks.PWKRKS(
+                    cell, kpts, xc=xc, ecut_wf=ecut_wf, ecut_rho=ecut_rho
+                )
             else:
-                mf = kuks.PWKUKS(cell, kpts, xc=xc)
+                mf = kuks.PWKUKS(
+                    cell, kpts, xc=xc, ecut_wf=ecut_wf, ecut_rho=ecut_rho
+                )
         mf.conv_tol = 1e-8
         mf.__dict__.update(**kwargs)
         if run:
@@ -75,6 +97,10 @@ class KnownValues(unittest.TestCase):
             assert mf.converged
         mo_energy, mo_occ = mf.get_mo_energy(mf.mo_coeff, mf.mo_occ)
         assert_allclose(mo_energy, mf.mo_energy, rtol=1e-8, atol=1e-8)
+        etot_ref = mf.e_tot
+        etot_check = mf.energy_tot(mf.mo_coeff, mf.mo_occ,
+                                   moe_ks=mo_energy)
+        assert_allclose(etot_check, etot_ref, atol=1e-9)
         # mo_energy, mo_occ = mf.mo_energy, mf.mo_occ
         delta = 1e-5
         cell = mf.cell
@@ -181,7 +207,6 @@ class KnownValues(unittest.TestCase):
             _run_test(s=0)
             _run_test(s=1)
 
-
     def test_fd_hf(self):
         ref = -10.649288588747416
         rmf = self._get_calc(CELL, KPTS, nvir=2)
@@ -227,6 +252,40 @@ class KnownValues(unittest.TestCase):
 
     def test_fd_ks_hyb(self):
         self._check_fd_ks("PBE0", ref=-10.940602656908139)
+
+    def test_smearing(self):
+        xc = "LDA,VWN"
+        rmf = self._get_calc(
+            CELL, KPTS, nvir=6, xc=xc, run=False, ecut_wf=40
+        )
+        umf1 = self._get_calc(
+            CELL, KPTS, nvir=6, spinpol=True, xc=xc, run=False, ecut_wf=40,
+        )
+        umf2 = self._get_calc(
+            ATOM, KPT1, nvir=2, spinpol=True, xc=xc, run=False, ecut_wf=40
+        )
+        assert_allclose(umf1.e_tot, rmf.e_tot, atol=1e-7)
+        check = True
+        sigmas = [0.05, 0.05, 0.01]
+        new_mfs = []
+        for mf, sigma in zip([rmf, umf1, umf2], sigmas):
+            mf.kernel()
+            etot_nosmear = mf.e_tot
+            mf = smearing_(mf, sigma=sigma, method="gauss")
+            mf.kernel()
+            etot_ref = mf.e_tot
+            # energy with and without smearing doesn't change too much
+            assert_allclose(etot_ref, etot_nosmear, atol=1e-2)
+            moe_tst = mf.mo_energy
+            mo_energy, mo_occ = mf.get_mo_energy(mf.mo_coeff, mf.mo_occ)
+            if check:
+                check = False
+                assert_allclose(mo_energy, moe_tst, rtol=1e-8, atol=1e-8)
+            etot_check = mf.energy_tot(mf.mo_coeff, mf.mo_occ, mo_energy)
+            mf.dump_scf_summary()
+            assert_allclose(etot_check, etot_ref, atol=1e-8)
+            new_mfs.append(mf)
+        assert_allclose(new_mfs[1].e_tot, new_mfs[0].e_tot, atol=1e-7)
 
 
 if __name__ == "__main__":

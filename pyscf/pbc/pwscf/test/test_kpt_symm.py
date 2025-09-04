@@ -1,6 +1,6 @@
 import unittest
 from pyscf.pbc import gto as pbcgto
-from pyscf.pbc.pwscf import khf, krks, jk, kpt_symm
+from pyscf.pbc.pwscf import khf, krks, kuks, jk, kpt_symm
 from pyscf.pbc.pwscf.smearing import smearing_
 import numpy as np
 from pyscf.pbc import tools
@@ -19,7 +19,7 @@ def get_mf_and_kpts():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        verbose=0,
+        verbose=4,
     )
     cell.mesh = [24, 24, 24]
     cell.build()
