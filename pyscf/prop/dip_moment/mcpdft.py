@@ -34,7 +34,7 @@ def get_guage_origin(mol,origin):
             center = charges.dot(coords)/charges.sum()
         else:
             raise RuntimeError ("Gauge origin is not recognized")
-    elif isinstance(center,str):
+    elif isinstance(origin, tuple):
         center = origin
     else:
         raise RuntimeError ("Gauge origin must be a string or tuple")
