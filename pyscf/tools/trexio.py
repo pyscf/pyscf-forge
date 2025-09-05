@@ -666,10 +666,14 @@ def scf_from_trexio(filename):
                     mo_coeff_k_dn  = mo_coeff_k[mask_dn, :]
                     mo_coeff_k_imag_dn = mo_coeff_k_imag[mask_dn, :]
 
-                    mo_coeff_k_up_ = np.empty((nao, len(mo_energy_k_up)), dtype=(mo_coeff_k_up + 1j * mo_coeff_k_imag_up).dtype)
+                    mo_coeff_k_up_ = np.empty((nao, len(mo_energy_k_up)),
+                                               dtype=(mo_coeff_k_up + 1j * mo_coeff_k_imag_up).dtype
+                                            )
                     mo_coeff_k_up_[idx, :] = mo_coeff_k_up.T + 1j * mo_coeff_k_imag_up.T
 
-                    mo_coeff_k_dn_ = np.empty((nao, len(mo_energy_k_dn)), dtype=(mo_coeff_k_dn + 1j * mo_coeff_k_imag_dn).dtype)
+                    mo_coeff_k_dn_ = np.empty((nao, len(mo_energy_k_dn)),
+                                              dtype=(mo_coeff_k_dn + 1j * mo_coeff_k_imag_dn).dtype
+                                            )
                     mo_coeff_k_dn_[idx, :] = mo_coeff_k_dn.T + 1j * mo_coeff_k_imag_dn.T
 
                     mo_energy_all_k.append((mo_energy_k_up, mo_energy_k_dn))
@@ -875,7 +879,7 @@ def _get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
+def _det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
     ncore = mcscf.ncore
     int64_num = trexio.get_int64_num(trexio_file)
 
