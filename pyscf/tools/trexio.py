@@ -667,13 +667,11 @@ def scf_from_trexio(filename):
                     mo_coeff_k_imag_dn = mo_coeff_k_imag[mask_dn, :]
 
                     mo_coeff_k_up_ = np.empty((nao, len(mo_energy_k_up)),
-                                               dtype=(mo_coeff_k_up + 1j * mo_coeff_k_imag_up).dtype
-                                            )
+                                              dtype=(mo_coeff_k_up + 1j * mo_coeff_k_imag_up).dtype)
                     mo_coeff_k_up_[idx, :] = mo_coeff_k_up.T + 1j * mo_coeff_k_imag_up.T
 
                     mo_coeff_k_dn_ = np.empty((nao, len(mo_energy_k_dn)),
-                                              dtype=(mo_coeff_k_dn + 1j * mo_coeff_k_imag_dn).dtype
-                                            )
+                                              dtype=(mo_coeff_k_dn + 1j * mo_coeff_k_imag_dn).dtype)
                     mo_coeff_k_dn_[idx, :] = mo_coeff_k_dn.T + 1j * mo_coeff_k_imag_dn.T
 
                     mo_energy_all_k.append((mo_energy_k_up, mo_energy_k_dn))
