@@ -58,11 +58,14 @@ def get_nc_data_from_upf(fname):
     dij = dij.reshape(len(projectors), len(projectors))
     _deriv = make_radial_derivative_calculator(pp_r, 2, 2)[0]
     d1 = _deriv(pp_local * pp_r)
-    charge = d1 / pp_r
+    charge = d1.copy()
+    charge[1:] /= pp_r[1:]
     charge[0] = charge[1]
     pp_k, chargek = fft_upf(pp_r, charge, 0)
     chargek[:] /= 4 * np.pi
-    locpotk = chargek * 4 * np.pi / pp_k**2
+    locpotk = chargek.copy()
+    locpotk[1:] *= 4 * np.pi / pp_k[1:]**2
+    locpotk[0] = locpotk[1]
     if False:
         import matplotlib
         matplotlib.use("QtAgg")

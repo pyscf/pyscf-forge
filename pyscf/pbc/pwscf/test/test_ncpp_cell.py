@@ -1,19 +1,23 @@
+import unittest
 from pyscf.pbc.gto.cell import Cell
-from pyscf.pbc.pwscf.ncpp_cell import NCPPCell
-from pyscf.data.elements import ELEMENTS, ELEMENTS_PROTON, \
-        _rm_digit, charge, _symbol, _std_symbol, _atom_symbol, is_ghost_atom, \
-        _std_symbol_without_ghost
+from pyscf.pbc.pwscf.ncpp_cell import NCPPCell, DEFAULT_SG15_PATH
 from pyscf.pbc.pwscf.upf import get_nc_data_from_upf
+from pyscf.pbc.pwscf.krks import PWKRKS
+from pyscf.pbc.pwscf.kuks import PWKUKS
+from pyscf.pbc.pwscf import kpt_symm
+import pyscf.pbc
 import numpy as np
 import os
+from numpy.testing import assert_allclose
 
 
+pyscf.pbc.DEBUG = False
+HAVE_SG15 = DEFAULT_SG15_PATH is not None and os.path.exists(DEFAULT_SG15_PATH)
 
-if __name__ == "__main__":
-    from pyscf.pbc import gto
-    from pyscf.pbc.pwscf.krks import PWKRKS
 
-    kwargs = dict(
+def setUpModule():
+    global CELL, KPTS, KPTS2, ATOM, KPT1
+    CELL = NCPPCell(
         atom = "C 0 0 0; C 0.89169994 0.89169994 0.89169994",
         a = np.asarray([
                 [0.       , 1.78339987, 1.78339987],
@@ -21,58 +25,74 @@ if __name__ == "__main__":
                 [1.78339987, 1.78339987, 0.        ]]),
         basis="gth-szv",
         ke_cutoff=50,
-        pseudo="gth-pade",
-        #symmorphic=True,
-        #space_group_symmetry=True,
-        verbose=6,
+        verbose=0,
     )
-
-    cell = gto.Cell(**kwargs)
-    cell.build()
-
-    kwargs.pop("pseudo")
-    nccell = NCPPCell(**kwargs)
-    nccell.build(sg15_path="../../gpaw_data/sg15_oncv_upf_2020-02-06/")
+    if HAVE_SG15:
+        CELL.build()
 
     kmesh = [2, 2, 2]
-    kpts = cell.make_kpts(
-        kmesh,
-        #time_reversal_symmetry=True,
-        #space_group_symmetry=True,
+    KPTS = CELL.make_kpts(kmesh)
+
+    kmesh2 = [1, 1, 3]
+    KPTS2 = CELL.make_kpts(kmesh2)
+
+    ATOM = NCPPCell(
+        atom = "C 0 0 0",
+        a = np.eye(3) * 4,
+        basis="gth-szv",
+        ke_cutoff=50,
+        spin=2,
+        verbose=0,
     )
+    if HAVE_SG15:
+        ATOM.build()
 
-    # from pyscf.pbc.pwscf import kpt_symm
+    nk = 1
+    kmesh = (nk,)*3
+    KPT1 = ATOM.make_kpts(kmesh)
 
-    ens1 = []
-    ens2 = []
-    ecuts = [18.38235294, 22.05882353, 25.73529412, 29.41176471, 33.08823529,
-             36.76470588, 44.11764706, 55.14705882, 73.52941176, 91.91176471]
-    for ecut in ecuts:
-        print("\n")
-        print("ECUT", ecut)
-        mf = PWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
-        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
-        mf.damp_type = "simple"
-        mf.damp_factor = 0.7
+
+def tearDownModule():
+    global CELL, ATOM, KPTS, KPTS2, KPT1
+    del CELL, ATOM, KPTS, KPTS2, KPT1
+
+
+@unittest.skipIf(not HAVE_SG15, "Missing SG15 pseudos")
+class KnownValues(unittest.TestCase):
+    def test_energy(self):
+        ecut_wf = 18.38235294
+        e_ref2 = -11.069880610677329
+        e_ref = -11.518140438246803
+        mf = PWKRKS(CELL, KPTS2, xc="PBE", ecut_wf=ecut_wf)
         mf.nvir = 4 # converge first 4 virtual bands
         mf.kernel()
-        mf.dump_scf_summary()
-        ens1.append(mf.e_tot)
+        assert_allclose(mf.e_tot, e_ref2, atol=1e-7)
+        mf = PWKUKS(CELL, KPTS2, xc="PBE", ecut_wf=ecut_wf)
+        mf.nvir = 4
+        mf.kernel()
+        assert_allclose(mf.e_tot, e_ref2, atol=1e-7)
+        mf = kpt_symm.KsymAdaptedPWKRKS(CELL, KPTS, xc="PBE", ecut_wf=ecut_wf)
+        mf.nvir = 4
+        mf.kernel()
+        assert_allclose(mf.e_tot, e_ref, atol=1e-7)
 
-        mf2 = PWKRKS(nccell, kpts, xc="PBE", ecut_wf=ecut)
-        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
-        mf2.damp_type = "simple"
-        mf2.damp_factor = 0.7
-        mf2.nvir = 4 # converge first 4 virtual bands
+        # check loading and unloading the cell
+        cell2 = NCPPCell.loads(CELL.dumps())
+        mf2 = kpt_symm.KsymAdaptedPWKRKS(
+            cell2, KPTS, xc="PBE", ecut_wf=ecut_wf
+        )
+        mf2.nvir = 4
         mf2.init_pp()
         mf2.init_jk()
-        # mf2.energy_tot(C_ks=mf.mo_coeff, mocc_ks=mf.mo_occ)
-        mf2.kernel()
-        ens2.append(mf2.e_tot)
-        mf2.dump_scf_summary()
-    print()
-    for ens in [ens1, ens2]:
-        print(ens)
-        print(ecuts[:-1])
-        print(27.2 * (np.array(ens[:-1]) - ens[-1]))
-        print()
+        assert_allclose(
+            mf2.energy_tot(mf.mo_coeff, mf.mo_occ), e_ref, atol=1e-7
+        )
+        # make sure original cell was not affected
+        assert_allclose(
+            mf.energy_tot(mf.mo_coeff, mf.mo_occ), e_ref, atol=1e-7
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
+

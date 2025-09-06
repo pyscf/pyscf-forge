@@ -43,26 +43,14 @@ def setUpModule():
     ATOM.mesh = [25, 25, 25]
     ATOM.build()
 
-    """
-    ATOM = NCPPCell(
-        atom = "C 0 0 0",
-        a = np.eye(3) * 4,
-        basis="gth-szv",
-        ke_cutoff=50,
-        spin=2,
-        verbose=4,
-    )
-    ATOM.build(sg15_path="/mnt/home/kbystrom/gpaw_data/sg15_oncv_upf_2020-02-06")
-    """
-
     nk = 1
     kmesh = (nk,)*3
     KPT1 = ATOM.make_kpts(kmesh)
 
 
 def tearDownModule():
-    global CELL, ATOM
-    del CELL, ATOM
+    global CELL, ATOM, KPTS, KPT1
+    del CELL, ATOM, KPTS, KPT1
 
 
 class KnownValues(unittest.TestCase):

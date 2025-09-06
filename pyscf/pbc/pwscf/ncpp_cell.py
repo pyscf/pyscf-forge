@@ -1,3 +1,4 @@
+from pyscf import __config__
 from pyscf.pbc.gto.cell import Cell
 from pyscf.data.elements import _symbol, is_ghost_atom, \
         _std_symbol_without_ghost
@@ -8,15 +9,24 @@ import io
 
 
 _ARRAY_PREFIX = "__NCPP_NPARRAY__"
+DEFAULT_SG15_PATH = getattr(__config__, 'pbc_pwscf_ncpp_cell_sg15_path', None)
 
 
 class NCPPCell(Cell):
+
+    _keys = {"sg15_path"}
+
+    def __init__(self, **kwargs):
+        sg15_path = kwargs.pop("sg15_path", DEFAULT_SG15_PATH)
+        Cell.__init__(self, **kwargs) 
+        self.sg15_path = sg15_path
+
     def build(self, **kwargs):
         if "pseudo" in kwargs or "ecp" in kwargs:
             raise ValueError("pseudo and ecp not supported")
-        if "sg15_path" not in kwargs:
-            raise ValueError("sg15_path must be supplied")
-        sg15_path = kwargs.pop("sg15_path")
+        self.sg15_path = kwargs.pop("sg15_path", self.sg15_path)
+        if self.sg15_path is None:
+            raise ValueError("sg15_path is not set")
         super().build(**kwargs)
 
         uniq_atoms = {a[0] for a in self._atom}
@@ -30,7 +40,7 @@ class NCPPCell(Cell):
             assert isinstance(symb, str)
             stdsymb = _std_symbol_without_ghost(symb)
             fname = os.path.join(
-                sg15_path, f"{stdsymb}_ONCV_PBE-1.2.upf"
+                self.sg15_path, f"{stdsymb}_ONCV_PBE-1.2.upf"
             )
             fmt_pseudo[symb] = get_nc_data_from_upf(fname)
         self._pseudo = _pseudo = fmt_pseudo
@@ -62,7 +72,7 @@ class NCPPCell(Cell):
                 elif isinstance(v, (np.ndarray, np.generic)):
                     # dic1[k] = v.tolist()
                     x = io.BytesIO()
-                    np.savez(x, v)
+                    np.save(x, v)
                     dic1[k] = _ARRAY_PREFIX + x.getvalue().hex()
                 else:
                     raise ValueError("Cannot dump type {}".format(type(v)))
@@ -98,6 +108,7 @@ class NCPPCell(Cell):
                     raise ValueError("Cannot dump type {}".format(type(v)))
             return dic1
         cell._pseudo = recurse(str_pseudo)
+        return cell
 
 
 if __name__ == "__main__":
@@ -121,7 +132,6 @@ if __name__ == "__main__":
 
     kwargs.pop("pseudo")
     nccell = NCPPCell(**kwargs)
-    nccell.build(sg15_path="../../gpaw_data/sg15_oncv_upf_2020-02-06/")
 
     kmesh = [2, 2, 2]
     kpts = cell.make_kpts(kmesh)
