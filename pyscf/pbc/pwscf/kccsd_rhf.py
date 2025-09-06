@@ -37,11 +37,13 @@ def padded_mo_coeff(mp, mo_coeff):
     padding_convention = padding_k_idx(mp, kind="joint")
     nkpts = mp.nkpts
 
-    result = np.zeros((nkpts, mp.nmo, mo_coeff[0].shape[1]),
-                      dtype=mo_coeff[0].dtype)
+    result = []
     for k in range(nkpts):
-        result[np.ix_([k], padding_convention[k],
-               np.arange(result.shape[2]))] = mo_coeff[k][frozen_mask[k], :]
+        res = np.zeros((mp.nmo, mo_coeff[k].shape[1]),
+                        dtype=mo_coeff[k].dtype)
+        slicing = np.ix_(padding_convention[k], np.arange(res.shape[1]))
+        res[slicing] = mo_coeff[k][frozen_mask[k], :]
+        result.append(res)
 
     return result
 
@@ -123,10 +125,13 @@ class _ERIS:
             moe = self.mo_energy[k].copy()
             moe[mo_occ[k]>THR_OCC] += mf._madelung
             moe_noewald[k] = moe
-        self.fock = np.asarray([np.diag(moe.astype(np.complex128)) for moe in moe_noewald])
+        self.fock = np.asarray(
+            [np.diag(moe.astype(np.complex128)) for moe in moe_noewald]
+        )
 
-        eris = get_molint_from_C(cell, mo_coeff,
-                                 kpts).transpose(0,2,1,3,5,4,6)
+        eris = get_molint_from_C(
+            cell, mo_coeff, kpts, basis_ks=mf._basis_data
+        ).transpose(0,2,1,3,5,4,6)
 
         no = cc.nocc
         self.oooo = eris[:,:,:,:no,:no,:no,:no]

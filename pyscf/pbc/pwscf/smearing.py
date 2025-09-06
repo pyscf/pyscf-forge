@@ -32,7 +32,7 @@ SMEARING_METHOD = getattr(__config__, 'pbc_scf_addons_smearing_method', 'fermi')
 
 def smearing(mf, sigma=None, method=SMEARING_METHOD, mu0=None, fix_spin=False):
     '''Fermi-Dirac or Gaussian smearing'''
-    if not isinstance(mf, khf.PWKRHF):
+    if not isinstance(mf, khf.PWKSCF):
         raise ValueError("For PW mode only")
 
     if isinstance(mf, _SmearingPWKSCF):
@@ -89,15 +89,6 @@ class _SmearingPWKSCF(_SmearingKSCF):
             raise RuntimeError
 
         return mocc_ks
-
-    def istype(self, type_code):
-        if not type_code.startswith("PW"):
-            type_code = "PW" + type_code
-        for o in ["RHF", "RKS"]:
-            n = o.replace("R", "U")
-            if o in type_code and super().istype(type_code.replace(o, n)):
-                return False
-        return super().istype(type_code)
 
     def energy_tot(self, C_ks, mocc_ks, moe_ks=None, mesh=None, Gv=None,
                    vj_R=None, exxdiv=None):

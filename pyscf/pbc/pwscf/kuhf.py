@@ -209,7 +209,8 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
     return out, mocc_ks_spin
 
 
-def init_guess_by_chkfile(cell, chkfile_name, nvir, project=None, out=None):
+def init_guess_by_chkfile(cell, chkfile_name, nvir, project=None, out=None,
+                          basis_ks=None):
     if isinstance(nvir, int): nvir = [nvir] * 2
 
     from pyscf.pbc.scf import chkfile
@@ -236,7 +237,8 @@ def init_guess_by_chkfile(cell, chkfile_name, nvir, project=None, out=None):
 
         C_ks_s, mocc_ks[s] = khf.init_guess_from_C0(cell, C_ks_s, ntot_ks,
                                                     out=C_ks_s,
-                                                    mocc_ks=mocc_ks[s])
+                                                    mocc_ks=mocc_ks[s],
+                                                    basis_ks=basis_ks)
 
     return C_ks, mocc_ks
 
@@ -246,7 +248,7 @@ def update_pp(mf, C_ks):
     if "t-ppnl" not in mf.scf_summary:
         mf.scf_summary["t-ppnl"] = np.zeros(2)
 
-    mf.with_pp.update_vppnloc_support_vec(C_ks, ncomp=2)
+    mf.with_pp.update_vppnloc_support_vec(C_ks, ncomp=2, basis_ks=mf._basis_data)
 
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     mf.scf_summary["t-ppnl"] += tock - tick
@@ -381,12 +383,12 @@ def converge_band(mf, C_ks, mocc_ks, kpts, Cout_ks=None,
     return conv_ks, moeout_ks, Cout_ks, fc_ks
 
 
-class PWKUHF(khf.PWKRHF):
+class PWKUHF(khf.PWKSCF):
     def __init__(self, cell, kpts=np.zeros((1,3)),
                  ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_PWKUHF_exxdiv', 'ewald')):
 
-        khf.PWKRHF.__init__(self, cell, kpts, ecut_wf=ecut_wf,
+        khf.PWKSCF.__init__(self, cell, kpts, ecut_wf=ecut_wf,
                             ecut_rho=ecut_rho, exxdiv=exxdiv)
         self.nvir = [0,0]
         self.nvir_extra = [1,1]
@@ -440,18 +442,17 @@ class PWKUHF(khf.PWKRHF):
                           for i in range(n0_ks[k])]) for k in range(nkpts)]
             C_ks_s, mocc_ks[s] = khf.init_guess_from_C0(self.cell, C0_ks_s,
                                                         ntot_ks, out=C_ks_s,
-                                                        mocc_ks=mocc_ks[s])
+                                                        mocc_ks=mocc_ks[s],
+                                                        basis_ks=self._basis_data)
 
         return C_ks, mocc_ks
 
-    def init_guess_by_chkfile(self, chk=None, nvir=None, project=None,
+    def init_guess_by_chkfile(self, chk=None, nvir=None, project=True,
                               out=None):
         if chk is None: chk = self.chkfile
         if nvir is None: nvir = self.nvir
         return init_guess_by_chkfile(self.cell, chk, nvir, project=project,
-                                     out=out)
-    def from_chk(self, chk=None, project=None, kpts=None):
-        return self.init_guess_by_chkfile(chk, project, kpts)
+                                     out=out, basis_ks=self._basis_data)
 
     def get_mo_occ(mf, moe_ks=None, C_ks=None):
         return get_mo_occ(mf.cell, moe_ks, C_ks)

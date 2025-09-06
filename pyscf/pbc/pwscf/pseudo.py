@@ -77,24 +77,6 @@ def apply_vppl_kpt(cell, C_k, mesh=None, vpplocR=None, C_k_R=None, basis=None):
     return wf_fft(C_k_R * vpplocR, mesh, basis=basis)
 
 
-def apply_vppnl_kpt(cell, C_k, kpt, mesh=None, Gv=None, basis=None):
-    if mesh is None: mesh = cell.mesh
-    if Gv is None: Gv = cell.get_Gv(mesh=mesh)
-
-    if len(cell._ecp) > 0:
-        return apply_vppnl_kpt_ccecp(cell, C_k, kpt, Gv)
-    elif cell.pseudo is not None:
-        if "GTH" in cell.pseudo.upper():
-            return apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=basis)
-        elif cell.pseudo == "SG15":
-            return apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=basis)
-        else:
-            raise NotImplementedError("Pseudopotential %s is currently not "
-                                      "supported." % (str(cell.pseudo)))
-    else:
-        return apply_vppnl_kpt_alle(cell, C_k, kpt, Gv)
-
-
 """ PW-PP class implementation goes here
 """
 def get_pp_type(cell):
@@ -165,7 +147,6 @@ class PWPP:
 
         self.pptype = get_pp_type(cell)
         self._ecp = None
-        self.vppnlocGG = None
         self.vppnlocWks = None
         self._ecpnloc_initialized = False
 
@@ -197,7 +178,7 @@ class PWPP:
                                        (self.ecp_nloc_item))
         self._ecpnloc_initialized = True
 
-    def update_vppnloc_support_vec(self, C_ks, ncomp=1, out=None):
+    def update_vppnloc_support_vec(self, C_ks, ncomp=1, out=None, basis_ks=None):
         if self.pptype == "ccecp":
             if not self._ecpnloc_initialized:
                 self.initialize_ecpnloc()
@@ -214,7 +195,8 @@ class PWPP:
                                          ke_cutoff_nloc=self.ecpnloc_ke_cutoff,
                                          ncomp=ncomp, _ecp=self._ecp,
                                          thr_eig=self.threshold_svec,
-                                         use_numexpr=self.ecpnloc_use_numexpr)
+                                         use_numexpr=self.ecpnloc_use_numexpr,
+                                         basis_ks=basis_ks)
             elif self.ecpnloc_method == "kb2":
                 raise NotImplementedError
                 if len(self.vppnlocWks) > 0:
@@ -235,7 +217,8 @@ class PWPP:
                                       _ecp=self._ecp,
                                       ke_cutoff_nloc=self.ecpnloc_ke_cutoff,
                                       ncomp=ncomp, thr_eig=self.threshold_svec,
-                                      use_numexpr=self.ecpnloc_use_numexpr)
+                                      use_numexpr=self.ecpnloc_use_numexpr,
+                                      basis_ks=basis_ks)
 
     def apply_vppl_kpt(self, C_k, mesh=None, vpplocR=None, C_k_R=None,
                        basis=None):
@@ -249,16 +232,14 @@ class PWPP:
         cell = self.cell
         if self.pptype == "ccecp":
             k = member(kpt, self.kpts)[0]
-            if self.vppnlocWks is None:
-                return lib.dot(C_k.conj(), self.vppnlocGG[k]).conj()
+            assert self.vppnlocWks is not None
+            if comp is None:
+                W_k = get_kcomp(self.vppnlocWks, k)
+            elif isinstance(comp, int):
+                W_k = get_kcomp(self.vppnlocWks["%d"%comp], k)
             else:
-                if comp is None:
-                    W_k = get_kcomp(self.vppnlocWks, k)
-                elif isinstance(comp, int):
-                    W_k = get_kcomp(self.vppnlocWks["%d"%comp], k)
-                else:
-                    raise RuntimeError("comp must be None or int")
-                return lib.dot(lib.dot(C_k, W_k.T.conj()), W_k)
+                raise RuntimeError("comp must be None or int")
+            return lib.dot(lib.dot(C_k, W_k.T.conj()), W_k)
         elif self.pptype == "gth":
             return apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=basis)
         elif self.pptype == "SG15":
@@ -585,11 +566,13 @@ def get_vpplocG_ccecp(cell, Gv, _ecp=None):
     return vlocG
 
 
-def apply_vppnlocGG_kpt_ccecp(cell, C_k, kpt, _ecp=None, use_numexpr=False):
+def apply_vppnlocGG_kpt_ccecp(cell, C_k, kpt, _ecp=None, Gv=None,
+                              use_numexpr=False):
     log = logger.Logger(cell.stdout, cell.verbose)
 
     if _ecp is None: _ecp = format_ccecp_param(cell)
-    Gv = cell.get_Gv()
+    if Gv is None:
+        Gv = cell.get_Gv()
     SI = cell.get_SI(Gv)
     ngrids = Gv.shape[0]
 
@@ -713,25 +696,9 @@ def apply_vppnlocGG_kpt_ccecp(cell, C_k, kpt, _ecp=None, use_numexpr=False):
     return Cbar_k
 
 
-def apply_vppnlocGG_kpt_ccecp_full(cell, C_k, k, vppnlocGG):
-    ngrids = C_k.shape[1]
-    max_memory = (cell.max_memory - lib.current_memory()[0]) * 0.8
-    Gblksize = min(int(np.floor(max_memory*1e6/16/ngrids)), ngrids)
-    W_k = np.zeros_like(C_k)
-    for p0,p1 in lib.prange(0,ngrids,Gblksize):
-        W_k += lib.dot(C_k[:,p0:p1].conj(), vppnlocGG[k,p0:p1]).conj()
-    return W_k
-
-
-def apply_vppnl_kpt_ccecp(cell, C_k, kpt, Gv, _ecp=None):
-    """ very slow implementation
-    """
-    vppnlocGG = get_vppnlocGG_kpt_ccecp(cell, kpt, Gv, _ecp=_ecp)
-    return lib.dot(C_k, vppnlocGG)
-
-
 def get_ccecp_support_vec(cell, C_ks, kpts, out, _ecp=None, ke_cutoff_nloc=None,
-                          ncomp=1, thr_eig=1e-12, use_numexpr=False):
+                          ncomp=1, thr_eig=1e-12, use_numexpr=False,
+                          basis_ks=None):
     log = logger.Logger(cell.stdout, cell.verbose)
 
     if out is None:
@@ -750,10 +717,13 @@ def get_ccecp_support_vec(cell, C_ks, kpts, out, _ecp=None, ke_cutoff_nloc=None,
             else:
                 out[key] = {}
 
-    if _ecp is None: _ecp = format_ccecp_param(cell0)
+    if _ecp is None: _ecp = format_ccecp_param(cell)
 
     mesh_map = cell_nloc = None
-    if ke_cutoff_nloc is not None:
+    mesh=None
+    if basis_ks is not None:
+        mesh = basis_ks[0].mesh
+    elif ke_cutoff_nloc is not None:
         if ke_cutoff_nloc < cell.ke_cutoff:
             log.debug1("Using ke_cutoff_nloc %s for KB support vector", ke_cutoff_nloc)
             mesh_map = get_mesh_map(cell, cell.ke_cutoff, ke_cutoff_nloc)
@@ -779,8 +749,12 @@ def get_ccecp_support_vec(cell, C_ks, kpts, out, _ecp=None, ke_cutoff_nloc=None,
 
         kpt = kpts[k]
         if cell_nloc is None:
+            if basis_ks is None:
+                Gv = None
+            else:
+                Gv = basis_ks[k].Gk - kpt
             W_k = apply_vppnlocGG_kpt_ccecp(cell, C_k, kpt, _ecp=_ecp,
-                                            use_numexpr=use_numexpr)
+                                            use_numexpr=use_numexpr, Gv=Gv)
         else:
             W_k = np.zeros_like(C_k)
             W_k[:,mesh_map] = apply_vppnlocGG_kpt_ccecp(cell_nloc,
@@ -807,7 +781,7 @@ def get_ccecp_support_vec(cell, C_ks, kpts, out, _ecp=None, ke_cutoff_nloc=None,
 
 def get_ccecp_kb_support_vec(cell, kb_basis, kpts, out, ke_cutoff_nloc=None,
                              ncomp=1, _ecp=None, thr_eig=1e-12,
-                             use_numexpr=False, ioblk=IOBLK):
+                             use_numexpr=False, ioblk=IOBLK, basis_ks=None):
 
     log = logger.Logger(cell.stdout, cell.verbose)
 
@@ -827,6 +801,8 @@ def get_ccecp_kb_support_vec(cell, kb_basis, kpts, out, ke_cutoff_nloc=None,
     nkpts = len(kpts)
     cell_kb = cell.copy()
     cell_kb.basis = kb_basis
+    if basis_ks is not None:
+        cell_kb.mesh = basis_ks[0].mesh
     cell_kb.build()
     log.debug("Using basis %s for KB-ccECP (%d AOs)", kb_basis,
               cell_kb.nao_nr())
@@ -851,6 +827,10 @@ def get_ccecp_kb_support_vec(cell, kb_basis, kpts, out, ke_cutoff_nloc=None,
         kpts01 = kpts[k0:k1]
         Cg_ks = [np.eye(nao) + 0.j for k in range(nkpts01)]
         ng_ks = [nao] * nkpts01
+        if basis_ks is None:
+            sub_bks = None
+        else:
+            sub_bks = basis_ks[k0:k1]
         if outcore:
             W_ks_blk = W_ks.create_group(tmpgroupname)
             Cg_ks = get_C_ks_G(cell_kb, kpts01, Cg_ks, ng_ks, out=W_ks_blk)
@@ -860,13 +840,16 @@ def get_ccecp_kb_support_vec(cell, kb_basis, kpts, out, ke_cutoff_nloc=None,
         for k in range(nkpts01):
             Cg_k = get_kcomp(Cg_ks, k)
             Cg_k = orth(cell_kb, Cg_k)
+            if sub_bks is not None:
+                Cg_k = Cg_k[:, sub_bks[k].indexes]
             set_kcomp(Cg_k, Cg_ks, k)
         Cg_k = None
         log.debug("keeping %s SOAOs", ng_ks)
 
         get_ccecp_support_vec(cell, Cg_ks, kpts01, W_ks_blk, _ecp=_ecp,
                               ke_cutoff_nloc=ke_cutoff_nloc, ncomp=1,
-                              thr_eig=thr_eig, use_numexpr=use_numexpr)
+                              thr_eig=thr_eig, use_numexpr=use_numexpr,
+                              basis_ks=sub_bks)
 
         for k in range(k0,k1):
             set_kcomp(get_kcomp(W_ks_blk, k-k0), W_ks, k)

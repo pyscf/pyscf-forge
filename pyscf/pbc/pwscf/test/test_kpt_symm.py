@@ -19,7 +19,7 @@ def get_mf_and_kpts():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        verbose=4,
+        verbose=0,
     )
     cell.mesh = [24, 24, 24]
     cell.build()

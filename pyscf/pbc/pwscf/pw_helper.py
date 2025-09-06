@@ -53,9 +53,10 @@ class PWBasis:
             by the indexes
         Gk: The plane-wave G-vectors for each index
     """
-    def __init__(self, mesh, cutoff, indexes, ke, Gk):
+    def __init__(self, mesh, cutoff, kpt, indexes, ke, Gk):
         self.mesh = mesh
         self.cutoff = cutoff
+        self.kpt = kpt
         self.indexes = indexes
         self.ke = ke
         self.Gk = Gk
@@ -97,6 +98,7 @@ def get_basis_data(cell, kpts, ecut_wf, wf_mesh=None, xc_mesh=None,
         basis_data.append(PWBasis(
             wf_mesh,
             ecut_wf,
+            kpt,
             np.asarray(indexes, dtype=np.uintp, order="C"),
             np.asarray(kinetic[indexes], dtype=np.float64, order="C"),
             np.asarray((kpt + Gv)[indexes, :], dtype=np.float64, order="C"),

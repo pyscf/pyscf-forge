@@ -425,7 +425,6 @@ class PWKRKS(PWKohnShamDFT, khf.PWKRHF):
         # When energy is computed from the orbitals, we need to account for
         # the different between \int vxc rho and \int exc rho.
         if moe_ks is not None:
-            print("XCDIFF", moe_ks[0].xcdiff)
             e_scf += moe_ks[0].xcdiff
         return e_scf
 

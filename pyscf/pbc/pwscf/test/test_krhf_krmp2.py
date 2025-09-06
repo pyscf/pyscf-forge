@@ -59,6 +59,16 @@ class KnownValues(unittest.TestCase):
         pwmp.kernel()
         assert(abs(pwmp.e_corr - e_corr0) < 1.e-4)
 
+        pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
+        pwmf.nvir = 10 # request 10 virtual states
+        pwmf.chkfile = chkfile
+        pwmf.kernel(save_ccecp_kb=True)
+
+        pwmp = pwscf.KMP2(pwmf)
+        pwmp.kernel()
+        # higher relative error threshold because the PW basis is different
+        assert(abs((pwmp.e_corr - e_corr0) / e_corr0) < 5.e-2)
+
     def test_alle(self):
         atom = "He 0 0 0"
         a = np.eye(3) * 2

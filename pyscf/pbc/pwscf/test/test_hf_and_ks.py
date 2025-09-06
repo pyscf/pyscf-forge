@@ -22,7 +22,7 @@ def setUpModule():
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        verbose=4,
+        verbose=0,
     )
     CELL.mesh = [13, 13, 13]
     # CELL.mesh = [27, 27, 27]
@@ -38,7 +38,7 @@ def setUpModule():
         ke_cutoff=50,
         pseudo="gth-pade",
         spin=-2,
-        verbose=4,
+        verbose=0,
     )
     ATOM.mesh = [25, 25, 25]
     ATOM.build()
@@ -67,6 +67,9 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
     def _get_calc(self, cell, kpts, spinpol=False, xc=None, run=True, **kwargs):
+        """
+        Helper function to make an SCF calculation for a test
+        """
         ecut_wf = kwargs.pop("ecut_wf", None)
         ecut_rho = kwargs.pop("ecut_rho", None)
         if xc is None:
@@ -92,19 +95,33 @@ class KnownValues(unittest.TestCase):
         return mf
 
     def _check_fd(self, mf):
+        """
+        Check a bunch of properties of the mean-field calculation:
+        - that get_mo_energy matches the mo_energy from SCF
+        - that energy_tot with moe_ks gives same output as SCF e_tot
+          (also tests energy_elec for this consistency implicitly)
+        - that eig_subspace, get_mo_energy(full_ham=True), and
+          finite difference all give the same prediction for the
+          change in total energy upon perturbation of the orbitals.
+          This implicitly tests all routines for constructing
+          the effective Hamiltonian, especially the XC potential.
+        """
         if not mf.converged:
             mf.kernel()
             assert mf.converged
         mo_energy, mo_occ = mf.get_mo_energy(mf.mo_coeff, mf.mo_occ)
-        assert_allclose(mo_energy, mf.mo_energy, rtol=1e-8, atol=1e-8)
+        if mf.istype("KRHF"):
+            assert_allclose(mo_energy, mf.mo_energy, rtol=1e-8, atol=1e-8)
+        else:
+            assert_allclose(mo_energy[0], mf.mo_energy[0], rtol=1e-6, atol=1e-6)
+            assert_allclose(mo_energy[1], mf.mo_energy[1], rtol=1e-6, atol=1e-6)
         etot_ref = mf.e_tot
         etot_check = mf.energy_tot(mf.mo_coeff, mf.mo_occ,
                                    moe_ks=mo_energy)
         assert_allclose(etot_check, etot_ref, atol=1e-9)
-        # mo_energy, mo_occ = mf.mo_energy, mf.mo_occ
         delta = 1e-5
         cell = mf.cell
-        mesh = cell.mesh
+        mesh = mf.wf_mesh
         Gv = cell.get_Gv(mesh)
 
         spinpol = isinstance(mf, kuhf.PWKUHF)
@@ -208,6 +225,10 @@ class KnownValues(unittest.TestCase):
             _run_test(s=1)
 
     def test_fd_hf(self):
+        """
+        Run the _check_fd tests for spin-restricted and unrestricted
+        Hartree-Fock.
+        """
         ref = -10.649288588747416
         rmf = self._get_calc(CELL, KPTS, nvir=2)
         umf = self._get_calc(CELL, KPTS, nvir=2, spinpol=True)
@@ -219,13 +240,22 @@ class KnownValues(unittest.TestCase):
         assert_allclose(rmf.mo_occ, umf.mo_occ[1])
         self._check_fd(rmf)
         self._check_fd(umf)
+        umf = self._get_calc(ATOM, KPT1, nvir=2, spinpol=True,
+                             damp_type="anderson")
+        self._check_fd(umf)
 
-    def _check_fd_ks(self, xc, mesh=None, ref=None):
+    def _check_fd_ks(self, xc, mesh=None, ref=None, run_atom=False):
+        """
+        Run the _check_fd tests for spin-restricted and unrestricted
+        Kohn-Sham DFT.
+        """
         if mesh is None:
             cell = CELL
+            atom = ATOM
         else:
             cell = CELL.copy()
             cell.mesh = mesh
+            atom = ATOM
             cell.build()
         rmf = self._get_calc(cell, KPTS, nvir=2, xc=xc, spinpol=False,
                              damp_type="simple", damp_factor=0.7)
@@ -240,12 +270,16 @@ class KnownValues(unittest.TestCase):
         assert_allclose(rmf.mo_occ, umf.mo_occ[1])
         self._check_fd(rmf)
         self._check_fd(umf)
+        if run_atom:
+            umf = self._get_calc(atom, KPT1, nvir=2, xc=xc, spinpol=True,
+                                 damp_type="anderson", ecut_wf=20, ecut_rho=200)
+            self._check_fd(umf)
 
     def test_fd_ks_lda(self):
-        self._check_fd_ks("LDA", ref=-10.453600311477887)
+        self._check_fd_ks("LDA", ref=-10.453600311477887, run_atom=True)
 
     def test_fd_ks_gga(self):
-        self._check_fd_ks("PBE", ref=-10.931960348543591)
+        self._check_fd_ks("PBE", ref=-10.931960348543591, run_atom=True)
 
     def test_fd_ks_mgga(self):
         self._check_fd_ks("R2SCAN", mesh=[21, 21, 21], ref=-10.881956126701505)
@@ -254,6 +288,11 @@ class KnownValues(unittest.TestCase):
         self._check_fd_ks("PBE0", ref=-10.940602656908139)
 
     def test_smearing(self):
+        """
+        Make sure that smearing is working (should give similar energy
+        to the non-smearing calculation and have mf.mo_energy matching
+        get_mo_energy, e_tot matching energy_tot(..., moe_ks), etc.)
+        """
         xc = "LDA,VWN"
         rmf = self._get_calc(
             CELL, KPTS, nvir=6, xc=xc, run=False, ecut_wf=40
@@ -282,10 +321,62 @@ class KnownValues(unittest.TestCase):
                 check = False
                 assert_allclose(mo_energy, moe_tst, rtol=1e-8, atol=1e-8)
             etot_check = mf.energy_tot(mf.mo_coeff, mf.mo_occ, mo_energy)
-            mf.dump_scf_summary()
             assert_allclose(etot_check, etot_ref, atol=1e-8)
             new_mfs.append(mf)
         assert_allclose(new_mfs[1].e_tot, new_mfs[0].e_tot, atol=1e-7)
+
+    def test_init_guesses(self):
+        """
+        Test a bunch of initial guesses for the SCF methods to make sure
+        they give consistent results and don't crash.
+        """
+        for spinpol in [False, True]:
+            mf = self._get_calc(
+                CELL, KPTS, nvir=2, xc="LDA,VWN", spinpol=spinpol,
+                ecut_wf=15, run=False
+            )
+            mf.init_guess = "hcore"
+            mf.conv_tol = 1e-8
+            e_ref = mf.kernel()
+            e_tots = []
+            for ig in ["h1e", "cycle1", "scf"]:
+                mf.init_guess = ig
+                e_tots.append(mf.kernel())
+            e_tots.append(mf.kernel(C0=mf.mo_coeff))
+            mf2 = self._get_calc(
+                CELL, KPTS, nvir=2, xc="LDA,VWN", spinpol=spinpol,
+                ecut_wf=15, run=False
+            )
+            e_tots.append(mf2.kernel(chkfile=mf.chkfile))
+            C_ks, mocc_ks = mf.from_chk(mf.chkfile)
+            e_tots.append(mf2.energy_tot(C_ks, mocc_ks))
+            assert_allclose(np.array(e_tots) - e_ref, 0, atol=1e-7)
+
+    def test_meshes(self):
+        """
+        Make sure that modifying the choices of meshes works
+        """
+        mf = self._get_calc(
+            CELL, KPTS, nvir=2, xc="LDA,VWN", spinpol=False,
+            ecut_wf=15, run=False
+        )
+        mf2 = self._get_calc(
+            CELL, KPTS, nvir=2, xc="LDA,VWN", spinpol=False, run=False
+        )
+        orig_wf_mesh = mf.wf_mesh
+        orig_xc_mesh = mf.xc_mesh
+        e1 = mf.kernel()
+        assert (mf2.wf_mesh == mf2.xc_mesh).all()
+        assert (mf2.wf_mesh == CELL.mesh).all()
+        e2 = mf2.kernel()
+        # energy doesn't change because default wf_mesh avoids aliasing
+        mf.set_meshes(wf_mesh=[m+5 for m in orig_wf_mesh], xc_mesh=orig_xc_mesh)
+        e3 = mf.kernel()
+        assert_allclose(e1, e3, atol=1e-7)
+        mf.set_meshes(wf_mesh=orig_wf_mesh, xc_mesh=orig_wf_mesh)
+        e4 = mf.kernel()
+        # energy changes a bit bit the XC integration precision changes
+        assert_allclose(e1, e3, atol=1e-5)
 
 
 if __name__ == "__main__":

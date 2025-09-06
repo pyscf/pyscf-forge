@@ -24,7 +24,7 @@ import tempfile
 import numpy as np
 
 from pyscf.pbc.pwscf.pw_helper import (get_nocc_ks_from_mocc, get_kcomp,
-                                       set_kcomp)
+                                       set_kcomp, wf_ifft)
 from pyscf.pbc import tools
 from pyscf import lib
 from pyscf.lib import logger
@@ -73,7 +73,7 @@ def fill_oovv(oovv, v_ia, Co_kj_R, Cv_kb_R, fac=None):
 
 
 def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
-               frozen=None):
+               frozen=None, basis_ks=None):
     """ Compute both direct (d) and exchange (x) contributions together.
 
     Args:
@@ -100,7 +100,12 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
             raise NotImplementedError
 
     nkpts = len(kpts)
-    mesh = cell.mesh
+    if basis_ks is None:
+        basis_ks = [None] * nkpts
+        mesh = cell.mesh
+    else:
+        assert len(basis_ks) == nkpts
+        mesh = basis_ks[0].mesh
     coords = cell.get_uniform_grids(mesh=mesh)
     ngrids = coords.shape[0]
 
@@ -178,7 +183,8 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
         C_k = get_kcomp(C_ks, k)
         if frozen is not None:
             C_k = C_k[frozen:]
-        C_k = tools.ifft(C_k, mesh)
+        # C_k = tools.ifft(C_k, mesh)
+        C_k = wf_ifft(C_k, mesh, basis_ks[k])
         set_kcomp(C_k, C_ks_R, k)
         C_k = None
 
@@ -476,7 +482,8 @@ class PWKRMP2:
         if frozen is None: frozen = self.frozen
 
         self.e_corr = kernel_dx_(cell, kpts, chkfile, summary, nvir=nvir,
-                                 nvir_lst=nvir_lst, frozen=frozen)
+                                 nvir_lst=nvir_lst, frozen=frozen,
+                                 basis_ks=self._scf._basis_data)
 
         self._finalize()
 

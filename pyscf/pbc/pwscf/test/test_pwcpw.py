@@ -56,6 +56,18 @@ class KnownValues(unittest.TestCase):
         mmp.kernel()
         assert(abs(mmp.e_corr - -0.215895180360867) < 1.e-6)
 
+        # HF with a plane-wave cutoff
+        mf = pwscf.KRHF(cell, kpts, ecut_wf=20)
+        mf.kernel()
+
+        # MP2
+        moe_ks, mocc_ks = mf.get_cpw_virtual(basis_cpw)
+        mf.dump_moe(moe_ks, mocc_ks)
+        mmp = pwscf.KMP2(mf)
+        mmp.kernel()
+        # higher threshold because we use different basis
+        assert(abs(mmp.e_corr - -0.215895180360867) < 1.e-3)
+
 
 if __name__ == "__main__":
     unittest.main()

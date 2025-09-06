@@ -18,7 +18,8 @@ import unittest
 
 
 class KnownValues(unittest.TestCase):
-    def _run_test(self, atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv):
+    def _run_test(self, atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv,
+                  test_scf=True):
         # cell
         cell = gto.Cell(
             atom=atom,
@@ -43,9 +44,17 @@ class KnownValues(unittest.TestCase):
         pmf = pw_helper.gtomf2pwmf(gmf)
         pcc = pwscf.PWKRCCSD(pmf)
         pcc.kernel()
-        print(pcc.e_corr)
-        print(gcc.e_corr)
         assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-6)
+
+        if test_scf:
+            pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
+            # need some virtual orbitals to converge davidson
+            pwmf.nvir = 4
+            pwmf.kernel()
+            pwcc = pwscf.PWKRCCSD(pwmf)
+            pwcc.kernel()
+            # Just to make sure the code stays consistent
+            assert(abs(pwcc.e_corr + 0.032784696721506294) < 1.e-4)
 
     def test_krccsd(self):
         ke_cutoff = 50
@@ -60,7 +69,8 @@ class KnownValues(unittest.TestCase):
         self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv)
         # diff occ per kpt (i.e., needs padding)
         kmesh = [2,2,1]
-        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv)
+        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv,
+                       test_scf=False)
 
 
 if __name__ == "__main__":

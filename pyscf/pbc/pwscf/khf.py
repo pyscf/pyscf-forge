@@ -706,7 +706,8 @@ def add_random_mo1(cell, n, C0):
     return np.vstack([C0,C1])
 
 
-def init_guess_by_chkfile(cell, chkfile_name, nvir, project=True, out=None):
+def init_guess_by_chkfile(cell, chkfile_name, nvir, project=True, out=None,
+                          basis_ks=None):
     from pyscf.pbc.scf import chkfile
     scf_dict = chkfile.load_scf(chkfile_name)[1]
     mocc_ks = scf_dict["mo_occ"]
@@ -724,13 +725,13 @@ def init_guess_by_chkfile(cell, chkfile_name, nvir, project=True, out=None):
             set_kcomp(get_kcomp(C0_ks, k), C_ks, k)
 
     C_ks, mocc_ks = init_guess_from_C0(cell, C_ks, ntot_ks, project=project,
-                                       out=C_ks, mocc_ks=mocc_ks)
+                                       out=C_ks, mocc_ks=mocc_ks, basis_ks=basis_ks)
 
     return C_ks, mocc_ks
 
 
 def init_guess_from_C0(cell, C0_ks, ntot_ks, project=True, out=None,
-                       mocc_ks=None):
+                       mocc_ks=None, basis_ks=None):
 
     log = logger.Logger(cell.stdout, cell.verbose)
 
@@ -749,7 +750,10 @@ def init_guess_from_C0(cell, C0_ks, ntot_ks, project=True, out=None,
         else:
             C = C0_k
         # project if needed
-        npw = np.prod(cell.mesh)
+        if basis_ks is None:
+            npw = np.prod(cell.mesh)
+        else:
+            npw = basis_ks[k].npw
         npw0 = C.shape[1]
         if npw != npw0:
             if project:
@@ -797,7 +801,7 @@ def update_pp(mf, C_ks):
     if "t-ppnl" not in mf.scf_summary:
         mf.scf_summary["t-ppnl"] = np.zeros(2)
 
-    mf.with_pp.update_vppnloc_support_vec(C_ks)
+    mf.with_pp.update_vppnloc_support_vec(C_ks, basis_ks=mf._basis_data)
 
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     mf.scf_summary["t-ppnl"] += tock - tick
@@ -1255,6 +1259,7 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
     Cao = np.eye(nao)+0.j
     Co_ks = mf.mo_coeff
     mocc_ks0 = mf.mo_occ
+    mesh = mf.wf_mesh
     # estimate memory usage and decide incore/outcore mode
     max_memory = (cell.max_memory - lib.current_memory()[0]) * 0.8
     nocc_max = np.max([sum(mocc_ks0[k]>THR_OCC) for k in range(nkpts)])
@@ -1271,7 +1276,10 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
     mocc_ks = [None] * nkpts
     for k in range(nkpts):
         # TODO check this is closed-shell as it does not work for smearing
-        Cv = pw_helper.get_C_ks_G(cell_cpw, [kpts[k]], [Cao], [nao])[0]
+        Cv = pw_helper.get_C_ks_G(cell_cpw, [kpts[k]], [Cao], [nao],
+                                  mesh=mesh)[0]
+        if mf._basis_data is not None:
+            Cv = Cv[:, mf._basis_data[k].indexes]
         occ = np.where(mocc_ks0[k]>THR_OCC)[0]
         Co = get_kcomp(Co_ks, k, occ=occ)
         Cv -= lib.dot(lib.dot(Cv, Co.conj().T), Co)
@@ -1283,7 +1291,6 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
 # build and diagonalize fock vv
     mf.update_pp(C_ks)
     mf.update_k(C_ks, mocc_ks)
-    mesh = cell.mesh
     Gv = cell.get_Gv(mesh)
     vj_R = mf.get_vj_R(C_ks, mocc_ks, mesh=mesh, Gv=Gv)
     exxdiv = mf.exxdiv
@@ -1321,8 +1328,8 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
     return e_tot, moe_ks, mocc_ks
 
 
-class PWKRHF(pbc_hf.KSCF):
-    '''PWKRHF base class. non-relativistic RHF using PW basis.
+class PWKSCF(pbc_hf.KSCF):
+    '''PWKSCF base class. non-relativistic RHF using PW basis.
     '''
 
     outcore = getattr(__config__, 'pbc_pwscf_khf_PWKRHF_outcore', False)
@@ -1403,6 +1410,7 @@ class PWKRHF(pbc_hf.KSCF):
             pw_helper.get_basis_data(self.cell, self.kpts, self._ecut_wf,
                                      wf_mesh=wf_mesh, xc_mesh=xc_mesh)
         )
+        self.with_pp = None
         self.with_jk = None
 
     @property
@@ -1451,6 +1459,15 @@ class PWKRHF(pbc_hf.KSCF):
     @madelung.setter
     def madelung(self, x):
         raise RuntimeError("Cannot set madelung directly")
+
+    def istype(self, type_code):
+        """
+        This is to make sure code elsewhere in PySCF that checks istype
+        treats PWKRHF as KRHF, PWKUKS as KUKS, etc.
+        """
+        if not type_code.startswith("PW"):
+            type_code = "PW" + type_code
+        return super().istype(type_code)
 
     def dump_flags(self):
 
@@ -1549,10 +1566,9 @@ class PWKRHF(pbc_hf.KSCF):
             C_ks, mocc_ks = self.get_init_guess_C0(C0, nvir=nvir, out=out)
         else:
             if os.path.isfile(chkfile) and init_guess[:3] == "chk":
-                C_ks, mocc_ks = self.init_guess_by_chkfile(chk=chkfile,
-                                                           nvir=nvir,
-                                                           out=out)
-                dump_chk = True
+                C_ks, mocc_ks = self.init_guess_by_chkfile(
+                    chk=chkfile, nvir=nvir, out=out
+                )
             else:
                 C_ks, mocc_ks = self.get_init_guess_key(nvir=nvir,
                                                         key=init_guess,
@@ -1562,32 +1578,12 @@ class PWKRHF(pbc_hf.KSCF):
 
     def get_init_guess_key(self, cell=None, kpts=None, basis=None, pseudo=None,
                            nvir=None, key="hcore", out=None):
-        if cell is None: cell = self.cell
-        if kpts is None: kpts = self.kpts
-        if nvir is None: nvir = self.nvir
-
-        if key in ["h1e","hcore","cycle1","scf"]:
-            C_ks, mocc_ks = get_init_guess(cell, kpts,
-                                           basis=basis, pseudo=pseudo,
-                                           nvir=nvir, key=key, out=out,
-                                           mesh=self.wf_mesh)
-        else:
-            logger.warn(self, "Unknown init guess %s", key)
-            raise RuntimeError
-        
-        if self._basis_data is not None:
-            for k, kpt in enumerate(self.kpts):
-                inds = self.get_basis_kpt(kpt).indexes
-                set_kcomp(np.ascontiguousarray(C_ks[k][:, inds]), C_ks, k)
-
-        return C_ks, mocc_ks
+        raise NotImplementedError
 
     def init_guess_by_chkfile(self, chk=None, nvir=None, project=True,
                               out=None):
-        if chk is None: chk = self.chkfile
-        if nvir is None: nvir = self.nvir
-        return init_guess_by_chkfile(self.cell, chk, nvir, project=project,
-                                     out=out)
+        raise NotImplementedError
+
     def from_chk(self, chk=None, project=None, kpts=None):
         return self.init_guess_by_chkfile(chk, project, kpts)
 
@@ -1599,10 +1595,7 @@ class PWKRHF(pbc_hf.KSCF):
         return self
 
     def get_init_guess_C0(self, C0, nvir=None, out=None):
-        if nvir is None: nvir = self.nvir
-        nocc = self.cell.nelectron // 2
-        ntot_ks = [nocc+nvir] * len(self.kpts)
-        return init_guess_from_C0(self.cell, C0, ntot_ks, out=out)
+        raise NotImplementedError
 
     def get_rho_R(self, C_ks, mocc_ks, mesh=None, Gv=None):
         return self.with_jk.get_rho_R(C_ks, mocc_ks, mesh=mesh, Gv=Gv)
@@ -1677,19 +1670,93 @@ class PWKRHF(pbc_hf.KSCF):
         return self.mo_energy, self.mo_occ
 
     kernel_charge = kernel_charge
+    apply_hcore_kpt = apply_hcore_kpt
+    apply_veff_kpt = apply_veff_kpt
+    apply_Fock_kpt = apply_Fock_kpt
+    energy_tot = energy_tot
+    converge_band_kpt = converge_band_kpt
+
+    def get_nband(self, nbandv, nbandv_extra):
+        raise NotImplementedError
+
+    def dump_moe(self, moe_ks_, mocc_ks_, nband=None, trigger_level=logger.DEBUG):
+        raise NotImplementedError
+
+    def update_pp(mf, C_ks):
+        raise NotImplementedError
+
+    def update_k(mf, C_ks, mocc_ks):
+        raise NotImplementedError
+
+    def eig_subspace(mf, C_ks, mocc_ks, mesh=None, Gv=None, vj_R=None,
+                     exxdiv=None, comp=None):
+        raise NotImplementedError
+
+    def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
+                      vj_R=None, comp=None, ret_mocc=True, full_ham=False):
+        raise NotImplementedError
+
+    def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
+                    vj_R=None, exxdiv=None):
+        raise NotImplementedError
+
+    def converge_band(mf, C_ks, mocc_ks, kpts, Cout_ks=None,
+                      mesh=None, Gv=None,
+                      vj_R=None, comp=None,
+                      conv_tol_davidson=1e-6,
+                      max_cycle_davidson=100,
+                      verbose_davidson=0):
+        raise NotImplementedError
+
+
+class PWKRHF(PWKSCF):
+    """
+    Spin-restricted Plane-wave Hartree-Fock.
+    """
     get_nband = get_nband
     dump_moe = dump_moe
     update_pp = update_pp
     update_k = update_k
     eig_subspace = eig_subspace
     get_mo_energy = get_mo_energy
-    apply_hcore_kpt = apply_hcore_kpt
-    apply_veff_kpt = apply_veff_kpt
-    apply_Fock_kpt = apply_Fock_kpt
     energy_elec = energy_elec
-    energy_tot = energy_tot
-    converge_band_kpt = converge_band_kpt
     converge_band = converge_band
+
+    def get_init_guess_key(self, cell=None, kpts=None, basis=None, pseudo=None,
+                           nvir=None, key="hcore", out=None):
+        if cell is None: cell = self.cell
+        if kpts is None: kpts = self.kpts
+        if nvir is None: nvir = self.nvir
+
+        if key in ["h1e", "hcore", "cycle1", "scf"]:
+            C_ks, mocc_ks = get_init_guess(cell, kpts,
+                                           basis=basis, pseudo=pseudo,
+                                           nvir=nvir, key=key, out=out,
+                                           mesh=self.wf_mesh)
+        else:
+            logger.warn(self, "Unknown init guess %s", key)
+            raise RuntimeError
+
+        if self._basis_data is not None:
+            for k, kpt in enumerate(self.kpts):
+                inds = self.get_basis_kpt(kpt).indexes
+                set_kcomp(np.ascontiguousarray(C_ks[k][:, inds]), C_ks, k)
+
+        return C_ks, mocc_ks
+
+    def init_guess_by_chkfile(self, chk=None, nvir=None, project=True,
+                              out=None):
+        if chk is None: chk = self.chkfile
+        if nvir is None: nvir = self.nvir
+        return init_guess_by_chkfile(self.cell, chk, nvir, project=project,
+                                     out=out, basis_ks=self._basis_data)
+
+    def get_init_guess_C0(self, C0, nvir=None, out=None):
+        if nvir is None: nvir = self.nvir
+        nocc = self.cell.nelectron // 2
+        ntot_ks = [nocc+nvir] * len(self.kpts)
+        return init_guess_from_C0(self.cell, C0, ntot_ks, out=out,
+                                  basis_ks=self._basis_data)
 
 
 if __name__ == "__main__":

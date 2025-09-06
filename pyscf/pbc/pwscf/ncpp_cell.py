@@ -1,11 +1,13 @@
 from pyscf.pbc.gto.cell import Cell
-from pyscf.gto.mole import MoleBase
-from pyscf.data.elements import ELEMENTS, ELEMENTS_PROTON, \
-        _rm_digit, charge, _symbol, _std_symbol, _atom_symbol, is_ghost_atom, \
+from pyscf.data.elements import _symbol, is_ghost_atom, \
         _std_symbol_without_ghost
 from pyscf.pbc.pwscf.upf import get_nc_data_from_upf
 import numpy as np
 import os
+import io
+
+
+_ARRAY_PREFIX = "__NCPP_NPARRAY__"
 
 
 class NCPPCell(Cell):
@@ -58,7 +60,10 @@ class NCPPCell(Cell):
                 elif isinstance(v, (list, dict)):
                     dic1[k] = recurse(v)
                 elif isinstance(v, (np.ndarray, np.generic)):
-                    dic1[k] = v.tolist()
+                    # dic1[k] = v.tolist()
+                    x = io.BytesIO()
+                    np.savez(x, v)
+                    dic1[k] = _ARRAY_PREFIX + x.getvalue().hex()
                 else:
                     raise ValueError("Cannot dump type {}".format(type(v)))
             return dic1
@@ -66,6 +71,33 @@ class NCPPCell(Cell):
         res = super().dumps()
         self._pseudo = backup_pseudo
         return res
+
+    @classmethod
+    def loads(cls, molstr):
+        cell = super().loads(molstr)
+        str_pseudo = cell._pseudo
+        def recurse(dic):
+            if isinstance(dic, dict):
+                dic1 = {}
+                iter = dic.items()
+            else:
+                dic1 = [None] * len(dic)
+                iter = enumerate(dic)
+            for k, v in iter:
+                if (v is None or
+                    isinstance(v, (bool, int, float))):
+                    dic1[k] = v
+                elif isinstance(v, (list, dict)):
+                    dic1[k] = recurse(v)
+                elif isinstance(v, str):
+                    if v.startswith(_ARRAY_PREFIX):
+                        v = v[len(_ARRAY_PREFIX):]
+                        v = np.load(io.BytesIO(bytes.fromhex(v)))
+                    dic1[k] = v
+                else:
+                    raise ValueError("Cannot dump type {}".format(type(v)))
+            return dic1
+        cell._pseudo = recurse(str_pseudo)
 
 
 if __name__ == "__main__":
@@ -81,9 +113,7 @@ if __name__ == "__main__":
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        #symmorphic=True,
-        #space_group_symmetry=True,
-        verbose=6,
+        verbose=0,
     )
 
     cell = gto.Cell(**kwargs)
@@ -94,11 +124,7 @@ if __name__ == "__main__":
     nccell.build(sg15_path="../../gpaw_data/sg15_oncv_upf_2020-02-06/")
 
     kmesh = [2, 2, 2]
-    kpts = cell.make_kpts(
-        kmesh,
-        #time_reversal_symmetry=True,
-        #space_group_symmetry=True,
-    )
+    kpts = cell.make_kpts(kmesh)
 
     # from pyscf.pbc.pwscf import kpt_symm
 

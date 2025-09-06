@@ -29,7 +29,7 @@ from pyscf import lib
 from pyscf.lib import logger
 from pyscf.pbc import tools
 
-from pyscf.pbc.pwscf.pw_helper import get_kcomp, set_kcomp
+from pyscf.pbc.pwscf.pw_helper import get_kcomp, set_kcomp, wf_ifft
 
 dot = lib.dot
 einsum = np.einsum
@@ -49,7 +49,7 @@ def kconserv(kpt123, reduce_latvec, kdota):
 
 
 def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
-                      erifile=None, dataname="eris"):
+                      erifile=None, dataname="eris", basis_ks=None):
     """
     Args:
         C_ks : list or h5py group
@@ -63,7 +63,10 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
     cput0 = (logger.process_clock(), logger.perf_counter())
 
     nkpts = len(kpts)
-    mesh = cell.mesh
+    if basis_ks is None:
+        mesh = cell.mesh
+    else:
+        mesh = basis_ks[0].mesh
     coords = cell.get_uniform_grids(mesh=mesh)
     ngrids = coords.shape[0]
     fac = ngrids**3. / cell.vol / nkpts
@@ -78,7 +81,9 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
     C_ks_R = fswap.create_group("C_ks_R")
     for k in range(nkpts):
         C_k = get_kcomp(C_ks, k)
-        C_k = tools.ifft(C_k, mesh)
+        basis = None if basis_ks is None else basis_ks[k]
+        # C_k = tools.ifft(C_k, mesh)
+        C_k = wf_ifft(C_k, mesh, basis=basis)
         set_kcomp(C_k, C_ks_R, k)
         C_k = None
 

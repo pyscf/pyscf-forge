@@ -55,10 +55,20 @@ class KnownValues(unittest.TestCase):
         pwmf.kernel(C0=pwmf.mo_coeff)
         assert_allclose(pwmf.e_tot, e_tot0, atol=1.e-4, rtol=0)
 
-        # krmp2
+        # kump2
         pwmp = pwscf.KUMP2(pwmf)
         pwmp.kernel()
         assert_allclose(pwmp.e_corr, e_corr0, atol=1.e-4, rtol=0)
+
+        pwmf = pwscf.KUHF(cell, kpts, ecut_wf=20)
+        pwmf.nvir = 4
+        pwmf.chkfile = chkfile
+        pwmf.kernel(save_ccecp_kb=True)
+
+        pwmp = pwscf.KUMP2(pwmf)
+        pwmp.kernel()
+        # higher relative error threshold because the PW basis is different
+        assert(abs((pwmp.e_corr - e_corr0) / e_corr0) < 2e-2)
 
     def test_gth(self):
         pseudo = "gth-pade"

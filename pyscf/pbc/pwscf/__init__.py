@@ -24,6 +24,11 @@ from pyscf.pbc.pwscf import khf, kuhf
 PWKRHF = KRHF = khf.PWKRHF
 PWKUHF = KUHF = kuhf.PWKUHF
 
+from pyscf.pbc.pwscf import krks, kuks
+
+PWKRKS = KRKS = krks.PWKRKS
+PWKUKS = KUKS = kuks.PWKUKS
+
 from pyscf.pbc.pwscf import kmp2, kump2
 PWKRMP2 = KRMP2 = PWKMP2 = KMP2 = kmp2.PWKRMP2
 PWKUMP2 = KUMP2 = kump2.PWKUMP2
