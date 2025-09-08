@@ -229,7 +229,7 @@ class KnownValues(unittest.TestCase):
         self._check_fd(rmf)
         self._check_fd(umf)
         umf = self._get_calc(ATOM, KPT1, nvir=2, spinpol=True,
-                             damp_type="anderson")
+                             damp_type="anderson", ecut_wf=15)
         self._check_fd(umf)
 
     def _check_fd_ks(self, xc, mesh=None, ref=None, run_atom=False):
@@ -260,7 +260,8 @@ class KnownValues(unittest.TestCase):
         self._check_fd(umf)
         if run_atom:
             umf = self._get_calc(atom, KPT1, nvir=2, xc=xc, spinpol=True,
-                                 damp_type="anderson", ecut_wf=20, ecut_rho=200)
+                                 damp_type="anderson", ecut_wf=15,
+                                 ecut_rho=200)
             self._check_fd(umf)
 
     def test_fd_ks_lda(self):
@@ -283,13 +284,13 @@ class KnownValues(unittest.TestCase):
         """
         xc = "LDA,VWN"
         rmf = self._get_calc(
-            CELL, KPTS, nvir=6, xc=xc, run=False, ecut_wf=40
+            CELL, KPTS, nvir=6, xc=xc, run=False, ecut_wf=15
         )
         umf1 = self._get_calc(
-            CELL, KPTS, nvir=6, spinpol=True, xc=xc, run=False, ecut_wf=40,
+            CELL, KPTS, nvir=6, spinpol=True, xc=xc, run=False, ecut_wf=15,
         )
         umf2 = self._get_calc(
-            ATOM, KPT1, nvir=2, spinpol=True, xc=xc, run=False, ecut_wf=40
+            ATOM, KPT1, nvir=2, spinpol=True, xc=xc, run=False, ecut_wf=15
         )
         assert_allclose(umf1.e_tot, rmf.e_tot, atol=1e-7)
         check = True
