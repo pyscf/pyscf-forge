@@ -177,7 +177,9 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
     omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, spin=mf.cell.spin)
     if omega != 0:
         # TODO range-separated hybrid functionals
-        raise NotImplementedError
+        raise NotImplementedError(
+            "Range-separated hybrids not implemented for PW mode"
+        )
 
     basis = mf.get_basis_kpt(kpt)
 

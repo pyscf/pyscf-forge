@@ -102,6 +102,20 @@ def kernel_doubleloop(mf, C0=None,
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     mf.scf_summary["t-init"] = tock - tick
 
+    single_loop = False
+    chg_conv_tol = 0.1
+    chg_conv_tol_band = None
+    chg_conv_tol_davidson = 0.001
+    chg_max_cycle = max_cycle
+    if mf.istype("KRKS") or mf.istype("KUKS"):
+        if not mf._numint.libxc.is_hybrid_xc(mf.xc):
+            if mf.with_pp.pptype != "ccecp":
+                single_loop = True
+                chg_conv_tol = conv_tol
+                chg_conv_tol_band = conv_tol_band
+                chg_conv_tol_davidson = 0.01 * conv_tol
+                chg_max_cycle = 4 * max_cycle
+
     # init E
     mesh = mf.wf_mesh
     Gv = cell.get_Gv(mesh)
@@ -113,12 +127,33 @@ def kernel_doubleloop(mf, C0=None,
     chg_scf_conv, fc_init, vj_R, C_ks, moe_ks, mocc_ks, e_tot = \
                         mf.kernel_charge(
                             C_ks, mocc_ks, nband, mesh=mesh, Gv=Gv,
-                            max_cycle=max_cycle, conv_tol=0.1,
+                            max_cycle=chg_max_cycle, conv_tol=chg_conv_tol,
                             max_cycle_davidson=max_cycle_davidson,
-                            conv_tol_davidson=0.001,
+                            conv_tol_davidson=chg_conv_tol_davidson,
                             verbose_davidson=verbose_davidson,
                             damp_type=damp_type, damp_factor=damp_factor,
-                            vj_R=vj_R)
+                            vj_R=vj_R, single_loop=single_loop,
+                            conv_tol_band=chg_conv_tol_band)
+
+    if single_loop:
+        scf_conv = chg_scf_conv
+        # remove extra virtual bands before return
+        remove_extra_virbands(C_ks, moe_ks, mocc_ks, nbandv_extra)
+        if dump_chk:
+            mf.dump_chk(locals())
+        if callable(callback):
+            callback(locals())
+        if mf.outcore:
+            C_ks = chkfile.load_mo_coeff(C_ks)
+            fswap.close()
+        cput1 = (logger.process_clock(), logger.perf_counter())
+        mf.scf_summary["t-tot"] = np.asarray(cput1) - np.asarray(cput0)
+        log.debug('    CPU time for %s %9.2f sec, wall time %9.2f sec',
+                  "scf_cycle", *mf.scf_summary["t-tot"])
+        # A post-processing hook before return
+        mf.post_kernel(locals())
+        return scf_conv, e_tot, moe_ks, C_ks, mocc_ks
+
     log.info('init E= %.15g', e_tot)
     if mf.exxdiv == "ewald":
         moe_ks = ewald_correction(moe_ks, mocc_ks, mf.madelung)
@@ -402,7 +437,14 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
                   verbose_davidson=0,
                   damp_type="anderson", damp_factor=0.3,
                   vj_R=None,
-                  last_hf_e=None):
+                  last_hf_e=None,
+                  single_loop=False,
+                  last_hf_moe=None,
+                  conv_tol_band=None):
+    """
+    single_loop=True means that there is no EXX or ccecp, so this loop only
+    needs to be run once. Changes log level and such
+    """
 
     log = logger.Logger(mf.stdout, mf.verbose)
 
@@ -422,6 +464,7 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
 
     cput1 = (logger.process_clock(), logger.perf_counter())
 
+    de = float("inf")
     for cycle in range(max_cycle):
 
         if cycle > 0:   # charge mixing
@@ -433,6 +476,65 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
             # vj_R = chgmixer.next_step(mf, vj_R, vj_R-last_vj_R)
             vj_R = chgmixer.next_step(mf, vj_R, last_vj_R)
 
+        if single_loop:
+            ctd_tmp = min(1e-5, max(0.01 * conv_tol, 0.001 * abs(de)))
+        else:
+            ctd_tmp = conv_tol_davidson
+        conv_ks, moe_ks, C_ks, fc_ks = mf.converge_band(
+                            C_ks, mocc_ks, mf.kpts,
+                            mesh=mesh, Gv=Gv,
+                            vj_R=vj_R,
+                            conv_tol_davidson=ctd_tmp,
+                            max_cycle_davidson=max_cycle_davidson,
+                            verbose_davidson=verbose_davidson)
+        fc_this = sum(fc_ks)
+        fc_tot += fc_this
+
+        if cycle > 0:
+            last_hf_e = e_tot
+        e_tot = mf.energy_tot(C_ks, mocc_ks, vj_R=vj_R)
+        if last_hf_e is not None:
+            de = e_tot-last_hf_e
+        else:
+            de = float("inf")
+        de_band = None
+        if conv_tol_band is not None:
+            if last_hf_moe is None:
+                band_check = False
+            else:
+                de_band = get_band_err(moe_ks, last_hf_moe, nband, joint=True)
+                band_check = de_band < conv_tol_band
+            last_hf_moe = moe_ks
+        else:
+            band_check = True
+        args = [cycle+1, e_tot, de, fc_this, fc_tot]
+        if single_loop:
+            fmt_str = 'cycle= %d E= %.15g  delta_E= %4.3g  %d FC (%d tot)'
+            fn = log.info
+        else:
+            fmt_str = '  chg cyc= %d E= %.15g  delta_E= %4.3g  %d FC (%d tot)'
+            fn = log.debug
+        if de_band is not None:
+            fmt_str = fmt_str + '   |dEbnd|= %4.3g'
+            args.append(de_band)
+        fn(fmt_str, *args)
+        mf.dump_moe(moe_ks, mocc_ks, nband=nband, trigger_level=logger.DEBUG3)
+
+        if abs(de) < conv_tol and band_check:
+            scf_conv = True
+
+        if not single_loop:
+            cput1 = log.timer_debug1('chg cyc= %d'%(cycle+1), *cput1)
+
+        if scf_conv:
+            break
+
+    if scf_conv and single_loop:
+        mocc_ks = mf.get_mo_occ(moe_ks)
+        last_vj_R = vj_R
+        vj_R = mf.get_vj_R(C_ks, mocc_ks)
+        vj_R = chgmixer.next_step(mf, vj_R, last_vj_R)
+
         conv_ks, moe_ks, C_ks, fc_ks = mf.converge_band(
                             C_ks, mocc_ks, mf.kpts,
                             mesh=mesh, Gv=Gv,
@@ -442,24 +544,12 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
                             verbose_davidson=verbose_davidson)
         fc_this = sum(fc_ks)
         fc_tot += fc_this
-
-        if cycle > 0: last_hf_e = e_tot
+        last_hf_e = e_tot
         e_tot = mf.energy_tot(C_ks, mocc_ks, vj_R=vj_R)
-        if last_hf_e is not None:
-            de = e_tot-last_hf_e
-        else:
-            de = float("inf")
-        log.debug('  chg cyc= %d E= %.15g  delta_E= %4.3g  %d FC (%d tot)',
-                  cycle+1, e_tot, de, fc_this, fc_tot)
+        de = e_tot-last_hf_e
+        fmt_str = 'Extra cycle= %d E= %.15g  delta_E= %4.3g  %d FC (%d tot)'
+        log.info(fmt_str, cycle+1, e_tot, de, fc_this, fc_tot)
         mf.dump_moe(moe_ks, mocc_ks, nband=nband, trigger_level=logger.DEBUG3)
-
-        if abs(de) < conv_tol:
-            scf_conv = True
-
-        cput1 = log.timer_debug1('chg cyc= %d'%(cycle+1), *cput1)
-
-        if scf_conv:
-            break
 
     return scf_conv, fc_tot, vj_R, C_ks, moe_ks, mocc_ks, e_tot
 
