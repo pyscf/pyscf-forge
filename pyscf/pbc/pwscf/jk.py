@@ -38,11 +38,14 @@ def _mul_by_occ_(C_k, mocc_k, occ=None):
     # because it assumes positive occupations
     if occ is None:
         occ = np.where(mocc_k > THR_OCC)[0].tolist()
-    occ = np.sqrt(0.5 * mocc_k[occ])
+    occ = np.sqrt(mocc_k[occ])
     C_k[:] *= occ[:, None]
 
 
 def get_rho_R(C_ks, mocc_ks, mesh, basis_ks=None):
+    """
+    Normalization is (1.0 / nkpts) * ng * rho_R.sum() = nelec
+    """
     nkpts = len(C_ks)
     rho_R = 0.
     for k in range(nkpts):
@@ -185,7 +188,7 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False,
     n_max = np.max(n_ks)
     no_max = np.max(no_ks)
 
-# TODO: non-aufbau configurations
+    # TODO: non-aufbau configurations
     for k in range(nkpts):
         if np.sum(mocc_ks[k][:no_ks[k]]>THR_OCC) != no_ks[k]:
             raise NotImplementedError("Non-aufbau configurations are not supported.")
@@ -209,15 +212,15 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False,
 
     buf1 = np.empty(n_max*ngrids, dtype=dtype)
     buf2 = np.empty(no_max*ngrids, dtype=dtype)
-    for k1,kpt1 in enumerate(kpts):
+    for k1, kpt1 in enumerate(kpts):
         C_k1_R = get_kcomp(C_ks_R, k1)
         no_k1 = no_ks[k1]
         n_k1 = n_ks[k1]
         Cbar_k1 = np.ndarray((n_k1,ngrids), dtype=dtype, buffer=buf1)
         Cbar_k1.fill(0)
 
-        mocc_k1 = 0.5 * mocc_ks[k1][:no_k1]
-        for k2,kpt2 in enumerate(kpts):
+        mocc_k1 = mocc_ks[k1][:no_k1]
+        for k2, kpt2 in enumerate(kpts):
             if n_k1 == no_k1 and k2 > k1: continue
 
             C_k2_R = get_kcomp(C_ks_R, k2)
@@ -225,7 +228,7 @@ def apply_k_s2(cell, C_ks, mocc_ks, kpts, mesh, Gv, out=None, outcore=False,
 
             coulG = tools.get_coulG(cell, kpt1-kpt2, exx=False, mesh=mesh,
                                     Gv=Gv)
-            mocc_k2 = 0.5 * mocc_ks[k2][:no_k2]
+            mocc_k2 = mocc_ks[k2][:no_k2]
 
             # o --> o
             if k2 <= k1:
@@ -371,7 +374,6 @@ class PWJK:
                 C_ks_comp = get_kcomp(C_ks, comp, load=False)
                 rho_R += get_rho_R(C_ks_comp, mocc_ks[comp], mesh,
                                    self.basis_ks)
-            rho_R *= 1./ncomp
         return rho_R
 
     def get_vj_R_from_rho_R(self, rho_R, mesh=None, Gv=None):

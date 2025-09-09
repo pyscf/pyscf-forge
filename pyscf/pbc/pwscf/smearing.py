@@ -82,12 +82,6 @@ class _SmearingPWKSCF(_SmearingKSCF):
                 "PWKSCF smearing without mo energy input"
             )
         mocc_ks = self.get_occ(mo_energy_kpts=moe_ks, mo_coeff_kpts=C_ks)
-        if self.istype("PWKUHF"):
-            mocc_ks = [
-                [2 * occ for occ in mocc_ks[0]],
-                [2 * occ for occ in mocc_ks[1]]
-            ]
-
         return mocc_ks
 
     def energy_tot(self, C_ks, mocc_ks, moe_ks=None, mesh=None, Gv=None,

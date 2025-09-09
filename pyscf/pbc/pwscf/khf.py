@@ -998,13 +998,15 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
 
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     tmp = with_jk.apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R, basis=basis)
-    Cbar_k = tmp * 2.
-    es[0] = np.einsum("ig,ig->", Cto_k, tmp)
+    Cbar_k = tmp
+    es[0] = np.einsum("ig,ig->", Cto_k, tmp) * 0.5
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[0] = np.asarray(tock - tick).reshape(1,2)
 
     tmp = -with_jk.apply_k_kpt(C_k, kpt, mesh=mesh, Gv=Gv, exxdiv=exxdiv,
                                comp=comp, basis=basis)
+    if comp is None:
+        tmp *= 0.5
     Cbar_k += tmp
     es[1] = np.einsum("ig,ig->", Cto_k, tmp) * 0.5
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
@@ -1066,7 +1068,7 @@ def ewald_correction(moe_ks, mocc_ks, madelung):
         moe_ks_new = [None] * ncomp
         for comp in range(ncomp):
             moe_ks_new[comp] = ewald_correction(moe_ks[comp], mocc_ks[comp],
-                                                madelung)
+                                                ncomp * madelung)
     return moe_ks_new
 
 

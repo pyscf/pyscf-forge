@@ -224,8 +224,9 @@ class KnownValues(unittest.TestCase):
         assert_allclose(rmf.e_tot, umf.e_tot, atol=1e-7, rtol=0)
         assert_allclose(rmf.mo_energy, umf.mo_energy[0])
         assert_allclose(rmf.mo_energy, umf.mo_energy[1])
-        assert_allclose(rmf.mo_occ, umf.mo_occ[0])
-        assert_allclose(rmf.mo_occ, umf.mo_occ[1])
+        half_occ = [0.5 * occ for occ in rmf.mo_occ]
+        assert_allclose(half_occ, umf.mo_occ[0])
+        assert_allclose(half_occ, umf.mo_occ[1])
         self._check_fd(rmf)
         self._check_fd(umf)
         umf = self._get_calc(ATOM, KPT1, nvir=2, spinpol=True,
@@ -254,8 +255,9 @@ class KnownValues(unittest.TestCase):
         assert_allclose(rmf.e_tot, umf.e_tot, atol=1e-7, rtol=0)
         assert_allclose(rmf.mo_energy, umf.mo_energy[0])
         assert_allclose(rmf.mo_energy, umf.mo_energy[1])
-        assert_allclose(rmf.mo_occ, umf.mo_occ[0])
-        assert_allclose(rmf.mo_occ, umf.mo_occ[1])
+        half_occ = [0.5 * occ for occ in rmf.mo_occ]
+        assert_allclose(half_occ, umf.mo_occ[0])
+        assert_allclose(half_occ, umf.mo_occ[1])
         self._check_fd(rmf)
         self._check_fd(umf)
         if run_atom:
@@ -314,6 +316,11 @@ class KnownValues(unittest.TestCase):
             assert_allclose(etot_check, etot_ref, atol=1e-8)
             new_mfs.append(mf)
         assert_allclose(new_mfs[1].e_tot, new_mfs[0].e_tot, atol=1e-7)
+        assert_allclose(new_mfs[1].mo_energy[0], new_mfs[0].mo_energy, atol=1e-7)
+        assert_allclose(new_mfs[1].mo_energy[1], new_mfs[0].mo_energy, atol=1e-7)
+        half_occ = [0.5 * occ for occ in new_mfs[0].mo_occ]
+        assert_allclose(new_mfs[1].mo_occ[0], half_occ, atol=1e-7)
+        assert_allclose(new_mfs[1].mo_occ[1], half_occ, atol=1e-7)
         umf1 = umf2 = None
 
     def test_init_guesses(self):

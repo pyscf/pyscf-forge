@@ -101,6 +101,8 @@ def get_mo_occ(cell, moe_ks=None, C_ks=None):
             mocc_ks[s] = khf.get_mo_occ(cell, C_ks=C_ks_s, nocc=nocc)
         else:
             raise RuntimeError
+        for k in range(len(mocc_ks[s])):
+            mocc_ks[s][k] *= 0.5
 
     return mocc_ks
 
@@ -315,7 +317,6 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                 e_comp_k = mf.apply_Fock_kpt(Co_k, kpt, mocc_ks[s], mesh, Gv,
                                              vj_R, exxdiv, comp=s,
                                              ret_E=True)[1]
-                e_comp_k *= 0.5
                 e_ks[k] += np.sum(e_comp_k)
                 e_comp += e_comp_k * wts[k]
         # e_comp /= nkpts
@@ -337,8 +338,8 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
                 e1_comp = mf.apply_hcore_kpt(Co_k, kpt, mesh, Gv, mf.with_pp,
                                              comp=s, ret_E=True,
                                              mocc_ks=mocc_k)[1]
-                e_ks[k] += 0.5 * np.sum(e1_comp)
-                e_ks[k] += 0.5 * np.sum(moe_ks[s][k][occ] * mocc_k)
+                e_ks[k] += np.sum(e1_comp)
+                e_ks[k] += np.sum(moe_ks[s][k][occ] * mocc_k)
     e_scf = np.dot(e_ks, wts)
 
     if moe_ks is None and exxdiv == "ewald":
