@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 # Author: Kyle Bystrom <kylebystrom@gmail.com>
 #
 
-""" Occupation smearing for SCF methods in plane-wave basis
+""" Occupation smearing for SCF methods in a plane-wave basis
 """
 
 from pyscf.pbc.scf.addons import _SmearingKSCF
@@ -31,7 +31,10 @@ SMEARING_METHOD = getattr(__config__, 'pbc_scf_addons_smearing_method', 'fermi')
 
 
 def smearing(mf, sigma=None, method=SMEARING_METHOD, mu0=None, fix_spin=False):
-    '''Fermi-Dirac or Gaussian smearing'''
+    """
+    Return a copy of mf with occupation smearing.
+    Fermi-Dirac and Gaussian smearing are supported.
+    """
     if not isinstance(mf, khf.PWKSCF):
         raise ValueError("For PW mode only")
 
@@ -47,6 +50,9 @@ def smearing(mf, sigma=None, method=SMEARING_METHOD, mu0=None, fix_spin=False):
 
 
 def smearing_(mf, *args, **kwargs):
+    """
+    Apply smearing in-place to a PWKSCF object mf.
+    """
     mf1 = smearing(mf, *args, **kwargs)
     mf.__class__ = mf1.__class__
     mf.__dict__ = mf1.__dict__
@@ -54,11 +60,17 @@ def smearing_(mf, *args, **kwargs):
 
 
 def has_smearing(mf):
+    """
+    Check if occupation smearing is used by mf.
+    """
     return isinstance(mf, _SmearingPWKSCF)
 
 
 class _SmearingPWKSCF(_SmearingKSCF):
-
+    """
+    Sub-class of _SmearingKSCF that uses defines the get_mo_occ
+    function for use in plane-wave calculations.
+    """
     def get_mo_occ(self, moe_ks=None, C_ks=None, nocc=None):
         cell = self.cell
         if nocc is None:

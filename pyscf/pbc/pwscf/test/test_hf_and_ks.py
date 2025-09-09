@@ -261,7 +261,8 @@ class KnownValues(unittest.TestCase):
         if run_atom:
             umf = self._get_calc(atom, KPT1, nvir=2, xc=xc, spinpol=True,
                                  damp_type="anderson", ecut_wf=15,
-                                 ecut_rho=200)
+                                 ecut_rho=60)
+            assert (umf.wf_mesh == umf.xc_mesh).all()
             self._check_fd(umf)
 
     def test_fd_ks_lda(self):
@@ -350,12 +351,16 @@ class KnownValues(unittest.TestCase):
             CELL, KPTS, nvir=2, xc="LDA,VWN", spinpol=False,
             ecut_wf=15, run=False
         )
+        # check the meshes are what we expect
+        assert (mf.wf_mesh == (19, 19, 19)).all()
+        assert (mf.xc_mesh == (35, 35, 35)).all()
         mf2 = self._get_calc(
             CELL, KPTS, nvir=2, xc="LDA,VWN", spinpol=False, run=False
         )
         orig_wf_mesh = mf.wf_mesh
         orig_xc_mesh = mf.xc_mesh
         e1 = mf.kernel()
+        # check the meshes are what we expect
         assert (mf2.wf_mesh == mf2.xc_mesh).all()
         assert (mf2.wf_mesh == CELL.mesh).all()
         e2 = mf2.kernel()

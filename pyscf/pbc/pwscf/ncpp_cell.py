@@ -1,3 +1,24 @@
+#!/usr/bin/env python
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Kyle Bystrom <kylebystrom@gmail.com>
+#
+
+""" Sub-class of the Cell object that supports SG15 psuedopotentials.
+"""
+
 from pyscf import __config__
 from pyscf.pbc.gto.cell import Cell
 from pyscf.data.elements import _symbol, is_ghost_atom, \
@@ -13,6 +34,12 @@ DEFAULT_SG15_PATH = getattr(__config__, 'pbc_pwscf_ncpp_cell_sg15_path', None)
 
 
 class NCPPCell(Cell):
+    """
+    Sub-class of Cell supporting SG15 pseudopotentials. The sg15_path
+    must be set either upon initialization or upon calling build.
+    Do not set any other pseudopotentials when initializing,
+    as only SG15 pseudos are supported when using this subclass.
+    """
 
     _keys = {"sg15_path"}
 

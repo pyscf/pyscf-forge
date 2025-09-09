@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 # limitations under the License.
 #
 # Author: Hong-Zhou Ye <osirpt.sun@gmail.com>
+# Author: Kyle Bystrom <kylebystrom@gmail.com>
 #
 
 """ All actual implementation of PW-related PPs go here.
@@ -284,8 +285,6 @@ def get_vpplocG_sg15(cell, Gv):
             spline = make_interp_spline(pp["grids"]["k"], pp["local_part"]["recip"])
             vlocG[ia] *= spline(G) / Zia  # spline is normalized to Zia
             # alpha parameters from the non-divergent Hartree+Vloc G=0 term.
-            # TODO this needed? Should compute limit of second deriv.
-            # How to figure out if this is working?
             vlocG[ia,G0idx] = pp["local_part"]["finite_g0"]
     vlocG[:] *= -1
     return vlocG

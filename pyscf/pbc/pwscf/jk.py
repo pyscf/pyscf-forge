@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -288,7 +288,8 @@ def jk(mf, with_jk=None, ace_exx=True, outcore=False, mesh=None,
 def get_ace_support_vec(cell, C1_ks, mocc1_ks, k1pts, C2_ks=None, k2pts=None,
                         out=None, mesh=None, Gv=None, exxdiv=None, method="cd",
                         outcore=False, basis_ks=None):
-    """ Compute the ACE support vectors for orbitals given by C2_ks and the
+    """
+    Compute the ACE support vectors for orbitals given by C2_ks and the
     corresponding k-points given by k2pts, using the Fock matrix obtained from
     C1_ks, mocc1_ks, k1pts. If C2_ks and/or k2pts are not provided, their
     values will be set to the C1_ks and/or k1pts. The results are saved to out
@@ -459,4 +460,3 @@ class PWJK:
             return apply_k_kpt(cell, C_k, kpt, None, mocc_ks, kpts, mesh, Gv,
                                C_ks_R=W_ks, exxdiv=exxdiv, basis=basis,
                                basis_ks=self.basis_ks)
-                       

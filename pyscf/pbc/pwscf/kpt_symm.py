@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,6 +35,15 @@ libpw = lib.load_library("libpwscf")
 
 
 def add_rotated_realspace_func_(fin, fout, mesh, rot, wt):
+    """
+    For real-valued functions fin and fout on mesh,
+
+    fout(rot * x) = fout(rot * x) + wt * fin(x)
+
+    where rot is a rotation operator represented as a 3x3 integer matrix,
+    and x is an integer-valued 3D vector representing the position
+    of the function on the mesh.
+    """
     assert fin.dtype == np.float64
     assert fout.dtype == np.float64
     assert fin.flags.c_contiguous
@@ -50,6 +59,15 @@ def add_rotated_realspace_func_(fin, fout, mesh, rot, wt):
 
 
 def get_rotated_complex_func(fin, mesh, rot, shift=None, fout=None):
+    """
+    For complex-valued fin on a given mesh, store a rotated
+    and shifted function in fout.
+
+    fout(rot * x + shift) = fin(x)
+
+    where rot and x are defined as in add_rotated_realspace_func_,
+    and shift is an integer-valued 3D vector.
+    """
     if shift is None:
         shift = [0, 0, 0]
     assert fin.dtype == np.complex128
@@ -67,6 +85,12 @@ def get_rotated_complex_func(fin, mesh, rot, shift=None, fout=None):
 
 
 def get_rho_R_ksym(C_ks, mocc_ks, mesh, kpts, basis_ks=None):
+    """
+    Get the real-space density from C_ks and mocc_ks, where the
+    set of kpts is reduced to the IBZ. kpts is a Kpoints object
+    storing both the IBZ and BZ k-points along with symmetry
+    mappings between them.
+    """
     rho_R = np.zeros(np.prod(mesh), dtype=np.float64, order="C")
     tmp_R = np.empty_like(rho_R)
     nelec = 0
@@ -81,10 +105,7 @@ def get_rho_R_ksym(C_ks, mocc_ks, mesh, kpts, basis_ks=None):
         jk._mul_by_occ_(Co_k_R, mocc_ks[k], occ)
         tmp_R[:] = lib.einsum("ig,ig->g", Co_k_R.conj(), Co_k_R).real
         for istar, iop in enumerate(kpts.stars_ops[k]):
-            # k2 = kpts.stars[k][istar]
             rot = kpts.ops[iop].rot
-            #if kpts.time_reversal_symm_bz[k2]:
-            #    rot[:] *= -1
             add_rotated_realspace_func_(tmp_R, rho_R, mesh, rot, 1.0)
     return rho_R
 
@@ -125,7 +146,17 @@ def get_ibz2bz_info_v2(kpts, k_ibz):
 def get_C_from_ibz2bz_info(mesh, kpt_ibz, kpt_bz, rot, tr, C_k_ibz,
                            out=None, realspace=False):
     """
-    kpt_ibz and kpt_bz are the scaled k-points (fractional coords in bz)
+    From a set of bands C_k_ibz at a k-point in the IBZ (kpt_ibz), get the
+    bands at a symmetrically equivalent k-point kpt_bz.
+
+    kpt_ibz and kpt_bz are the scaled k-points (fractional coords in bz).
+    tr is a bool indicating whether the symmetry operation
+    includes time-reversal.
+
+    If tr == True, kpt_bz = -rot * kpt_ibz.
+    If tr == False, kpt_bz = rot * kpt_ibz.
+    In both cases, the k-points are equivalent modulo 1
+    (in fractional coordinates).
     """
     out = np.ndarray(C_k_ibz.shape, dtype=np.complex128, order="C", buffer=out)
     rrot = rot.copy()
@@ -168,48 +199,20 @@ def get_C_from_ibz2bz_info(mesh, kpt_ibz, kpt_bz, rot, tr, C_k_ibz,
 
 def get_C_from_symm(C_ks_ibz, mesh, kpts, k_bz, out=None, occ_ks=None,
                     realspace=False):
-    #k_ibz = kpts.bz2ibz[k_bz]
-    #iop = kpts.stars_ops_bz[k_bz]
-    #rot = kpts.ops[iop].rot
-    #if occ_ks is not None:
-    #    occ = occ_ks[k_ibz]
-    #else:
-    #    occ = None
-    #C_k_ibz = jk.get_kcomp(C_ks_ibz, k_ibz, occ=occ)
+    """
+    Get C_k in the full BZ from C_ks_ibz in the IBZ, at the k-point index k_bz.
+    """
     kpt_ibz, kpt_bz, rot, tr, C_k_ibz = get_ibz2bz_info(C_ks_ibz, kpts, k_bz,
                                                         occ_ks=occ_ks)
     return get_C_from_ibz2bz_info(mesh, kpt_ibz, kpt_bz, rot, tr, C_k_ibz,
                                   out=out, realspace=realspace)
-    out = np.ndarray(C_k_ibz.shape, dtype=np.complex128, order="C", buffer=out)
-    if not realspace:
-        rot = np.rint(np.linalg.inv(rot).T)
-    tr = kpts.time_reversal_symm_bz[k_bz]
-    if tr:
-        rot[:] *= -1
-    new_kpt = rot.dot(kpt_ibz)
-    shift = [0, 0, 0]
-    kpt_bz = kpts.kpts_scaled[k_bz]
-    for v in range(3):
-        while np.round(new_kpt[v] - kpt_bz[v]) < 0:
-            shift[v] += 1
-            new_kpt[v] += 1
-        while np.round(new_kpt[v] - kpt_bz[v]) > 0:
-            shift[v] -= 1
-            new_kpt[v] -= 1
-        assert np.abs(new_kpt[v] - kpt_bz[v]) < 1e-8, f"{v}, {new_kpt} {kpt_bz}"
-    shift = [-1 * v for v in shift]
-    for i in range(out.shape[0]):
-        get_rotated_complex_func(C_k_ibz[i], mesh, rot, shift, fout=out[i])
-        if tr:
-            out[i] = out[i].conj()
-    return out
-
-
-# def get_C_from_symm(C_ks_ibz)
 
 
 def get_C_from_C_ibz(C_ks_ibz, mesh, kpts, realspace=False):
-    # assumes incore
+    """
+    Get C_ks in the full BZ from C_kz_ibz in the IBZ.
+    Assumes that C_ks_ibz is incore.
+    """
     C_ks = []
     for k in range(kpts.nkpts):
         C_ks.append(get_C_from_symm(
@@ -307,6 +310,9 @@ def apply_k_sym_s1(cell, C_ks, mocc_ks, kpts_obj, Ct_ks, ktpts, mesh, Gv,
 
 def apply_k_sym(cell, C_ks, mocc_ks, kpts, mesh, Gv, Ct_ks=None, ktpts=None,
                 exxdiv=None, out=None, outcore=False, basis_ks=None):
+    """
+    Apply the EXX operator with symmetry-reduced k-points.
+    """
     if Ct_ks is None:
         # TODO s2 symmetry
         Ct_ks = C_ks
@@ -361,6 +367,9 @@ def get_ace_support_vec(cell, C1_ks, mocc1_ks, k1pts, C2_ks=None, k2pts=None,
 
 
 class KsymAdaptedPWJK(jk.PWJK):
+    """
+    Lattice symmetry-adapted PWJK module.
+    """
     _ace_kpts = None
 
     def __init_exx(self):
@@ -493,6 +502,11 @@ def jksym(mf, with_jk=None, ace_exx=True, outcore=False, mesh=None,
 
 
 class KsymMixin:
+    """
+    This mixin can be inherited to make a PWKSCF object support
+    symmetry reduction of the k-points to the
+    irreducible Brillouin zone (IBZ).
+    """
     def _set_madelung(self):
         self._madelung = tools.pbc.madelung(self.cell, self.all_kpts)
         self._etot_shift_ewald = -0.5*self._madelung*self.cell.nelectron

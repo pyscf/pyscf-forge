@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,21 +57,21 @@ def kernel_doubleloop(mf, C0=None,
                       max_cycle=100, max_cycle_davidson=10, verbose_davidson=0,
                       ace_exx=True, damp_type="anderson", damp_factor=0.3,
                       dump_chk=True, conv_check=True, callback=None, **kwargs):
-    ''' Kernel function for SCF in a PW basis
-        Note:
-            This double-loop implementation follows closely the implementation in Quantum ESPRESSO.
+    '''Kernel function for SCF in a PW basis
 
-        Args:
-            C0 (list of numpy arrays):
-                A list of nkpts numpy arrays, each of size nocc(k) * Npw.
-            nbandv (int):
-                How many virtual bands to compute? Default is zero.
-            nbandv_extra (int):
-                How many extra virtual bands to include to facilitate the
-                convergence of the davidson algorithm for the highest few
-                virtual bands? Default is 1.
+    Note:
+        This double-loop implementation follows closely the implementation in Quantum ESPRESSO.
+
+    Args:
+        C0 (list of numpy arrays):
+            A list of nkpts numpy arrays, each of size nocc(k) * Npw.
+        nbandv (int):
+            How many virtual bands to compute? Default is zero.
+        nbandv_extra (int):
+            How many extra virtual bands to include to facilitate the
+            convergence of the davidson algorithm for the highest few
+            virtual bands? Default is 1.
     '''
-
     log = logger.Logger(mf.stdout, mf.verbose)
     cput0 = (logger.process_clock(), logger.perf_counter())
 
@@ -400,6 +400,42 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
                   damp_type="anderson", damp_factor=0.3,
                   vj_R=None,
                   last_hf_e=None):
+    """
+    For a given nonlocal potential and EXX (K) potential, run a
+    charge self-consistency loop. If neither CCECP potentials nor
+    EXX are used (e.g. LDA DFT with GTH potential), this loop
+    achieves full self-consistency.
+
+    Args:
+        C_ks (list of numpy arrays): 
+            Orbital plane-wave coefficients at each spin/k-point
+        mocc_ks (list of numpy arrays):
+            Orbital occupations of each orbital/band at each spin/k-point.
+        nband (int):
+            Number of band energies to print
+        mesh (3-tuple):
+            FFT grid size
+        Gv (numpy array):
+            G-vectors of the mesh
+        max_cycle (int):
+            Max number of SCF cycles
+        conv_tol (float):
+            Convergence tolerance (Ha)
+        max_cycle_davidson (int):
+            Max number of cycles to converge each Davidson solver call.
+        conv_tol_davidson (float):
+            Threshold to converge Davidson solver (Ha)
+        verbose_davidson (bool):
+            Print extra info for Davidson solver
+        damp_type (str):
+            "simple" or "anderson", charge mixing method
+        damp_factor (float):
+            Damping for simple mixing, smaller is faster mixing.
+        vj_R (numpy array):
+            Initial Coulomb potential
+        last_hf_e (numpy array):
+            Initial total energy
+    """
 
     log = logger.Logger(mf.stdout, mf.verbose)
 
@@ -576,11 +612,14 @@ def orth_mo(cell, C_ks, mocc_ks, thr=1e-3):
 def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
                    key="hcore", out=None, kpts_obj=None, mesh=None):
     """
-        Args:
-            nvir (int):
-                Number of virtual bands to be evaluated. Default is zero.
-            out (h5py group):
-                If provided, the orbitals are written to it.
+    Initial guess for the plane-wave coefficients of the bands,
+    using a GTO calculation based on key="hcore", "h1e", "cycle1", "scf".
+
+    Args:
+        nvir (int):
+            Number of virtual bands to be evaluated. Default is zero.
+        out (h5py group):
+            If provided, the orbitals are written to it.
     """
 
     log = logger.Logger(cell0.stdout, cell0.verbose)
@@ -794,6 +833,12 @@ def init_guess_from_C0(cell, C0_ks, ntot_ks, project=True, out=None,
 
 
 def update_pp(mf, C_ks):
+    """
+    Update the pseudopotential for a given set of bands C_ks. This is
+    only needed for CCECP because computing the nonlocal part is
+    expensive, and so is done only for each outer iteration in
+    the SCF double-loop.
+    """
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     if "t-ppnl" not in mf.scf_summary:
         mf.scf_summary["t-ppnl"] = np.zeros(2)
@@ -805,6 +850,10 @@ def update_pp(mf, C_ks):
 
 
 def update_k(mf, C_ks, mocc_ks):
+    """
+    Update the K potential (EXX) for a given set of bands C_ks
+    and their occupations mocc_ks
+    """
     tick = np.asarray([logger.process_clock(), logger.perf_counter()])
     if "t-ace" not in mf.scf_summary:
         mf.scf_summary["t-ace"] = np.zeros(2)
@@ -821,7 +870,22 @@ def update_k(mf, C_ks, mocc_ks):
 
 def eig_subspace(mf, C_ks, mocc_ks, mesh=None, Gv=None, vj_R=None, exxdiv=None,
                  comp=None):
+    """
+    Diagonalize the effective Hamiltonian in the space of the bands C_ks.
+    If vj_R is not provided, it is computed from C_ks and the occupations
+    mocc_ks. Note that update_k and update_pp are not called, so whatever
+    EXX potential/nonlocal CCECP part is already stored in mf is used.
 
+    Args:
+        C_ks: Bands
+        mocc_ks: Occupations
+        mesh: FFT grid
+        Gv: Plane-wave wave-vectors of FFT grid
+        vj_R: Coulomb potential in real-space
+        exxdiv: Divergence approach for EXX operator
+        comp (int):
+            If not None, apply the effective Hamiltonian at this spin index.
+    """
     cell = mf.cell
     if vj_R is None: vj_R = mf.get_vj_R(C_ks, mocc_ks)
     if mesh is None: mesh = mf.wf_mesh
@@ -867,7 +931,7 @@ def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
     else:
         k = member(kpt, mf.kpts)[0]
         mocc_k = mocc_ks[k][:C_k.shape[0]]
-    
+
     basis = mf.get_basis_kpt(kpt)
 
     tspans = np.zeros((3,2))
@@ -894,7 +958,7 @@ def apply_hcore_kpt(mf, C_k, kpt, mesh, Gv, with_pp, C_k_R=None, comp=None,
     tock = np.asarray([logger.process_clock(), logger.perf_counter()])
     tspans[2] = tock - tick
 
-    for ie_comp,e_comp in enumerate(mf.scf_summary["e_comp_name_lst"][:3]):
+    for ie_comp, e_comp in enumerate(mf.scf_summary["e_comp_name_lst"][:3]):
         key = "t-%s" % e_comp
         if key not in mf.scf_summary:
             mf.scf_summary[key] = np.zeros(2)
@@ -1008,7 +1072,13 @@ def ewald_correction(moe_ks, mocc_ks, madelung):
 
 def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
                   vj_R=None, comp=None, ret_mocc=True, full_ham=False):
-
+    """
+    Get the molecular orbital energies of C_ks without diagonalizing
+    in the C_ks subspace. The effective Hamiltonian is constructed
+    as in `eig_subspace`. `full_ham=True` returns the effective
+    Hamiltonian matrix in the basis of C_ks (as opposed to the orbital
+    energies, which is just the diagonal of that matrix).
+    """
     log = logger.Logger(mf.stdout, mf.verbose)
 
     cell = mf.cell
@@ -1236,7 +1306,7 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
     kpts = mf.kpts
     nkpts = len(kpts)
     cell = mf.cell
-# formating basis
+    # formating basis
     atmsymbs = cell._basis.keys()
     if isinstance(basis, str):
         basisdict = {atmsymb: basis for atmsymb in atmsymbs}
@@ -1245,15 +1315,15 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
         basisdict = basis
     else:
         raise TypeError("Input basis must be either a str or dict.")
-# pruning pGTOs that have unwanted exponents
+    # pruning pGTOs that have unwanted exponents
     basisdict = pw_helper.remove_pGTO_from_cGTO_(basisdict, amax=amax,
                                                  amin=amin, verbose=mf.verbose)
-# make a new cell with the modified GTO basis
+    # make a new cell with the modified GTO basis
     cell_cpw = cell.copy()
     cell_cpw.basis = basisdict
     cell_cpw.verbose = 0
     cell_cpw.build()
-# make CPW for all kpts
+    # make CPW for all kpts
     nao = cell_cpw.nao_nr()
     Cao = np.eye(nao)+0.j
     Co_ks = mf.mo_coeff
@@ -1286,7 +1356,7 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
         set_kcomp(C, C_ks, k)
         mocc_ks[k] = np.asarray([2.]*len(occ) + [0.]*Cv.shape[0])
         C = Co = Cv = None
-# build and diagonalize fock vv
+    # build and diagonalize fock vv
     mf.update_pp(C_ks)
     mf.update_k(C_ks, mocc_ks)
     Gv = cell.get_Gv(mesh)
@@ -1318,7 +1388,7 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
                  "Please check the SCF convergence.")
     log.debug("CPW band energies")
     mf.dump_moe(moe_ks, mocc_ks)
-# dump to chkfile
+    # dump to chkfile
     chkfile.dump_scf(cell, erifile, e_tot, moe_ks, mocc_ks, C_ks)
 
     if not incore: fswap.close()
@@ -1352,7 +1422,34 @@ class PWKSCF(pbc_hf.KSCF):
 
     def __init__(self, cell, kpts=np.zeros((1,3)), ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_PWKRHF_exxdiv', 'ewald')):
+        """
+        Initialize a PWKSCF object. Note that the wf_mesh (FFT grid dimensions
+        for computing wave functions, densities, and EXX) and xc_mesh
+        (FFT grid dimensions for computing XC energy and potential)
+        are initially set based on ecut_wf and ecut_rho, but they can
+        be modified using the set_meshes function.
 
+        Args:
+            cell (Cell object): Chemical system to compute.
+            kpts (numpy.array): List of k-points to sample Brillouin Zone.
+            ecut_wf (float):
+                Kinetic energy cutoff of the plane-wave basis,
+                in Hartree. If provided, all plane-waves with energy < ecut_wf
+                are included in the basis. If not provided, all plane-waves
+                on a uniform grid of size wf_mesh (cell.mesh by default)
+                are used. By default, wf_mesh is constructed with a cutoff
+                of 4 * ecut_wf. Also, if ecut_rho is not provided, then by
+                default xc_mesh is constructed with a cutoff of 16 * ecut_wf.
+            ecut_rho (float):
+                Kinetic energy cutoff for constructing the dense grid xc_mesh,
+                in Hartree. Currently this is only used for constructing the XC
+                integration grid and is not needed for Hartree-Fock.
+                If neither ecut_rho nor ecut_wf is provided, then by
+                default xc_mesh = wf_mesh = cell.mesh.
+            exxdiv (str):
+                Method for curing the divergence of exact exchange.
+                Must be 'ewald' or None.
+        """
         if not cell._built:
             sys.stderr.write('Warning: cell.build() is not called in input\n')
             cell.build()
@@ -1366,7 +1463,7 @@ class PWKSCF(pbc_hf.KSCF):
         else:
             self._ecut_wf = ecut_wf
             if ecut_rho is None:
-                ecut_rho = 4 * ecut_wf
+                ecut_rho = 16 * ecut_wf
             self._ecut_rho = ecut_rho
 
         self.kpts = kpts
@@ -1391,6 +1488,10 @@ class PWKSCF(pbc_hf.KSCF):
 
     @property
     def wf_mesh(self):
+        """
+        Mesh for storing wave functions, pseudo-densities, and
+        wave function products.
+        """
         if self._wf_mesh is None:
             return np.asarray(self.cell.mesh)
         else:
@@ -1398,14 +1499,24 @@ class PWKSCF(pbc_hf.KSCF):
 
     @property
     def xc_mesh(self):
+        """
+        Mesh for integrating the XC energy. Only used for DFT.
+        """
         if self._xc_mesh is None:
             return np.asarray(self.cell.mesh)
         else:
             return self._xc_mesh
 
     def set_meshes(self, wf_mesh=None, xc_mesh=None):
+        """
+        Set meshes to be different from their defaults.
+        init_pp and init_jk must be called again after setting
+        the meshes. Note that xc_mesh must be larger in all dimensions
+        than wf_mesh, and xc_mesh is only used for DFT calculations.
+        """
         self._wf_mesh, self._xc_mesh, self._wf2xc, self._basis_data = (
             pw_helper.get_basis_data(self.cell, self.kpts, self._ecut_wf,
+                                     self._ecut_rho,
                                      wf_mesh=wf_mesh, xc_mesh=xc_mesh)
         )
         self.with_pp = None
@@ -1413,9 +1524,16 @@ class PWKSCF(pbc_hf.KSCF):
 
     @property
     def ecut_wf(self):
+        """
+        Plane-wave cutoff energy in Hartree
+        """
         return self._ecut_wf
-    
+
     def get_basis_kpt(self, kpt):
+        """
+        Get the PWBasis object for a given k-point. K-point
+        must be in self.kpts.
+        """
         if self._basis_data is None:
             return None
         else:
@@ -1425,14 +1543,29 @@ class PWKSCF(pbc_hf.KSCF):
     @property
     def kpts(self):
         return self._kpts
+
     @property
     def kpts_obj(self):
+        """
+        For calculations with symmetry reduction of k-points,
+        return the Kpoints object for this calculation.
+        Otherwise return None.
+        """
         return None
+
     @property
     def weights(self):
+        """
+        Array with weight for each k-point. Sums to 1.
+        """
         return [1.0 / len(self._kpts)] * len(self._kpts)
+
     @kpts.setter
     def kpts(self, x):
+        """
+        Set the k-points. Also resets the meshes to their defaults
+        because the PW basis must be reset when the k-points are reset.
+        """
         self._kpts = np.reshape(x, (-1,3))
         # update madelung constant and energy shift for exxdiv
         self._set_madelung()
@@ -1447,6 +1580,7 @@ class PWKSCF(pbc_hf.KSCF):
     @property
     def etot_shift_ewald(self):
         return self._etot_shift_ewald
+
     @etot_shift_ewald.setter
     def etot_shift_ewald(self, x):
         raise RuntimeError("Cannot set etot_shift_ewald directly")
@@ -1454,6 +1588,7 @@ class PWKSCF(pbc_hf.KSCF):
     @property
     def madelung(self):
         return self._madelung
+
     @madelung.setter
     def madelung(self, x):
         raise RuntimeError("Cannot set madelung directly")
@@ -1677,7 +1812,8 @@ class PWKSCF(pbc_hf.KSCF):
     def get_nband(self, nbandv, nbandv_extra):
         raise NotImplementedError
 
-    def dump_moe(self, moe_ks_, mocc_ks_, nband=None, trigger_level=logger.DEBUG):
+    def dump_moe(self, moe_ks_, mocc_ks_, nband=None,
+                 trigger_level=logger.DEBUG):
         raise NotImplementedError
 
     def update_pp(mf, C_ks):

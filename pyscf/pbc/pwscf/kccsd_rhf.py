@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,6 +49,17 @@ def padded_mo_coeff(mp, mo_coeff):
 
 
 class PWKRCCSD:
+    """
+    Restricted CCSD in plane-wave basis.
+
+    Attribute `frozen` is the same as in GTO CCSD.
+
+    Correlation energy can be accessed from the `e_corr` property.
+    Other CCSD results can be accessed from the underlaying
+    `mcc` (Periodic RCCSD, which contains e_tot, t-amplitudes, etc.)
+    after `kernel` is called.
+    """
+
     def __init__(self, mf, frozen=None):
         self._scf = mf
         self.mo_occ = mf.mo_occ

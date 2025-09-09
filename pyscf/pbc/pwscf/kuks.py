@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,9 +27,15 @@ import numpy as np
 
 
 class PWKUKS(krks.PWKohnShamDFT, kuhf.PWKUHF):
+    """
+    Unrestricted Kohn-Sham DFT in a plane-wave basis.
+    """
     def __init__(self, cell, kpts=np.zeros((1,3)), xc='LDA,VWN',
                  ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_SCF_exxdiv', 'ewald')):
+        """
+        See PWKSCF for input options.
+        """
         kuhf.PWKUHF.__init__(self, cell, kpts, ecut_wf=ecut_wf, ecut_rho=ecut_rho,
                              exxdiv=exxdiv)
         krks.PWKohnShamDFT.__init__(self, xc)

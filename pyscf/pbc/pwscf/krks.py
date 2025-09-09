@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,6 +31,13 @@ from pyscf.pbc.lib.kpts_helper import member
 
 def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
                    out=None):
+    """
+    Get a density array from computing the xc potential, similar to
+    the pyscf.dft.numint module. For LDA, returns [rho].
+    For GGA, returns [rho, drho/dx, drho/dy, drho/dz]. For MGGA,
+    returns [rho, drho/dx, drho/dy, drho/dz, tau], with tau
+    being the kinetic energy density.
+    """
     if mocc_ks[0][0].ndim == 0:
         spin = 0
     else:
@@ -91,6 +98,9 @@ def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
 
 def apply_vxc_kpt(mf, C_k, kpt, vxc_R, vtau_R=None, mesh=None, Gv=None,
                   C_k_R=None, comp=None, basis=None):
+    """
+    Apply the XC potential to the bands C_k at a given kpt.
+    """
     cell = mf.cell
     if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
@@ -134,6 +144,12 @@ def eval_xc(mf, xc_code, rhovec_R, xctype):
 
 
 def vxc_from_vxcvec(rhovec_R, vxcvec_R, xctype, mesh, Gv, dv):
+    """
+    Takes the vxcvec_R (containg the XC energy functional derivative
+    with respect to rho, drho/dx, drho/dy, drho/dz, tau) and
+    converts it to vxc_R (dexc/drho) and vtau_R (dexc/dtau).
+    vtau_R is None for non-MGGA functionals.
+    """
     nspin = vxcvec_R.shape[0]
     vxc_R = vxcvec_R[:, 0].copy()
     if rhovec_R.ndim == 2:
@@ -226,7 +242,9 @@ def apply_veff_kpt(mf, C_k, kpt, mocc_ks, kpts, mesh, Gv, vj_R, with_jk,
 
 
 class PWKohnShamDFT(rks.KohnShamDFT):
-    
+    """
+    Kohn-Sham DFT in a plane-wave basis.
+    """
     def __init__(self, xc='LDA,VWN'):
         rks.KohnShamDFT.__init__(self, xc)
         self.scf_summary["e_comp_name_lst"].append("xc")
@@ -266,6 +284,11 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         raise NotImplementedError
 
     def coarse_to_dense_grid(self, func_xR, out_xr=None):
+        """
+        Use FFT's to transfer func_xR from a coarse grid
+        (specifically, self.wf_mesh) to a dense grid
+        (specifically, self.xc_mesh).
+        """
         # TODO use real FFTs here since the real-space density is real
         xshape = func_xR.shape[:-1]
         small_size = np.prod(self.wf_mesh)
@@ -293,6 +316,11 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         return rhovec_r
 
     def dense_to_coarse_grid(self, func_xr, out_xR=None):
+        """
+        Use FFT's to transfer func_xr from a dense grid
+        (specifically, self.xc_mesh) to a coarse grid
+        (specifically, self.wf_mesh).
+        """
         # TODO use real FFTs here since the real-space density is real
         ratio = np.prod(self.xc_mesh) / np.prod(self.wf_mesh)
         invr = 1 / ratio
@@ -305,6 +333,21 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         return out_xR
 
     def get_vj_R(self, C_ks, mocc_ks, mesh=None, Gv=None, save_rho=False):
+        """
+        As with the Hartree-Fock version, this routine computes the Coulomb
+        potential vj_R and returns it. It also computes the XC potential
+        and tags vj_R with four quantities used  in the DFT SCF cycle:
+            exc: The XC energy
+            vxcdot:
+                The integral of the XC potential multiplied by the density
+                (and the XC kinetic potential multiplied by the kinetic
+                energy density, for MGGAs). This is needed if the total
+                energy is computed from the orbital eigenvalues.
+            vxc_R: The XC potential in realspace, dexc/drho.
+            vtau_R:
+                The XC kinetic potential in realspace, dexc/dtau.
+                This is None of the functional is not a MGGA.
+        """
         # Override get_vj_R to include XC potential
         cell = self.cell
         if mesh is None: mesh = self.wf_mesh
@@ -367,10 +410,15 @@ class PWKohnShamDFT(rks.KohnShamDFT):
 
 
 class PWKRKS(PWKohnShamDFT, khf.PWKRHF):
-    
+    """
+    Restricted Kohn-Sham DFT in a plane-wave basis.
+    """
     def __init__(self, cell, kpts=np.zeros((1,3)), xc='LDA,VWN',
                  ecut_wf=None, ecut_rho=None,
                  exxdiv=getattr(__config__, 'pbc_scf_SCF_exxdiv', 'ewald')):
+        """
+        See PWKSCF for input options.
+        """
         khf.PWKRHF.__init__(self, cell, kpts, ecut_wf=ecut_wf,
                             ecut_rho=ecut_rho, exxdiv=exxdiv)
         PWKohnShamDFT.__init__(self, xc)

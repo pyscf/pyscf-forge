@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -410,6 +410,9 @@ def PWKRMP2_from_gtomf(mf, chkfile=None):
 
 
 class PWKRMP2:
+    """
+    Restriced MP2 perturbation theory in a plane-wave basis.
+    """
     def __init__(self, mf, nvir=None, frozen=None):
         self.cell = self.mol = mf.cell
         self._scf = mf

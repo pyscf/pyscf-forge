@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,8 +66,8 @@ class PWBasis:
         return self.ke.size
     
 
-def get_basis_data(cell, kpts, ecut_wf, wf_mesh=None, xc_mesh=None,
-                   sphere=True):
+def get_basis_data(cell, kpts, ecut_wf, ecut_rho=None, wf_mesh=None,
+                   xc_mesh=None, sphere=True):
     latvec = cell.lattice_vectors()
     if wf_mesh is None:
         use_small_inner_mesh = True
@@ -78,10 +78,12 @@ def get_basis_data(cell, kpts, ecut_wf, wf_mesh=None, xc_mesh=None,
     else:
         use_small_inner_mesh = False
     if xc_mesh is None:
-        if ecut_wf is None:
+        if ecut_wf is None and ecut_rho is None:
             xc_mesh = wf_mesh
         else:
-            xc_mesh = tools.cutoff_to_mesh(latvec, 16 * ecut_wf)
+            if ecut_rho is None:
+                ecut_rho = 16 * ecut_wf
+            xc_mesh = tools.cutoff_to_mesh(latvec, ecut_rho)
     if not sphere:
         if use_small_inner_mesh:
             inner_mesh = [((((m + 1) // 2) - 1) // 2) * 2 + 1 for m in wf_mesh]
@@ -107,6 +109,11 @@ def get_basis_data(cell, kpts, ecut_wf, wf_mesh=None, xc_mesh=None,
 
 
 def wf_fft(C_k_R, mesh, basis=None):
+    """
+    Fourier transform a wave function from real to reciprocal space.
+    If `basis` is provided, only the coefficients for the plane-waves in
+    `basis` are returned.
+    """
     assert C_k_R.dtype == np.complex128
     C_k = tools.fft(C_k_R, mesh)
     if basis is not None:
@@ -115,6 +122,11 @@ def wf_fft(C_k_R, mesh, basis=None):
 
 
 def wf_ifft(C_k, mesh, basis=None):
+    """
+    Fourier transform a wave function from reciprocal to real space.
+    If `basis` is provided, `C_k` should only contain the coefficients
+    for the plane-waves in `basis`.
+    """
     if basis is not None:
         _C_k = np.zeros((C_k.shape[0], np.prod(mesh)), dtype=C_k.dtype)
         _C_k[:, basis.indexes] = C_k
@@ -148,6 +160,8 @@ def get_kcomp(C_ks, k, load=True, occ=None, copy=False):
                 return C_ks[key][occ]
         else:
             return C_ks[key]
+
+
 def safe_write(h5grp, key, val, occ=None):
     if key in h5grp:
         if occ is None:
@@ -160,6 +174,8 @@ def safe_write(h5grp, key, val, occ=None):
             h5grp[key][occ] = val
     else:
         h5grp[key] = val
+
+
 def set_kcomp(C_k, C_ks, k, occ=None, copy=False):
     if isinstance(C_ks, (list,np.ndarray)):
         if occ is None:
@@ -175,6 +191,8 @@ def set_kcomp(C_k, C_ks, k, occ=None, copy=False):
     else:
         key = "%d"%k
         safe_write(C_ks, key, C_k, occ)
+
+
 def acc_kcomp(C_k, C_ks, k, occ=None):
     if isinstance(C_ks, (list,np.ndarray)):
         if occ is None:
@@ -189,6 +207,8 @@ def acc_kcomp(C_k, C_ks, k, occ=None):
             if isinstance(occ, np.ndarray):
                 occ = occ.tolist()
             C_ks[key][occ] += C_k
+
+
 def scale_kcomp(C_ks, k, scale):
     if isinstance(C_ks, (list,np.ndarray)):
         C_ks[k] *= scale
@@ -323,7 +343,6 @@ def get_mesh_map(cell, ke_cutoff, ke_cutoff2, mesh=None, mesh2=None):
     a sparse grid "mesh2" where mesh2 is rigorously a subset of mesh. This
     function returns the indices of grid points in mesh2 in mesh.
     """
-
     latvec = cell.lattice_vectors()
     if mesh is None:
         mesh = tools.cutoff_to_mesh(latvec, ke_cutoff)
@@ -528,6 +547,13 @@ def apply_kin_kpt(C_k, kpt, Gv, basis=None):
 """ Charge mixing methods
 """
 class _Mixing:
+    """
+    Mixing class for the (semi)local effective potential.
+    For Hartree-Fock calculations, the Coulomb potential
+    is mixed. For DFT calculations, a concatenated vector
+    of the Coulomb potential, the local XC potential,
+    and (for meta-GGAs) the kinetic part of the XC potential is mixed.
+    """
     def __init__(self, mf):
         self.cycle = 0
         if isinstance(mf, rks.KohnShamDFT):
@@ -556,11 +582,15 @@ class _Mixing:
         raise NotImplementedError
 
     def next_step(self, mf, f, flast):
-        ferr = f - flast
-        kwargs = self._extract_kwargs(f)
-        return self._tag(self._next_step(mf, f, ferr), kwargs)
-
-    def next_step(self, mf, f, flast):
+        """
+        Compute the next mixed potential from the current
+        potential f and previous flast. For Hartree-Fock,
+        returns the mixed Coulomb potential. For DFT,
+        both f and flast must be tagged with exc, vxcdot,
+        vxc_R, and vtau_R (vtau_R can be None). The return
+        value is the mixed Coulomb potential tagged with
+        exc, vxcdot, and the mixed vxc_R and vtau_R.
+        """
         if not self._ks:
             return self._next_step(mf, f, f - flast)
         ferr = f - flast
@@ -591,6 +621,9 @@ class _Mixing:
 
 
 class SimpleMixing(_Mixing):
+    """
+    Simple mixing, i.e. f_mix = beta * f_old + (1 - beta) * f_new
+    """
     def __init__(self, mf, beta=0.3):
         super().__init__(mf)
         self.beta = beta
@@ -601,6 +634,9 @@ class SimpleMixing(_Mixing):
 
 
 class AndersonMixing(_Mixing):
+    """
+    Anderson mixing, i.e. mixing with DIIS.
+    """
     def __init__(self, mf, ndiis=10, diis_start=1):
         super().__init__(mf)
         self.diis = DIIS()

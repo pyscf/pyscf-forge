@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2018 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -369,6 +369,9 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
 
 
 class PWKUMP2(kmp2.PWKRMP2):
+    """
+    Spin-unrestriced MP2 in a plane-wave basis.
+    """
     def __init__(self, mf, nvir=None):
         kmp2.PWKRMP2.__init__(self, mf, nvir=nvir)
 
