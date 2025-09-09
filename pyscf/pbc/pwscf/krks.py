@@ -262,7 +262,7 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         raise NotImplementedError
 
     def get_vj_R_from_rho_R(self, *args, **kwargs):
-        # TODO
+        # unneeded
         raise NotImplementedError
 
     def coarse_to_dense_grid(self, func_xR, out_xr=None):
@@ -282,7 +282,6 @@ class PWKohnShamDFT(rks.KohnShamDFT):
             nrho = func_xR.shape[0]
             shape = (nrho, dense_size)
         rhovec_g = np.zeros(shape, dtype=np.complex128)
-        # print(rhovec_g.shape, self._wf2xc.shape, rhovec_G.shape)
         rhovec_g[..., self._wf2xc] = rhovec_G
         if out_xr is None:
             rhovec_r = tools.ifft(rhovec_g, self.xc_mesh).real
@@ -336,28 +335,14 @@ class PWKohnShamDFT(rks.KohnShamDFT):
                 self.xc, rhovec_R, xctype
             )
             if hasattr(self, "_deda_r") and self._deda_r is not None:
-                # TODO add this back in
                 vxcvec_R[:] += self._deda_r * self._damix_r
         else:
             # xc integration is on a denser mesh than density generation
-            # TODO this doesn't work for spin polarization
-            """
-            ratio = np.prod(self.xc_mesh) / np.prod(self.wf_mesh)
-            invr = 1 / ratio
-            nrho = rhovec_R.shape[0]
-            rhovec_G = tools.fft(rhovec_R, self.wf_mesh)
-            dense_size = np.prod(self.xc_mesh)
-            rhovec_g = np.zeros((nrho, dense_size), dtype=np.complex128)
-            # print(rhovec_g.shape, self._wf2xc.shape, rhovec_G.shape)
-            rhovec_g[..., self._wf2xc] = rhovec_G
-            rhovec_r = tools.ifft(rhovec_g, self.xc_mesh).real * ratio
-            """
             rhovec_r = self.coarse_to_dense_grid(rhovec_R)
             exc, vxcvec_r = self.eval_xc(
                 self.xc, rhovec_r, xctype
             )
             if hasattr(self, "_deda_r") and self._deda_r is not None:
-                # TODO add this back in
                 vxcvec_r[:] += self._deda_r * self._damix_r
             vxcvec_R = np.empty_like(rhovec_R)
             if vxcvec_R.ndim == 2:
@@ -446,46 +431,13 @@ if __name__ == "__main__":
         basis="gth-szv",
         ke_cutoff=50,
         pseudo="gth-pade",
-        #symmorphic=True,
-        #space_group_symmetry=True,
     )
-    # cell.mesh = [13, 13, 13]
-    # cell.mesh = [29, 29, 29]
     cell.build()
     cell.verbose = 6
 
-    # kmesh = [4, 4, 4]
     kmesh = [2, 2, 2]
-    kpts = cell.make_kpts(
-        kmesh,
-        #time_reversal_symmetry=True,
-        #space_group_symmetry=True,
-    )
-
-    from pyscf.pbc.pwscf import kpt_symm
-
-    ens = []
-    ecuts = [18.38235294, 22.05882353, 25.73529412, 29.41176471, 33.08823529,
-             36.76470588, 44.11764706, 55.14705882, 73.52941176, 91.91176471]
-    for ecut in ecuts:
-        print("\n\n\n")
-        print("ECUT", ecut)
-        mf = PWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
-        # mf = kpt_symm.KsymAdaptedPWKRKS(cell, kpts, xc="PBE", ecut_wf=ecut)
-        
-        # nxc = 49
-        # mf.set_meshes(xc_mesh=[nxc, nxc, nxc])
-        
-        mf.damp_type = "simple"
-        mf.damp_factor = 0.7
-        mf.nvir = 4 # converge first 4 virtual bands
-        mf.kernel()
-        mf.dump_scf_summary()
-        ens.append(mf.e_tot)
-    print(ens)
-
-    print(ecuts[:-1])
-    print(27.2 * (np.array(ens[:-1]) - ens[-1]))
-
-    assert(abs(mf.e_tot - -10.673452914596) < 1.e-5)
-
+    kpts = cell.make_kpts(kmesh)
+    mf = PWKRKS(cell, kpts, xc="PBE", ecut_wf=20)
+    mf.nvir = 4  # converge first 4 virtual bands
+    mf.kernel()
+    mf.dump_scf_summary()

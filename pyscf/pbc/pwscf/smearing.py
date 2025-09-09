@@ -53,19 +53,8 @@ def smearing_(mf, *args, **kwargs):
     return mf
 
 
-def _occ_from_C(C_ks):
-    raise NotImplementedError  # TODO
-    nkpts = len(C_ks)
-    if nocc == 0:
-        mocc_ks = [np.zeros(get_kcomp(C_ks,k,load=False).shape[0])
-                   for k in range(nkpts)]
-    else:
-        mocc_ks = [None] * nkpts
-        for k in range(nkpts):
-            C_k = get_kcomp(C_ks, k, load=False)
-            mocc_ks[k] = np.asarray([min(2, max(0, nocc - i))
-                                     for i in range(C_k.shape[0])])
-    return mocc_ks
+def has_smearing(mf):
+    return isinstance(mf, _SmearingPWKSCF)
 
 
 class _SmearingPWKSCF(_SmearingKSCF):
@@ -76,17 +65,16 @@ class _SmearingPWKSCF(_SmearingKSCF):
             nocc = cell.nelectron / 2.0
         else:
             assert nocc == cell.nelectron / 2.0
-        if moe_ks is not None:
-            mocc_ks = self.get_occ(mo_energy_kpts=moe_ks)
-            if self.istype("PWKUHF"):
-                mocc_ks = [[2 * occ for occ in mocc_ks[0]], [2 * occ for occ in mocc_ks[1]]]
-        elif C_ks is not None:
-            if self.istype("PWKUHF"):
-                mocc_ks = [_occ_from_C(C_ks[0]), _occ_from_C(C_ks[1])]
-            else:
-                mocc_ks = _occ_from_C(C_ks)
-        else:
-            raise RuntimeError
+        if moe_ks is None:
+            raise NotImplementedError(
+                "PWKSCF smearing without mo energy input"
+            )
+        mocc_ks = self.get_occ(mo_energy_kpts=moe_ks, mo_coeff_kpts=C_ks)
+        if self.istype("PWKUHF"):
+            mocc_ks = [
+                [2 * occ for occ in mocc_ks[0]],
+                [2 * occ for occ in mocc_ks[1]]
+            ]
 
         return mocc_ks
 

@@ -105,6 +105,3 @@ if __name__ == "__main__":
     umf.kernel()
 
     umf.dump_scf_summary()
-
-    assert(abs(umf.e_tot - -5.39994570429868) < 1e-5)
-

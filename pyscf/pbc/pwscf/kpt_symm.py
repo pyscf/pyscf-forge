@@ -258,27 +258,27 @@ def apply_k_sym_s1(cell, C_ks, mocc_ks, kpts_obj, Ct_ks, ktpts, mesh, Gv,
                 kmap[-1] = Co_k_ibz_R
                 Co_k_R = get_C_from_ibz2bz_info(mesh, *kmap, realspace=True)
                 jk.set_kcomp(Co_k_R, Co_ks_R, k_bz)
-            # raise NotImplementedError
     else:
-        if True:
-            for k_ibz in range(len(C_ks)):
-                Co_k_ibz = jk.get_kcomp(C_ks, k_ibz, occ=occ_ks[k_ibz])
-                jk._mul_by_occ_(Co_k_ibz, mocc_ks[k_ibz], occ_ks[k_ibz])
-                maps = get_ibz2bz_info_v2(kpts_obj, k_ibz)
-                for kmap in maps:
-                    k_bz = kmap[-1]
-                    kmap[-1] = Co_k_ibz
-                    Co_k = get_C_from_ibz2bz_info(mesh, *kmap, realspace=False)
-                    jk.set_kcomp(wf_ifft(Co_k, mesh), Co_ks_R, k_bz)
-        else:
-            for k in range(nkpts):
-                # Co_k = jk.set_kcomp(C_ks, k, occ=occ_ks[k])
-                # TODO need to make a new basis for symmetrized calculation,
-                # or perhaps just rotate it in real space?
-                Co_k = get_C_from_symm(C_ks, mesh, kpts_obj, k, occ_ks=occ_ks)
-                jk._mul_by_occ_(Co_k, mocc_ks[k], occ_ks[k])
-                jk.set_kcomp(wf_ifft(Co_k, mesh), Co_ks_R, k)
-                Co_k = None
+        for k_ibz in range(len(C_ks)):
+            Co_k_ibz = jk.get_kcomp(C_ks, k_ibz, occ=occ_ks[k_ibz])
+            jk._mul_by_occ_(Co_k_ibz, mocc_ks[k_ibz], occ_ks[k_ibz])
+            maps = get_ibz2bz_info_v2(kpts_obj, k_ibz)
+            for kmap in maps:
+                k_bz = kmap[-1]
+                kmap[-1] = Co_k_ibz
+                Co_k = get_C_from_ibz2bz_info(mesh, *kmap, realspace=False)
+                jk.set_kcomp(wf_ifft(Co_k, mesh), Co_ks_R, k_bz)
+        """
+        Below is a draft of an alternate approach for the above loop
+        for k in range(nkpts):
+            # Co_k = jk.set_kcomp(C_ks, k, occ=occ_ks[k])
+            # TODO need to make a new basis for symmetrized calculation,
+            # or perhaps just rotate it in real space?
+            Co_k = get_C_from_symm(C_ks, mesh, kpts_obj, k, occ_ks=occ_ks)
+            jk._mul_by_occ_(Co_k, mocc_ks[k], occ_ks[k])
+            jk.set_kcomp(wf_ifft(Co_k, mesh), Co_ks_R, k)
+            Co_k = None
+        """
 
     for k in range(nktpts):
         Ct_k = jk.get_kcomp(Ct_ks, k)
@@ -435,12 +435,15 @@ class KsymAdaptedPWJK(jk.PWJK):
                                       method="cd", outcore=self.outcore,
                                       basis_ks=self.basis_ks)
         else:   # store ifft of Co_ks
-            raise NotImplementedError  # TODO
+            # TODO kpt_symm without ACE
+            raise NotImplementedError("kpt_symm only supports ACE for EXX")
+            """
             if mesh is None: mesh = self.mesh
             for k in range(nkpts):
                 occ = np.where(mocc_ks[k]>jk.THR_OCC)[0]
                 Co_k = jk.get_kcomp(C_ks, k, occ=occ)
                 jk.set_kcomp(tools.ifft(Co_k, mesh), out, k)
+            """
 
     def apply_k_kpt(self, C_k, kpt, mesh=None, Gv=None, exxdiv=None, comp=None,
                     basis=None):
@@ -460,7 +463,9 @@ class KsymAdaptedPWJK(jk.PWJK):
             W_k = jk.get_kcomp(W_ks, k)
             return jk.apply_k_kpt_support_vec(C_k, W_k)
         else:
-            raise NotImplementedError  # TODO
+            # TODO kpt_symm without ACE
+            raise NotImplementedError("kpt_symm only supports ACE for EXX")
+            """
             cell = self.cell
             kpts = self.kpts
             nkpts = len(kpts)
@@ -471,6 +476,7 @@ class KsymAdaptedPWJK(jk.PWJK):
                        for k in range(nkpts)]
             return apply_k_kpt(cell, C_k, kpt, None, mocc_ks, kpts, mesh, Gv,
                                C_ks_R=W_ks, exxdiv=exxdiv)
+            """
 
 
 def jksym(mf, with_jk=None, ace_exx=True, outcore=False, mesh=None,
@@ -575,7 +581,6 @@ class KsymAdaptedPWKUKS(KsymMixin, kuks.PWKUKS):
 
 if __name__ == "__main__":
     from pyscf.pbc import gto
-    from pyscf.pbc.pwscf import pw_helper
     from pyscf.pbc.pwscf.khf import PWKRHF
     import time
 
@@ -594,12 +599,9 @@ if __name__ == "__main__":
     cell.build()
     cell.verbose = 6
 
-    kmesh = [4, 4, 4]
+    kmesh = [2, 2, 2]
     center = [0, 0, 0]
-    kpts = cell.make_kpts(
-        kmesh,
-        scaled_center=center,
-    )
+    kpts = cell.make_kpts(kmesh)
     skpts = cell.make_kpts(
         kmesh,
         scaled_center=center,
@@ -607,18 +609,16 @@ if __name__ == "__main__":
         time_reversal_symmetry=True,
     )
 
-    mf = PWKRHF(cell, kpts, ecut_wf=50)
-    mf.damp_type = "simple"
-    mf.damp_factor = 0.7
-    mf.nvir = 4 # converge first 4 virtual bands
+    mf = PWKRHF(cell, kpts, ecut_wf=40)
+    mf.nvir = 4
     t0 = time.monotonic()
     mf.kernel()
     t1 = time.monotonic()
 
-    mf2 = KsymAdaptedPWKRHF(cell, skpts, ecut_wf=50)
+    mf2 = KsymAdaptedPWKRHF(cell, skpts, ecut_wf=20)
     mf2.damp_type = "simple"
     mf2.damp_factor = 0.7
-    mf2.nvir = 4 # converge first 4 virtual bands
+    mf2.nvir = 4
     t2 = time.monotonic()
     mf2.kernel()
     t3 = time.monotonic()
@@ -626,5 +626,6 @@ if __name__ == "__main__":
     print(mf.e_tot, mf2.e_tot)
     mf.dump_scf_summary()
     mf2.dump_scf_summary()
-    print(skpts.nkpts, skpts.nkpts_ibz)
-    print(t1 - t0, t3 - t2)
+    print("nkpts in BZ and IBZ", skpts.nkpts, skpts.nkpts_ibz)
+    print("Runtime without symmmetry", t1 - t0)
+    print("Runtime with symmetry", t3 - t2)

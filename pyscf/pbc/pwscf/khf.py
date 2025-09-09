@@ -45,10 +45,7 @@ import pyscf.lib.parameters as param
 from pyscf.pbc.lib.kpts_helper import member
 
 
-# TODO
-# 1. fractional occupation (for metals)
-# 2. APIs for getting CPW and CPW virtuals
-
+# TODO APIs for getting CPW and CPW virtuals
 
 THR_OCC = 1E-3
 
@@ -1228,8 +1225,10 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
             file. If not provided, mf.chkfile is used. A RuntimeError is raised
             if the latter is None.
     """
-
+    from pyscf.pbc.pwscf.smearing import has_smearing
     log = logger.Logger(mf.stdout, mf.verbose)
+    if has_smearing(mf):
+        raise NotImplementedError("CPW Virtuals with occupation smearing")
 
     assert(mf.converged)
     if erifile is None: erifile = mf.chkfile
@@ -1275,7 +1274,6 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
         C_ks = fswap.create_group("C_ks")
     mocc_ks = [None] * nkpts
     for k in range(nkpts):
-        # TODO check this is closed-shell as it does not work for smearing
         Cv = pw_helper.get_C_ks_G(cell_cpw, [kpts[k]], [Cao], [nao],
                                   mesh=mesh)[0]
         if mf._basis_data is not None:
@@ -1772,106 +1770,18 @@ if __name__ == "__main__":
     )
     MESH = [13, 13, 13]
     cell.mesh = MESH
-    # cell.mesh = [17, 17, 17]
-    # cell.mesh = [29, 29, 29]
     cell.build()
     cell.verbose = 6
-    print(cell.nelectron)
 
     res = pw_helper.get_mesh_map(cell, None, None, (3, 3, 3), (2, 2, 2))
-    print(res)
-    # exit()
 
-    kmesh = [2, 2, 2]
+    kmesh = [2, 1, 1]
     kpts = cell.make_kpts(kmesh)
 
     mf = PWKRHF(cell, kpts, ecut_wf=None)
     mf.damp_type = "simple"
     mf.damp_factor = 0.7
-    mf.nvir = 4 # converge first 4 virtual bands
+    mf.nvir = 4  # converge first 4 virtual bands
     mf.kernel()
     mf.dump_scf_summary()
-
-    terms = ['nuc', 'kin', 'ppl', 'ppnl', 'coul', 'ex']
-    ets = []
-    ng_list = [13, 17, 23, 25, 33, 45, 51]
-    ng_list = [14, 15, 19, 21, 25, 29, 33, 37]
-    ngx = np.max(ng_list)
-    elists = []
-    for ng in ng_list:
-        print("NGRID", ng)
-        mf2 = PWKRHF(cell, kpts, ecut_wf=1000)
-        mf2.set_meshes(wf_mesh=[ng, ng, ng], xc_mesh=[ngx, ngx, ngx])
-        # cell.mesh = [ng, ng, ng]
-        # cell.build()
-        # mf2 = PWKRHF(cell, kpts, ecut_wf=None)
-        if False:
-            mf2.damp_type = "simple"
-            mf2.damp_factor = 0.7
-            mf2.nvir = 4 # converge first 4 virtual bands
-            mf2.conv_tol = 1e-7
-            mf2.kernel()
-            mf2.dump_scf_summary()
-            ets.append(mf2.e_tot)
-        else:
-            mf2.init_jk()
-            mf2.init_pp()
-            mf2.update_k(mf.mo_coeff, mf.mo_occ)
-        print(mf2.energy_tot(mf.mo_coeff, mf.mo_occ))
-        ens = []
-        for t in terms:
-            ens.append(mf2.scf_summary[t])
-        elists.append(ens)
-        print(ens)
-        print()
-        print()
-    print("RESULT", ets)
-    ens = []
-    for t in terms:
-        ens.append(mf.scf_summary[t])
-    print(ens)
-    for es in elists:
-        print(np.array(es) - np.array(elists[-1]))
-    exit()
-    print()
-    print()
-
-    ets = []
-    for ecut in [25, 50, 75, 100]:
-        mf2 = PWKRHF(cell, kpts, ecut_wf=ecut)
-        mf2.xc_mesh = MESH
-        mf2.damp_type = "simple"
-        mf2.damp_factor = 0.7
-        mf2.nvir = 4 # converge first 4 virtual bands
-        mf2.init_jk()
-        mf2.init_pp()
-        mo_coeff = [coeff[:, mf2._wf2xc][:, basis.indexes]
-                    for coeff, basis in zip(mf.mo_coeff, mf2._basis_data)]
-        mf2.update_k(mo_coeff, mf.mo_occ)
-        mf2.energy_tot(mo_coeff, mf.mo_occ)
-        ens = []
-        mf2.kernel()
-        for t in terms:
-            ens.append(mf2.scf_summary[t])
-        print(terms)
-        print(ens, mf2.e_tot)
-        ets.append(mf2.e_tot)
-    print(ets)
-    exit()
-
-    mf2 = PWKRHF(cell, kpts, ecut_wf=100)
-    print(mf2.wf_mesh)
-    mf2.damp_type = "simple"
-    mf2.damp_factor = 0.7
-    mf2.nvir = 4 # converge first 4 virtual bands
-    mf2.init_jk()
-    mf2.init_pp()
-    mo_coeff = [coeff[:, basis.indexes] for coeff, basis in zip(mf.mo_coeff, mf2._basis_data)]
-    mf2.update_k(mo_coeff, mf.mo_occ)
-    mf2.energy_tot(mo_coeff, mf.mo_occ)
-    print(mf2.wf_mesh)
-    mf2.kernel()
-    mf2.dump_scf_summary()
-
-    print(mf.e_tot, mf2.e_tot)
     assert(abs(mf.e_tot - -10.673452914596) < 1.e-5)

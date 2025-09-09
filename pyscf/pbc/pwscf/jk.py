@@ -60,18 +60,6 @@ def apply_j_kpt(C_k, mesh, vj_R, C_k_R=None, basis=None):
     return wf_fft(C_k_R * vj_R, mesh, basis)
 
 
-# def apply_j(C_ks, mesh, vj_R, C_ks_R=None, out=None):
-#     nkpts = len(C_ks)
-#     if out is None: out = [None] * nkpts
-#     for k in range(nkpts):
-#         C_k = get_kcomp(C_ks, k)
-#         C_k_R = None if C_ks_R is None else get_kcomp(C_ks_R, k)
-#         Cbar_k = apply_j_kpt(C_k, mesh, vj_R, C_k_R=C_k_R)
-#         set_kcomp(Cbar_k, out, k)
-#
-#     return out
-
-
 def apply_k_kpt(cell, C_k, kpt1, C_ks, mocc_ks, kpts, mesh, Gv,
                 C_k_R=None, C_ks_R=None, exxdiv=None,
                 basis=None, basis_ks=None):

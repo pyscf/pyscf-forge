@@ -196,13 +196,13 @@ class KnownValues(unittest.TestCase):
                 ep = mf.energy_elec(Ct_ks, mo_occ, Gv=Gv, mesh=mesh)
                 fd = (ep - em) / delta
 
-                # NOTE need to understand the factor of 2 a bit better
-                # but the factor of nkpts is just because the fd energy
+                # NOTE the factor of nkpts is because the fd energy
                 # is per unit cell, but the gap is the energy derivative
-                # for the supercell with respect to perturbing the orbital
+                # for the supercell with respect to perturbing the orbital.
+                # The factor of 2 is because perturbing an occupied orbital
+                # in spin-restricted mode affects 2 electrons.
                 expected_de = expected_de * 2 / nkpts
                 if spinpol:
-                    # TODO why?
                     expected_de /= 2
                 assert_allclose(expected_de, fd, atol=1e-8, rtol=1e-8)
         
@@ -313,6 +313,7 @@ class KnownValues(unittest.TestCase):
             assert_allclose(etot_check, etot_ref, atol=1e-8)
             new_mfs.append(mf)
         assert_allclose(new_mfs[1].e_tot, new_mfs[0].e_tot, atol=1e-7)
+        umf1 = umf2 = None
 
     def test_init_guesses(self):
         """
@@ -369,6 +370,6 @@ class KnownValues(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    print("Finite difference for pbc.pwscf -- khf, kuhf, krks, kuks")
+    # Finite difference for pbc.pwscf -- khf, kuhf, krks, kuks
     unittest.main()
 

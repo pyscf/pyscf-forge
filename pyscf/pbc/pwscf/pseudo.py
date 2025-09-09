@@ -286,7 +286,7 @@ def get_vpplocG_sg15(cell, Gv):
             # alpha parameters from the non-divergent Hartree+Vloc G=0 term.
             # TODO this needed? Should compute limit of second deriv.
             # How to figure out if this is working?
-            # vlocG[ia,G0idx] = pp["local_part"]["finite_g0"]
+            vlocG[ia,G0idx] = pp["local_part"]["finite_g0"]
     vlocG[:] *= -1
     return vlocG
 

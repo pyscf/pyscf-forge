@@ -24,7 +24,6 @@ def setUpModule():
                 [1.78339987, 0.        , 1.78339987],
                 [1.78339987, 1.78339987, 0.        ]]),
         basis="gth-szv",
-        ke_cutoff=50,
         verbose=0,
     )
     if HAVE_SG15:
@@ -40,7 +39,6 @@ def setUpModule():
         atom = "C 0 0 0",
         a = np.eye(3) * 4,
         basis="gth-szv",
-        ke_cutoff=50,
         spin=2,
         verbose=0,
     )
@@ -61,8 +59,8 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
     def test_energy(self):
         ecut_wf = 18.38235294
-        e_ref2 = -11.069880610677329
-        e_ref = -11.518140438246803
+        e_ref2 = -10.5957823763498
+        e_ref = -11.044064472796734
         mf = PWKRKS(CELL, KPTS2, xc="PBE", ecut_wf=ecut_wf)
         mf.nvir = 4 # converge first 4 virtual bands
         mf.kernel()
@@ -91,6 +89,25 @@ class KnownValues(unittest.TestCase):
         assert_allclose(
             mf.energy_tot(mf.mo_coeff, mf.mo_occ), e_ref, atol=1e-7
         )
+
+        # make sure a ghost atom doesn't mess anything up
+        gcell = NCPPCell(
+            atom = """
+            C 0 0 0
+            C 0.89169994 0.89169994 0.89169994
+            ghost:C -0.9 -0.9 -0.9
+            """,
+            a = np.asarray([
+                    [0.       , 1.78339987, 1.78339987],
+                    [1.78339987, 0.        , 1.78339987],
+                    [1.78339987, 1.78339987, 0.        ]]),
+            basis="gth-szv",
+            verbose=0,
+        )
+        gcell.build()
+        mf2 = PWKRKS(gcell, KPTS2, xc="PBE", ecut_wf=ecut_wf)
+        mf2.kernel()
+        assert_allclose(mf2.e_tot, e_ref2, atol=1e-6, rtol=0)
 
 
 if __name__ == "__main__":

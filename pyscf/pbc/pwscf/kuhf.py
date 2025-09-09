@@ -82,7 +82,6 @@ def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
         nkpts = len(mf.kpts)
         for s in [0,1]:
             for k in range(nkpts):
-                # TODO why does it not work to apply ewald in khf.get_mo_energy
                 moe_ks[s][k][mocc_ks[s][k] > khf.THR_OCC] -= mf.madelung
 
     if ret_mocc:
@@ -287,7 +286,6 @@ def eig_subspace(mf, C_ks, mocc_ks, mesh=None, Gv=None, vj_R=None, exxdiv=None,
         nkpts = len(mf.kpts)
         for s in [0,1]:
             for k in range(nkpts):
-                # TODO double-counting?
                 moe_ks[s][k][mocc_ks[s][k] > khf.THR_OCC] -= mf.madelung
 
     return C_ks, moe_ks, mocc_ks

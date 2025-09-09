@@ -39,6 +39,9 @@ def get_nc_data_from_upf(fname):
     pp_nl = root.find('PP_NONLOCAL')
     dij = None
     projectors = []
+    # add some buffer to the arrays when Fourier transforming
+    # to get a denser grid in k-space
+    buf = pp_r.size
     for child in pp_nl:
         if child.tag == "PP_DIJ":
             dij = _parse_array_upf(child)
@@ -52,27 +55,33 @@ def get_nc_data_from_upf(fname):
                 "l": l,
                 "cut": cutoff_index,
                 "rproj": projector,
-                "kproj": fft_upf(pp_r, projector, l, mul_by_r=False)[1]
+                "kproj": fft_upf(pp_r, projector, l, mul_by_r=False, buf=buf)[1]
             })
     assert dij is not None
     dij = dij.reshape(len(projectors), len(projectors))
     _deriv = make_radial_derivative_calculator(pp_r, 2, 2)[0]
     d1 = _deriv(pp_local * pp_r)
     charge = d1.copy()
+    # nelec = np.trapz(charge * pp_r, x=pp_r)
+    # NOTE this is the non-divergent G=0 term of the local pseudo.
+    # It should be 4*pi*Q1 in the expansion Q(k) = Q(0) + Q1 k^2 + ...
+    # where Q(k) is the pseudo-charge. Here this is computed
+    # from I2 = \int d^3r r^2 Q(r). Q1 is -I2/6.
+    g0lim = -0.5 * np.trapz(charge * pp_r**3, x=pp_r)
+    g0lim *= 4 * np.pi / 3
     charge[1:] /= pp_r[1:]
     charge[0] = charge[1]
-    pp_k, chargek = fft_upf(pp_r, charge, 0)
+    pp_k, chargek = fft_upf(pp_r, charge, 0, buf=buf)
     chargek[:] /= 4 * np.pi
     locpotk = chargek.copy()
     locpotk[1:] *= 4 * np.pi / pp_k[1:]**2
     locpotk[0] = locpotk[1]
-    if False:
-        import matplotlib
-        matplotlib.use("QtAgg")
-        import matplotlib.pyplot as plt
-        plt.plot(pp_k, chargek)
-        plt.show()
     assert (np.diag(np.diag(dij)) == dij).all(), "dij must be diagonal"
+    # Another, less precise way to compute the Q1 term is finite difference
+    # derivative in reciprocal space.
+    # ikd0, ikd1 = 0, 1
+    # g0lim = 4 * np.pi * (chargek[ikd1] - chargek[ikd0])
+    # g0lim /= (pp_k[ikd1]**2 - pp_k[ikd0]**2)
     return {
         "z": int(round(float(root.find("PP_HEADER").attrib["z_valence"]))),
         "projectors": projectors,
@@ -80,7 +89,7 @@ def get_nc_data_from_upf(fname):
         "local_part": {
             "real": charge,
             "recip": chargek,
-            "finite_g0": 2 * (chargek[1] - chargek[0]) / (pp_k[1] - pp_k[0]),
+            "finite_g0": g0lim,
             "locpotk": locpotk,
         },
         "grids": {
@@ -105,7 +114,7 @@ def _get_deriv_weights(r_g, D, i, istart, deriv_order):
 
 def fsbt(l, f_g, r_g, G_k, mul_by_r):
     """
-    This is the Fast spherical Bessel transform implemented in GPAW.
+    This is the Fast spherical Bessel transform as implemented in GPAW.
 
     Returns::
 
@@ -135,8 +144,13 @@ def fsbt(l, f_g, r_g, G_k, mul_by_r):
     return f_k
 
 
-def fft_upf(r, f, l, mul_by_r=True):
+def fft_upf(r, f, l, mul_by_r=True, buf=0):
     N = r.size
+    if buf > 0:
+        # NOTE TODO this assumes a linear grid
+        r = np.append(r, r[-1] + r[1] + r[1] * np.arange(buf))
+        f = np.append(f, np.zeros(buf, dtype=f.dtype))
+        N += buf
     G = np.linspace(0, np.pi / r[1], N // 2 + 1)
     fk = 4 * np.pi * fsbt(l, f, r, G, mul_by_r=mul_by_r)
     return G, fk
@@ -151,7 +165,7 @@ def make_radial_derivative_calculator(r_g, deriv_order=1, stencil_order=2):
     techniques of the same order, but it has the benefit that it
     can be used on arbitrary radial grids, without knowledge of
     the particular grid being used. A second function is also
-    returned that can evaluated the derivative of the radial
+    returned that can evaluate the derivative of the radial
     derivative with respect to a change in function value.
 
     Args:
@@ -207,9 +221,3 @@ def make_radial_derivative_calculator(r_g, deriv_order=1, stencil_order=2):
         return vfunc_xg
 
     return _eval_radial_deriv, _eval_radial_deriv_bwd
-
-
-
-if __name__ == "__main__":
-    fname = '../../gpaw_data/sg15_oncv_upf_2020-02-06/C_ONCV_PBE-1.2.upf'
-    get_nc_data_from_upf(fname)
