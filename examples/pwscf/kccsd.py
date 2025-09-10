@@ -1,4 +1,5 @@
 import numpy as np
+from pyscf.pbc import cc
 from pyscf.pbc.pwscf.pw_helper import gtomf2pwmf
 from pyscf.pbc.pwscf.kccsd_rhf import PWKRCCSD
 

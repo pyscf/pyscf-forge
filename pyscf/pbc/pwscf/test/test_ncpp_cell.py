@@ -62,15 +62,18 @@ class KnownValues(unittest.TestCase):
         e_ref2 = -10.5957823763498
         e_ref = -11.044064472796734
         mf = PWKRKS(CELL, KPTS2, xc="PBE", ecut_wf=ecut_wf)
+        mf.conv_tol = 1e-9
         mf.nvir = 4 # converge first 4 virtual bands
         mf.kernel()
         assert_allclose(mf.e_tot, e_ref2, atol=1e-7)
         mf = PWKUKS(CELL, KPTS2, xc="PBE", ecut_wf=ecut_wf)
         mf.nvir = 4
+        mf.conv_tol = 1e-9
         mf.kernel()
         assert_allclose(mf.e_tot, e_ref2, atol=1e-7)
         mf = kpt_symm.KsymAdaptedPWKRKS(CELL, KPTS, xc="PBE", ecut_wf=ecut_wf)
         mf.nvir = 4
+        mf.conv_tol = 1e-9
         mf.kernel()
         assert_allclose(mf.e_tot, e_ref, atol=1e-7)
 
