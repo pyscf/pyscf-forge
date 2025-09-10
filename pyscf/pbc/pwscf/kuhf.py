@@ -108,7 +108,8 @@ def get_mo_occ(cell, moe_ks=None, C_ks=None):
 
 
 def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
-                   key="hcore", out=None, kpts_obj=None, mesh=None):
+                   key="hcore", out=None, kpts_obj=None, mesh=None,
+                   xc=None):
     """
     Args:
         nvir (int):
@@ -161,10 +162,16 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
 
     if kpts_obj is None:
         kpts_obj = kpts
-    if len(kpts) < 30:
-        pmf = scf.KUHF(cell, kpts_obj)
+    if xc is None:
+        if len(kpts) < 30:
+            pmf = scf.KUHF(cell, kpts_obj)
+        else:
+            pmf = scf.KUHF(cell, kpts_obj).density_fit()
     else:
-        pmf = scf.KUHF(cell, kpts_obj).density_fit()
+        if len(kpts) < 30:
+            pmf = scf.KUKS(cell, kpts_obj, xc=xc)
+        else:
+            pmf = scf.KUKS(cell, kpts_obj, xc=xc).density_fit()
 
     if key.lower() == "cycle1":
         pmf.max_cycle = 0
@@ -405,10 +412,15 @@ class PWKUHF(khf.PWKSCF):
         if nvir is None: nvir = self.nvir
 
         if key in ["h1e","hcore","cycle1","scf"]:
+            if hasattr(self, "xc"):
+                # This is DFT, use fast initial guess
+                xc = "LDA,VWN"
+            else:
+                xc = None
             C_ks, mocc_ks = get_init_guess(cell, kpts,
                                            basis=basis, pseudo=pseudo,
                                            nvir=nvir, key=key, out=out,
-                                           mesh=self.wf_mesh)
+                                           mesh=self.wf_mesh, xc=xc)
         else:
             logger.warn(self, "Unknown init guess %s", key)
             raise RuntimeError

@@ -372,6 +372,14 @@ class KsymAdaptedPWJK(jk.PWJK):
     """
     _ace_kpts = None
 
+    def __init__(self, cell, kpts, mesh=None, exxdiv=None, **kwargs):
+        if cell.space_group_symmetry and not cell.symmorphic:
+            raise NotImplementedError(
+                "Plane-wave calculation with k-point symmetry only "
+                "supports symmorphic symmetry operations"
+            )
+        super().__init__(cell, kpts, mesh=mesh, exxdiv=exxdiv, **kwargs)
+
     def __init_exx(self):
         if self.outcore:
             self.swapfile = tempfile.NamedTemporaryFile(dir=lib.param.TMPDIR)

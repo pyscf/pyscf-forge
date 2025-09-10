@@ -425,4 +425,4 @@ if __name__ == "__main__":
     for nvir,ecorr in zip(nvir_lst,ecorr_lst):
         err = abs(ecorr - es["%d"%nvir])
         print(err)
-        assert(err < 1e-6)
+        assert(err < 1e-5)

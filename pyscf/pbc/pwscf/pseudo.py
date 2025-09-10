@@ -61,7 +61,14 @@ def get_vpplocG(cell, mesh=None, Gv=None):
     if len(cell._ecp) > 0:
         return get_vpplocG_ccecp(cell, Gv)
     elif cell.pseudo is not None:
-        if "GTH" in cell.pseudo.upper():
+        if isinstance(cell.pseudo, dict):
+            # assume it is GTH and check for errors
+            try:
+                res = get_vpplocG_gth(cell, Gv)
+            except Exception as e:
+                raise e
+            return res
+        elif "GTH" in cell.pseudo.upper():
             return get_vpplocG_gth(cell, Gv)
         elif cell.pseudo == "SG15":
             return get_vpplocG_sg15(cell, Gv)
@@ -92,7 +99,7 @@ def get_pp_type(cell):
             assert("GTH" in cell.pseudo.upper())
         elif isinstance(cell.pseudo, dict):
             for key,pp in cell.pseudo.items():
-                assert("GTH" in pp.upper())
+                assert(isinstance(pp, list) or "GTH" in pp.upper())
         else:
             raise RuntimeError("Unknown pseudo type %s" % (str(cell.pseudo)))
         return "gth"

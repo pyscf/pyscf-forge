@@ -610,7 +610,8 @@ def orth_mo(cell, C_ks, mocc_ks, thr=1e-3):
 
 
 def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
-                   key="hcore", out=None, kpts_obj=None, mesh=None):
+                   key="hcore", out=None, kpts_obj=None, mesh=None,
+                   xc=None):
     """
     Initial guess for the plane-wave coefficients of the bands,
     using a GTO calculation based on key="hcore", "h1e", "cycle1", "scf".
@@ -663,10 +664,16 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
 
     if kpts_obj is None:
         kpts_obj = kpts
-    if len(kpts) < 30:
-        pmf = scf.KRHF(cell, kpts_obj)
+    if xc is None:
+        if len(kpts) < 30:
+            pmf = scf.KRHF(cell, kpts_obj)
+        else:
+            pmf = scf.KRHF(cell, kpts_obj).density_fit()
     else:
-        pmf = scf.KRHF(cell, kpts_obj).density_fit()
+        if len(kpts) < 30:
+            pmf = scf.KRKS(cell, kpts_obj, xc=xc)
+        else:
+            pmf = scf.KRKS(cell, kpts_obj, xc=xc).density_fit()
 
     if key.lower() == "cycle1":
         pmf.max_cycle = 0
@@ -1516,11 +1523,18 @@ class PWKSCF(pbc_hf.KSCF):
         the meshes. Note that xc_mesh must be larger in all dimensions
         than wf_mesh, and xc_mesh is only used for DFT calculations.
         """
-        self._wf_mesh, self._xc_mesh, self._wf2xc, self._basis_data = (
-            pw_helper.get_basis_data(self.cell, self.kpts, self._ecut_wf,
-                                     self._ecut_rho,
-                                     wf_mesh=wf_mesh, xc_mesh=xc_mesh)
-        )
+        if self._ecut_wf is None:
+            self._wf_mesh = np.array(wf_mesh)
+            self._xc_mesh = np.array(xc_mesh)
+            self._wf2xc = pw_helper.get_mesh_map(
+                self.cell, None, None, mesh=xc_mesh, mesh2=wf_mesh
+            )
+        else:
+            self._wf_mesh, self._xc_mesh, self._wf2xc, self._basis_data = (
+                pw_helper.get_basis_data(self.cell, self.kpts, self._ecut_wf,
+                                         self._ecut_rho,
+                                         wf_mesh=wf_mesh, xc_mesh=xc_mesh)
+            )
         self.with_pp = None
         self.with_jk = None
 
@@ -1865,10 +1879,15 @@ class PWKRHF(PWKSCF):
         if nvir is None: nvir = self.nvir
 
         if key in ["h1e", "hcore", "cycle1", "scf"]:
+            if hasattr(self, "xc"):
+                # This is DFT, use fast initial guess
+                xc = "LDA,VWN"
+            else:
+                xc = None
             C_ks, mocc_ks = get_init_guess(cell, kpts,
                                            basis=basis, pseudo=pseudo,
                                            nvir=nvir, key=key, out=out,
-                                           mesh=self.wf_mesh)
+                                           mesh=self.wf_mesh, xc=xc)
         else:
             logger.warn(self, "Unknown init guess %s", key)
             raise RuntimeError
