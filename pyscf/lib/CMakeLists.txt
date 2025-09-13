@@ -112,15 +112,64 @@ else ()
   set(CMAKE_INSTALL_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
 endif ()
 
-# Build the PDFT library
-set (PDFT_SOURCE_FILES "../mcpdft/nr_numint.c")
-add_library (clib_pdft SHARED ${PDFT_SOURCE_FILES})
-#FIXME: LD_LIBRARY_PATH
-target_link_libraries (clib_pdft dft ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
-set_target_properties (clib_pdft PROPERTIES
-    CLEAN_DIRECT_OUTPUT 1
-    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_NAME "pdft")
+# Build the occri library (optional - depends on availability of FFTW, OpenMP)
+option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, OpenMP)" ON)
+
+if(BUILD_OCCRI)
+    set(OCCRI_SOURCE_FILES
+        occri/occri.c
+        occri/occri.h
+    )
+    
+    # Check for required dependencies
+    set(OCCRI_DEPS_FOUND TRUE)
+    
+    # Find FFTW
+    find_library(FFTW3_LIBRARY fftw3)
+    find_library(FFTW3_THREADS_LIBRARY fftw3_threads)
+    find_path(FFTW3_INCLUDE_DIR fftw3.h)
+    
+    if(NOT FFTW3_LIBRARY OR NOT FFTW3_THREADS_LIBRARY OR NOT FFTW3_INCLUDE_DIR)
+        message(STATUS "FFTW3 not found - OCCRI C extension will not be built")
+        set(OCCRI_DEPS_FOUND FALSE)
+    endif()
+    
+    # Find OpenMP
+    find_package(OpenMP)
+    if(NOT OPENMP_FOUND)
+        message(STATUS "OpenMP not found - OCCRI C extension will not be built")
+        set(OCCRI_DEPS_FOUND FALSE)
+    endif()
+    
+    if(OCCRI_DEPS_FOUND)
+        message(STATUS "Building OCCRI C extension with FFTW and OpenMP")
+        add_library(occri SHARED ${OCCRI_SOURCE_FILES})
+        
+        # Add include directories
+        target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
+        target_include_directories(occri PRIVATE ${FFTW3_INCLUDE_DIR})
+        
+        # Link against FFTW and OpenMP
+        target_link_libraries(occri
+            ${OPENMP_C_PROPERTIES}
+            ${FFTW3_LIBRARY}
+            ${FFTW3_THREADS_LIBRARY}
+        )
+        
+        # Set output directory and name
+        set_target_properties(occri PROPERTIES
+            CLEAN_DIRECT_OUTPUT 1
+            LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+            OUTPUT_NAME "occri"
+        )
+    else()
+        message(STATUS "OCCRI C extension disabled due to missing dependencies")
+        message(STATUS "Pure Python implementation will be used (performance will be reduced)")
+        message(STATUS "To enable optimized version, install: FFTW3, BLAS, OpenMP")
+    endif()
+else()
+    message(STATUS "OCCRI C extension build disabled by user")
+endif()
 
 # Build the LibXC interface v2 library
 set (LIBXC_ITRF2_SOURCE_FILES "dft/libxc_itrf2.c")

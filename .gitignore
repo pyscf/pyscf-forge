@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+lib*.*
 lib64/
 parts/
 sdist/
@@ -109,6 +109,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+*code-workspace
 
 # Spyder project settings
 .spyderproject
@@ -134,3 +135,9 @@ dmypy.json
 
 # MacOS
 .DS_Store
+
+# Multigrid modules (development)
+multigrid/
+**/multigrid/
+examples/occri/multigrid/
+pytest.ini
