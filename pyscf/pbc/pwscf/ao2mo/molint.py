@@ -88,7 +88,6 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         C_k = None
 
     dtype = np.complex128
-    dsize = 16
     if mo_slices is None:
         nmo = get_kcomp(C_ks, 0, load=False).shape[0]
         mo_slices = [(0,nmo)] * 4
@@ -191,7 +190,8 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         tct, twt = t_tot
         rc = tc / tct * 100
         rw = tw / twt * 100
-        logger.debug1(cell, 'CPU time for %10s %9.2f  ( %6.2f%% ), wall time %9.2f  ( %6.2f%% )', comp.ljust(10), tc, rc, tw, rw)
+        fmtstr = 'CPU time for %10s %9.2f  ( %6.2f%% ), wall time %9.2f  ( %6.2f%% )'
+        logger.debug1(cell, fmtstr, comp.ljust(10), tc, rc, tw, rw)
 
     t_tot = tspans[-1]
     for icomp,comp in enumerate(tcomps):

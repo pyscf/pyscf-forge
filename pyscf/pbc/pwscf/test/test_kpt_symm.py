@@ -90,7 +90,7 @@ class KnownValues(unittest.TestCase):
         rho2 = mf2.get_rho_for_xc("LDA", Csym_ks, moccsym_ks)
         assert_almost_equal(np.abs(rho1 - rho2).mean() * cell.vol, 0, 6)
         assert_almost_equal(epred, eref, 6)
-    
+
     def test_get_wf(self):
         global mf, cell, kpts_sym
         C_ks = [coeff.copy() for coeff in mf.mo_coeff]
@@ -118,7 +118,7 @@ class KnownValues(unittest.TestCase):
             assert_almost_equal(rdot1[:2], rdot2[:2], 4)
             assert_almost_equal(rdot1, rdot3, 6)
             k += 1
-    
+
     def test_get_wf_real(self):
         global mf, cell, kpts_sym
         C_ks = [coeff.copy() for coeff in mf.mo_coeff]

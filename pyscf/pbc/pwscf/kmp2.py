@@ -273,9 +273,7 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
 
                 nvir_a = nvir_ks[ka]
                 nvir_b = nvir_ks[kb]
-                occ_a = occ_ks[ka]
                 vir_a = vir_ks[ka]
-                occ_b = occ_ks[kb]
                 vir_b = vir_ks[kb]
 
                 tick[:] = logger.process_clock(), logger.perf_counter()
@@ -370,7 +368,7 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
                 tock[:] = logger.process_clock(), logger.perf_counter()
                 tspans[5] += tock - tick
 
-                oovv_ka = oovv_kb = eijab = woovv = None
+                oovv_ka = oovv_kb = eijab = None
 
         cput1 = log.timer('kpt %d (%6.3f %6.3f %6.3f)'%(ki,*kpti), *cput1)
 

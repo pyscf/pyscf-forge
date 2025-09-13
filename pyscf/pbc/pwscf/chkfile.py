@@ -42,7 +42,7 @@ def dump_scf(mol, chkfile, e_tot, mo_energy, mo_occ, mo_coeff,
     save(chkfile, 'scf', scf_dic)
 
     # save mo_coeff only if incore mode
-    if not mo_coeff is None:
+    if mo_coeff is not None:
         with h5py.File(chkfile, "a") as f:
             if "mo_coeff" in f: del f["mo_coeff"]
             C_ks = f.create_group("mo_coeff")

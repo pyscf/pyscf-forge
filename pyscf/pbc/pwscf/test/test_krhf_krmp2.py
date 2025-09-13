@@ -88,7 +88,7 @@ class KnownValues(unittest.TestCase):
         self._run_test(
             "ccecp", atom, a, -10.6261884956522, -0.136781915070538, mesh
         )
-    
+
     def test_gth(self):
         atom = "C 0 0 0; C 0.89169994 0.89169994 0.89169994"
         a = np.asarray(

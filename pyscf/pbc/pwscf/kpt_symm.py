@@ -405,7 +405,7 @@ class KsymAdaptedPWJK(jk.PWJK):
                 )
             rho_R *= 1./ncomp
         return rho_R
-    
+
     def get_vj_R_from_rho_R(self, rho_R, mesh=None, Gv=None):
         if mesh is None: mesh = self.mesh
         if Gv is None: Gv = self.get_Gv(mesh)
@@ -425,8 +425,6 @@ class KsymAdaptedPWJK(jk.PWJK):
         """
         if self.exx_W_ks is None:
             self.__init_exx()
-
-        nkpts = len(kpts)
 
         if mesh is None:
             mesh = self.mesh

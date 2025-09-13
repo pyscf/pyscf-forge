@@ -172,6 +172,7 @@ def kernel_doubleloop(mf, C0=None,
     fc_tot = fc_init
     fc_this = 0
     chg_conv_tol = 0.1
+    de = None
     for cycle in range(max_cycle):
 
         last_hf_e = e_tot
@@ -499,6 +500,8 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
     cput1 = (logger.process_clock(), logger.perf_counter())
 
     de = float("inf")
+    moe_ks = None
+    e_tot = None
     for cycle in range(max_cycle):
 
         if cycle > 0:   # charge mixing
@@ -1232,8 +1235,6 @@ def energy_elec(mf, C_ks, mocc_ks, mesh=None, Gv=None, moe_ks=None,
     if mesh is None: mesh = mf.wf_mesh
     if Gv is None: Gv = cell.get_Gv(mesh)
     if exxdiv is None: exxdiv = mf.exxdiv
-
-    C_incore = isinstance(C_ks, list)
 
     kpts = mf.kpts
     nkpts = len(kpts)

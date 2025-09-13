@@ -52,7 +52,7 @@ def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
         nrho = 4
     elif xctype == "MGGA":
         nrho = 5
-    elif xctype == None:
+    elif xctype is None:
         nrho = 0
     else:
         raise ValueError(f"Unsupported xctype {xctype}")
@@ -300,7 +300,6 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         small_size = np.prod(self.wf_mesh)
         big_size = np.prod(self.xc_mesh)
         ratio = big_size / small_size
-        invr = 1 / ratio
         func_xR = func_xR.view()
         func_xR.shape = (-1, small_size)
         rhovec_G = tools.fft(func_xR, self.wf_mesh)

@@ -77,7 +77,7 @@ class KnownValues(unittest.TestCase):
         e_tot0 = -5.39796638192271
         e_corr0 = -0.00682323936825284
         self._run_test(pseudo, atom, a, e_tot0, e_corr0)
-    
+
     def test_ccecp(self):
         pseudo = "ccecp"
         atom = "C 0 0 0"

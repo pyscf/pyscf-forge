@@ -20,9 +20,6 @@
 """ Helper functions for PW SCF
 """
 
-
-import copy
-import h5py
 import tempfile
 import numpy as np
 import scipy.linalg
@@ -60,11 +57,11 @@ class PWBasis:
         self.indexes = indexes
         self.ke = ke
         self.Gk = Gk
-    
+
     @property
     def npw(self):
         return self.ke.size
-    
+
 
 def get_basis_data(cell, kpts, ecut_wf, ecut_rho=None, wf_mesh=None,
                    xc_mesh=None, sphere=True):
@@ -286,7 +283,6 @@ def get_C_ks_G(cell, kpts, mo_coeff_ks, n_ks, out=None, verbose=0, mesh=None):
         cell.build()
     mydf = df.FFTDF(cell)
     mesh = mydf.mesh
-    ni = mydf._numint
 
     coords = mydf.grids.coords
     ngrids = coords.shape[0]
@@ -317,7 +313,7 @@ def get_C_ks_G(cell, kpts, mo_coeff_ks, n_ks, out=None, verbose=0, mesh=None):
         C_ks_R = [np.zeros([ngrids,n_ks[k]], dtype=dtype)
                    for k in range(k0,k1)]
         for ao_ks_etc, p0, p1 in mydf.aoR_loop(mydf.grids, kpts[k0:k1]):
-            ao_ks, mask = ao_ks_etc[0], ao_ks_etc[2]
+            ao_ks = ao_ks_etc[0]
             for krel, ao in enumerate(ao_ks):
                 k = krel + k0
                 kpt = kpts[k].reshape(-1,1)

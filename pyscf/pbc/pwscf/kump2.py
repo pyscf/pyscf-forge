@@ -19,13 +19,11 @@
 """ kpt-sampled periodic MP2 using a plane wave basis and spin-unrestricted HF
 """
 
-import h5py
 import tempfile
 import numpy as np
 
 from pyscf.pbc.pwscf import kmp2
-from pyscf.pbc.pwscf.pw_helper import (get_nocc_ks_from_mocc, get_kcomp,
-                                       set_kcomp, wf_ifft)
+from pyscf.pbc.pwscf.pw_helper import (get_nocc_ks_from_mocc, wf_ifft)
 from pyscf.pbc.pwscf.kuhf import get_spin_component
 from pyscf.pbc import tools
 from pyscf import lib
@@ -96,7 +94,6 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
     nvir_max = np.max(nvir_ks)
     nocc_sps = np.asarray([[nocc_ks[0][k],nocc_ks[1][k]] for k in range(nkpts)])
     nvir_sps = np.asarray([[nvir_ks[0][k],nvir_ks[1][k]] for k in range(nkpts)])
-    n_sps = np.asarray([[n_ks[0][k],n_ks[1][k]] for k in range(nkpts)])
     if nvir_lst is None:
         nvir_lst = [nvir_max]
     nvir_lst = np.asarray(nvir_lst)

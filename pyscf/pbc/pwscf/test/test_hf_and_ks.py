@@ -208,7 +208,7 @@ class KnownValues(unittest.TestCase):
                 if spinpol:
                     expected_de /= 2
                 assert_allclose(expected_de, fd, atol=1e-7, rtol=1e-7)
-        
+
         if not spinpol:
             _run_test()
         else:

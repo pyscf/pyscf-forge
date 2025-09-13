@@ -168,7 +168,6 @@ class PWPP:
         if self.pptype == "ccecp":
             logger.debug(self, "Initializing ccECP non-local part")
             cell = self.cell
-            dtype = np.complex128
             self._ecp = format_ccecp_param(cell)
             if self.outcore:
                 self.swapfile = tempfile.NamedTemporaryFile(dir=lib.param.TMPDIR)
@@ -190,7 +189,6 @@ class PWPP:
         if self.pptype == "ccecp":
             if not self._ecpnloc_initialized:
                 self.initialize_ecpnloc()
-            nkpts = len(self.kpts)
             cell = self.cell
 
             if self.ecpnloc_method == "kb":
@@ -298,8 +296,6 @@ def get_vpplocG_sg15(cell, Gv):
 
 
 def apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=None):
-    no = C_k.shape[0]
-
     # non-local pp
     from pyscf import gto
     fakemol = gto.Mole()
@@ -367,8 +363,7 @@ def apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=None):
 
 
 def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
-    no = C_k.shape[0]
-    from pyscf.pbc.gto.pseudo.pp import Ylm, Ylm_real, cart2polar
+    from pyscf.pbc.gto.pseudo.pp import Ylm, cart2polar
 
     if basis is None:
         Gk = Gv + kpt
@@ -498,7 +493,6 @@ def format_ccecp_param(cell):
                         \sum_{k} ck_3*exp(-alpk_3*r^2)
             Vnl(r) = \sum_l \sum_k ck_l * exp(-alpk_l*r^2) \sum_m |lm><lm|
     """
-    uniq_atms = cell._basis.keys()
     _ecp = {}
     for iatm in range(cell.natm):
         atm = cell.atom_symbol(iatm)
@@ -726,10 +720,7 @@ def get_ccecp_support_vec(cell, C_ks, kpts, out, _ecp=None, ke_cutoff_nloc=None,
     if _ecp is None: _ecp = format_ccecp_param(cell)
 
     mesh_map = cell_nloc = None
-    mesh=None
-    if basis_ks is not None:
-        mesh = basis_ks[0].mesh
-    elif ke_cutoff_nloc is not None:
+    if basis_ks is None and ke_cutoff_nloc is not None:
         if ke_cutoff_nloc < cell.ke_cutoff:
             log.debug1("Using ke_cutoff_nloc %s for KB support vector", ke_cutoff_nloc)
             mesh_map = get_mesh_map(cell, cell.ke_cutoff, ke_cutoff_nloc)
