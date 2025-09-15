@@ -11,12 +11,6 @@ Installation instruction:
     https://github.com/TREX-CoE/trexio/blob/master/python/README.md
 '''
 
-# TODO
-## read UHF with a k grid
-## 2e AO
-## 1e MO
-## 1e AO
-
 import re
 import math
 import numpy as np
