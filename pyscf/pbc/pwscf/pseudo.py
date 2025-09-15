@@ -24,12 +24,13 @@
 import tempfile
 import numpy as np
 import scipy.linalg
-from scipy.special import dawsn
+from scipy.special import dawsn, sph_harm_y
 from scipy.interpolate import make_interp_spline
 
 from pyscf.pbc.pwscf.pw_helper import (get_kcomp, set_kcomp, get_C_ks_G, orth,
                                        get_mesh_map, wf_fft, wf_ifft)
 from pyscf.pbc.gto import pseudo as gth_pseudo
+from pyscf.pbc.gto.pseudo.pp import cart2polar
 from pyscf.pbc import tools
 from pyscf.pbc.lib.kpts_helper import member
 from pyscf import lib
@@ -363,8 +364,6 @@ def apply_vppnl_kpt_gth(cell, C_k, kpt, Gv, basis=None):
 
 
 def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
-    from pyscf.pbc.gto.pseudo.pp import Ylm, cart2polar
-
     if basis is None:
         Gk = Gv + kpt
         SI = cell.get_SI(Gv=Gv)
@@ -372,7 +371,6 @@ def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
         Gk = basis.Gk
         SI = cell.get_SI(Gv=Gk-kpt)
     ngrids = Gk.shape[0]
-    # buf = np.empty((48,ngrids), dtype=np.complex128)
     Cbar_k = np.zeros_like(C_k)
 
     G_rad, G_theta, G_phi = cart2polar(Gk)
@@ -383,7 +381,7 @@ def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
     lm = 0
     for l in range(lmax + 1):
         for m in range(2 * l + 1):
-            G_ylm[lm] = Ylm(l, m, G_theta, G_phi)
+            G_ylm[lm] = sph_harm_y(l, m, G_theta, G_phi)
             lm += 1
 
     for ia in range(cell.natm):
