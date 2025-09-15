@@ -446,7 +446,7 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
     achieves full self-consistency.
 
     Args:
-        C_ks (list of numpy arrays): 
+        C_ks (list of numpy arrays):
             Orbital plane-wave coefficients at each spin/k-point
         mocc_ks (list of numpy arrays):
             Orbital occupations of each orbital/band at each spin/k-point.
@@ -732,7 +732,7 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
         cell.pseudo = None
         cell._pseudo = None
     cell.basis = basis
-    if len(cell._ecp) > 0 or pseudo == "SG15": 
+    if len(cell._ecp) > 0 or pseudo == "SG15":
         # use GTH to avoid the slow init time of ECP
         gth_pseudo = {}
         for iatm in range(cell0.natm):

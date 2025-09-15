@@ -45,7 +45,7 @@ class NCPPCell(Cell):
 
     def __init__(self, **kwargs):
         sg15_path = kwargs.pop("sg15_path", DEFAULT_SG15_PATH)
-        Cell.__init__(self, **kwargs) 
+        Cell.__init__(self, **kwargs)
         self.sg15_path = sg15_path
 
     def build(self, **kwargs):

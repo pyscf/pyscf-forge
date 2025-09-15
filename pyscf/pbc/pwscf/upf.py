@@ -22,6 +22,7 @@
 import xml.etree.ElementTree as ET
 import numpy as np
 from math import factorial as fac
+from scipy.integrate import trapezoid
 
 
 def _parse_array_upf(entry, dtype=float):
@@ -62,12 +63,12 @@ def get_nc_data_from_upf(fname):
     _deriv = make_radial_derivative_calculator(pp_r, 2, 2)[0]
     d1 = _deriv(pp_local * pp_r)
     charge = d1.copy()
-    # nelec = np.trapz(charge * pp_r, x=pp_r)
+    # nelec = trapezoid(charge * pp_r, x=pp_r)
     # NOTE this is the non-divergent G=0 term of the local pseudo.
     # It should be 4*pi*Q1 in the expansion Q(k) = Q(0) + Q1 k^2 + ...
     # where Q(k) is the pseudo-charge. Here this is computed
     # from I2 = \int d^3r r^2 Q(r). Q1 is -I2/6.
-    g0lim = -0.5 * np.trapz(charge * pp_r**3, x=pp_r)
+    g0lim = -0.5 * trapezoid(charge * pp_r**3, x=pp_r)
     g0lim *= 4 * np.pi / 3
     charge[1:] /= pp_r[1:]
     charge[0] = charge[1]
