@@ -24,7 +24,7 @@
 import tempfile
 import numpy as np
 import scipy.linalg
-from scipy.special import dawsn, sph_harm_y
+import scipy.special
 from scipy.interpolate import make_interp_spline
 
 from pyscf.pbc.pwscf.pw_helper import (get_kcomp, set_kcomp, get_C_ks_G, orth,
@@ -39,6 +39,13 @@ from pyscf import __config__
 
 
 IOBLK = getattr(__config__, "pbc_pwscf_pseudo_IOBLK", 4000) # unit MB
+dawsn = scipy.special.dawsn
+if hasattr(scipy.special, "sph_harm_y"):
+    sph_harm = scipy.special.sph_harm_y
+    new_sph_harm = True
+else:
+    sph_harm = scipy.special.sph_harm
+    new_sph_harm = False
 
 
 """ Wrapper functions
@@ -381,7 +388,11 @@ def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
     lm = 0
     for l in range(lmax + 1):
         for m in range(2 * l + 1):
-            G_ylm[lm] = sph_harm_y(l, m, G_theta, G_phi)
+            mp = m - l
+            if new_sph_harm:
+                G_ylm[lm] = sph_harm(l, mp, G_theta, G_phi)
+            else:
+                G_ylm[lm] = sph_harm(mp, l, G_phi, G_theta)
             lm += 1
 
     for ia in range(cell.natm):

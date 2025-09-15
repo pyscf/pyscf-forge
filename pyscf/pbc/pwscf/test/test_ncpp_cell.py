@@ -59,8 +59,8 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
     def test_energy(self):
         ecut_wf = 18.38235294
-        e_ref2 = -10.5957823763498
-        e_ref = -11.044064472796734
+        e_ref2 = -10.801827216069011
+        e_ref = -11.221518554994296
         mf = PWKRKS(CELL, KPTS2, xc="PBE", ecut_wf=ecut_wf)
         mf.conv_tol = 1e-9
         mf.nvir = 4 # converge first 4 virtual bands
