@@ -28,22 +28,25 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
     kmo_coeff = kmf.mo_coeff
     kmo_energy = kmf.mo_energy
     ks1e = kmf.get_ovlp()
+    kh1e = kmf.get_hcore()
 
     ksc = [np.dot(s1e,mo_coeff) for s1e,mo_coeff in zip(ks1e,kmo_coeff)]
     kfock = np.asarray([np.dot(sc*moe,sc.T.conj()) for sc,moe in zip(ksc,kmo_energy)])
 
     s1e = _k2s_aoint(ks1e, kpts, phase, 's1e')
+    h1e = _k2s_aoint(kh1e, kpts, phase, 'h1e')
     fock = _k2s_aoint(kfock, kpts, phase, 'fock')
 
     mo_energy, mo_coeff = eig(fock, s1e)
 
-    mf = scf.RHF(scell, kpt=kpts[0]).rs_density_fit(auxbasis=kmf.with_df.auxbasis)
+    mf = scf.RHF(scell, kpt=kpts[0])
     mf.mo_coeff = mo_coeff
     mf.mo_energy = mo_energy
     mf.mo_occ = mf.get_occ()
     mf.e_tot = kmf.e_tot * Nk
     mf.converged = True
     mf.get_ovlp = lambda *args: s1e
+    mf.get_hcore = lambda *args: h1e
 
     return mf
 
@@ -147,7 +150,7 @@ def _k2s_aoint(kA, kpts, phase, name='aoint'):
     return sA
 
 
-class K2SDF:
+class K2SDF(lib.StreamObject):
     def __init__(self, with_df, time_reversal_symmetry=True):
         self.with_df = with_df
         self.cell = with_df.cell
@@ -411,6 +414,9 @@ def k2s_iao(cell, kocc_coeff, kpts, minao=MINAO, orth=False, s1e=None):
             Supercell IAO coefficients of shape (nkpts*nao, nkpts*niao) where nao and niao
             are the number of AOs and IAOs within a unit cell. The IAOs are sorted by cell.
     '''
+    from pyscf.lib import logger
+    log = logger.new_logger(cell, cell.verbose)
+
     nkpts = len(kpts)
     kiao_coeff = np.asarray(lo.iao.iao(cell, kocc_coeff, kpts=kpts, minao=minao))
     if orth:
@@ -426,7 +432,9 @@ def k2s_iao(cell, kocc_coeff, kpts, minao=MINAO, orth=False, s1e=None):
                            phase.conj()).reshape(nkpts*nao,nkpts*niao)
 
     if gamma_point(kpts[0]):
-        assert( abs(iao_coeff.imag).max() < 1e-10 )
+        iao_coeff_imag = abs(iao_coeff.imag).max()
+        if iao_coeff_imag > 1e-10:
+            log.warn('Discard large imag part in k2s_iao: %6.2e.', iao_coeff_imag)
         iao_coeff = iao_coeff.real
 
     return iao_coeff
