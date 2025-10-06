@@ -90,7 +90,7 @@ class WaterDimer(unittest.TestCase):
         frag_lolist = oa + ob
 
         gamma = 10
-        threshs = [1e-5,1e-6,1e-100]
+        threshs = [1e-5*2,1e-6*2,1e-100*2]
         refs = [
             [-0.3995407761,-0.4185382023,-0.4231105742],
             [-0.4052089997,-0.4238689186,-0.4300854290],
