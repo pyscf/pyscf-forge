@@ -105,11 +105,12 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
         numerator = 1;
         denominator = 1;
         sgn = 1;
-        osgn = 1;
+        // Commute each spin-down electron past each spin-up electron
+        osgn = -track2MS;
         for (ispin = 1; ispin < nspin; ispin++){
             sup = (1ULL << ispin) & coupstr[icoup];
             msup = (1ULL << ispin) & detstr[idet];
-            if (msup){ track2MS++; osgn *= -1; } else { track2MS--; osgn *= -1; sgn *= osgn; }
+            if (msup){ track2MS++; osgn *= -1; } else { track2MS--; sgn *= osgn; }
             /* Clebsch-Gordan coefficient <j1,j2,m1,m2|J,M=m1+m2> (j2 = 1/2, m2 = +-1/2)
  *              = sgn * sqrt (num / denom)
  *              sgn = sgn(J2-j1)^delta(m2,+1/2)
