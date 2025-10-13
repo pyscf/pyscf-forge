@@ -9,6 +9,16 @@ from pyscf import lib
 from pyscf.fci import cistring
 from pyscf.fci.addons import _unpack_nelec
 
+def norm_sdown (smult, nelec):
+    s2 = smult-1
+    m2 = nelec[0] - nelec[1]
+    return np.sqrt ((s2-m2+2)*(s2+m2)/4)
+
+def norm_sup (smult, nelec):
+    s2 = smult-1
+    m2 = nelec[0] - nelec[1]
+    return np.sqrt ((s2-m2)*(s2+m2+2)/4)
+
 def contract_sladder(fcivec, norb, nelec, op=-1):
     ''' Contract spin ladder operator S+ or S- with fcivec.
         Changes neleca - nelecb without altering <S2>
@@ -59,8 +69,6 @@ def contract_sladder(fcivec, norb, nelec, op=-1):
         citmp *= spin_comm_fac
         #: ci1[addra.reshape(-1,1),addrb] += citmp
         lib.takebak_2d(ci1, citmp, addra, addrb)
-    norm_ci1 = linalg.norm (ci1) + np.finfo (float).tiny
-    ci1 *= norm_ci0 / norm_ci1 # ???
     return ci1
 
 def contract_sdown (ci, norb, nelec): return contract_sladder (ci, norb, nelec, op=-1)
@@ -107,6 +115,7 @@ def mdown (ci0, norb, nelec, smult):
     for i in range (len (ci1)):
         for j in range (((smult-1)-(neleca-nelecb))//2,0,-1):
             ci1[i] = contract_sdown (ci1[i], norb, (neleca+j,nelecb-j))
+            ci1[i] /= norm_sdown (smult, (neleca+j,nelecb-j))
     return like_ci0 (ci1, ci0)
 
 def mup (ci0, norb, nelec, smult):
@@ -136,6 +145,7 @@ def mup (ci0, norb, nelec, smult):
     for i in range (len (ci1)):
         for j in range (((smult-1)-(neleca-nelecb))//2):
             ci1[i] = contract_sup (ci1[i], norb, (neleca+j,nelecb-j))
+            ci1[i] /= norm_sup (smult, (neleca+j,nelecb-j))
     return like_ci0 (ci1, ci0)
 
 if __name__ == '__main__':

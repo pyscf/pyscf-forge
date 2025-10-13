@@ -3,6 +3,7 @@ import unittest
 from scipy import linalg
 from pyscf.csf_fci.csfstring import CSFTransformer
 from pyscf.csf_fci.spin_op import contract_sdown, contract_sup, mdown, mup
+from pyscf.csf_fci.spin_op import norm_sdown, norm_sup
 from pyscf.fci.direct_spin1 import contract_2e
 from pyscf.fci.spin_op import spin_square0
 from pyscf.fci import cistring
@@ -46,6 +47,7 @@ class KnownValues(unittest.TestCase):
                 self.assertEqual (contract_sup (ci, norb, nelec).size, 0)
             for ms in np.arange (s,-s,-1):
                 ci = contract_sdown (ci, norb, nelec)
+                ci /= norm_sdown (smult, nelec)
                 nelec = (nelec[0]-1, nelec[1]+1)
                 cc_test, chc_test, smult_test = get_cc_chc_smult (eri, ci, norb, nelec)
                 with self.subTest(norb=norb, nelec=nelec_tot, op=opstring(-1,s,ms)):
@@ -56,6 +58,7 @@ class KnownValues(unittest.TestCase):
                 self.assertEqual (contract_sdown (ci, norb, nelec).size, 0)
             for ms in np.arange (-s,s,1):
                 ci = contract_sup (ci, norb, nelec)
+                ci /= norm_sup (smult, nelec)
                 nelec = (nelec[0]+1, nelec[1]-1)
                 cc_test, chc_test, smult_test = get_cc_chc_smult (eri, ci, norb, nelec)
                 with self.subTest(norb=norb, nelec=nelec_tot, op=opstring(1,s,ms)):
