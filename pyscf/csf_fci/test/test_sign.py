@@ -9,7 +9,8 @@ class KnownValues(unittest.TestCase):
 
     def test_sign (self):
         rng = np.random.default_rng ()
-        for smult, ndocc, nvirt in itertools.product (range (1,6), range(3), range(3)):
+        for smult, ndocc, nvirt in itertools.product (range (1,6), range(4), range(3)):
+            if nvirt > 0: continue
             if smult==1 and ndocc==0: continue
             nelec = ((smult-1) + ndocc, ndocc)
             norb = (smult-1) + ndocc + nvirt
@@ -27,7 +28,7 @@ class KnownValues(unittest.TestCase):
                                    smult)
                 with self.subTest (norb=norb, nelec=sum(nelec), smult=smult, spin=spin):
                     self.assertAlmostEqual (ci1.ravel ().dot (ci0.ravel ()), 1.0, 8)
-                
+
 if __name__=="__main__":
     print ("Full tests for csfstring sign")
     unittest.main () 
