@@ -24,7 +24,6 @@ def contract_sladder(fcivec, norb, nelec, op=-1):
         Changes neleca - nelecb without altering <S2>
         Obtained by modifying pyscf.fci.spin_op.contract_ss
     '''
-    norm_ci0 = linalg.norm (fcivec)
     neleca, nelecb = _unpack_nelec(nelec)
     na = cistring.num_strings(norb, neleca)
     nb = cistring.num_strings(norb, nelecb)
@@ -71,8 +70,11 @@ def contract_sladder(fcivec, norb, nelec, op=-1):
         lib.takebak_2d(ci1, citmp, addra, addrb)
     return ci1
 
-def contract_sdown (ci, norb, nelec): return contract_sladder (ci, norb, nelec, op=-1)
-def contract_sup (ci, norb, nelec): return contract_sladder (ci, norb, nelec, op=1)
+def contract_sdown (ci, norb, nelec):
+    return contract_sladder (ci, norb, nelec, op=-1)
+
+def contract_sup (ci, norb, nelec):
+    return contract_sladder (ci, norb, nelec, op=1)
 
 def as_list (ci0):
     if isinstance (ci0, np.ndarray) and ci0.ndim == 2:
@@ -169,12 +171,13 @@ if __name__ == '__main__':
             ss, smult = spin_square0 (c, norb, ne)
             hc = contract_2e (eri, c, norb, ne)
             chc = c.conj ().ravel ().dot (hc.ravel ())
-        except AssertionError as e:
+        except AssertionError:
             assert (any ([n<0 for n in ne]))
             ss, smult, chc = (0.0, 1.0, 0.0)
         cc = linalg.norm (c)
         ndeta, ndetb = c.shape
-        print (" {:>6d} {:>6d} {:>5d} {:>5d} {:5.3f} {:13.9f} {:5.3f} {:5.3f}".format (ne[0], ne[1], ndeta, ndetb, cc, chc, ss, smult))
+        print (" {:>6d} {:>6d} {:>5d} {:>5d} {:5.3f} {:13.9f} {:5.3f} {:5.3f}".format (
+            ne[0], ne[1], ndeta, ndetb, cc, chc, ss, smult))
     print_line (ci, nelec)
     for ndown in range (smult-1):
         ci = contract_sdown (ci, norb, nelec)
@@ -184,5 +187,6 @@ if __name__ == '__main__':
         ci = contract_sup (ci, norb, nelec)
         nelec = (nelec[0]+1, nelec[1]-1)
         print_line (ci, nelec)
-    print ("Time elapsed {} clock ; {} wall".format (lib.logger.process_clock () - t0, lib.logger.perf_counter () - w0))
+    print ("Time elapsed {} clock ; {} wall".format (lib.logger.process_clock () - t0, 
+                                                     lib.logger.perf_counter () - w0))
 
