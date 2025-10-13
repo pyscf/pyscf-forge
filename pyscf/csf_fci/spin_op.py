@@ -187,6 +187,6 @@ if __name__ == '__main__':
         ci = contract_sup (ci, norb, nelec)
         nelec = (nelec[0]+1, nelec[1]-1)
         print_line (ci, nelec)
-    print ("Time elapsed {} clock ; {} wall".format (lib.logger.process_clock () - t0, 
+    print ("Time elapsed {} clock ; {} wall".format (lib.logger.process_clock () - t0,
                                                      lib.logger.perf_counter () - w0))
 
