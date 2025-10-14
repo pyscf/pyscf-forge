@@ -9,7 +9,6 @@ from pyscf.fci.spin_op import spin_square0
 from pyscf.fci import cistring
 from itertools import product
 
-np.random.seed(1)
 def get_cc_chc_smult (eri, c, norb, ne):
     cc = c.conj ().ravel ().dot (c.ravel ())
     chc = c.conj ().ravel ().dot (contract_2e (eri, c, norb, ne).ravel ())
