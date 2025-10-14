@@ -609,8 +609,14 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
             inparr[:,det_addrs] = 0
             continue
 
+        # sign convention of PySCF is A' B' |vac>
+        # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
+        ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+        ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
+        sgn = (-1) ** (ncomm % 2)
+
         t_ref = lib.logger.perf_counter ()
-        umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult))
+        umat = np.asarray_chkfinite (sgn * get_spin_evecs (nspin, neleca, nelecb, smult))
         size_umat = max (size_umat, umat.nbytes)
         ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save
         #                 memory when there are too many csfs
@@ -740,8 +746,14 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             dj = di + nconf*ndet
             mat_ij = mat[:,di:dj].reshape (nrow, nconf, ndet)
 
+            # sign convention of PySCF is A' B' |vac>
+            # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
+            ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+            ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
+            sgn = (-1) ** (ncomm % 2)
+
             nspin = neleca + nelecb - 2*npair
-            umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult))
+            umat = np.asarray_chkfinite (sgn * get_spin_evecs (nspin, neleca, nelecb, smult))
 
             outmat[:,ci:cj] = np.tensordot (mat_ij, umat, axes=1).reshape (nrow, ncsf*nconf, order='C')
 
