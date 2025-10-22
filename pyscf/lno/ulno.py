@@ -203,7 +203,7 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
     # Beta block size (based on beta canonical occ)
     occblksize_b, mem_peak_b = _mp2_rdm1_occblksize(noccb, nvirb, 0, 0, 3, M/2, dsize)
     if DEBUG_BLKSIZE: occblksize_b = max(1, noccb // 2)
-    print(occblksize_a,occblksize_b)
+
     # 
     log.debug1('make_lo_rdm1_1h (alpha): nocc=%d nvir=%d nOcc=%d blksize=%d peak_mem=%.2f MB',
                nocca, nvira, nOcca, occblksize_a, mem_peak_a)
@@ -450,7 +450,6 @@ def make_lo_rdm1_1h_df(eris, moeocc, moevir, uocc):
     # Beta block size (based on beta canonical occ)
     occblksize_b, mem_peak_b = _mp2_rdm1_occblksize(noccb, nvirb, naux, 3, 3, M/2, dsize)
     if DEBUG_BLKSIZE: occblksize_b = max(1, noccb // 2)
-    # print(occblksize_a,occblksize_b)
     
     # 
     log.debug1('make_lo_rdm1_1h (alpha): nocc=%d nvir=%d nOcc=%d naux=%d blksize=%d peak_mem=%.2f MB',
