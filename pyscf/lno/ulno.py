@@ -87,6 +87,10 @@ def make_las(mlno, eris, orbloc, lno_type, lno_param):
             dmoo, dmvv = make_lo_rdm1_1h(eris, moeocc, moevir, uocc_loc)
     else:
         raise NotImplementedError('Unsupported LNO type')
+        
+    # if mlno._match_oldulno:
+    #     dmoo[0],dmoo[1]=dmoo[0]/2.0,dmoo[1]/2.0
+    #     dmvv[0],dmvv[1]=dmvv[0]/2.0,dmvv[1]/2.0
 
     orbfrag = [None,] * 2
     frzfrag = [None,] * 2
@@ -190,14 +194,14 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
 
     # Determine block sizes
     mem_avail = eris.max_memory - lib.current_memory()[0]
-    M = mem_avail * 0.7 * 1e6 / dsize
+    M = mem_avail * 0.1 * 1e6 / dsize
     
     # Alpha block size (based on alpha canonical occ)
-    occblksize_a, mem_peak_a = _mp2_rdm1_occblksize(nocca, nvira, 0, 0, 2, M/2, dsize)
+    occblksize_a, mem_peak_a = _mp2_rdm1_occblksize(nocca, nvira, 0, 0, 3, M/2, dsize)
     if DEBUG_BLKSIZE: occblksize_a = max(1, nocca // 2)
     
     # Beta block size (based on beta canonical occ)
-    occblksize_b, mem_peak_b = _mp2_rdm1_occblksize(noccb, nvirb, 0, 0, 2, M/2, dsize)
+    occblksize_b, mem_peak_b = _mp2_rdm1_occblksize(noccb, nvirb, 0, 0, 3, M/2, dsize)
     if DEBUG_BLKSIZE: occblksize_b = max(1, noccb // 2)
 
     # 
@@ -223,7 +227,7 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
     dmvv_a = np.zeros((nvira, nvira), dtype=dtype)
     dmvv_b = np.zeros((nvirb, nvirb), dtype=dtype)
     
-    # construct t2aa and contract
+    #-- construct t2aa and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOcca, occblksize_a)):
         # fragment-occ DF energies
         eKv_a = eIv_a[K0:K1]
@@ -234,16 +238,36 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
             
             # form t2_ovov-block
             denom_aa = lib.direct_sum('Ka+ib->Kaib', eKv_a, eiv_a)
-            t2aa = eris.get_ivov(u_a, K0, K1, i0, i1) / denom_aa
-            t2aa = t2aa - t2aa.transpose(0,3,2,1)
+            t2aa_i = eris.get_ivov(u_a, K0, K1, i0, i1) / denom_aa
+            t2aa_i = t2aa_i - t2aa_i.transpose(0,3,2,1)
             denom_aa = None
+            eiv_a=None
             
-            # contract block to make MP2/DM
-            dmoo_a[i0:i1, :] += lib.einsum('Kaib,Kajb->ij', t2aa, t2aa.conj())
-            dmvv_a += lib.einsum('Kaic,Kbic->ba', np.conj(t2aa), t2aa)
-            t2aa = None
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, nocca, occblksize_a)):
+                if ibatch==jbatch:
+                    t2aa_j=t2aa_i
+                else:
+                    # full-occ DF energies
+                    ejv_a = eov_a[j0:j1]
+                    
+                    # form t2_ovov-block
+                    denom_aa = lib.direct_sum('Ka+jb->Kajb', eKv_a, ejv_a)
+                    t2aa_j = eris.get_ivov(u_a, K0, K1, j0, j1) / denom_aa
+                    t2aa_j = t2aa_j - t2aa_j.transpose(0,3,2,1)
+                    denom_aa = None
+                    ejv_a=None
+    
+                # contract block to make occupied MP2-DM
+                dmoo_a[i0:i1, j0:j1] += lib.einsum('Kaib,Kajb->ij', t2aa_i, t2aa_j.conj())
+                t2aa_j=None
+                
+            # contract block to make virtual MP2-DM
+            dmvv_a += lib.einsum('Kaic,Kbic->ba', np.conj(t2aa_i), t2aa_i)
+            t2aa_i=None
+            
+        eKv_a=None
         
-    # construct t2bb and contract
+    #-- construct t2bb and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOccb, occblksize_b)):
         # fragment-occ DF energies
         eKv_b = eIv_b[K0:K1]
@@ -254,16 +278,35 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
             
             # form t2_ovov-block
             denom_bb = lib.direct_sum('Ka+ib->Kaib', eKv_b, eiv_b)
-            t2bb = eris.get_IVOV(u_b, K0, K1, i0, i1) / denom_bb
-            t2bb = t2bb - t2bb.transpose(0,3,2,1)
+            t2bb_i = eris.get_IVOV(u_b, K0, K1, i0, i1) / denom_bb
+            t2bb_i = t2bb_i - t2bb_i.transpose(0,3,2,1)
             denom_bb = None
+            eiv_b = None
             
-            # contract block to make MP2/DM
-            dmoo_b[i0:i1, :] += lib.einsum('Kaib,Kajb->ij', t2bb, t2bb.conj())
-            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2bb.conj(), t2bb)
-            t2bb = None
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, noccb, occblksize_b)):
+                if ibatch==jbatch:
+                    t2bb_j=t2bb_i
+                else:
+                    # full-occ DF integrals/energies
+                    ejv_b = eov_b[j0:j1]
+                    
+                    # form t2_ovov-block
+                    denom_bb = lib.direct_sum('Ka+jb->Kajb', eKv_b, ejv_b)
+                    t2bb_j = eris.get_IVOV(u_b, K0, K1, j0, j1) / denom_bb
+                    t2bb_j = t2bb_j - t2bb_j.transpose(0,3,2,1)
+                    denom_bb = None
+                    ejv_b=None
+            
+                # contract block to make occupied MP2/DM
+                dmoo_b[i0:i1, j0:j1] += lib.einsum('Kaib,Kajb->ij', t2bb_i, t2bb_j.conj())
+                t2bb_j=None
+                
+            # contract block to make virtual MP2/DM
+            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2bb_i.conj(), t2bb_i)
+            t2bb_i = None
+        eKv_b = None
 
-    # construct t2ba and contract
+    #-- construct t2ba and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOccb, occblksize_b)):
         # fragment-occ DF energies
         eKv_b = eIv_b[K0:K1]
@@ -274,16 +317,34 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
             
             # form t2_ovov-block
             denom_ba = lib.direct_sum('Ka+ib->Kaib', eKv_b, eiv_a)
-            t2ba = eris.get_IVov(u_b, K0, K1, i0, i1) / denom_ba
+            t2ba_i = eris.get_IVov(u_b, K0, K1, i0, i1) / denom_ba
             denom_ba = None
+            eiv_a=None
             
-            # contract block to make MP2/DM            
-            dmoo_a[i0:i1, :]+=2*lib.einsum('Kaib,Kajb->ij', t2ba, t2ba.conj())
-            dmvv_a += lib.einsum('Kcia,Kcib->ba', t2ba.conj(), t2ba)
-            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2ba.conj(), t2ba)
-            t2ba = None
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, nocca, occblksize_a)):
+                if ibatch==jbatch:
+                    t2ba_j=t2ba_i
+                else:
+                    # full-occ DF energies
+                    ejv_a = eov_a[j0:j1]
+                    
+                    # form t2_ovov-block
+                    denom_ba = lib.direct_sum('Ka+jb->Kajb', eKv_b, ejv_a)
+                    t2ba_j = eris.get_IVov(u_b, K0, K1, j0, j1) / denom_ba
+                    denom_ba = None
+                    ejv_a=None
+            
+                # contract block to make occupied MP2/DM            
+                dmoo_a[i0:i1, j0:j1] += 2*lib.einsum('Kaib,Kajb->ij', t2ba_i, t2ba_j.conj())
+                t2ba_j=None
+                
+            # contract block to make virtual MP2/DM 
+            dmvv_a += lib.einsum('Kcia,Kcib->ba', t2ba_i.conj(), t2ba_i)
+            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2ba_i.conj(), t2ba_i)
+            t2ba_i = None
+        eKv_b=None
         
-    # construct t2ab and contract
+    #-- construct t2ab and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOcca, occblksize_a)):
         # fragment-occ DF energies
         eKv_a = eIv_a[K0:K1]
@@ -294,14 +355,31 @@ def make_lo_rdm1_1h(eris, moeocc, moevir, uocc):
             
             # form t2_ovov-block
             denom_ab = lib.direct_sum('Ka+ib->Kaib', eKv_a, eiv_b)
-            t2ab = eris.get_ivOV(u_a, K0, K1, i0, i1) / denom_ab
+            t2ab_i = eris.get_ivOV(u_a, K0, K1, i0, i1) / denom_ab
             denom_ba = None
+            eiv_b=None
             
-            # contract block to make MP2/DM
-            dmoo_b[i0:i1, :]+=2*lib.einsum('Kaib,Kajb->ij', t2ab, t2ab.conj())
-            dmvv_a += lib.einsum('Kaic,Kbic->ba', t2ab.conj(), t2ab)
-            dmvv_b += lib.einsum('Kcia,Kcib->ba', t2ab.conj(), t2ab)
-            t2ab = None
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, noccb, occblksize_b)):
+                if ibatch==jbatch:
+                    t2ab_j=t2ab_i
+                else:
+                    # full-occ DF energies
+                    ejv_b = eov_b[j0:j1]
+                    
+                    # form t2_ovov-block
+                    denom_ab = lib.direct_sum('Ka+jb->Kajb', eKv_a, ejv_b)
+                    t2ab_j = eris.get_ivOV(u_a, K0, K1, j0, j1) / denom_ab
+                    denom_ba = None
+                    ejv_b=None
+            
+                # contract block to make occupied MP2/DM
+                dmoo_b[i0:i1, j0:j1] += 2*lib.einsum('Kaib,Kajb->ij', t2ab_i, t2ab_j.conj())
+                t2ab_j = None
+            
+            dmvv_a += lib.einsum('Kaic,Kbic->ba', t2ab_i.conj(), t2ab_i)
+            dmvv_b += lib.einsum('Kcia,Kcib->ba', t2ab_i.conj(), t2ab_i)
+            t2ab_i = None
+        eKv_a=None
 
     return [dmoo_a, dmoo_b], [dmvv_a, dmvv_b]
 
@@ -366,13 +444,13 @@ def make_lo_rdm1_1h_df(eris, moeocc, moevir, uocc):
     M = mem_avail * 0.7 * 1e6 / dsize
     
     # Alpha block size (based on alpha canonical occ)
-    occblksize_a, mem_peak_a = _mp2_rdm1_occblksize(nocca, nvira, naux, 2, 2, M/2, dsize)
+    occblksize_a, mem_peak_a = _mp2_rdm1_occblksize(nocca, nvira, naux, 3, 3, M/2, dsize)
     if DEBUG_BLKSIZE: occblksize_a = max(1, nocca // 2)
     
     # Beta block size (based on beta canonical occ)
-    occblksize_b, mem_peak_b = _mp2_rdm1_occblksize(noccb, nvirb, naux, 2, 2, M/2, dsize)
+    occblksize_b, mem_peak_b = _mp2_rdm1_occblksize(noccb, nvirb, naux, 3, 3, M/2, dsize)
     if DEBUG_BLKSIZE: occblksize_b = max(1, noccb // 2)
-
+    
     # 
     log.debug1('make_lo_rdm1_1h (alpha): nocc=%d nvir=%d nOcc=%d naux=%d blksize=%d peak_mem=%.2f MB',
                nocca, nvira, nOcca, naux, occblksize_a, mem_peak_a)
@@ -396,32 +474,55 @@ def make_lo_rdm1_1h_df(eris, moeocc, moevir, uocc):
     dmvv_a = np.zeros((nvira, nvira), dtype=dtype)
     dmvv_b = np.zeros((nvirb, nvirb), dtype=dtype)
     
-    # construct t2aa and contract
+    #-- construct t2aa and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOcca, occblksize_a)):
+        
         # fragment-occ DF integrals/energies
         KvL_a = eris.xform_occ(u_a[:, K0:K1], spin='a') 
         eKv_a = eIv_a[K0:K1]
         
         for ibatch, (i0, i1) in enumerate(lib.prange(0, nocca, occblksize_a)):
+            
             # full-occ DF integrals/energies
             ivL_a = eris.get_occ_blk(i0, i1, spin='a')
             eiv_a = eov_a[i0:i1]
             
             # form t2-block
             denom_aa = lib.direct_sum('Ka+ib->Kaib', eKv_a, eiv_a)
-            t2aa = lib.einsum('Kax,ibx->Kaib', KvL_a, ivL_a) / denom_aa
-            t2aa = t2aa - t2aa.transpose(0,3,2,1)
+            t2aa_i = lib.einsum('Kax,ibx->Kaib', KvL_a, ivL_a) / denom_aa
+            t2aa_i = t2aa_i - t2aa_i.transpose(0,3,2,1)
             denom_aa = None
             ivL_a = None
+            eiv_a = None
             
-            # contract block to make MP2/DM
-            dmoo_a[i0:i1, :] += lib.einsum('Kaib,Kajb->ij', t2aa, t2aa.conj())
-            dmvv_a += lib.einsum('Kaic,Kbic->ba', np.conj(t2aa), t2aa)
-            t2aa = None
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, nocca, occblksize_a)):
+                if jbatch == ibatch:
+                    t2aa_j = t2aa_i
+                else:
+                    # full-occ DF integrals/energies
+                    jvL_a = eris.get_occ_blk(j0, j1, spin='a')
+                    ejv_a = eov_a[j0:j1]
+                    
+                    # form t2-block
+                    denom_aa = lib.direct_sum('Ka+jb->Kajb', eKv_a, ejv_a)
+                    t2aa_j = lib.einsum('Kax,jbx->Kajb', KvL_a, jvL_a) / denom_aa
+                    t2aa_j = t2aa_j - t2aa_j.transpose(0,3,2,1)
+                    denom_aa = None
+                    jvL_a = None
+                    ejv_a = None
+            
+                # contract block to make occupied MP2-DM
+                dmoo_a[i0:i1, j0:j1] += lib.einsum('Kaib,Kajb->ij', t2aa_i, t2aa_j.conj())
+                t2aa_j = None
+                
+            # contract block to make virtual MP2-DM
+            dmvv_a += lib.einsum('Kaic,Kbic->ba', np.conj(t2aa_i), t2aa_i)
+            t2aa_i=None
             
         KvL_a = None
+        eKv_a = None
         
-    # construct t2bb and contract
+    #-- construct t2bb and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOccb, occblksize_b)):
         # fragment-occ DF integrals/energies
         KvL_b = eris.xform_occ(u_b[:, K0:K1], spin='b')
@@ -434,19 +535,40 @@ def make_lo_rdm1_1h_df(eris, moeocc, moevir, uocc):
             
             # form t2-block
             denom_bb = lib.direct_sum('Ka+ib->Kaib', eKv_b, eiv_b)
-            t2bb = lib.einsum('Kax,ibx->Kaib', KvL_b, ivL_b) / denom_bb
-            t2bb = t2bb - t2bb.transpose(0,3,2,1)
+            t2bb_i = lib.einsum('Kax,ibx->Kaib', KvL_b, ivL_b) / denom_bb
+            t2bb_i = t2bb_i - t2bb_i.transpose(0,3,2,1)
             denom_bb = None
             ivL_b = None
-            
-            # contract block to make MP2/DM
-            dmoo_b[i0:i1, :] += lib.einsum('Kaib,Kajb->ij', t2bb, t2bb.conj())
-            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2bb.conj(), t2bb)
-            t2bb = None
-        
-        KvL_a = None
+            eiv_b = None
 
-    # construct t2ba and contract
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, noccb, occblksize_b)):
+                if jbatch == ibatch:
+                    t2bb_j = t2bb_i
+                else:
+                    # full-occ DF integrals/energies
+                    jvL_b = eris.get_occ_blk(j0, j1, spin='b')
+                    ejv_b = eov_b[j0:j1]
+                    
+                    # form t2-block
+                    denom_bb = lib.direct_sum('Ka+jb->Kajb', eKv_b, ejv_b)
+                    t2bb_j = lib.einsum('Kax,jbx->Kajb', KvL_b, jvL_b) / denom_bb
+                    t2bb_j = t2bb_j - t2bb_j.transpose(0,3,2,1)
+                    denom_bb = None
+                    jvL_b = None
+                    ejv_b = None
+            
+                # contract block to make occupied MP2-DM
+                dmoo_b[i0:i1, j0:j1] += lib.einsum('Kaib,Kajb->ij', t2bb_i, t2bb_j.conj())
+                t2bb_j=None
+            
+            # contract block to make virtual MP2-DM
+            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2bb_i.conj(), t2bb_i)
+            t2bb_i = None
+        
+        KvL_b = None
+        eKv_b = None
+    
+    #-- construct t2ba and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOccb, occblksize_b)):
         # fragment-occ DF integrals/energies
         KvL_b = eris.xform_occ(u_b[:, K0:K1], spin='b')
@@ -459,18 +581,40 @@ def make_lo_rdm1_1h_df(eris, moeocc, moevir, uocc):
             
             # form t2-block
             denom_ba = lib.direct_sum('Ka+ib->Kaib', eKv_b, eiv_a)
-            t2ba= lib.einsum('Kax,ibx->Kaib', KvL_b, ivL_a) / denom_ba
+            t2ba_i = lib.einsum('Kax,ibx->Kaib', KvL_b, ivL_a) / denom_ba
             ivL_a = None
+            eiv_a = None
             denom_ba = None
             
-            # contract block to make MP2/DM            
-            dmoo_a[i0:i1, :]+=2*lib.einsum('Kaib,Kajb->ij', t2ba, t2ba.conj())
-            dmvv_a += lib.einsum('Kcia,Kcib->ba', t2ba.conj(), t2ba)
-            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2ba.conj(), t2ba)
-            t2ba = None
-        KvL_b = None
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, nocca, occblksize_a)):
+                if jbatch == ibatch:
+                    t2ba_j = t2ba_i
+                    
+                else:
+                    # full-occ DF integrals/energies
+                    jvL_a = eris.get_occ_blk(j0, j1, spin='a')
+                    ejv_a = eov_a[j0:j1]
+                    
+                    # form t2-block
+                    denom_ba = lib.direct_sum('Ka+jb->Kajb', eKv_b, ejv_a)
+                    t2ba_j = lib.einsum('Kax,jbx->Kajb', KvL_b, jvL_a) / denom_ba
+                    jvL_a = None
+                    ejv_a=None
+                    denom_ba = None
             
-    # construct t2ab and contract
+                # contract block to make occupied MP2-DM
+                dmoo_a[i0:i1, j0:j1]+=2*lib.einsum('Kaib,Kajb->ij', t2ba_i, t2ba_j.conj())
+                t2ba_j=None
+                
+            # contract block to make virtual MP2-DM
+            dmvv_a += lib.einsum('Kcia,Kcib->ba', t2ba_i.conj(), t2ba_i)
+            dmvv_b += lib.einsum('Kaic,Kbic->ba', t2ba_i.conj(), t2ba_i)
+            t2ba_i = None
+            
+        KvL_b = None
+        eKv_b = None
+        
+    #-- construct t2ab and contract
     for Kbatch, (K0, K1) in enumerate(lib.prange(0, nOcca, occblksize_a)):
         # fragment-occ DF integrals/energies
         KvL_a = eris.xform_occ(u_a[:, K0:K1], spin='a')
@@ -483,23 +627,45 @@ def make_lo_rdm1_1h_df(eris, moeocc, moevir, uocc):
             
             # form t2-block
             denom_ab = lib.direct_sum('Ka+ib->Kaib', eKv_a, eiv_b)
-            t2ab = lib.einsum('Kax,ibx->Kaib', KvL_a, ivL_b) / denom_ab
+            t2ab_i = lib.einsum('Kax,ibx->Kaib', KvL_a, ivL_b) / denom_ab
             ivL_b = None
+            eiv_b = None
             denom_ba = None
+
+            for jbatch, (j0, j1) in enumerate(lib.prange(0, noccb, occblksize_b)):
+                if jbatch == ibatch:
+                    t2ab_j = t2ab_i
+                else:   
+                    # full-occ DF integrals/energies
+                    jvL_b = eris.get_occ_blk(j0, j1, spin='b')
+                    ejv_b = eov_b[j0:j1]
+                    
+                    # form t2-block
+                    denom_ab = lib.direct_sum('Ka+jb->Kajb', eKv_a, ejv_b)
+                    t2ab_j = lib.einsum('Kax,jbx->Kajb', KvL_a, jvL_b) / denom_ab
+                    jvL_b = None
+                    ejv_b = None
+                    denom_ba = None
             
-            # contract block to make MP2/DM
-            dmoo_b[i0:i1, :]+=2*lib.einsum('Kaib,Kajb->ij', t2ab, t2ab.conj())
-            dmvv_a += lib.einsum('Kaic,Kbic->ba', t2ab.conj(), t2ab)
-            dmvv_b += lib.einsum('Kcia,Kcib->ba', t2ab.conj(), t2ab)
-            t2ab = None
+                # contract block to make occupied MP2-DM
+                dmoo_b[i0:i1, j0:j1]+=2*lib.einsum('Kaib,Kajb->ij', t2ab_i, t2ab_j.conj())
+                t2ba_j=None
+
+             
+            # contract block to make virtual MP2-DM
+            dmvv_a += lib.einsum('Kaic,Kbic->ba', t2ab_i.conj(), t2ab_i)
+            dmvv_b += lib.einsum('Kcia,Kcib->ba', t2ab_i.conj(), t2ab_i)
+            t2ab_i = None
+            
         KvL_a = None
+        eKv_a = None
 
     return [dmoo_a, dmoo_b], [dmvv_a, dmvv_b]
 
 
 #####------ Density Fitted ERIS code
 class _ULNO_DF_ERIs:
-    # This class is now more of a holder for common properties,
+    # This class is now more of a holder for common propert0es,
     # matching the structure of _LNODFINCOREERIS
     def __init__(self, with_df, orbocc, orbvir, max_memory, verbose=None, stdout=None):
         self.with_df = with_df
@@ -823,22 +989,22 @@ class _ULNO_Incore_ERIs(_ULNO_ERIs):
     def get_ivov(self, u, i0, i1, j0, j1):
         orbi = np.dot(self.orbo, u)
         g = ao2mo.general(self._eri, [orbi[:,i0:i1], self.orbv, self.orbo[:,j0:j1], self.orbv], compact=False)
-        return g.reshape(orbi.shape[1], self.orbv.shape[1], self.orbo.shape[1], self.orbv.shape[1])
+        return g.reshape(orbi[:,i0:i1].shape[1], self.orbv.shape[1], self.orbo[:,j0:j1].shape[1], self.orbv.shape[1])
 
     def get_ivOV(self, u, i0, i1, j0, j1):
         orbi = np.dot(self.orbo, u)
         g = ao2mo.general(self._eri, [orbi[:,i0:i1], self.orbv, self.orbO[:,j0:j1], self.orbV], compact=False)
-        return g.reshape(orbi.shape[1], self.orbv.shape[1], self.orbO.shape[1], self.orbV.shape[1])
+        return g.reshape(orbi[:,i0:i1].shape[1], self.orbv.shape[1], self.orbO[:,j0:j1].shape[1], self.orbV.shape[1])
 
     def get_IVov(self, u, i0, i1, j0, j1):
         orbI = np.dot(self.orbO, u)
         g = ao2mo.general(self._eri, [orbI[:,i0:i1], self.orbV, self.orbo[:,j0:j1], self.orbv], compact=False)
-        return g.reshape(orbI.shape[1], self.orbV.shape[1], self.orbo.shape[1], self.orbv.shape[1])
+        return g.reshape(orbI[:,i0:i1].shape[1], self.orbV.shape[1], self.orbo[:,j0:j1].shape[1], self.orbv.shape[1])
 
     def get_IVOV(self, u, i0, i1, j0, j1):
         orbI = np.dot(self.orbO, u)
         g = ao2mo.general(self._eri, [orbI[:,i0:i1], self.orbV, self.orbO[:,j0:j1], self.orbV], compact=False)
-        return g.reshape(orbI.shape[1], self.orbV.shape[1], self.orbO.shape[1], self.orbV.shape[1])
+        return g.reshape(orbI[:,i0:i1].shape[1], self.orbV.shape[1], self.orbO[:,j0:j1].shape[1], self.orbV.shape[1])
 
 # unrestricted LNO class
 class ULNO(lno.LNO):
