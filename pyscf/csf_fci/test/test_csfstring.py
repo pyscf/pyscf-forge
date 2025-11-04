@@ -55,6 +55,11 @@ class KnownValues(unittest.TestCase):
                 with self.subTest (nspin=nspin, ms=ms):
                     case_spin_evecs (self, nspin, ms)
 
+    def test_memory_management (self):
+        # Currently only the get_spin_evecs function
+        with self.assertRaises (MemoryError):
+            get_spin_evecs (18, 9, 9, 1, max_memory=2000)
+
 if __name__=="__main__":
     print ("Full tests for csfstring")
     unittest.main () 

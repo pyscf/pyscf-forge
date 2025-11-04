@@ -576,6 +576,7 @@ class FCISolver (CSFFCISolver, direct_spin1.FCISolver):
         assert (isinstance (self.smult, (int, np.number)))
         neleca, nelecb = _unpack_nelec (self.nelec)
         if self.transformer is None:
-            self.transformer = CSFTransformer (self.norb, neleca, nelecb, self.smult)
+            self.transformer = CSFTransformer (self.norb, neleca, nelecb, self.smult,
+                                               max_memory=self.max_memory)
         else:
             self.transformer._update_spin_cache (self.norb, neleca, nelecb, self.smult)
