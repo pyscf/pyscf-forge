@@ -10,10 +10,11 @@
 //#include "vhf/fblas.h"
 //#include "fci.h"
 
-void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, int nstr, int norb, int neleca, int nelecb)
+void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, size_t nstr, int norb, int neleca, int nelecb)
 {
 
-    int i, iorb, isorb, ispin;
+    size_t i;
+    int iorb, isorb, ispin;
     uint64_t * astrs = ddstrs;
     uint64_t * bstrs = & ddstrs[nstr];
     uint64_t * npairs = csdstrs;
@@ -44,10 +45,11 @@ void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, int nstr, int 
     }
 }
 
-void FCICSFcsdstrs2ddstrs (uint64_t * ddstrs, uint64_t * csdstrs, int nstr, int norb, int neleca, int nelecb)
+void FCICSFcsdstrs2ddstrs (uint64_t * ddstrs, uint64_t * csdstrs, size_t nstr, int norb, int neleca, int nelecb)
 {
 
-    int i, iorb, isorb, ispin;
+    size_t i;
+    int iorb, isorb, ispin;
     uint64_t * astrs = ddstrs;
     uint64_t * bstrs = & ddstrs[nstr];
     uint64_t * dconf_strs = & csdstrs[nstr];
@@ -81,14 +83,14 @@ void FCICSFcsdstrs2ddstrs (uint64_t * ddstrs, uint64_t * csdstrs, int nstr, int 
 }
 
 
-void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int nspin, int ndet, int ncoup, int twoS, int twoMS)
+void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int nspin, size_t ndet, size_t ncoup, int twoS, int twoMS)
 {
 
 
 #pragma omp parallel default(shared)
 {
 
-    unsigned int idet, icoup, ispin, idetcoup, ndetcoup;
+    size_t idet, icoup, ispin, idetcoup, ndetcoup;
     int track2S, track2MS, sgn, osgn;
     uint64_t numerator, denominator, sup, msup;
 
@@ -144,10 +146,11 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
 }
 
 
-void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, int ndet, int nspin, int twoMS)
+void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
 {
 
-    int nflip, iflip, idet, jdet, osgn, sgn;
+    size_t idet, jdet;
+    int nflip, iflip, osgn, sgn;
     uint64_t flipdet;
     double sz2 = (double) twoMS * twoMS / 4;
     double diag = sz2 + (double) nspin / 2;
@@ -176,10 +179,11 @@ void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, int ndet, int nspin, in
 }
 
 
-void FCICSFgetscstrs (uint64_t * scstrs, bool * mask, int nstr, int nspin)
+void FCICSFgetscstrs (uint64_t * scstrs, bool * mask, size_t nstr, int nspin)
 {
 
-    int istr, ispin, srun;
+    size_t istr;
+    int ispin, srun;
     for (istr = 0; istr < nstr; istr++){
         srun = 0;
         for (ispin = 0; ispin < nspin; ispin++){
@@ -190,7 +194,7 @@ void FCICSFgetscstrs (uint64_t * scstrs, bool * mask, int nstr, int nspin)
 
 }
 
-void FCICSFstrs2addr (int * addrs, uint64_t * strings, int nstr, int * gentable_ravel, int nspin, int twoS)
+void FCICSFstrs2addr (int * addrs, uint64_t * strings, size_t nstr, int * gentable_ravel, int nspin, int twoS)
 {
 
     /*  Example of a genealogical coupling table for 8 spins and s = 1 (triplet), counting from the final state
@@ -212,6 +216,7 @@ void FCICSFstrs2addr (int * addrs, uint64_t * strings, int nstr, int * gentable_
         Address = 10 + 6 + 0 = 16.
         Top left (0,0) is the null state (nspin = 0, s = 0).
     */
+    size_t istr;
     int n0 = (nspin - twoS) / 2;
     int n1 = (nspin + twoS) / 2;
     int i0, i1;
@@ -219,7 +224,7 @@ void FCICSFstrs2addr (int * addrs, uint64_t * strings, int nstr, int * gentable_
     for (i0 = 0; i0 <= n0; i0++){
         gentable[i0] = & (gentable_ravel[i0*(n1+1)]);
     }
-    int istr, ispin;
+    int ispin;
 
     for (istr = 0; istr < nstr; istr++){
         addrs[istr] = 0;
@@ -240,7 +245,7 @@ void FCICSFstrs2addr (int * addrs, uint64_t * strings, int nstr, int * gentable_
 }
 
 
-void FCICSFaddrs2str (uint64_t * strings, int * addrs, int nstr, int * gentable_ravel, int nspin, int twoS)
+void FCICSFaddrs2str (uint64_t * strings, int * addrs, size_t nstr, int * gentable_ravel, int nspin, int twoS)
 {
 
     /*  Example of a genealogical coupling table for 8 spins and s = 1 (triplet), counting from the final state
@@ -261,6 +266,7 @@ void FCICSFaddrs2str (uint64_t * strings, int * addrs, int nstr, int * gentable_
         The next would be 01110011: right twice, then down twice (avoiding 10 and 6), then right three times, then down once (in the final column).
         Address = 10 + 6 + 0 = 16.
     */
+    size_t istr;
     int n0 = (nspin - twoS) / 2;
     int n1 = (nspin + twoS) / 2;
     int i0, i1;
@@ -268,7 +274,7 @@ void FCICSFaddrs2str (uint64_t * strings, int * addrs, int nstr, int * gentable_
     for (i0 = 0; i0 <= n0; i0++){
         gentable[i0] = &(gentable_ravel[i0*(n1+1)]);
     }
-    int istr, ispin, caddrs;
+    int ispin, caddrs;
 
     for (istr = 0; istr < nstr; istr++){
         strings[istr] = 1ULL;
@@ -291,15 +297,16 @@ void FCICSFaddrs2str (uint64_t * strings, int * addrs, int nstr, int * gentable_
     free (gentable);
 }
 
-void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * astrs, uint64_t * bstrs, unsigned int norb, unsigned int nconf, unsigned int ndet)
+void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * astrs, uint64_t * bstrs, unsigned int norb, size_t nconf, size_t ndet)
 {
 
-    unsigned int ndet_lt = ndet * (ndet+1) / 2;
+    size_t ndet_lt = ndet * (ndet+1) / 2;
 
 #pragma omp parallel default(shared)
 {
 
-    unsigned int idetconf, iconf, idetx, idety, iorb, nexc;
+    size_t iconf, idetx, idety, idetconf;
+    unsigned int iorb, nexc;
     uint64_t exc_str, somo_str, big_idx1, big_idx2, hdiag_idx_lt, hdiag_idx_ut;
     unsigned int exc[2];
     int sgn, esgn;

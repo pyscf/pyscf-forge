@@ -285,7 +285,7 @@ def ddstrs2csdstrs (norb, neleca, nelecb, ddstrs):
         ddstrs = np.ascontiguousarray (ddstrs)
     libcsf.FCICSFddstrs2csdstrs (csdstrs.ctypes.data_as (ctypes.c_void_p),
                                 ddstrs.ctypes.data_as (ctypes.c_void_p),
-                                ctypes.c_int (nstr),
+                                ctypes.c_size_t (nstr),
                                 ctypes.c_int (norb),
                                 ctypes.c_int (neleca), ctypes.c_int (nelecb))
     return csdstrs
@@ -300,7 +300,7 @@ def csdstrs2ddstrs (norb, neleca, nelecb, csdstrs):
         csdstrs = np.ravel (csdstrs)
     libcsf.FCICSFcsdstrs2ddstrs (ddstrs.ctypes.data_as (ctypes.c_void_p),
                                 csdstrs.ctypes.data_as (ctypes.c_void_p),
-                                ctypes.c_int (nstr),
+                                ctypes.c_size_t (nstr),
                                 ctypes.c_int (norb),
                                 ctypes.c_int (neleca), ctypes.c_int (nelecb))
     return ddstrs

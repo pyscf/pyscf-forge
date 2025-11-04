@@ -930,8 +930,8 @@ def get_spin_evecs (nspin, neleca, nelecb, smult):
                         spinstrs.ctypes.data_as (ctypes.c_void_p),
                         scstrs.ctypes.data_as (ctypes.c_void_p),
                         ctypes.c_int (nspin),
-                        ctypes.c_int (ndet),
-                        ctypes.c_int (ncsf),
+                        ctypes.c_size_t (ndet),
+                        ctypes.c_size_t (ncsf),
                         ctypes.c_int (twoS),
                         ctypes.c_int (twoMS))
 
@@ -957,7 +957,7 @@ def _test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
         t_start = lib.logger.perf_counter ()
         libcsf.FCICSFmakeS2mat (S2mat.ctypes.data_as (ctypes.c_void_p),
                              spinstrs.ctypes.data_as (ctypes.c_void_p),
-                             ctypes.c_int (ndet),
+                             ctypes.c_size_t (ndet),
                              ctypes.c_int (nspin),
                              ctypes.c_int (twoMS))
         print ("TIME: {} seconds to make S2mat for {} spins with s={}, ms={}".format (
@@ -1010,7 +1010,7 @@ def get_scstrs (nspin, smult):
 
     libcsf.FCICSFgetscstrs (scstrs.ctypes.data_as (ctypes.c_void_p),
                             mask.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_int (len (scstrs)),
+                            ctypes.c_size_t (len (scstrs)),
                             ctypes.c_int (nspin))
 
     return np.ascontiguousarray (scstrs[mask], dtype=np.int64)
@@ -1025,7 +1025,7 @@ def addrs2str (nspin, smult, addrs):
     twoS = smult - 1
     libcsf.FCICSFaddrs2str (strs.ctypes.data_as (ctypes.c_void_p),
                             addrs.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_int (nstr),
+                            ctypes.c_size_t (nstr),
                             gentable.ctypes.data_as (ctypes.c_void_p),
                             ctypes.c_int (nspin),
                             ctypes.c_int (twoS))
@@ -1041,7 +1041,7 @@ def strs2addr (nspin, smult, strs):
     twoS = smult - 1
     libcsf.FCICSFstrs2addr (addrs.ctypes.data_as (ctypes.c_void_p),
                             strs.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_int (nstr),
+                            ctypes.c_size_t (nstr),
                             gentable.ctypes.data_as (ctypes.c_void_p),
                             ctypes.c_int (nspin),
                             ctypes.c_int (twoS))
