@@ -937,7 +937,7 @@ def get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=param.MAX_MEMORY):
     mem_reqd = ndet * ncsf * np.dtype (np.float64).itemsize / 1e6
     if mem_reqd > mem_rem:
         memstr = ('CSF unitary matrix for {} unpaired of {} total electrons w/ s={:.1f} is too big'
-                  "({} MB req'd of {} MB remaining; {} MB total available)").format (
+                  " ({} MB req'd of {} MB remaining; {} MB total available)").format (
             nspin, neleca+nelecb, s, mem_reqd, mem_rem, max_memory)
         raise MemoryError (memstr)
     umat = np.ones ((ndet, ncsf), dtype=np.float64)

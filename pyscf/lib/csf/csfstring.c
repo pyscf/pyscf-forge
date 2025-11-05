@@ -92,7 +92,8 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
 
     size_t idet, icoup, ispin, idetcoup, ndetcoup;
     int track2S, track2MS, sgn, osgn;
-    uint64_t numerator, denominator, sup, msup;
+    uint64_t sup, msup;
+    double numerator, denominator;
 
     ndetcoup = ndet * ncoup;
 
@@ -119,7 +120,6 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
  *              num = j1 + 1/2 + sgn(J-j1)*sgn(m2)*M
  *              denom = 2*j1 + 1 
  *              All numbers are half-integers so multiply num and denom by 2
- *                  in order to avoid floating-point arithmetic until the very end
  *          */
             numerator *= (sup == msup) ? track2S + track2MS + 1 : track2S + 1 - track2MS;
             if (numerator == 0){ break; }
@@ -127,13 +127,8 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
             if (msup && !sup){ sgn *= -1; }
 
             /* All numbers are half-integers so num is *2 computed in this way.
- *              In order to reduce risk of integer overflow, choose how to correct this based on parity
  *          */
-            if (1ULL & numerator){
-                denominator *= 2;
-            } else {
-                numerator /= 2;
-            }
+            numerator /= 2;
 
             if (sup){ track2S++; } else { track2S--; }
         } 
