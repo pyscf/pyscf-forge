@@ -58,7 +58,14 @@ class KnownValues(unittest.TestCase):
     def test_memory_management (self):
         # Currently only the get_spin_evecs function
         with self.assertRaises (MemoryError):
-            get_spin_evecs (18, 9, 9, 1, max_memory=2000)
+            get_spin_evecs (10, 5, 5, 1, max_memory=1)
+
+    def test_many_determinants (self):
+        # Prove that there is no integer overrun above 16 singly-occupied orbitals
+        umat = get_spin_evecs (20, 10, 10, 19)
+        ovlp = np.dot (umat.T, umat)
+        ovlperr = linalg.norm (ovlp - np.eye (ovlp.shape[0]))
+        self.assertLess (ovlperr, 1e-8)
 
 if __name__=="__main__":
     print ("Full tests for csfstring")
