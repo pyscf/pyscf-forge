@@ -8,8 +8,6 @@ from pyscf import gto, scf, mcpdft
 from pyscf.mcpdft.lpdft import _LPDFT
 from pyscf.prop.dip_moment.lpdft import _LPDFTDipole
 
-_LPDFT.dip_moment = _LPDFTDipole.dip_moment
-
 mol = gto.M(
     atom="""O 0 0 0
           H 0 -0.757 0.587

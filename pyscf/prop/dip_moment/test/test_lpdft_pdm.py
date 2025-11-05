@@ -22,8 +22,6 @@ from pyscf.csf_fci import csf_solver
 from pyscf.mcpdft.lpdft import _LPDFT
 from pyscf.prop.dip_moment.lpdft import _LPDFTDipole
 
-_LPDFT.dip_moment = _LPDFTDipole.dip_moment
-
 geom_h2o='''
 O  0.00000000   0.08111156   0.00000000
 H  0.78620605   0.66349738   0.00000000
@@ -79,7 +77,7 @@ class KnownValues(unittest.TestCase):
                 dm_test = mc.dip_moment(unit='Debye', origin="Coord_center",state=i)
                 for dmt,dmr in zip(dm_test,dm_ref[i]):
                     self.assertAlmostEqual(dmt, dmr, None, message, delta)
- 
+
     def test_h2o_lpdft_ftlda_augccpvdz(self): 
         dm_ref = np.array(\
             [[0.0000, 1.8875, 0.0000],  # State 0: x, y, z

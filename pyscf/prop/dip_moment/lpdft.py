@@ -64,7 +64,7 @@ class ElectricDipole (lpdft_grad.Gradients):
 
         log.note('L-PDFT PDM <{}|mu|{}>           {:>10} {:>10} {:>10}'.format(i,i,'X','Y','Z'))
         log.note('Hamiltonian Contribution (%s) : %9.5f, %9.5f, %9.5f', unit, *ham_response)
-        log.note('Lagrange Contribution    (%s) : %9.5f, %9.5f, %9.5f', unit, *LdotJnuc)            
+        log.note('Lagrange Contribution    (%s) : %9.5f, %9.5f, %9.5f', unit, *LdotJnuc)
         log.note('Permanent Dipole Moment  (%s) : %9.5f, %9.5f, %9.5f', unit, *mol_dip)
         return mol_dip
 
@@ -116,7 +116,7 @@ class ElectricDipole (lpdft_grad.Gradients):
 
         casdm1_transit, _ = mc.fcisolver.trans_rdm12 (Lci, ci, ncas, nelecas)
         casdm1_transit += casdm1_transit.transpose (1,0)
- 
+
         dm_cas_transit = reduce(np.dot, (mo_cas, casdm1_transit, mo_cas.T))
 
         dm = dmL_core + dmL_cas + dm_cas_transit
@@ -144,4 +144,3 @@ class _LPDFTDipole(_LPDFT):
         mol_dipole = dip_obj.kernel (state=state, unit=unit, origin=origin)
         return mol_dipole
 _LPDFT.dip_moment = _LPDFTDipole.dip_moment
-
