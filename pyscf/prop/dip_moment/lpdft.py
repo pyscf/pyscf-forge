@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Helen Clifford <helenclifford@uchicago.com>
+# Author: Helen Clifford <helenclifford@uchicago.edu>
 
 from pyscf.lib import logger
 from functools import reduce
