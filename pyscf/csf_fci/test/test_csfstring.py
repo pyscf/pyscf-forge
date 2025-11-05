@@ -61,8 +61,8 @@ class KnownValues(unittest.TestCase):
             get_spin_evecs (10, 5, 5, 1, max_memory=1)
 
     def test_many_determinants (self):
-        # Prove that there is no integer overrun above 16 singly-occupied orbitals
-        umat = get_spin_evecs (20, 10, 10, 19)
+        # Prove that there is no integer overrun for 26 singly-occupied orbitals
+        umat = get_spin_evecs (26, 13, 13, 27)
         ovlp = np.dot (umat.T, umat)
         ovlperr = linalg.norm (ovlp - np.eye (ovlp.shape[0]))
         self.assertLess (ovlperr, 1e-8)
