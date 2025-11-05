@@ -6,6 +6,9 @@ from pyscf.data import nist
 from pyscf import lib
 from pyscf.grad import lpdft as lpdft_grad
 from pyscf.prop.dip_moment.mcpdft import mcpdft_HellmanFeynman_dipole, get_guage_origin, nuclear_dipole
+from pyscf.mcscf import mc1step
+from pyscf.mcscf.df import _DFCASSCF
+from pyscf.mcpdft.lpdft import _LPDFT
 
 class ElectricDipole (lpdft_grad.Gradients):
 
@@ -107,3 +110,21 @@ class ElectricDipole (lpdft_grad.Gradients):
         mol_dip_L = -np.tensordot(ao_dip, dm).real
 
         return mol_dip_L
+
+
+
+class _LPDFTDipole(_LPDFT):
+    def dip_moment (self, unit='Debye', origin='Coord_Center', state=None):
+        if not isinstance (self, mc1step.CASSCF):
+            raise NotImplementedError ("CASCI-based PDFT dipole moments")
+        elif getattr (self, 'frozen', None) is not None:
+            raise NotImplementedError ("PDFT dipole moments with frozen orbitals")
+        elif isinstance (self, _DFCASSCF):
+            raise NotImplementedError ("PDFT dipole moments with density-fitting ERIs")
+        if not lib.isinteger (state):
+            raise RuntimeError ('Permanent dipole requires a single state')
+        dip_obj =  ElectricDipole(self)
+        mol_dipole = dip_obj.kernel (state=state, unit=unit, origin=origin)
+        return mol_dipole
+lpdft_dipole = _LPDFTDipole
+
