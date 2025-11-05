@@ -19,8 +19,10 @@ from pyscf import gto, scf, mcscf
 from pyscf import mcpdft
 import unittest
 from pyscf.csf_fci import csf_solver
-from pyscf.fci.addons import fix_spin_
-from pyscf.prop.dip_moment.lpdft import lpdft_dipole
+from pyscf.mcpdft.lpdft import _LPDFT
+from pyscf.prop.dip_moment.lpdft import _LPDFTDipole
+
+_LPDFT.dip_moment = _LPDFTDipole.dip_moment
 
 geom_h2o='''
 O  0.00000000   0.08111156   0.00000000
@@ -74,24 +76,24 @@ class KnownValues(unittest.TestCase):
         mc = get_h2o_ftpbe(mol_h2o, iroots)
         for i in range(3):
             with self.subTest (i=i):
-                dm_test = lpdft_dipole.dip_moment(mc, unit='Debye', origin="Coord_center",state=i)
+                dm_test = mc.dip_moment(unit='Debye', origin="Coord_center",state=i)
                 for dmt,dmr in zip(dm_test,dm_ref[i]):
                     self.assertAlmostEqual(dmt, dmr, None, message, delta)
-        
+ 
     def test_h2o_lpdft_ftlda_augccpvdz(self): 
-       dm_ref = np.array(\
-           [[0.0000, 1.8875, 0.0000],  # State 0: x, y, z
-           [ 0.0000,-1.4480, 0.0000],  # State 1: x, y, z
-           [ 0.0000, 3.3715, 0.0000]]) # State 2: x, y, z
-       delta = 0.001
-       message = "Dipoles are not equal within {} D".format(delta)
-       iroots=3
-       mc = get_h2o_ftlda(mol_h2o, iroots)
-       for i in range(3):
-           with self.subTest (i=i):
-               dm_test = lpdft_dipole.dip_moment(mc, unit='Debye', origin="Coord_center",state=i)
-               for dmt,dmr in zip(dm_test,dm_ref[i]):
-                   self.assertAlmostEqual(dmt, dmr, None, message, delta)
+        dm_ref = np.array(\
+            [[0.0000, 1.8875, 0.0000],  # State 0: x, y, z
+            [ 0.0000,-1.4480, 0.0000],  # State 1: x, y, z
+            [ 0.0000, 3.3715, 0.0000]]) # State 2: x, y, z
+        delta = 0.001
+        message = "Dipoles are not equal within {} D".format(delta)
+        iroots=3
+        mc = get_h2o_ftlda(mol_h2o, iroots)
+        for i in range(3):
+            with self.subTest (i=i):
+                dm_test = mc.dip_moment(unit='Debye', origin="Coord_center",state=i)
+                for dmt,dmr in zip(dm_test,dm_ref[i]):
+                    self.assertAlmostEqual(dmt, dmr, None, message, delta)
 
 
 if __name__ == "__main__":

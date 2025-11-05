@@ -116,9 +116,9 @@ class ElectricDipole (lpdft_grad.Gradients):
 
         casdm1_transit, _ = mc.fcisolver.trans_rdm12 (Lci, ci, ncas, nelecas)
         casdm1_transit += casdm1_transit.transpose (1,0)
-   
+ 
         dm_cas_transit = reduce(np.dot, (mo_cas, casdm1_transit, mo_cas.T))
-   
+
         dm = dmL_core + dmL_cas + dm_cas_transit
 
         center = get_guage_origin(mol, origin)
@@ -143,5 +143,5 @@ class _LPDFTDipole(_LPDFT):
         dip_obj =  ElectricDipole(self)
         mol_dipole = dip_obj.kernel (state=state, unit=unit, origin=origin)
         return mol_dipole
-lpdft_dipole = _LPDFTDipole
+_LPDFT.dip_moment = _LPDFTDipole.dip_moment
 
