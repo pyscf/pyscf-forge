@@ -32,8 +32,8 @@ def setUpModule():
     # create a (N-2)-electron system for charged-neutral H2O
     mol.charge = 2
     mol.build()
-    rmf = mol.RKS(mol, xc = "b3lyp").run()
-    umf = mol.UKS(mol, xc = "b3lyp").run()
+    rmf = mol.RKS(xc = "b3lyp").run()
+    umf = mol.UKS(xc = "b3lyp").run()
 
 def tearDownModule():
     global mol, rmf, umf
@@ -107,7 +107,7 @@ class KnownValues(unittest.TestCase):
         mol.basis = 'def2-svp'
         mol.charge = -2
         mol.build()
-        mf = mol.RKS(mol, xc = "b3lyp").run()
+        mf = mol.RKS(xc = "b3lyp").run()
         pp = RppRPADirect(mf, nvir_act=10, nelec="n+2")
         pp.hh_state = 10
         pp.kernel("s")
