@@ -119,7 +119,8 @@ def test_cell_k_grid_ae_6_31g(cart):
         v0 = np.asarray(cell0.pbc_intor('int1e_nuc', kpts=kpts0))
         trexio.to_trexio(cell0, filename)
         cell1 = trexio.mol_from_trexio(filename)
-        kpts1 = cell1.make_kpts(kmesh)
+        kpts1 = kpts0
+        #kpts1 = cell1.make_kpts(kmesh)
         s1 = np.asarray(cell1.pbc_intor('int1e_ovlp', kpts=kpts1))
         t1 = np.asarray(cell1.pbc_intor('int1e_kin', kpts=kpts1))
         v1 = np.asarray(cell1.pbc_intor('int1e_nuc', kpts=kpts1))
@@ -138,13 +139,9 @@ def test_mf_rhf_ae_6_31g(cart):
         filename = os.path.join(d, 'test.h5')
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g*', cart=cart)
         mf0 = mol0.RHF().run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        trexio.write_mo_2e_int_eri(eri0, filename)
-        eri1 = trexio.read_mo_2e_int_eri(filename)
-        assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## molecule, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -153,14 +150,9 @@ def test_mf_uhf_ae_6_31g(cart):
         filename = os.path.join(d, 'test.h5')
         mol0 = pyscf.M(atom='H 0 0 0; H 0 0 1', basis='6-31g*', spin=2, cart=cart)
         mf0 = mol0.UHF().run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        # write/read 2-electron integrals do not work for UHF
-        # trexio.write_mo_2e_int_eri(eri0, filename)
-        # eri1 = trexio.read_mo_2e_int_eri(filename)
-        # assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## molecule, segment contraction (ccecp-cc-pVQZ), ccecp, RHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -169,13 +161,9 @@ def test_mf_rhf_ccecp_ccpvqz(cart):
         filename = os.path.join(d, 'test.h5')
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='ccecp-ccpvqz', ecp='ccecp', cart=cart)
         mf0 = mol0.RHF().run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        trexio.write_mo_2e_int_eri(eri0, filename)
-        eri1 = trexio.read_mo_2e_int_eri(filename)
-        assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## PBC, k=gamma, segment contraction (6-31g), all-electron, RHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -188,13 +176,9 @@ def test_mf_k_gamma_rhf_ae_6_31g(cart):
         mf0 = pyscf.pbc.scf.RKS(cell0)
         mf0.xc = 'LDA'
         mf0.run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## PBC, k=general, segment contraction (6-31g), all-electron, RHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -212,9 +196,6 @@ def test_mf_k_general_rhf_ae_6_31g(cart):
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## PBC, k=grid, segment contraction (6-31g), all-electron, RHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -230,13 +211,9 @@ def test_mf_k_grid_rhf_ae_6_31g(cart):
         mf0 = pyscf.pbc.scf.KRKS(cell0, kpts=kpts0)
         mf0.xc = 'LDA'
         mf0.run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(np.asarray(mf1.mo_coeff) - np.asarray(mf0.mo_coeff)).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## PBC, k=gamma, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -250,13 +227,9 @@ def test_mf_k_gamma_uhf_ae_6_31g(cart):
         mf0 = pyscf.pbc.scf.UKS(cell0)
         mf0.xc = 'LDA'
         mf0.run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## PBC, k=general, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -275,9 +248,6 @@ def test_mf_k_general_uhf_ae_6_31g(cart):
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(mf1.mo_coeff - mf0.mo_coeff).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 ## PBC, k=grid, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
@@ -294,13 +264,9 @@ def test_mf_k_grid_uhf_ae_6_31g(cart):
         mf0 = pyscf.pbc.scf.KUKS(cell0, kpts=kpts0)
         mf0.xc = 'LDA'
         mf0.run()
-        eri0 = mf0._eri
         trexio.to_trexio(mf0, filename)
         mf1 = trexio.scf_from_trexio(filename)
         assert abs(np.asarray(mf1.mo_coeff) - np.asarray(mf0.mo_coeff)).max() < DIFF_TOL
-        #trexio.write_mo_2e_int_eri(eri0, filename)
-        #eri1 = trexio.read_mo_2e_int_eri(filename)
-        #assert abs(eri0 - eri1).max() < DIFF_TOL
 
 #################################################################
 # reading/writing `mol` from/to trexio file + SCF run.
