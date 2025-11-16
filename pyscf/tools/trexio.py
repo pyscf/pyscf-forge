@@ -232,12 +232,27 @@ def _scf_to_trexio(mf, trexio_file):
 
             if isinstance(mf, (pbc.scf.uhf.UHF, pbc.dft.uks.UKS, pbc.scf.kuhf.KUHF, pbc.dft.kuks.KUKS)):
                 mo_type = 'UHF'
-                mo_energy = np.ravel(mf.mo_energy)
-                mo_num = mo_energy.size
-                mo_up, mo_dn = mf.mo_coeff
+                if isinstance(mf, (pbc.scf.uhf.UHF, pbc.dft.uks.UKS)):
+                    mo_energy = np.ravel(mf.mo_energy)
+                    mo_num = mo_energy.size
+                    mo_up, mo_dn = mf.mo_coeff
+                elif isinstance(mf, (pbc.scf.kuhf.KUHF, pbc.dft.kuks.KUKS)):
+                    mo_energy = np.ravel(mf.mo_energy)
+                    mo_num = mo_energy.size
+                    mo_up, mo_dn = mf.mo_coeff
+                    print(mf.mo_coeff)
+                    mo_up = mo_up[0]
+                    mo_dn = mo_dn[0]
+                    print(mo_up)
+                    print(mo_dn)
+                else:
+                    raise NotImplementedError(f'Conversion function for {mf.__class__}')
                 idx = _order_ao_index(mf.mol)
                 mo_up = mo_up[idx].T
                 mo_dn = mo_dn[idx].T
+                num_mo_up = len(mo_up)
+                num_mo_dn = len(mo_dn)
+                assert num_mo_up + num_mo_dn == mo_num
                 mo=np.concatenate([mo_up, mo_dn], axis=0) # dim (num_mo, num_ao) but it is f-contiguous
                 mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
                 if np.all(np.isreal(mo_coefficient)):
@@ -247,13 +262,22 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_coefficient_real = mo_coefficient.real
                     mo_coefficient_imag = mo_coefficient.imag
                 mo_occ = np.ravel(mf.mo_occ)
-                mo_spin = np.zeros(mo_energy.size, dtype=int)
-                mo_spin[mf.mo_energy[0].size:] = 1
-            else:
+                mo_spin = np.zeros(num_mo_up+num_mo_dn, dtype=int)
+                mo_spin[:num_mo_up] = 0
+                mo_spin[num_mo_up:] = 1
+
+            elif isinstance(mf, (pbc.scf.krhf.KRHF, pbc.dft.krks.KRKS, pbc.scf.rhf.RHF, pbc.dft.rks.RKS)):
                 mo_type = 'RHF'
-                mo_energy = mf.mo_energy
-                mo_num = mo_energy.size
-                mo = mf.mo_coeff
+                if isinstance(mf, (pbc.scf.rhf.RHF, pbc.dft.rks.RKS)):
+                    mo_energy = np.ravel(mf.mo_energy)
+                    mo_num = mo_energy.size
+                    mo = mf.mo_coeff
+                elif isinstance(mf, (pbc.scf.krhf.KRHF, pbc.dft.krks.KRKS)):
+                    mo_energy = np.ravel(mf.mo_energy)
+                    mo_num = mo_energy.size
+                    mo = mf.mo_coeff[0]
+                else:
+                    raise NotImplementedError(f'Conversion function for {mf.__class__}')
                 idx = _order_ao_index(mf.mol)
                 mo = mo[idx].T # dim (num_mo, num_ao) but it is f-contiguous
                 mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
@@ -263,8 +287,10 @@ def _scf_to_trexio(mf, trexio_file):
                 else:
                     mo_coefficient_real = mo_coefficient.real
                     mo_coefficient_imag = mo_coefficient.imag
-                mo_occ = mf.mo_occ
-                mo_spin = np.zeros(mo_energy.size, dtype=int)
+                mo_occ = np.ravel(mf.mo_occ)
+                mo_spin = np.zeros(mo_num, dtype=int)
+            else:
+                raise NotImplementedError(f'Conversion function for {mf.__class__}')
 
             # 4.2 Molecular orbitals (mo group)
             trexio.write_mo_type(trexio_file, mo_type)
