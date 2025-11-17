@@ -13,4 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
+# NOTE 08/04/2025
+# This module should function with PySCF v2.10.0 specifically
+# The next release will include this module, which should then be removed
+# from PySCF-Forge
 from pyscf.dft2 import libxc

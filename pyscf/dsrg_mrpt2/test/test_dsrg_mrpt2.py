@@ -155,7 +155,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(e_sa[1], -149.46392257544233, delta=1.0e-6)
 # Forte: -149.977757019742
 # Forte: -149.463920553410
-        
+
 
     def test_singlet_o2_casscf_df(self):
         mc = mcscf.CASSCF(mfo2_df, 6, 8)
@@ -165,7 +165,7 @@ class KnownValues(unittest.TestCase):
         pt.kernel()
         self.assertAlmostEqual(pt.e_tot, -149.93467822, delta=1.0e-6)
 # Forte: -149.934676874344
-    
+
     def test_water_sa_casscf(self):
         mc = mcscf.CASSCF(mfh2o, 4, 4).state_average_([.5,.5],wfnsym='A1')
         mc.fix_spin_(ss=0)

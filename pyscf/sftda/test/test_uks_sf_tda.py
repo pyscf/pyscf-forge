@@ -22,12 +22,10 @@ try:
 except ImportError:
     mcfun = None
 
-# ToDo: Add the SF-TDDFT tests.
-
 def diagonalize(a, b, nroots=4,extype=0):
     a_b2a, a_a2b = a
     b_b2a, b_a2b = b
-    
+
     nocc_b,nvir_a = a_b2a.shape[:2]
     nocc_a,nvir_b = a_a2b.shape[:2]
 
@@ -72,7 +70,7 @@ def setUpModule():
     mf_tpss = dft.UKS(mol).set(xc='tpss', conv_tol=1e-12)
     mf_tpss.grids.prune = None
     mf_tpss = mf_tpss.newton().run()
-    
+
 def tearDownModule():
     global mol, mf_lda, mf_bp86 , mf_b3lyp, mf_tpss
     mol.stdout.close()
@@ -257,5 +255,5 @@ class KnownValues(unittest.TestCase):
         self.assertTrue(isinstance(sftda.TDA_SF(ks), sftda.uhf_sf.TDA_SF))
 
 if __name__ == "__main__":
-    print("Full Tests for SF-TD-UKS")
+    print("Full Tests for SF-TDA")
     unittest.main()

@@ -9,6 +9,7 @@ sudo apt-get -qq install \
     curl
 
 python -m pip install --upgrade pip
+pip install "scipy<1.16"
 pip install pytest
 pip install .
 

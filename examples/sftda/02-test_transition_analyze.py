@@ -37,7 +37,7 @@ xy = mftd1.xy
 tools_td.transition_analyze(mf, mftd1, e[0], xy[0], tdtype='TDA')
 
 
-mftd2 = sftda.uks_sf.TDA_SF(mf)
+mftd2 = sftda.uks_sf.TDDFT_SF(mf)
 mftd2.nstates = 5
 mftd2.extype = 1
 mftd2.collinear_samples=200
@@ -50,7 +50,7 @@ xy = mftd2.xy
 # 2. Print tansition analyze for the first spin-flip down excited state.
 #
 for i in range(5):
-    tools_td.transition_analyze(mf, mftd2, e[i], xy[i], tdtype='TDA')
+    tools_td.transition_analyze(mf, mftd2, e[i], xy[i], tdtype='TDDFT')
 
 
 #
@@ -63,21 +63,24 @@ B_baab, B_abba = b
 n_occ_a, n_virt_b = A_abab.shape[0], A_abab.shape[1]
 n_occ_b, n_virt_a = B_abba.shape[2], B_abba.shape[3]
 
-A_abab_2d = A_abab.reshape(n_occ_a*n_virt_b, n_occ_a*n_virt_b)
-B_abba_2d = B_abba.reshape(n_occ_a*n_virt_b, n_occ_b*n_virt_a)
-B_baab_2d = B_baab.reshape(n_occ_b*n_virt_a, n_occ_a*n_virt_b)
-A_baba_2d = A_baba.reshape(n_occ_b*n_virt_a, n_occ_b*n_virt_a)
+A_abab_2d = A_abab.reshape((n_occ_a*n_virt_b,n_occ_a*n_virt_b), order='C')
+B_abba_2d = B_abba.reshape((n_occ_a*n_virt_b,n_occ_b*n_virt_a), order='C')
+B_baab_2d = B_baab.reshape((n_occ_b*n_virt_a,n_occ_a*n_virt_b), order='C')
+A_baba_2d = A_baba.reshape((n_occ_b*n_virt_a,n_occ_b*n_virt_a), order='C')
 
-upper_block = np.hstack((A_abab_2d, B_abba_2d))
-lower_block = np.hstack((B_baab_2d, A_baba_2d))
-Casida_matrix = np.vstack((upper_block, lower_block))
+Casida_matrix = np.block([[ A_abab_2d, B_abba_2d],
+                          [-B_baab_2d,-A_baba_2d]])
 
 eigenvals, eigenvecs = np.linalg.eig(Casida_matrix)
 
 # sort the eigenvalues and eigenvectors
-idx = eigenvals.real.argsort()
-eigenvals = eigenvals[idx]
-eigenvecs = eigenvecs[:, idx].transpose(1,0)
+idxt = eigenvals.real.argsort()
+eigenvals = eigenvals[idxt]
+eigenvecs = eigenvecs[:, idxt]
+# find the positive roots
+idxp = np.where(eigenvals>-1e-4)[0]
+eigenvals = eigenvals[idxp]
+eigenvecs = eigenvecs[:, idxp].transpose(1,0)
 
 def norm_xy(z):
     x = z[:n_occ_a*n_virt_b].reshape(n_occ_a,n_virt_b)

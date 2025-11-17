@@ -30,7 +30,7 @@
 
 '''
 XC functional, the interface to libxc
-(http://www.tddft.org/programs/octopus/wiki/index.php/Libxc)
+(https://libxc.gitlab.io)
 '''
 
 import sys
@@ -161,17 +161,17 @@ def is_hybrid_xc(xc_code):
         if 'HF' in xc_code:
             return True
         xc = _get_xc(xc_code)
-        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs)
+        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs, xc_code)
     elif numpy.issubdtype(type(xc_code), numpy.integer):
         xc = _get_xc(xc_code)
-        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs)
+        return _is_hybrid_xc(xc.xc_objs, xc.hyb, xc.facs, xc_code)
     else:
         return any((is_hybrid_xc(x) for x in xc_code))
 
-def _is_hybrid_xc(xc_objs, hyb, facs):
+def _is_hybrid_xc(xc_objs, hyb, facs, xc_code):
     if _hybrid_coeff(xc_objs, hyb, facs) != 0:
         return True
-    if _rsh_coeff(xc_objs, hyb, facs) != (0, 0, 0):
+    if _rsh_coeff(xc_objs, hyb, facs, xc_code) != (0, 0, 0):
         return True
     return False
 
@@ -276,20 +276,27 @@ def rsh_coeff(xc_code):
     if xc_code is None:
         return 0, 0, 0
 
-    # check_omega = True
-    # if isinstance(xc_code, str) and ',' in xc_code:
-    #     # Parse only X part for the RSH coefficients.  This is to handle
-    #     # exceptions for C functionals such as M11.
-    #     xc_code = format_xc_code(xc_code)
-    #     xc_code = xc_code.split(',')[0] + ','
-    #     if 'SR_HF' in xc_code or 'LR_HF' in xc_code or 'RSH(' in xc_code:
-    #         check_omega = False
     xc = _get_xc(xc_code)
     return xc.rsh_coeff
 
-def _rsh_coeff(xc_objs, hyb, facs, check_omega=True):
+def _rsh_coeff(xc_objs, hyb, facs, xc_code):
+    check_omega = True
+    if isinstance(xc_code, str) and ',' in xc_code:
+        # Parse only X part for the RSH coefficients.  This is to handle
+        # exceptions for C functionals such as M11.
+        xc_code = format_xc_code(xc_code)
+        xc_code = xc_code.split(',')[0] + ','
+        if 'SR_HF' in xc_code or 'LR_HF' in xc_code or 'RSH(' in xc_code:
+            check_omega = False
+
     hyb, alpha, omega = hyb
-    beta = hyb - alpha
+    if omega == 0:
+        # SR and LR Coulomb share the same coefficients
+        # Note: this change breaks compatibility with pyscf-2.7
+        assert hyb == alpha
+        beta = 0.
+    else:
+        beta = hyb - alpha
     rsh_pars = [omega, alpha, beta]
     rsh_tmp = (ctypes.c_double*3)()
     for fac, xc in zip(facs, xc_objs):
@@ -454,7 +461,7 @@ def parse_xc(description):
                                 x_id = possible_xc.pop()
                             sys.stderr.write('XC parser takes %s\n' % x_id)
                             sys.stderr.write('You can add prefix to %s for a '
-                                             'specific functional (e.g. X_%s, '
+                                             'specific functional (e.g. GGA_X_%s, '
                                              'HYB_MGGA_X_%s)\n'
                                              % (key, key, key))
                         else:
@@ -515,8 +522,6 @@ def parse_xc(description):
             # dftd3 cannot be used in a custom xc description
             assert '-d3' not in token
             parse_token(token, 'compound XC', search_xc_alias=True)
-    if hyb[2] == 0: # No omega is assigned. LR_HF is 0 for normal Coulomb operator
-        hyb[1] = 0
     return tuple(hyb), tuple(remove_dup(fn_facs))
 
 def eval_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=None):
@@ -611,7 +616,7 @@ def eval_xc(xc_code, rho, spin=0, relativity=0, deriv=1, omega=None, verbose=Non
           | vtau[:,2]   = (u, d)
 
         * fxc for restricted case:
-          (v2rho2, v2rhosigma, v2sigma2, v2lapl2, vtau2, v2rholapl, v2rhotau, v2lapltau, v2sigmalapl, v2sigmatau)
+          (v2rho2, v2rhosigma, v2sigma2, v2lapl2, v2tau2, v2rholapl, v2rhotau, v2lapltau, v2sigmalapl, v2sigmatau)
 
         * fxc for unrestricted case:
           | v2rho2[:,3]     = (u_u, u_d, d_d)
@@ -873,7 +878,7 @@ def _libxc_to_xcfun_indices(xctype, spin=0, deriv=1):
     return numpy.hstack(idx)
 
 def _eval_xc(xc_code, rho, spin=0, deriv=1, omega=None):
-    xc = _get_xc(xc_code, spin)
+    xc = _get_xc(xc_code, spin, omega)
     assert deriv <= xc.max_deriv_order
     xctype = xc.xc_type
     assert xctype in ('HF', 'LDA', 'GGA', 'MGGA')
@@ -881,9 +886,6 @@ def _eval_xc(xc_code, rho, spin=0, deriv=1, omega=None):
     rho = numpy.asarray(rho, order='C', dtype=numpy.double)
     if xctype == 'MGGA' and rho.shape[-2] == 6:
         rho = numpy.asarray(rho[...,[0,1,2,3,5],:], order='C')
-
-    if omega is not None:
-        raise NotImplementedError('use register_custom_functional_() to set omega')
 
     if xc.needs_laplacian:
         raise NotImplementedError('laplacian in meta-GGA method')
@@ -1009,11 +1011,26 @@ def define_xc_(ni, description, xctype='LDA', hyb=0, rsh=(0,0,0)):
         outlen = lib.comb(xlen+deriv, deriv)
         exc, vxc, fxc, kxc = libxc_out[:4]
         out = [exc]
-        if vxc is not None:
+        if deriv > 0:
+            assert vxc is not None
             out.extend([x for x in vxc if x is not None])
-        if fxc is not None:
-            out.extend([fxc[i] for i in [0, 1, 2, 6, 4, 9]])
-        if kxc is not None:
+        if deriv > 1:
+            assert fxc is not None
+            if xctype == 'GGA':
+                assert len(fxc) == 3, 'fxc for GGA should be arranged as (v2rho2, v2rhosigma, v2sigma2)'
+            elif xctype == 'MGGA':
+                if len(fxc) == 10:
+                    fxc = [fxc[i] for i in [0, 1, 2, 6, 4, 9]]
+                else:
+                    assert len(fxc) == 6, (
+                        'fxc for MGGA should be arranged as\n'
+                        '(v2rho2, v2rhosigma, v2sigma2, v2tau2, v2rhotau, v2sigmatau)\nor\n'
+                        '(v2rho2, v2rhosigma, v2sigma2, v2lapl2, v2tau2, '
+                        'v2rholapl, v2rhotau, v2lapltau, v2sigmalapl, v2sigmatau)')
+            assert all(x is not None for x in fxc)
+            out.extend(fxc)
+        if deriv > 2:
+            assert kxc is not None
             out.extend([x for x in kxc if x is not None])
         if spin == 1:
             # Returns of eval_xc are structured as [grid_id,deriv_component]
@@ -1116,7 +1133,7 @@ class XCFunctionalCache:
 
     @cached_property
     def rsh_coeff(self):
-        return _rsh_coeff(self.xc_objs, self.hyb, self.facs, True)
+        return _rsh_coeff(self.xc_objs, self.hyb, self.facs, self.xc_code)
 
     def customize_(self, ext_params=None, omega=None, hyb=None, facs=None,
                    density_threshold=None, callback=None, clear=True):
@@ -1194,10 +1211,12 @@ _CUSTOM_FUNC_R = {}
 _CUSTOM_FUNC_U = {}
 
 @lru_cache(100)
-def _get_system_xc(xc_code, spin):
-    return XCFunctionalCache(xc_code, spin)
+def _get_system_xc(xc_code, spin, omega=None):
+    return XCFunctionalCache(xc_code, spin, omega)
 
-def _get_xc(xc_code, spin=0):
+def _get_xc(xc_code, spin=0, omega=None):
+    if omega is not None:
+        return _get_system_xc(xc_code, spin, omega)
     try:
         if spin > 0:
             return _CUSTOM_FUNC_U[xc_code]
@@ -1259,6 +1278,14 @@ def register_custom_functional_(new_xc_code, based_on_xc_code, ext_params=None, 
         xc.xc_code = new_xc_code
         xc.customize_(ext_params, omega, hyb, facs, density_threshold, callback, False)
         return xc
+
+    try:
+        parse_xc(new_xc_code)
+        warnings.warn('Attempting to register a custom functional with xc_code '
+                      f'"{new_xc_code}", which is a valid built-in xc_code. '
+                      'Consider using a different xc_code to avoid confusion.')
+    except Exception:
+        pass
 
     if restricted:
         _CUSTOM_FUNC_R[new_xc_code] = build(0)

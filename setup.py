@@ -93,6 +93,11 @@ class CMakeBuildPy(build_py):
         self.announce('Configuring extensions', level=3)
         src_dir = os.path.abspath(os.path.join(__file__, '..', 'pyscf', 'lib'))
         cmd = ['cmake', f'-S{src_dir}', f'-B{self.build_temp}']
+        
+        # Allow user to disable OCCRI C extension build
+        build_occri = os.getenv('BUILD_OCCRI', 'ON')
+        cmd.extend([f'-DBUILD_OCCRI={build_occri}'])
+        
         configure_args = os.getenv('CMAKE_CONFIGURE_ARGS')
         if configure_args:
             cmd.extend(configure_args.split(' '))
