@@ -199,4 +199,5 @@ set_target_properties (clib_csf PROPERTIES
     OUTPUT_NAME "csf")
 
 add_subdirectory(sfnoci)
+add_subdirectory(pwscf)
 
