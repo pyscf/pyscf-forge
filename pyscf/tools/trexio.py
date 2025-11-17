@@ -240,11 +240,8 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_energy = np.ravel(mf.mo_energy)
                     mo_num = mo_energy.size
                     mo_up, mo_dn = mf.mo_coeff
-                    print(mf.mo_coeff)
                     mo_up = mo_up[0]
                     mo_dn = mo_dn[0]
-                    print(mo_up)
-                    print(mo_dn)
                 else:
                     raise NotImplementedError(f'Conversion function for {mf.__class__}')
                 idx = _order_ao_index(mf.mol)
