@@ -42,6 +42,7 @@ from pyscf import lib
 from pyscf import __config__
 
 from pyscf.lno.make_lno_rdm1 import make_lo_rdm1_occ, make_lo_rdm1_vir
+from pyscf.lno import domain
 
 einsum = lib.einsum
 
@@ -51,7 +52,6 @@ DEBUG_BLKSIZE = getattr(__config__, 'lnocc_DEBUG_BLKSIZE', False)
 r''' TODO's
 [ ] chkfile / restart
 '''
-
 
 def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=None,
            lno_norb=None, eris=None):
@@ -77,6 +77,7 @@ def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=N
         lno_pct_occ = [None, None]
     if lno_norb is None:
         lno_norb = [[None,None]] * nfrag
+
     mf = mlno._scf
 
     log = logger.new_logger(mlno)
@@ -87,7 +88,7 @@ def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=N
 
     cput2 = cput1 = (logger.process_clock(), logger.perf_counter())
 
-# Loop over fragment
+    # Loop over fragment
     frag_res = [None] * nfrag
     for ifrag,loidx in enumerate(frag_lolist):
         if len(loidx) == 2 and isinstance(loidx[0], Iterable): # Unrestricted
@@ -116,13 +117,47 @@ def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=N
             lno_param = [{'thresh': lno_thresh[i], 'pct_occ': lno_pct_occ[i],
                           'norb': lno_norb[ifrag][i]} for i in [0,1]]
 
-        mo_coeff, frozen, uocc_loc, frag_msg = mlno.make_las(eris, orbloc, lno_type, lno_param)
+        lnofrag, frozen, uocc_loc, frag_msg = mlno.make_las(eris, orbloc, lno_type, lno_param)
         cput2 = log.timer('Fragment %d make las'%(ifrag+1), *cput2)
         log.info('Fragment %d/%d  LAS: %s', ifrag+1, nfrag, frag_msg)
-        frag_res[ifrag], frag_msg = mlno.impurity_solve(mf, mo_coeff, uocc_loc, eris, frozen=frozen)
+
+        # calculate domains/prune basis
+        if mlno.prune_lno_basis:
+            # compute domain
+            mf_frag, lnofrag, uocc_loc, eris, frozen = \
+            domain.prune_lno_basis(mf, lnofrag, orbloc, uocc_loc, eris,
+                                   frozen, bp_thr=mlno.lno_basis_thresh)
+
+            log.info('Domain: %d/%d basis functions', mf_frag.mol.nao,
+                     mf.mol.nao)
+
+            # set properties
+            mlno._scf = mf_frag
+            mlno._mo_occ = mf_frag.mo_occ
+            mlno._s1e = mlno._scf.get_ovlp()
+            mlno._h1e = None
+            mlno._vhf = None
+            mlno._precompute()
+            mlno.lnofrag=lnofrag.copy()
+
+        else:
+            mf_frag = mf
+
+        # solve impurity problem
+        frag_res[ifrag], frag_msg = mlno.impurity_solve(mf_frag, lnofrag, uocc_loc, eris, frozen=frozen)
         cput2 = log.timer('Fragment %d imp sol '%(ifrag+1), *cput2)
         log.info('Fragment %d/%d  Sol: %s', ifrag+1, nfrag, frag_msg)
         cput1 = log.timer('Fragment %d'%(ifrag+1)+' '*(8-len(str(ifrag+1))), *cput1)
+
+        # reinitialize basis for active-space calc
+        if mlno.prune_lno_basis:
+            # reset properties
+            mlno._scf = mf
+            mlno._mo_occ = None
+            mlno._s1e = None
+            mlno._h1e = None
+            mlno._vhf = None
+            mlno._precompute()
 
     classname = mlno.__class__.__name__
     cput0 = log.timer(classname+' '*(17-len(classname)), *cput0)
@@ -333,6 +368,10 @@ class LNO(lib.StreamObject):
         self.frag_wghtlist = None
         self.verbose_imp = 0 # allow separate verbose level for `impurity_solve`
 
+        # domain parameters
+        self.prune_lno_basis = False  # whether or not to use domains
+        self.lno_basis_thresh = 0.02  # default Boughton-Pulay parameter
+
         # df eri
         self._ovL = None
         self._ovL_to_save = None
@@ -418,35 +457,6 @@ class LNO(lib.StreamObject):
         log.info('force_outcore_ao2mo = %s', self.force_outcore_ao2mo)
         log.info('_match_oldcode = %s', self._match_oldcode)
         return self
-
-    # def mo_splitter(self, kind='mask'):
-    #     r''' Return index arrays that split MOs into
-    #         - frozen occupieds
-    #         - active occupieds
-    #         - active virtuals
-    #         - frozen virtuals
-    #
-    #     Args:
-    #         kind (str):
-    #             'mask'  : return masks each of length nmo
-    #             'index' : return index arrays
-    #             'idx'   : same as 'index'
-    #     '''
-    #     maskact = self.get_frozen_mask()
-    #     maskocc = self.mo_occ > 1e-10
-    #     return mo_splitter(maskact, maskocc, kind=kind)
-    #
-    # def split_mo_coeff(self):
-    #     r''' Return the four components of MOs specified in :func:`mo_splitter`
-    #     '''
-    #     mo = self.mo_coeff
-    #     masks = self.mo_splitter()
-    #     return [mo[:,m] for m in masks]
-    #
-    # def split_mo_energy(self):
-    #     moe = self.mo_energy
-    #     masks = self.mo_splitter()
-    #     return [moe[m] for m in masks]
 
     def kernel(self, eris=None):
         '''The LNO calculation driver.

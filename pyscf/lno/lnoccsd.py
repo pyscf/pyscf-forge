@@ -236,15 +236,6 @@ def _make_eris_incore(mycc, mo_coeff=None):
     nvir = nmo - nocc
 
     eri1 = ao2mo.incore.full(mycc._scf._eri, eris.mo_coeff)
-    #:eri1 = ao2mo.restore(1, eri1, nmo)
-    #:eris.oooo = eri1[:nocc,:nocc,:nocc,:nocc].copy()
-    #:eris.ovoo = eri1[:nocc,nocc:,:nocc,:nocc].copy()
-    #:eris.ovvo = eri1[:nocc,nocc:,nocc:,:nocc].copy()
-    #:eris.ovov = eri1[:nocc,nocc:,:nocc,nocc:].copy()
-    #:eris.oovv = eri1[:nocc,:nocc,nocc:,nocc:].copy()
-    #:ovvv = eri1[:nocc,nocc:,nocc:,nocc:].copy()
-    #:eris.ovvv = lib.pack_tril(ovvv.reshape(-1,nvir,nvir)).reshape(nocc,nvir,-1)
-    #:eris.vvvv = ao2mo.restore(4, eri1[nocc:,nocc:,nocc:,nocc:], nvir)
 
     if eri1.ndim == 4:
         eri1 = ao2mo.restore(4, eri1, nmo)
@@ -474,6 +465,7 @@ def _make_df_eris(cc, mo_coeff=None):
             eris.ovvv[:,p0:p1,q0:q1] = lib.ddot(tmpLov.T, vvL.T).reshape(nocc,p1-p0,q1-q0)
         vvL = None
     return eris
+
 def _cp(a):
     return np.array(a, copy=False, order='C')
 
@@ -544,7 +536,7 @@ def impurity_solve(mcc, mo_coeff, uocc_loc, mo_occ, maskact, eris,
             oovv = ovov.reshape(nactocc,nactvir,nactocc,nactvir).transpose(0,2,1,3)
             ovov = None
             cput1 = log.timer_debug1('imp sol - eri    ', *cput1)
-            
+
             # MP2 fragment energy
             t1, t2 = mcc.init_amps(eris=imp_eris)[1:]
             cput1 = log.timer_debug1('imp sol - mp2 amp', *cput1)
@@ -560,7 +552,7 @@ def impurity_solve(mcc, mo_coeff, uocc_loc, mo_occ, maskact, eris,
             t2 += einsum('ia,jb->ijab',t1,t1)
             elcorr_cc = get_fragment_energy(oovv, t2, uocc_loc)
             cput1 = log.timer_debug1('imp sol - cc  ene', *cput1)
-            
+
             # CCSD(T) fragment energy
             if ccsd_t:
                 if nactmo > max_las_size_ccsd_t:
@@ -615,12 +607,14 @@ def get_fragment_energy(oovv, t2, uocc_loc):
 
 
 class LNOCCSD(LNO):
-
-    ''' Use the following _max_las_size arguments to avoid calculations that have no
-        hope of finishing. This may ease scanning thresholds.
-    '''
+    # Use the following _max_las_size arguments to avoid calculations that have no
+    # hope of finishing. This may ease scanning thresholds.
     _max_las_size_ccsd = 1000
     _max_las_size_ccsd_t = 1000
+
+    # The following arguments set default scs coefficients
+    pss=0.333
+    pos=1.2
 
     def __init__(self, mf, lo_coeff, frag_lolist, lno_type=None, lno_thresh=None, frozen=None):
 
@@ -756,7 +750,7 @@ class LNOCCSD(LNO):
 
     @property
     def e_corr_ccsd_scs(self):
-        e_corr = 0.333*self.e_corr_ccsd_ss + 1.2*self.e_corr_ccsd_os
+        e_corr = self.pss*self.e_corr_ccsd_ss + self.pos*self.e_corr_ccsd_os
         return e_corr
 
     @property
@@ -776,7 +770,7 @@ class LNOCCSD(LNO):
 
     @property
     def e_corr_pt2_scs(self):
-        e_corr = 0.333*self.e_corr_pt2_ss + 1.2*self.e_corr_pt2_os
+        e_corr = self.pss*self.e_corr_pt2_ss + self.pos*self.e_corr_pt2_os
         return e_corr
 
     @property
@@ -861,7 +855,7 @@ if __name__ == '__main__':
     mf = scf.RHF(mol).density_fit()
     mf.kernel()
 
-# canonical
+    # canonical
     mmp = mp.MP2(mf, frozen=frozen)
     mmp.kernel()
     efull_mp2 = mmp.e_corr
@@ -874,7 +868,7 @@ if __name__ == '__main__':
     efull_t = CCSD_T(mcc, eris=eris, verbose=mcc.verbose)
     efull_ccsd_t = efull_ccsd + efull_t
 
-# LNO with PM localized orbitals
+    # LNO with PM localized orbitals
     # PM localization
     orbocc = mf.mo_coeff[:,frozen:np.count_nonzero(mf.mo_occ)]
     mlo = lo.PipekMezey(mol, orbocc)
