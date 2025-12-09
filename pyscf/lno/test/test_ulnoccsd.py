@@ -75,9 +75,9 @@ class WaterDimer(unittest.TestCase):
             orbocc.append(mf.mo_coeff[s][:,frozen:np.count_nonzero(mf.mo_occ[s])])
             mlo = lo.PipekMezey(mol, orbocc[s])
             lo_coeff_s = mlo.kernel()
-            while True: # always performing jacobi sweep to avoid trapping in local minimum/saddle point
-                lo_coeff1_s = mlo.stability_jacobi()[1]
-                if lo_coeff1_s is lo_coeff_s:
+            for i in range(100): # always performing jacobi sweep to avoid trapping in local minimum/saddle point
+                stable, lo_coeff1_s = mlo.stability_jacobi()
+                if stable:
                     break
                 mlo = lo.PipekMezey(mf.mol, lo_coeff1_s).set(verbose=4)
                 mlo.init_guess = None

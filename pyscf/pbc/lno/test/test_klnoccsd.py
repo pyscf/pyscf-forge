@@ -40,11 +40,11 @@ class WaterDimer(unittest.TestCase):
         H    1.746241653903   -0.373945564047    0.758561000000
         '''
         cell.a = np.eye(3) * 5
-        cell.basis = 'cc-pvdz'
+        cell.basis = 'def2-svp'
         cell.precision = 1e-10
         cell.build()
 
-        kmesh = [3,1,1]
+        kmesh = [2,1,1]
         kpts = cell.make_kpts(kmesh)
         nkpts = len(kpts)
         scell = pbctools.super_cell(cell, kmesh)
@@ -57,52 +57,13 @@ class WaterDimer(unittest.TestCase):
         cls.scell = scell
         cls.smf = smf
         cls.frozen = 2 * nkpts
+    
     @classmethod
     def tearDownClass(cls):
         cls.cell.stdout.close()
         cls.scell.stdout.close()
         del cls.cell, cls.kmf, cls.frozen
         del cls.scell, cls.smf
-
-    # def test_lno_pm_by_thresh(self):
-    #     cell = self.cell
-    #     mf = self.mf
-    #     frozen = self.frozen
-    #
-    #     # PM localization
-    #     orbocc = mf.mo_coeff[:,frozen:np.count_nonzero(mf.mo_occ)]
-    #     mlo = lo.PipekMezey(cell, orbocc)
-    #     lo_coeff = mlo.kernel()
-    #     while True: # always performing jacobi sweep to avoid trapping in local minimum/saddle point
-    #         lo_coeff1 = mlo.stability_jacobi()[1]
-    #         if lo_coeff1 is lo_coeff:
-    #             break
-    #         mlo = lo.PipekMezey(mf.cell, lo_coeff1).set(verbose=4)
-    #         mlo.init_guess = None
-    #         lo_coeff = mlo.kernel()
-    #
-    #     # Fragment list: for PM, every orbital corresponds to a fragment
-    #     frag_lolist = [[i] for i in range(lo_coeff.shape[1])]
-    #
-    #     gamma = 10
-    #     threshs = [1e-5,1e-6,1e-100]
-    #     refs = [
-    #         [-0.4044781783,-0.4231598372,-0.4292049721],
-    #         [-0.4058765086,-0.4244510794,-0.4307864928],
-    #         self.ecano
-    #     ]
-    #     for thresh,ref in zip(threshs,refs):
-    #         # mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
-    #         mcc = LNOCCSD(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
-    #         mcc.lno_thresh = [thresh*gamma,thresh]
-    #         mcc.kernel()
-    #         emp2 = mcc.e_corr_pt2
-    #         eccsd = mcc.e_corr_ccsd
-    #         eccsd_t = mcc.e_corr_ccsd_t
-    #         # print('[%s],' % (','.join([f'{x:.10f}' for x in [emp2,eccsd,eccsd_t]])))
-    #         self.assertAlmostEqual(emp2, ref[0], 6)
-    #         self.assertAlmostEqual(eccsd, ref[1], 6)
-    #         # self.assertAlmostEqual(eccsd_t, ref[2], 6)
 
     def test_lno_iao_by_thresh(self):
         cell = self.cell
@@ -147,7 +108,7 @@ class WaterDimer(unittest.TestCase):
             semp2 = mcc.e_corr_pt2
             seccsd = mcc.e_corr_ccsd
             seccsd_t = mcc.e_corr_ccsd_t
-            # print('[%s],' % (','.join([f'{x:.10f}' for x in [emp2,eccsd,eccsd_t]])))
+            # print('[%s],' % (','.join([f'{x:.10f}' for x in [semp2,seccsd,seccsd_t]])))
             self.assertAlmostEqual(kemp2, semp2, 6)
             self.assertAlmostEqual(keccsd, seccsd, 6)
             # self.assertAlmostEqual(keccsd_t, seccsd_t, 6)

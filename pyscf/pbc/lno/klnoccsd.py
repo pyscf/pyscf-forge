@@ -206,24 +206,6 @@ def _make_df_eris_outcore(mycc, mo_coeff=None):
     eris.ovvv[:] = zdotCNtoR(LovR.T, LovI.T, LvvR, LvvI).reshape(nocc,nvir,nvir_pair)
     eris.vvvv[:] = zdotCNtoR(LvvR.T, LvvI.T, LvvR, LvvI)
 
-    # def contract1(LbraR, LbraI, LketR, LketI):
-    #     out_shape = (LbraR.shape[1], LketR.shape[1])
-    #     out = np.zeros(out_shape, dtype=REAL)
-    #     for q1,q2 in enumerate(k2sdf.qconserv):
-    #         i0,i1 = k2sdf.get_auxslice(q1)
-    #         j0,j1 = k2sdf.get_auxslice(q2)
-    #         zdotNNtoR(LbraR[i0:i1].T, LbraI[i0:i1].T, LketR[j0:j1], LketI[j0:j1], 1, out, 1)
-    #     return out
-    #
-    # eris.oooo[:] = contract1(LooR, LooI, LooR, LooI).reshape(nocc,nocc,nocc,nocc)
-    # eris.ovoo[:] = contract1(LovR, LovI, LooR, LooI).reshape(nocc,nvir,nocc,nocc)
-    # eris.oovv[:] = lib.unpack_tril(
-    #                contract1(LooR, LooI, LvvR, LvvI)).reshape(nocc,nocc,nvir,nvir)
-    # eris.ovvo[:] = contract1(LovR, LovI, LvoR, LvoI).reshape(nocc,nvir,nvir,nocc)
-    # eris.ovov[:] = contract1(LovR, LovI, LovR, LovI).reshape(nocc,nvir,nocc,nvir)
-    # eris.ovvv[:] = contract1(LovR, LovI, LvvR, LvvI).reshape(nocc,nvir,nvir_pair)
-    # eris.vvvv[:] = contract1(LvvR, LvvI, LvvR, LvvI).reshape(nvir_pair,nvir_pair)
-
     log.timer('CCSD integral transformation', *cput0)
     return eris
 
@@ -469,7 +451,7 @@ class KLNOCCSD(KLNO,LNOCCSD):
         mcc._s1e = self._s1e
         mcc._h1e = self._h1e
         mcc._vhf = self._vhf
-        
+
         if self.kwargs_imp is not None:
             mcc = mcc.set(**self.kwargs_imp)
 
@@ -510,7 +492,7 @@ if __name__ == '__main__':
 
     mf = k2s_scf(kmf)
 
-# KLNO with PM localized orbitals
+    # KLNO with PM localized orbitals
     # PM localization within the BvK supercell
     orbocc = mf.mo_coeff[:,mf.mo_occ>1e-6]
     mlo = lo.PipekMezey(mf.cell, orbocc)

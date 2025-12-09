@@ -51,12 +51,6 @@ def UCCSD(mf, frozen=None, mo_coeff=None, mo_occ=None):
 
 class MODIFIED_UCCSD(uccsd.UCCSD):
     def ao2mo(self, mo_coeff=None):
-        #nmo = self.nmo[0]
-        #nao = self.mo_coeff[0].shape[0]
-        #nmo_pair = nmo * (nmo+1) // 2
-        #nao_pair = nao * (nao+1) // 2
-        #mem_incore = 2 * (max(nao_pair**2, nmo**4) + nmo_pair**2) * 8/1e6
-        #mem_now = lib.current_memory()[0]
         if self._scf._eri is not None: #and
             #(mem_incore+mem_now < self.max_memory or self.incore_complete)):
             return _make_eris_incore(self, mo_coeff)
@@ -238,13 +232,19 @@ def _make_df_eris_outcore(mycc, mo_coeff=None):
         Loo[blk] = Lpq[:,oa,oa]
         Lov[blk] = Lpq[:,oa,va]
         Lvo[blk] = Lpq[:,va,oa]
-        Lvv[blk] = lib.pack_tril(Lpq[:,va,va].reshape(-1,nvira,nvira))
+        # Lvv[blk] = lib.pack_tril(Lpq[:,va,va].reshape(-1,nvira,nvira))
+        # Bugfix (Ardavan) for case where nvirb is 0
+        Lvv[blk] = lib.pack_tril(Lpq[:,va,va].reshape(-1,nvira,nvira)) if nvira > 0 else np.empty((Lpq.shape[0], 0), dtype=Lpq.dtype)
+
         # (L|bb)
         Lpq = einsum('Lab,ap,bq->Lpq', eri1, mob, mob)
         LOO[blk] = Lpq[:,ob,ob]
         LOV[blk] = Lpq[:,ob,vb]
         LVO[blk] = Lpq[:,vb,ob]
-        LVV[blk] = lib.pack_tril(Lpq[:,vb,vb].reshape(-1,nvirb,nvirb))
+        # LVV[blk] = lib.pack_tril(Lpq[:,vb,vb].reshape(-1,nvirb,nvirb))
+        # Bugfix (Ardavan) for case where nvirb is 0
+        LVV[blk] = lib.pack_tril(Lpq[:,vb,vb].reshape(-1,nvirb,nvirb)) if nvirb > 0 else np.empty((Lpq.shape[0], 0), dtype=Lpq.dtype)
+        
     Loo = Loo.reshape(naux,nocca*nocca)
     Lov = Lov.reshape(naux,nocca*nvira)
     Lvo = Lvo.reshape(naux,nocca*nvira)
@@ -413,7 +413,11 @@ def get_fragment_energy(eris, t1, t2, prj):
 def get_maskact(frozen, nmo):
     maskact = [None,] * 2
     for s in range(2):
-        frozen[s], maskact[s] = lnoccsd.get_maskact(frozen[s], nmo[s])
+        if len(frozen[s])>0:
+            frozen[s], maskact[s] = lnoccsd.get_maskact(frozen[s], nmo[s])
+        else:
+            #update for domain lno-ccsd
+            _, maskact[s] = lnoccsd.get_maskact(frozen[s], nmo[s])
     return frozen, maskact
 
 def fock_from_mo(mymf, s1e=None, force_exxdiv_none=True):
