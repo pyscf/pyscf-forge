@@ -127,8 +127,8 @@ def make_full_rdm1(eris, moeocc, moevir, with_occ=True, with_vir=True):
             jvLR = jvLI = None
             denom = None
             if with_occ:
-                dmoo[i0:i1,j0:j1]  = 4*lib.einsum('iakc.jbkc->ij', t2ijvv, t2ijvv)
-                dmoo[i0:i1,j0:j1] -= 2*lib.einsum('iakc.jckb->ij', t2ijvv, t2ijvv)
+                dmoo[i0:i1,j0:j1]  = 4*lib.einsum('iakc,jbkc->ij', t2ijvv, t2ijvv)
+                dmoo[i0:i1,j0:j1] -= 2*lib.einsum('iakc,jckb->ij', t2ijvv, t2ijvv)
             if with_vir:
                 dmvv  = 4*lib.einsum('iajc,ibjc->ab', t2ijvv, t2ijvv)
                 dmvv -= 2*lib.einsum('iajc,icjb->ab', t2ijvv, t2ijvv)

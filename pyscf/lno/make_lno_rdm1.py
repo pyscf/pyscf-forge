@@ -142,8 +142,8 @@ def make_full_rdm1(eris, moeocc, moevir, with_occ=True, with_vir=True):
             jvL = None
             denom = None
             if with_occ:
-                dmoo[i0:i1,j0:j1]  = 4*lib.einsum('ikac.jkbc->ij', np.conj(t2ijvv), t2ijvv)
-                dmoo[i0:i1,j0:j1] -= 2*lib.einsum('ikac.jkcb->ij', np.conj(t2ijvv), t2ijvv)
+                dmoo[i0:i1,j0:j1]  = 4*lib.einsum('ikac,jkbc->ij', np.conj(t2ijvv), t2ijvv)
+                dmoo[i0:i1,j0:j1] -= 2*lib.einsum('ikac,jkcb->ij', np.conj(t2ijvv), t2ijvv)
             if with_vir:
                 dmvv  = 4*lib.einsum('ijac,ijbc->ab', t2ijvv, np.conj(t2ijvv))
                 dmvv -= 2*lib.einsum('ijac,ijcb->ab', t2ijvv, np.conj(t2ijvv))
@@ -188,8 +188,8 @@ def make_full_rdm1_occ(eris, moeocc, moevir):
             t2ijvv = np.conj(lib.einsum('iax,jbx->ijab', ivL, jvL)) / denom
             jvL = None
             denom = None
-            dm[i0:i1,j0:j1]  = 4*lib.einsum('ikac.jkbc->ij', np.conj(t2ijvv), t2ijvv)
-            dm[i0:i1,j0:j1] -= 2*lib.einsum('ikac.jkcb->ij', np.conj(t2ijvv), t2ijvv)
+            dm[i0:i1,j0:j1]  = 4*lib.einsum('ikac,jkbc->ij', np.conj(t2ijvv), t2ijvv)
+            dm[i0:i1,j0:j1] -= 2*lib.einsum('ikac,jkcb->ij', np.conj(t2ijvv), t2ijvv)
             t2ijvv = None
         ivL = None
 
