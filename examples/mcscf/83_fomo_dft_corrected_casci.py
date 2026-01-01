@@ -17,7 +17,8 @@ References:
 """
 
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import addons, casci_dft
+from pyscf.scf import fomoscf
+from pyscf.mcscf import dft_corrected_casci
 import numpy as np
 
 # Build water molecule
@@ -66,7 +67,7 @@ print(f"   Energy: {mc_std.e_tot:.10f} Ha")
 print("\n" + "-"*70)
 print("2. FOMO-CASCI (FOMO orbitals, HF core)")
 print("-"*70)
-mf_fomo = addons.fomo_scf(
+mf_fomo = fomoscf.fomo_scf(
     mf_rhf, 
     temperature=0.25, 
     method='gaussian',
@@ -80,23 +81,23 @@ mc_fomo.kernel()
 print(f"   Energy: {mc_fomo.e_tot:.10f} Ha")
 
 # =============================================================================
-# Part 3: DFT-CASCI (RHF orbitals, DFT core)
+# Part 3: DFT-corrected CASCI (RHF orbitals, DFT core)
 # =============================================================================
 print("\n" + "-"*70)
-print("3. DFT-CASCI (RHF orbitals, PBE core)")
+print("3. DFT-corrected CASCI (RHF orbitals, PBE core)")
 print("-"*70)
-mc_dft = casci_dft.CASCI(mf_rhf, ncas, nelecas, xc='PBE')
+mc_dft = dft_corrected_casci.CASCI(mf_rhf, ncas, nelecas, xc='PBE')
 mc_dft.verbose = 0
 mc_dft.kernel()
 print(f"   Energy: {mc_dft.e_tot:.10f} Ha")
 
 # =============================================================================
-# Part 4: FOMO-CASCI-DFT (FOMO orbitals, DFT core) - The Full Method
+# Part 4: FOMO-DFT-corrected CASCI (FOMO orbitals, DFT core) - The Full Method
 # =============================================================================
 print("\n" + "-"*70)
-print("4. FOMO-CASCI-DFT (FOMO orbitals, PBE core)")
+print("4. FOMO-DFT-corrected CASCI (FOMO orbitals, PBE core)")
 print("-"*70)
-mc_fomo_dft = casci_dft.CASCI(mf_fomo, ncas, nelecas, xc='PBE')
+mc_fomo_dft = dft_corrected_casci.CASCI(mf_fomo, ncas, nelecas, xc='PBE')
 mc_fomo_dft.verbose = 0
 mc_fomo_dft.kernel()
 print(f"   Energy: {mc_fomo_dft.e_tot:.10f} Ha")
@@ -105,7 +106,7 @@ print(f"   Energy: {mc_fomo_dft.e_tot:.10f} Ha")
 # Part 5: Try Different XC Functionals with FOMO
 # =============================================================================
 print("\n" + "-"*70)
-print("5. FOMO-CASCI-DFT with different XC functionals")
+print("5. FOMO-DFT-corrected CASCI with different XC functionals")
 print("-"*70)
 
 functionals = ['LDA', 'PBE', 'B3LYP', 'PBE0']
@@ -113,7 +114,7 @@ functionals = ['LDA', 'PBE', 'B3LYP', 'PBE0']
 # Collect results first
 xc_results = []
 for xc in functionals:
-    mc_xc = casci_dft.CASCI(mf_fomo, ncas, nelecas, xc=xc)
+    mc_xc = dft_corrected_casci.CASCI(mf_fomo, ncas, nelecas, xc=xc)
     mc_xc.verbose = 0
     mc_xc.kernel()
     delta_e = (mc_xc.e_tot - mc_fomo.e_tot) * 1000
@@ -135,8 +136,8 @@ print(f"{'Method':<40} {'Energy (Ha)':<20}")
 print("-"*60)
 print(f"{'Standard CASCI (RHF + HF core)':<40} {mc_std.e_tot:<20.10f}")
 print(f"{'FOMO-CASCI (FOMO + HF core)':<40} {mc_fomo.e_tot:<20.10f}")
-print(f"{'DFT-CASCI (RHF + PBE core)':<40} {mc_dft.e_tot:<20.10f}")
-print(f"{'FOMO-CASCI-DFT (FOMO + PBE core)':<40} {mc_fomo_dft.e_tot:<20.10f}")
+print(f"{'DFT-corrected CASCI (RHF + PBE core)':<40} {mc_dft.e_tot:<20.10f}")
+print(f"{'FOMO-DFT-corrected CASCI (FOMO + PBE core)':<40} {mc_fomo_dft.e_tot:<20.10f}")
 print("="*70)
 
 # Analysis
@@ -145,7 +146,7 @@ print(f"  FOMO effect (HF core):     {(mc_fomo.e_tot - mc_std.e_tot)*1000:+.4f} 
 print(f"  DFT effect (RHF orbitals): {(mc_dft.e_tot - mc_std.e_tot)*1000:+.4f} mHa")
 print(f"  Combined (FOMO + DFT):     {(mc_fomo_dft.e_tot - mc_std.e_tot)*1000:+.4f} mHa")
 
-print("\nNote: FOMO-CASCI-DFT is recommended for:")
+print("\nNote: FOMO-DFT-corrected CASCI is recommended for:")
 print("  - Multireference systems requiring accurate core treatment")
 print("  - Photochemistry and excited state dynamics")
 print("  - Systems where both static and dynamic correlation are important")

@@ -6,11 +6,12 @@ Unit tests for DFT-corrected CASCI gradients (analytical and numerical)
 import unittest
 import numpy as np
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import casci_dft, addons
+from pyscf.mcscf import dft_corrected_casci
+from pyscf.scf import fomoscf
 
 
 class TestGradients_RHF_Analytical(unittest.TestCase):
-    """Tests for RHF-based DFT-CASCI analytical gradients"""
+    """Tests for RHF-based DFT-corrected CASCI analytical gradients"""
     
     @classmethod
     def setUpClass(cls):
@@ -24,21 +25,21 @@ class TestGradients_RHF_Analytical(unittest.TestCase):
     
     def test_gradient_shape(self):
         """Test that gradient has correct shape"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='analytical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_gradient_not_all_zero(self):
         """Test that gradient is not all zeros"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='analytical').kernel()
         self.assertGreater(np.abs(g).max(), 1e-6)
     
     def test_translational_invariance(self):
         """Test translational invariance (sum of gradients = 0)"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc.kernel()
         g = mc.Gradients(method='analytical').kernel()
         grad_sum = np.sum(g, axis=0)
@@ -47,7 +48,7 @@ class TestGradients_RHF_Analytical(unittest.TestCase):
 
 
 class TestGradients_RHF_Numerical(unittest.TestCase):
-    """Tests for RHF-based DFT-CASCI numerical gradients"""
+    """Tests for RHF-based DFT-corrected CASCI numerical gradients"""
     
     @classmethod
     def setUpClass(cls):
@@ -61,14 +62,14 @@ class TestGradients_RHF_Numerical(unittest.TestCase):
     
     def test_gradient_shape(self):
         """Test that numerical gradient has correct shape"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_step_size_parameter(self):
         """Test that step_size parameter works"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc.kernel()
         g1 = mc.Gradients(method='numerical', step_size=1e-4).kernel()
         g2 = mc.Gradients(method='numerical', step_size=1e-5).kernel()
@@ -78,7 +79,7 @@ class TestGradients_RHF_Numerical(unittest.TestCase):
     
     def test_translational_invariance(self):
         """Test translational invariance for numerical gradients"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         grad_sum = np.sum(g, axis=0)
@@ -100,7 +101,7 @@ class TestGradients_RHF_Comparison(unittest.TestCase):
     
     def test_analytical_vs_numerical_agreement(self):
         """Test that analytical and numerical gradients agree within tolerance"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         
         g_analytical = mc.Gradients(method='analytical').kernel()
@@ -120,7 +121,7 @@ class TestGradients_RHF_Comparison(unittest.TestCase):
     
     def test_auto_mode(self):
         """Test that auto mode returns valid gradients"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc.kernel()
         g = mc.Gradients(method='auto').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
@@ -128,7 +129,7 @@ class TestGradients_RHF_Comparison(unittest.TestCase):
 
 
 class TestGradients_UHF(unittest.TestCase):
-    """Tests for UHF-based DFT-CASCI gradients (numerical only)"""
+    """Tests for UHF-based DFT-corrected CASCI gradients (numerical only)"""
     
     @classmethod
     def setUpClass(cls):
@@ -142,21 +143,21 @@ class TestGradients_UHF(unittest.TestCase):
     
     def test_numerical_gradient_shape(self):
         """Test UHF numerical gradient shape"""
-        mc = casci_dft.UCASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.UCASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_analytical_not_supported(self):
         """Test that analytical gradients raise error for UHF"""
-        mc = casci_dft.UCASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.UCASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         with self.assertRaises(ValueError):
             mc.Gradients(method='analytical')
     
     def test_translational_invariance(self):
         """Test translational invariance for UHF gradients"""
-        mc = casci_dft.UCASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc = dft_corrected_casci.UCASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         grad_sum = np.sum(g, axis=0)
@@ -179,39 +180,39 @@ class TestGradients_FOMO(unittest.TestCase):
     
     def test_fomo_analytical_gradient(self):
         """Test FOMO-CASCI analytical gradient"""
-        mf_fomo = addons.fomo_scf(
+        mf_fomo = fomoscf.fomo_scf(
             self.mf, temperature=0.25, method='gaussian',
             restricted=(self.ncore, self.ncas)
         )
         mf_fomo.kernel()
         
-        mc = casci_dft.CASCI(mf_fomo, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(mf_fomo, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='analytical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_fomo_numerical_gradient(self):
         """Test FOMO-CASCI numerical gradient"""
-        mf_fomo = addons.fomo_scf(
+        mf_fomo = fomoscf.fomo_scf(
             self.mf, temperature=0.25, method='gaussian',
             restricted=(self.ncore, self.ncas)
         )
         mf_fomo.kernel()
         
-        mc = casci_dft.CASCI(mf_fomo, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(mf_fomo, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_fomo_gradient_agreement(self):
         """Test FOMO analytical vs numerical gradient agreement"""
-        mf_fomo = addons.fomo_scf(
+        mf_fomo = fomoscf.fomo_scf(
             self.mf, temperature=0.25, method='gaussian',
             restricted=(self.ncore, self.ncas)
         )
         mf_fomo.kernel()
         
-        mc = casci_dft.CASCI(mf_fomo, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(mf_fomo, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         
         g_analytical = mc.Gradients(method='analytical').kernel()
@@ -238,32 +239,32 @@ class TestGradients_Functionals(unittest.TestCase):
     
     def test_lda_gradient(self):
         """Test LDA functional gradient"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()  # Use numerical for reliability
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_pbe_gradient(self):
         """Test PBE functional gradient"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_b3lyp_gradient(self):
         """Test B3LYP functional gradient"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='B3LYP')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='B3LYP')
         mc.kernel()
         g = mc.Gradients(method='numerical').kernel()
         self.assertEqual(g.shape, (self.mol.natm, 3))
     
     def test_different_functionals_different_gradients(self):
         """Test that different functionals give different gradients"""
-        mc_lda = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc_lda = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc_lda.kernel()
         g_lda = mc_lda.Gradients(method='numerical').kernel()
         
-        mc_pbe = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
+        mc_pbe = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='PBE')
         mc_pbe.kernel()
         g_pbe = mc_pbe.Gradients(method='numerical').kernel()
         
@@ -286,14 +287,14 @@ class TestGradients_ErrorHandling(unittest.TestCase):
     
     def test_invalid_method(self):
         """Test that invalid method raises error"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         with self.assertRaises(ValueError):
             mc.Gradients(method='invalid_method')
     
     def test_gradient_before_kernel(self):
         """Test that gradient works even if we compute numerical (it runs kernel internally)"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         # Don't run kernel
         # Numerical gradient should fail, analytical might fail differently
         try:
@@ -307,7 +308,7 @@ class TestGradients_ErrorHandling(unittest.TestCase):
     
     def test_auto_fallback(self):
         """Test that auto mode can fall back to numerical"""
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         # Auto mode should work
         g = mc.Gradients(method='auto').kernel()
@@ -331,7 +332,7 @@ class TestGradients_Performance(unittest.TestCase):
         """Test that analytical is faster than numerical (for small molecules)"""
         import time
         
-        mc = casci_dft.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
+        mc = dft_corrected_casci.CASCI(self.mf, self.ncas, self.nelecas, xc='LDA')
         mc.kernel()
         
         # Analytical
@@ -357,7 +358,7 @@ class TestGradients_Consistency(unittest.TestCase):
         """Test H2 molecule gradient"""
         mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        mc = casci_dft.CASCI(mf, ncas=2, nelecas=2, xc='PBE')
+        mc = dft_corrected_casci.CASCI(mf, ncas=2, nelecas=2, xc='PBE')
         mc.kernel()
         
         g_ana = mc.Gradients(method='analytical').kernel()
@@ -374,7 +375,7 @@ class TestGradients_Consistency(unittest.TestCase):
             basis='sto-3g', unit='Angstrom', verbose=0
         )
         mf = scf.RHF(mol).run()
-        mc = casci_dft.CASCI(mf, ncas=4, nelecas=4, xc='PBE')
+        mc = dft_corrected_casci.CASCI(mf, ncas=4, nelecas=4, xc='PBE')
         mc.kernel()
         
         # Just test numerical works

@@ -18,7 +18,7 @@ Author:
 """
 
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import casci_dft
+from pyscf.mcscf import dft_corrected_casci
 import numpy as np
 import time
 
@@ -37,7 +37,7 @@ mol = gto.M(
 ncas, nelecas = 6, 6
 
 print("="*70)
-print("DFT-CASCI Nuclear Gradients: Analytical vs Numerical")
+print("DFT-corrected CASCI Nuclear Gradients: Analytical vs Numerical")
 print("="*70)
 
 # =============================================================================
@@ -48,7 +48,7 @@ print("Part 1: RHF Reference - Method Comparison")
 print("="*70)
 
 mf_rhf = scf.RHF(mol).run()
-mc = casci_dft.CASCI(mf_rhf, ncas, nelecas, xc='PBE')
+mc = dft_corrected_casci.CASCI(mf_rhf, ncas, nelecas, xc='PBE')
 mc.kernel()
 
 print(f"\nCASCI Energy: {mc.e_tot:.10f} Ha")
@@ -104,7 +104,7 @@ print("Part 3: UHF Reference (Numerical Gradients)")
 print("="*70)
 
 mf_uhf = scf.UHF(mol).run()
-mc_uhf = casci_dft.UCASCI(mf_uhf, ncas, nelecas, xc='PBE')
+mc_uhf = dft_corrected_casci.UCASCI(mf_uhf, ncas, nelecas, xc='PBE')
 mc_uhf.kernel()
 
 print(f"\nUCASCI Energy: {mc_uhf.e_tot:.10f} Ha")
@@ -132,7 +132,7 @@ functionals = ['LDA', 'PBE', 'B3LYP']
 results = []
 
 for xc in functionals:
-    mc_xc = casci_dft.CASCI(mf_rhf, ncas, nelecas, xc=xc)
+    mc_xc = dft_corrected_casci.CASCI(mf_rhf, ncas, nelecas, xc=xc)
     mc_xc.kernel()
     g_xc = mc_xc.Gradients(method='analytical').kernel()
     results.append((xc, mc_xc.e_tot, g_xc))

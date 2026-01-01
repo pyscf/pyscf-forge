@@ -15,7 +15,6 @@
 #
 # Author: Arshad Mehmood, IACS, Stony Brook University 
 # Email: arshad.mehmood@stonybrook.edu
-# Date: 30 December 2025
 #
 
 """
@@ -50,26 +49,26 @@ DFCASCI : Factory function that auto-detects RHF/UHF reference
 
 Examples
 --------
-RHF-based DFT-CASCI:
+RHF-based DFT-corrected CASCI:
 
 >>> from pyscf import gto, scf
->>> from pyscf.mcscf import casci_dft
+>>> from pyscf.mcscf import dft_corrected_casci
 >>> mol = gto.M(atom='O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587', basis='cc-pvdz')
 >>> mf = scf.RHF(mol).run()
->>> mc = casci_dft.CASCI(mf, ncas=6, nelecas=6, xc='PBE')
+>>> mc = dft_corrected_casci.CASCI(mf, ncas=6, nelecas=6, xc='PBE')
 >>> mc.kernel()
 >>> g = mc.Gradients(method='analytical').kernel()
 
-UHF-based DFT-CASCI:
+UHF-based DFT-corrected CASCI:
 
 >>> mf = scf.UHF(mol).run()
->>> mc = casci_dft.UCASCI(mf, ncas=6, nelecas=6, xc='PBE')
+>>> mc = dft_corrected_casci.UCASCI(mf, ncas=6, nelecas=6, xc='PBE')
 >>> mc.kernel()
 >>> g = mc.Gradients(method='numerical').kernel()
 
 Using factory function (auto-detects RHF/UHF):
 
->>> mc = casci_dft.DFCASCI(mf, ncas=6, nelecas=6, xc='PBE')
+>>> mc = dft_corrected_casci.DFCASCI(mf, ncas=6, nelecas=6, xc='PBE')
 >>> mc.kernel()
 
 References
@@ -127,10 +126,10 @@ class CASCI(casci.CASCI):
     Examples
     --------
     >>> from pyscf import gto, scf
-    >>> from pyscf.mcscf import casci_dft
+    >>> from pyscf.mcscf import dft_corrected_casci
     >>> mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='sto-3g')
     >>> mf = scf.RHF(mol).run()
-    >>> mc = casci_dft.CASCI(mf, ncas=2, nelecas=2, xc='LDA')
+    >>> mc = dft_corrected_casci.CASCI(mf, ncas=2, nelecas=2, xc='LDA')
     >>> mc.kernel()
     -1.0831...
     
@@ -257,19 +256,19 @@ class CASCI(casci.CASCI):
         
         Returns
         -------
-        grad : pyscf.grad.casci_dft.Gradients
+        grad : pyscf.grad.dft_corrected_casci.Gradients
             Gradient object
             
         Examples
         --------
-        >>> mc = casci_dft.CASCI(mf, ncas=4, nelecas=4, xc='PBE')
+        >>> mc = dft_corrected_casci.CASCI(mf, ncas=4, nelecas=4, xc='PBE')
         >>> mc.kernel()
         >>> g = mc.Gradients(method='analytical').kernel()  # Fast
         >>> g = mc.Gradients(method='numerical').kernel()   # Accurate
         >>> g = mc.Gradients(method='auto').kernel()        # Safe default
         """
-        from pyscf.grad import casci_dft as casci_dft_grad
-        return casci_dft_grad.Gradients(self, method=method, step_size=step_size)
+        from pyscf.grad import dft_corrected_casci as dft_corrected_casci_grad
+        return dft_corrected_casci_grad.Gradients(self, method=method, step_size=step_size)
 
 
 class UCASCI(ucasci.UCASCI):
@@ -304,10 +303,10 @@ class UCASCI(ucasci.UCASCI):
     Examples
     --------
     >>> from pyscf import gto, scf
-    >>> from pyscf.mcscf import casci_dft
+    >>> from pyscf.mcscf import dft_corrected_casci
     >>> mol = gto.M(atom='O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587', basis='cc-pvdz')
     >>> mf = scf.UHF(mol).run()
-    >>> mc = casci_dft.UCASCI(mf, ncas=6, nelecas=6, xc='PBE')
+    >>> mc = dft_corrected_casci.UCASCI(mf, ncas=6, nelecas=6, xc='PBE')
     >>> mc.kernel()
     
     See Also
@@ -473,17 +472,17 @@ class UCASCI(ucasci.UCASCI):
         
         Returns
         -------
-        grad : pyscf.grad.casci_dft.UGradients
+        grad : pyscf.grad.dft_corrected_casci.UGradients
             Gradient object for unrestricted CASCI
             
         Examples
         --------
-        >>> mc = casci_dft.UCASCI(mf_uhf, ncas=4, nelecas=4, xc='PBE')
+        >>> mc = dft_corrected_casci.UCASCI(mf_uhf, ncas=4, nelecas=4, xc='PBE')
         >>> mc.kernel()
         >>> g = mc.Gradients(method='numerical').kernel()
         """
-        from pyscf.grad import casci_dft as casci_dft_grad
-        return casci_dft_grad.UGradients(self, method=method, step_size=step_size)
+        from pyscf.grad import dft_corrected_casci as dft_corrected_casci_grad
+        return dft_corrected_casci_grad.UGradients(self, method=method, step_size=step_size)
 
 
 # Aliases for backward compatibility
@@ -493,7 +492,7 @@ DFTCoreUCASCI = UCASCI
 
 def DFCASCI(mf, ncas, nelecas, xc='PBE', ncore=None):
     """
-    Factory function to create DFT-CASCI object based on SCF reference type.
+    Factory function to create DFT-corrected CASCI object based on SCF reference type.
     
     Automatically selects CASCI (for RHF/ROHF) or UCASCI (for UHF) based on
     the mean-field object type.
@@ -514,17 +513,17 @@ def DFCASCI(mf, ncas, nelecas, xc='PBE', ncore=None):
     Returns
     -------
     mc : CASCI or UCASCI
-        Appropriate DFT-CASCI object based on reference type
+        Appropriate DFT-corrected CASCI object based on reference type
         
     Examples
     --------
     >>> from pyscf import gto, scf
-    >>> from pyscf.mcscf import casci_dft
+    >>> from pyscf.mcscf import dft_corrected_casci
     >>> mol = gto.M(atom='O 0 0 0; H 0 0.757 0.587; H 0 -0.757 0.587', basis='cc-pvdz')
     >>> mf_rhf = scf.RHF(mol).run()
-    >>> mc = casci_dft.DFCASCI(mf_rhf, 6, 6, xc='PBE')  # Returns CASCI
+    >>> mc = dft_corrected_casci.DFCASCI(mf_rhf, 6, 6, xc='PBE')  # Returns CASCI
     >>> mf_uhf = scf.UHF(mol).run()
-    >>> mc = casci_dft.DFCASCI(mf_uhf, 6, 6, xc='PBE')  # Returns UCASCI
+    >>> mc = dft_corrected_casci.DFCASCI(mf_uhf, 6, 6, xc='PBE')  # Returns UCASCI
     """
     if isinstance(mf, scf.uhf.UHF):
         return UCASCI(mf, ncas, nelecas, xc, ncore)
@@ -542,18 +541,18 @@ if __name__ == '__main__':
     )
     
     print("="*60)
-    print("DFT-CASCI Energy Test")
+    print("DFT-corrected CASCI Energy Test")
     print("="*60)
     
     # RHF-based
-    print("\n1. RHF-based DFT-CASCI:")
+    print("\n1. RHF-based DFT-corrected CASCI:")
     mf_rhf = scf.RHF(mol).run()
     mc_rhf = CASCI(mf_rhf, 6, 6, xc='PBE')
     mc_rhf.kernel()
     print(f"   Energy: {mc_rhf.e_tot:.10f} Ha")
     
     # UHF-based
-    print("\n2. UHF-based DFT-CASCI:")
+    print("\n2. UHF-based DFT-corrected CASCI:")
     mf_uhf = scf.UHF(mol).run()
     mc_uhf = UCASCI(mf_uhf, 6, 6, xc='PBE')
     mc_uhf.kernel()

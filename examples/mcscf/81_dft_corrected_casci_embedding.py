@@ -18,7 +18,7 @@ Reference:
 """
 
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import casci_dft
+from pyscf.mcscf import dft_corrected_casci
 
 # Build water molecule
 mol = gto.M(
@@ -58,11 +58,11 @@ mc_rhf_hf.verbose = 0
 mc_rhf_hf.kernel()
 print(f"    Total Energy: {mc_rhf_hf.e_tot:.10f} Ha")
 
-# DFT-CASCI with different functionals
-print("\n1b. DFT-CASCI (RHF reference) with different XC functionals:")
+# DFT-corrected CASCI with different functionals
+print("\n1b. DFT-corrected CASCI (RHF reference) with different XC functionals:")
 rhf_results = []
 for xc in ['LDA', 'PBE', 'B3LYP']:
-    mc = casci_dft.CASCI(mf_rhf, ncas, nelecas, xc=xc)
+    mc = dft_corrected_casci.CASCI(mf_rhf, ncas, nelecas, xc=xc)
     mc.verbose = 0
     mc.kernel()
     delta_e = (mc.e_tot - mc_rhf_hf.e_tot) * 1000
@@ -89,11 +89,11 @@ mc_uhf_hf.verbose = 0
 mc_uhf_hf.kernel()
 print(f"    Total Energy: {mc_uhf_hf.e_tot:.10f} Ha")
 
-# DFT-UCASCI with different functionals
-print("\n2b. DFT-UCASCI (UHF reference) with different XC functionals:")
+# DFT-corrected UCASCI with different functionals
+print("\n2b. DFT-corrected UCASCI (UHF reference) with different XC functionals:")
 uhf_results = []
 for xc in ['LDA', 'PBE', 'B3LYP']:
-    mc = casci_dft.UCASCI(mf_uhf, ncas, nelecas, xc=xc)
+    mc = dft_corrected_casci.UCASCI(mf_uhf, ncas, nelecas, xc=xc)
     mc.verbose = 0
     mc.kernel()
     delta_e = (mc.e_tot - mc_uhf_hf.e_tot) * 1000
@@ -110,14 +110,14 @@ print("Part 3: Using DFCASCI Factory Function")
 print("="*70)
 
 print("\n3a. DFCASCI auto-detects RHF:")
-mc_auto_rhf = casci_dft.DFCASCI(mf_rhf, ncas, nelecas, xc='PBE')
+mc_auto_rhf = dft_corrected_casci.DFCASCI(mf_rhf, ncas, nelecas, xc='PBE')
 mc_auto_rhf.verbose = 0
 mc_auto_rhf.kernel()
 print(f"    Type: {type(mc_auto_rhf).__name__}")
 print(f"    Energy: {mc_auto_rhf.e_tot:.10f} Ha")
 
 print("\n3b. DFCASCI auto-detects UHF:")
-mc_auto_uhf = casci_dft.DFCASCI(mf_uhf, ncas, nelecas, xc='PBE')
+mc_auto_uhf = dft_corrected_casci.DFCASCI(mf_uhf, ncas, nelecas, xc='PBE')
 mc_auto_uhf.verbose = 0
 mc_auto_uhf.kernel()
 print(f"    Type: {type(mc_auto_uhf).__name__}")

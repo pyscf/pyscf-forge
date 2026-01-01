@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Example 22: FOMO-CASCI-DFT Gradients - Complete Comparison
+Example 22: FOMO-DFT-corrected CASCI Gradients - Complete Comparison
 ==========================================================
 
 This example demonstrates all combinations of:
@@ -14,7 +14,8 @@ Author:
 """
 
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import addons, casci_dft
+from pyscf.scf import fomoscf
+from pyscf.mcscf import dft_corrected_casci
 import numpy as np
 import time
 
@@ -27,12 +28,12 @@ ncas, nelecas = 6, 6
 ncore = (mol.nelectron - nelecas) // 2
 
 print("="*70)
-print("Complete FOMO-CASCI-DFT Gradient Comparison")
+print("Complete FOMO-DFT-corrected CASCI Gradient Comparison")
 print("="*70)
 
 # Setup
 mf_rhf = scf.RHF(mol).run()
-mf_fomo = addons.fomo_scf(mf_rhf, temperature=0.25, method='gaussian', restricted=(ncore, ncas))
+mf_fomo = fomoscf.fomo_scf(mf_rhf, temperature=0.25, method='gaussian', restricted=(ncore, ncas))
 mf_fomo.kernel()
 
 # All combinations
@@ -63,8 +64,8 @@ for name, mf, xc in configs:
         energy = mc.e_tot
         
     else:
-        # DFT-CASCI (both methods available)
-        mc = casci_dft.CASCI(mf, ncas, nelecas, xc=xc)
+        # DFT-corrected CASCI (both methods available)
+        mc = dft_corrected_casci.CASCI(mf, ncas, nelecas, xc=xc)
         mc.kernel()
         energy = mc.e_tot
         
@@ -130,7 +131,7 @@ print("\n" + "="*70)
 print("Recommendations")
 print("="*70)
 print("""
-For FOMO-CASCI-DFT calculations:
+For FOMO-DFT-corrected CASCI calculations:
 
 1. **Molecular Dynamics / Exploratory Work:**
    - Use: Analytical gradients (method='analytical')

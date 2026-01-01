@@ -12,7 +12,8 @@ Author:
 """
 
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import addons, casci_dft
+from pyscf.scf import fomoscf
+from pyscf.mcscf import dft_corrected_casci
 import numpy as np
 import time
 
@@ -32,7 +33,7 @@ print("="*70)
 mf_rhf = scf.RHF(mol).run()
 
 # FOMO-SCF
-mf_fomo = addons.fomo_scf(
+mf_fomo = fomoscf.fomo_scf(
     mf_rhf, 
     temperature=0.25, 
     method='gaussian', 
@@ -56,7 +57,7 @@ g_std = mc_std.Gradients().kernel()
 print("\n" + "-"*70)
 print("2. FOMO-CASCI (FOMO orbitals, LDA core)")
 print("-"*70)
-mc_fomo = casci_dft.CASCI(mf_fomo, ncas, nelecas, xc='LDA')
+mc_fomo = dft_corrected_casci.CASCI(mf_fomo, ncas, nelecas, xc='LDA')
 mc_fomo.kernel()
 print(f"Energy: {mc_fomo.e_tot:.10f} Ha")
 

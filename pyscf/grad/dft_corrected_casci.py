@@ -7,8 +7,8 @@ This module provides nuclear gradients for CASCI calculations with
 DFT-corrected core energy, supporting both RHF and UHF references
 as well as FOMO (Fractional Occupation Molecular Orbital) wavefunctions.
 
-Author: Arshad Mehmood
-Date: December 31, 2025
+Author: Arshad Mehmood, IACS, Stony Brook University
+Email: arshad.mehmood@stonybrook.edu
 """
 
 import numpy as np
@@ -24,6 +24,16 @@ def sanitize_mo_occ_for_cphf(mc):
     FOMO produces fractional orbital occupations which cause issues
     in the CPHF equations. This function converts fractional occupations
     to binary (0 or 2 for RHF, 0 or 1 for UHF) for CPHF stability.
+    
+    Parameters
+    ----------
+    mc : CASCI object
+        CASCI calculation object
+        
+    Returns
+    -------
+    sanitized : ndarray or None
+        Sanitized occupations, or None if no changes needed
     """
     mf = mc._scf
     mo_occ = getattr(mf, 'mo_occ', None)
@@ -63,10 +73,10 @@ class Gradients(casci_grad.Gradients):
     Examples
     --------
     >>> from pyscf import gto, scf
-    >>> from pyscf.mcscf import casci_dft
+    >>> from pyscf.mcscf import dft_corrected_casci
     >>> mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='cc-pvdz')
     >>> mf = scf.RHF(mol).run()
-    >>> mc = casci_dft.CASCI(mf, ncas=2, nelecas=2, xc='PBE')
+    >>> mc = dft_corrected_casci.CASCI(mf, ncas=2, nelecas=2, xc='PBE')
     >>> mc.kernel()
     >>> grad = mc.Gradients(method='analytical').kernel()
     """
@@ -128,6 +138,24 @@ class Gradients(casci_grad.Gradients):
         
         Accuracy: ~1-2e-2 Ha/Bohr
         Speed: Fast
+        
+        Parameters
+        ----------
+        mo_coeff : ndarray, optional
+            Molecular orbital coefficients
+        ci : ndarray, optional
+            CI coefficients
+        atmlst : list of int, optional
+            List of atom indices
+        state : int, optional
+            Electronic state index
+        verbose : int, optional
+            Verbosity level
+            
+        Returns
+        -------
+        de : ndarray
+            Nuclear gradients, shape (natm, 3)
         """
         mc = self.base
         log = logger.new_logger(self, verbose)
@@ -180,6 +208,24 @@ class Gradients(casci_grad.Gradients):
         
         Accuracy: ~1e-6 Ha/Bohr
         Speed: Slow (requires 2*natm*3 energy evaluations)
+        
+        Parameters
+        ----------
+        mo_coeff : ndarray, optional
+            Molecular orbital coefficients
+        ci : ndarray, optional
+            CI coefficients
+        atmlst : list of int, optional
+            List of atom indices
+        state : int, optional
+            Electronic state index
+        verbose : int, optional
+            Verbosity level
+            
+        Returns
+        -------
+        de : ndarray
+            Nuclear gradients, shape (natm, 3)
         """
         mc = self.base
         mol = mc.mol
@@ -223,7 +269,7 @@ class Gradients(casci_grad.Gradients):
     
     def compute_energy_at_geometry(self, coords, log):
         """
-        Compute DFT-CASCI energy at displaced geometry.
+        Compute DFT-corrected CASCI energy at displaced geometry.
         
         Parameters
         ----------
@@ -256,18 +302,18 @@ class Gradients(casci_grad.Gradients):
         
         # Check if FOMO
         if hasattr(mc._scf, 'fomo_temperature'):
-            from pyscf.mcscf import addons
+            from pyscf.scf import fomoscf
             fomo_kwargs = {}
             for attr in ['fomo_temperature', 'fomo_method', 'fomo_restricted']:
                 if hasattr(mc._scf, attr):
                     fomo_kwargs[attr.replace('fomo_', '')] = getattr(mc._scf, attr)
-            mf_new = addons.fomo_scf(mf_new, **fomo_kwargs)
+            mf_new = fomoscf.fomo_scf(mf_new, **fomo_kwargs)
             mf_new.verbose = 0
             mf_new.kernel()
         
-        # Run CASCI
-        from pyscf.mcscf import casci_dft
-        mc_new = casci_dft.CASCI(mf_new, mc.ncas, mc.nelecas, xc=mc.xc)
+        # Run DFT-corrected CASCI
+        from pyscf.mcscf import dft_corrected_casci
+        mc_new = dft_corrected_casci.CASCI(mf_new, mc.ncas, mc.nelecas, xc=mc.xc)
         mc_new.verbose = 0
         if hasattr(mc, 'grids_level'):
             mc_new.grids_level = mc.grids_level
@@ -341,7 +387,7 @@ class Gradients(casci_grad.Gradients):
         if hasattr(mc, 'grids') and mc.grids is not None:
             mf_dft_temp.grids = mc.grids
         else:
-            mf_dft_temp.grids = mc._build_grids(mol)
+            mf_dft_temp.grids = mc.build_grids(mol)
         
         if mf_dft_temp.grids.coords is None:
             mf_dft_temp.grids.build()
@@ -387,7 +433,7 @@ class UGradients(lib.StreamObject):
     
     Examples
     --------
-    >>> mc = casci_dft.UCASCI(mf_uhf, ncas=4, nelecas=4, xc='PBE')
+    >>> mc = dft_corrected_casci.UCASCI(mf_uhf, ncas=4, nelecas=4, xc='PBE')
     >>> mc.kernel()
     >>> grad = mc.Gradients(method='numerical').kernel()
     """
@@ -468,7 +514,7 @@ class UGradients(lib.StreamObject):
     
     def compute_energy_at_geometry(self, coords, log):
         """
-        Compute DFT-UCASCI energy at displaced geometry.
+        Compute DFT-corrected UCASCI energy at displaced geometry.
         
         Parameters
         ----------
@@ -497,18 +543,18 @@ class UGradients(lib.StreamObject):
         
         # Check if FOMO
         if hasattr(mc._scf, 'fomo_temperature'):
-            from pyscf.mcscf import addons
+            from pyscf.scf import fomoscf
             fomo_kwargs = {}
             for attr in ['fomo_temperature', 'fomo_method', 'fomo_restricted']:
                 if hasattr(mc._scf, attr):
                     fomo_kwargs[attr.replace('fomo_', '')] = getattr(mc._scf, attr)
-            mf_new = addons.fomo_scf(mf_new, **fomo_kwargs)
+            mf_new = fomoscf.fomo_scf(mf_new, **fomo_kwargs)
             mf_new.verbose = 0
             mf_new.kernel()
         
-        # Run UCASCI
-        from pyscf.mcscf import casci_dft
-        mc_new = casci_dft.UCASCI(mf_new, mc.ncas, mc.nelecas, xc=mc.xc)
+        # Run DFT-corrected UCASCI
+        from pyscf.mcscf import dft_corrected_casci
+        mc_new = dft_corrected_casci.UCASCI(mf_new, mc.ncas, mc.nelecas, xc=mc.xc)
         mc_new.verbose = 0
         if hasattr(mc, 'grids_level'):
             mc_new.grids_level = mc.grids_level

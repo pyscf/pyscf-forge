@@ -23,7 +23,7 @@ Reference:
 """
 
 from pyscf import gto, scf, mcscf
-from pyscf.mcscf import addons
+from pyscf.scf import fomoscf
 import numpy as np
 
 # Build water molecule
@@ -70,7 +70,7 @@ print("2. FOMO-SCF (Gaussian smearing, T=0.25 eV) + CASCI")
 print("-"*70)
 
 # Create FOMO-SCF object
-mf_fomo_gauss = addons.fomo_scf(
+mf_fomo_gauss = fomoscf.fomo_scf(
     mf_rhf, 
     temperature=0.25,      # Smearing temperature in eV
     method='gaussian',     # Gaussian smearing
@@ -95,7 +95,7 @@ print("\n" + "-"*70)
 print("3. FOMO-SCF (Fermi-Dirac smearing, T=0.25 eV) + CASCI")
 print("-"*70)
 
-mf_fomo_fermi = addons.fomo_scf(
+mf_fomo_fermi = fomoscf.fomo_scf(
     scf.RHF(mol),
     temperature=0.25,
     method='fermi',        # Fermi-Dirac smearing
@@ -124,7 +124,7 @@ temperatures = [0.1, 0.25, 0.5, 1.0]
 # First, collect all results
 results = []
 for temp in temperatures:
-    mf_temp = addons.fomo_scf(
+    mf_temp = fomoscf.fomo_scf(
         scf.RHF(mol),
         temperature=temp,
         method='gaussian',
