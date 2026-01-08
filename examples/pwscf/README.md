@@ -33,3 +33,13 @@ Plane-wave calculations can be performed with GTH or CCECP pseudopotentials
 norm-conserving pseudopotentials. The post-SCF methods have been tested with GTH
 and CCECP but not SG15, while the SCF methods have been tested with GTH, CCECP, and SG15.
 
+## SG15 Pseudopotentials
+
+SG15 pseudopotentials are not included in the PySCF soruce code, and they are required
+to use the `pyscf.pbc.pwscf.ncpp_cell` module. The SG15 potentials can be downloaded
+from http://www.quantum-simulation.org/potentials/sg15_oncv/. The UPF format is used,
+so the `sg15_oncv_upf_2020-02-06.tar.gz` set is recommended.
+
+When initializing an `NCPPCell` object, one must pass the argument `sg15_path`,
+which should point to wherever `sg15_oncv_upf_2020-02-06.tar.gz` was extracted.
+Alternatively, one can set `pbc_pwscf_ncpp_cell_sg15_path` in `.pyscf_conf.py`.

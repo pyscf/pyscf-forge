@@ -275,17 +275,17 @@ def apply_k(cell, C_ks, mocc_ks, kpts, mesh, Gv, Ct_ks=None, ktpts=None,
                           out, outcore, basis_ks=basis_ks)
 
 
-def jk(mf, with_jk=None, ace_exx=True, outcore=False, mesh=None,
-       basis_ks=None):
+def create_pwjk_handler(cell, kpts=None, exxdiv=None, with_jk=None,
+                        ace_exx=True, outcore=False, mesh=None, basis_ks=None):
+    if kpts is None:
+        kpts = np.array([[0.0, 0.0, 0.0]])
     if with_jk is None:
-        with_jk = PWJK(mf.cell, mf.kpts, exxdiv=mf.exxdiv,
+        with_jk = PWJK(cell, kpts, exxdiv=exxdiv,
                        mesh=mesh, basis_ks=basis_ks)
         with_jk.ace_exx = ace_exx
         with_jk.outcore = outcore
 
-    mf.with_jk = with_jk
-
-    return mf
+    return with_jk
 
 
 def get_ace_support_vec(cell, C1_ks, mocc1_ks, k1pts, C2_ks=None, k2pts=None,

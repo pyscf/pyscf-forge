@@ -83,8 +83,7 @@ class KnownValues(unittest.TestCase):
             cell2, KPTS, xc="PBE", ecut_wf=ecut_wf
         )
         mf2.nvir = 4
-        mf2.init_pp()
-        mf2.init_jk()
+        mf2.build()
         assert_allclose(
             mf2.energy_tot(mf.mo_coeff, mf.mo_occ), e_ref, atol=1e-7
         )

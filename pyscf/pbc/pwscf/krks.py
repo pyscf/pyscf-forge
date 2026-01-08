@@ -413,6 +413,19 @@ class PWKohnShamDFT(rks.KohnShamDFT):
 
     to_gpu = lib.to_gpu
 
+    def build(self, cell=None, **kwargs):
+        if cell is None: cell = self.cell
+
+        if self.with_pp is None or self.with_pp.cell != cell:
+            with_pp = getattr(kwargs, "with_pp", None)
+            self.init_pp(with_pp=with_pp)
+
+        if self.with_jk is None or self.with_jk.cell != cell:
+            with_jk = getattr(kwargs, "with_jk", None)
+            self.init_jk(with_jk=with_jk)
+
+        return self
+
 
 class PWKRKS(PWKohnShamDFT, khf.PWKRHF):
     """

@@ -122,21 +122,23 @@ def get_pp_type(cell):
         return "ccecp"
 
 
-def pseudopotential(mf, with_pp=None, mesh=None, outcore=False, **kwargs):
+def create_pwpp_handler(cell, kpts=None, with_pp=None, mesh=None,
+                        outcore=False, **kwargs):
+    if kpts is None:
+        kpts = np.array([[0.0, 0.0, 0.0]])
+
     def set_kw(with_pp_, key):
         val = kwargs.get(key, None)
         if val is not None: setattr(with_pp_, key, val)
 
     if with_pp is None:
-        with_pp = PWPP(mf.cell, mf.kpts, mesh=mesh, outcore=outcore)
+        with_pp = PWPP(cell, kpts, mesh=mesh, outcore=outcore)
         set_kw(with_pp, "ecpnloc_method")
         set_kw(with_pp, "ecpnloc_kbbas")
         set_kw(with_pp, "ecpnloc_ke_cutoff")
         set_kw(with_pp, "ecpnloc_use_numexpr")
 
-    mf.with_pp = with_pp
-
-    return mf
+    return with_pp
 
 
 class PWPP:
@@ -382,8 +384,9 @@ def apply_vppnl_kpt_sg15(cell, C_k, kpt, Gv, basis=None):
 
     G_rad, G_theta, G_phi = cart2polar(Gk)
     G_phi[:] = G_phi % (2 * np.pi)
-    lmax = np.max([[proj["l"] for proj in pp["projectors"]]
-                  for pp in cell._pseudo.values()])
+    lmaxs = [np.max([proj["l"] for proj in pp["projectors"]])
+             for pp in cell._pseudo.values()]
+    lmax = np.max(lmaxs)
     G_ylm = np.empty(((lmax + 1) * (lmax + 1), ngrids), dtype=np.complex128)
     lm = 0
     for l in range(lmax + 1):

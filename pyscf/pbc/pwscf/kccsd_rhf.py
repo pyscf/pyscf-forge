@@ -61,6 +61,8 @@ class PWKRCCSD:
     """
 
     def __init__(self, mf, frozen=None):
+        if not mf.converged:
+            raise NotImplementedError("PW-CCSD with unconverged ground state.")
         self._scf = mf
         self.mo_occ = mf.mo_occ
         self.mo_energy = mf.mo_energy

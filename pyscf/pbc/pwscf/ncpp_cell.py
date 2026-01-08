@@ -53,7 +53,14 @@ class NCPPCell(Cell):
             raise ValueError("pseudo and ecp not supported")
         self.sg15_path = kwargs.pop("sg15_path", self.sg15_path)
         if self.sg15_path is None:
-            raise ValueError("sg15_path is not set")
+            msg = (
+                "sg15_path is not set. It is necessary to set the sg15_path "
+                "or set pbc_pwscf_ncpp_cell_sg15_path in the config file. "
+                "You can get the SG15 pseudopotentials from "
+                "http://www.quantum-simulation.org/potentials/sg15_oncv/ "
+                "(specifically sg15_oncv_upf_2020-02-06.tar.gz)."
+            )
+            raise ValueError(msg)
         super().build(**kwargs)
 
         uniq_atoms = {a[0] for a in self._atom}

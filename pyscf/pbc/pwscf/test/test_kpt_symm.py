@@ -81,8 +81,7 @@ class KnownValues(unittest.TestCase):
             print("TIMES", t1 - t0, t3 - t2, len(C_ks), len(Csym_ks))
 
         mf2 = smearing_(mf2, sigma=0.01, method='gauss')
-        mf2.init_jk()
-        mf2.init_pp()
+        mf2.build()
         eref = mf.energy_elec(C_ks, mocc_ks)
         epred = mf2.energy_elec(Csym_ks, moccsym_ks)
 

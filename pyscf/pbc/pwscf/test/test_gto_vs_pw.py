@@ -36,9 +36,8 @@ class KnownValues(unittest.TestCase):
 
         # PW (both vanilla and ACE)
         pmf = pwscf.KRHF(cell, kpts)
-        pmf.init_pp()
-        pmf.init_jk()
         pmf.exxdiv = exxdiv
+        pmf.build()
         no_ks = pw_helper.get_nocc_ks_from_mocc(gmf.mo_occ)
         C_ks = pw_helper.get_C_ks_G(cell, kpts, gmf.mo_coeff, no_ks)
         mocc_ks = khf.get_mo_occ(cell, C_ks=C_ks)

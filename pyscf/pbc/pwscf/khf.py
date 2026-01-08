@@ -493,9 +493,9 @@ def kernel_charge(mf, C_ks, mocc_ks, nband, mesh=None, Gv=None,
     fc_tot = 0
 
     if damp_type.lower() == "simple":
-        chgmixer = pw_helper.SimpleMixing(mf, damp_factor)
+        chgmixer = pw_helper.SimpleMixing(mf, beta=damp_factor)
     elif damp_type.lower() == "anderson":
-        chgmixer = pw_helper.AndersonMixing(mf)
+        chgmixer = pw_helper.AndersonMixing(mf, beta=damp_factor)
 
     cput1 = (logger.process_clock(), logger.perf_counter())
 
@@ -759,15 +759,9 @@ def get_init_guess(cell0, kpts, basis=None, pseudo=None, nvir=0,
     if kpts_obj is None:
         kpts_obj = kpts
     if xc is None:
-        if len(kpts) < 30:
-            pmf = scf.KRHF(cell, kpts_obj)
-        else:
-            pmf = scf.KRHF(cell, kpts_obj).density_fit()
+        pmf = scf.KRHF(cell, kpts_obj).density_fit()
     else:
-        if len(kpts) < 30:
-            pmf = scf.KRKS(cell, kpts_obj, xc=xc)
-        else:
-            pmf = scf.KRKS(cell, kpts_obj, xc=xc).density_fit()
+        pmf = scf.KRKS(cell, kpts_obj, xc=xc).density_fit()
 
     if key.lower() == "cycle1":
         pmf.max_cycle = 0
@@ -1611,7 +1605,7 @@ class PWKSCF(pbc_hf.KSCF):
     def set_meshes(self, wf_mesh=None, xc_mesh=None):
         """
         Set meshes to be different from their defaults.
-        init_pp and init_jk must be called again after setting
+        init_pp and init_jk (or build) must be called again after setting
         the meshes. Note that xc_mesh must be larger in all dimensions
         than wf_mesh, and xc_mesh is only used for DFT calculations.
         """
@@ -1852,26 +1846,35 @@ class PWKSCF(pbc_hf.KSCF):
             mesh = None
         else:
             mesh = self.wf_mesh
-        return pw_pseudo.pseudopotential(self, with_pp=with_pp, mesh=mesh,
-                                         outcore=self.outcore, **kwargs)
+        self.with_pp = pw_pseudo.create_pwpp_handler(
+            self.cell, kpts=self.kpts, with_pp=with_pp, mesh=mesh,
+            outcore=self.outcore, **kwargs
+        )
 
     def init_jk(self, with_jk=None, ace_exx=None):
-        if ace_exx is None: ace_exx = self.ace_exx
-        return pw_jk.jk(self, with_jk=with_jk, ace_exx=ace_exx,
-                        outcore=self.outcore, mesh=self.wf_mesh,
-                        basis_ks=self._basis_data)
+        if ace_exx is None:
+            ace_exx = self.ace_exx
+        self.with_jk = pw_jk.create_pwjk_handler(
+            self.cell, kpts=self.kpts, exxdiv=self.exxdiv, ace_exx=ace_exx,
+            outcore=self.outcore, mesh=self.wf_mesh, basis_ks=self._basis_data
+        )
 
-    def scf(self, C0=None, **kwargs):
-        self.dump_flags()
+    def build(self, cell=None, **kwargs):
+        if cell is None: cell = self.cell
 
-        if self.with_pp is None:
+        if self.with_pp is None or self.with_pp.cell != cell:
             with_pp = getattr(kwargs, "with_pp", None)
             self.init_pp(with_pp=with_pp)
 
-        if self.with_jk is None:
+        if self.with_jk is None or self.with_jk.cell != cell:
             with_jk = getattr(kwargs, "with_jk", None)
             self.init_jk(with_jk=with_jk)
 
+        return self
+
+    def scf(self, C0=None, **kwargs):
+        self.dump_flags()
+        self.build(**kwargs)
         self.converged, self.e_tot, self.mo_energy, self.mo_coeff, \
                 self.mo_occ = kernel_doubleloop(
                             self, C0=C0,

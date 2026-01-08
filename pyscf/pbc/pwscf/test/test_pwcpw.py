@@ -8,6 +8,7 @@ basis set.
 import h5py
 import tempfile
 import numpy as np
+from numpy.testing import assert_allclose
 
 from pyscf.pbc import gto, pwscf
 from pyscf import lib
@@ -47,14 +48,19 @@ class KnownValues(unittest.TestCase):
         # HF
         mf = pwscf.KRHF(cell, kpts)
         mf.kernel()
-        assert(abs(mf.e_tot - -10.6754924867542) < 1.e-6)
+        # For pyscf<=2.10
+        # assert_allclose(mf.e_tot, -10.6754924867542, atol=1.e-6, rtol=0)
+        assert_allclose(mf.e_tot, -10.6755254339103, atol=1.e-6, rtol=0)
 
         # MP2
         moe_ks, mocc_ks = mf.get_cpw_virtual(basis_cpw)
         mf.dump_moe(moe_ks, mocc_ks)
         mmp = pwscf.KMP2(mf)
         mmp.kernel()
-        assert(abs(mmp.e_corr - -0.215895180360867) < 1.e-6)
+        # For pyscf<=2.10
+        # emp_ref = -0.215895180360867
+        emp_ref = -0.21590657102232175
+        assert_allclose(mmp.e_corr, emp_ref, atol=1.e-6, rtol=0)
 
         # HF with a plane-wave cutoff
         mf = pwscf.KRHF(cell, kpts, ecut_wf=20)
@@ -66,7 +72,7 @@ class KnownValues(unittest.TestCase):
         mmp = pwscf.KMP2(mf)
         mmp.kernel()
         # higher threshold because we use different basis
-        assert(abs(mmp.e_corr - -0.215895180360867) < 1.e-3)
+        assert_allclose(mmp.e_corr, emp_ref, atol=1.e-3, rtol=0)
 
 
 if __name__ == "__main__":

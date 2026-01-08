@@ -5,6 +5,7 @@
 import h5py
 import tempfile
 import numpy as np
+from numpy.testing import assert_allclose
 
 from pyscf.pbc import gto, pwscf
 from pyscf import lib
@@ -43,21 +44,21 @@ class KnownValues(unittest.TestCase):
         pwmf.nvir = 10 # request 10 virtual states
         pwmf.chkfile = chkfile
         pwmf.kernel(save_ccecp_kb=True)
-        assert(abs(pwmf.e_tot - e_tot0) < 1.e-6)
+        assert_allclose(pwmf.e_tot, e_tot0, atol=1.e-6, rtol=0)
 
         # krhf init from chkfile
         pwmf.init_guess = "chkfile"
         pwmf.kernel()
-        assert(abs(pwmf.e_tot - e_tot0) < 1.e-6)
+        assert_allclose(pwmf.e_tot, e_tot0, atol=1.e-6, rtol=0)
 
         # input C0
         pwmf.kernel(C0=pwmf.mo_coeff)
-        assert(abs(pwmf.e_tot - e_tot0) < 1.e-6)
+        assert_allclose(pwmf.e_tot, e_tot0, atol=1.e-6, rtol=0)
 
         # krmp2
         pwmp = pwscf.KMP2(pwmf)
         pwmp.kernel()
-        assert(abs(pwmp.e_corr - e_corr0) < 1.e-4)
+        assert_allclose(pwmp.e_corr, e_corr0, atol=1.e-4, rtol=0)
 
         pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
         pwmf.nvir = 10 # request 10 virtual states
@@ -67,14 +68,18 @@ class KnownValues(unittest.TestCase):
         pwmp = pwscf.KMP2(pwmf)
         pwmp.kernel()
         # higher relative error threshold because the PW basis is different
-        assert(abs((pwmp.e_corr - e_corr0) / e_corr0) < 5.e-2)
+        assert_allclose(abs((pwmp.e_corr - e_corr0) / e_corr0),
+                       0, atol=5.e-2, rtol=0)
+
 
     def test_alle(self):
         atom = "He 0 0 0"
         a = np.eye(3) * 2
         mesh = [10, 10, 10]
+        # e0 = -3.01953411844147 for pyscf<=2.10
+        e0 = -3.01955958753843
         self._run_test(
-            None, atom, a, -3.01953411844147, -0.0184642869417647, mesh
+            None, atom, a, e0, -0.0184642869417647, mesh
         )
 
     def test_ccecp(self):
@@ -85,8 +90,10 @@ class KnownValues(unittest.TestCase):
              [1.78339987, 1.78339987, 0.        ]]
         )
         mesh = [10, 10, 10]
+        # e0 = -10.6261884956522 for pyscf<=2.10
+        e0 = -10.6262216801107
         self._run_test(
-            "ccecp", atom, a, -10.6261884956522, -0.136781915070538, mesh
+            "ccecp", atom, a, e0, -0.136781915070538, mesh
         )
 
     def test_gth(self):
@@ -97,8 +104,10 @@ class KnownValues(unittest.TestCase):
              [1.78339987, 1.78339987, 0.        ]]
         )
         mesh = [10, 10, 10]
+        # e0 = -10.6754927046184 for pyscf<=2.10
+        e0 = -10.675524900499157
         self._run_test(
-            "gth-pade", atom, a, -10.6754927046184, -0.139309030515543, mesh
+            "gth-pade", atom, a, e0, -0.139309030515543, mesh
         )
 
 

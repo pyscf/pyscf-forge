@@ -152,8 +152,6 @@ def get_kcomp(C_ks, k, load=True, occ=None, copy=False):
             if occ is None:
                 return C_ks[key][()]
             else:
-                if isinstance(occ, np.ndarray):
-                    occ = occ.tolist()
                 return C_ks[key][occ]
         else:
             return C_ks[key]
@@ -633,13 +631,17 @@ class AndersonMixing(_Mixing):
     """
     Anderson mixing, i.e. mixing with DIIS.
     """
-    def __init__(self, mf, ndiis=10, diis_start=1):
+    def __init__(self, mf, ndiis=10, diis_start=1, beta=0.0):
         super().__init__(mf)
         self.diis = DIIS()
+        self.beta = beta
         self.diis.space = ndiis
         self.diis.min_space = diis_start
 
     def _next_step(self, mf, f, ferr):
         self.cycle += 1
-        return self.diis.update(f, ferr)
+        if self.beta < 1e-6:
+            return self.diis.update(f, ferr)
+        else:
+            return self.diis.update(f - self.beta * ferr, ferr)
 

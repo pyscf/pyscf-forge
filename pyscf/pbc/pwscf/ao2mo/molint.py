@@ -35,14 +35,6 @@ dot = lib.dot
 einsum = np.einsum
 
 
-def get_molint(mf_or_fchk, kpts, nvir=None, erifile=None, dataname="eri_mo"):
-    """
-    Args:
-        mf_or_fchk : PWSCF object or str of
-    """
-    pass
-
-
 def kconserv(kpt123, reduce_latvec, kdota):
     tmp = dot(kpt123.reshape(1,-1), reduce_latvec) + kdota
     return np.where(abs(tmp - np.rint(tmp)).sum(axis=1)<1e-6)[0][0]

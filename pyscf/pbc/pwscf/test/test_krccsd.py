@@ -8,6 +8,7 @@ should agree.
 import h5py
 import tempfile
 import numpy as np
+from numpy.testing import assert_allclose
 
 from pyscf.pbc import gto, scf, pwscf, cc
 from pyscf.pbc.pwscf import khf, pw_helper
@@ -42,6 +43,9 @@ class KnownValues(unittest.TestCase):
 
         # PW
         pmf = pw_helper.gtomf2pwmf(gmf)
+        pmf.build()
+        pmf.update_pp(pmf.mo_coeff)
+        pmf.update_k(pmf.mo_coeff, pmf.mo_occ)
         pcc = pwscf.PWKRCCSD(pmf)
         pcc.kernel()
         assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-6)
@@ -50,11 +54,16 @@ class KnownValues(unittest.TestCase):
             pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
             # need some virtual orbitals to converge davidson
             pwmf.nvir = 4
+            pwmf.nvir_extra = 3
+            pwmf.conv_tol = 1e-8
+            pwmf.init_guess = "scf"
+            # pwmf.damp_type = "simple"
+            pwmf.damp_factor = 0.0
             pwmf.kernel()
             pwcc = pwscf.PWKRCCSD(pwmf)
             pwcc.kernel()
             # Just to make sure the code stays consistent
-            assert(abs(pwcc.e_corr + 0.032784696721506294) < 1.e-4)
+            assert_allclose(pwcc.e_corr, -0.03234330656841895, atol=1.e-4, rtol=0)
 
     def test_krccsd(self):
         ke_cutoff = 50

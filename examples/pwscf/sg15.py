@@ -59,8 +59,6 @@ for ecut in ecuts:
     mf2.damp_type = "simple"
     mf2.damp_factor = 0.7
     mf2.nvir = 4 # converge first 4 virtual bands
-    mf2.init_pp()
-    mf2.init_jk()
     mf2.kernel()
     ens2.append(mf2.e_tot)
     print(mf.e_tot, mf2.e_tot)
