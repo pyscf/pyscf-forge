@@ -358,10 +358,11 @@ def get_mesh_map(cell, ke_cutoff, ke_cutoff2, mesh=None, mesh2=None):
 
 
 def remove_pGTO_from_cGTO_(bdict, amax=None, amin=None, verbose=0):
-    """ Removing from input GTO basis all primitive GTOs whose exponents are >amax or <amin.
     """
-    from pyscf import gto as mol_gto
-    from pyscf.pbc import gto as pbc_gto
+    Removing from input GTO basis all primitive GTOs
+    whose exponents are >amax or <amin.
+    """
+    from pyscf import gto
     def prune(blist):
         if amin is None and amax is None:
             return blist
@@ -390,10 +391,13 @@ def remove_pGTO_from_cGTO_(bdict, amax=None, amin=None, verbose=0):
     for atm,basis in bdict.items():
         if isinstance(basis, str):
             if "gth" in basis.lower():
-                cell = pbc_gto.M(atom="%s 0 0 0"%atm, basis=basis, spin=1)
+                try:
+                    cell = gto.M(atom="%s 0 0 0"%atm, basis=basis, spin=1)
+                except RuntimeError:
+                    cell = gto.M(atom="%s 0 0 0"%atm, basis=basis, spin=0)
                 blist = cell._basis[atm]
             else:
-                blist = mol_gto.basis.load(basis, atm)
+                blist = gto.basis.load(basis, atm)
         else:
             blist = basis
         bdict_new[atm] = prune(blist)
@@ -472,7 +476,7 @@ def gtomf2pwmf(mf, chkfile=None):
             If not provided, a temporary file is generated.
     """
     from pyscf.pbc import scf
-    assert(isinstance(mf, (scf.khf.KRHF,scf.kuhf.KUHF,scf.uhf.UHF)))
+    assert(isinstance(mf, (scf.hf.RHF,scf.khf.KRHF,scf.kuhf.KUHF,scf.uhf.UHF)))
 
     from pyscf.pbc import pwscf
     cell = mf.cell
@@ -496,6 +500,14 @@ def gtomf2pwmf(mf, chkfile=None):
         pwmf.mo_coeff = C_ks
         pwmf.mo_energy = moe_ks = mf.mo_energy
         pwmf.mo_occ = mocc_ks = mf.mo_occ
+        pwmf.e_tot = mf.e_tot
+    elif isinstance(mf, scf.hf.RHF):
+        pwmf = pwscf.KRHF(cell, kpts)
+        nmo_ks = [Cgto_ks.shape[1]]
+        C_ks = get_C_ks_G(cell, kpts, [Cgto_ks], nmo_ks)
+        pwmf.mo_coeff = C_ks
+        pwmf.mo_energy = moe_ks = [mf.mo_energy]
+        pwmf.mo_occ = mocc_ks = [mf.mo_occ]
         pwmf.e_tot = mf.e_tot
     elif isinstance(mf, scf.uhf.UHF):
         pwmf = pwscf.KUHF(cell, kpts)
