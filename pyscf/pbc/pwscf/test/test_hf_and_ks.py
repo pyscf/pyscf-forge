@@ -215,6 +215,24 @@ class KnownValues(unittest.TestCase):
             _run_test(s=0)
             _run_test(s=1)
 
+    def test_xc_type(self):
+        mf = khf.PWKRHF(CELL, KPTS, ecut_wf=20)
+        mf.conv_tol = 1e-8
+        mf.kernel()
+        ks = krks.PWKRKS(CELL, KPTS, xc="HF", ecut_wf=20)
+        ks.conv_tol = 1e-8
+        ks.kernel()
+        ks.xc = "0.5*HF"
+        e_half = ks.energy_tot(ks.mo_coeff, ks.mo_occ)
+        exx = 2 * (ks.e_tot - e_half)
+        assert exx < -0.1
+        ks.xc = None
+        e_hartree = ks.energy_tot(ks.mo_coeff, ks.mo_occ)
+        assert_allclose(mf.e_tot, ks.e_tot, atol=1e-7, rtol=0)
+        assert_allclose(e_hartree + exx, ks.e_tot, atol=1e-7, rtol=0)
+        ks.kernel()
+        assert ks.e_tot < e_hartree
+
     def test_fd_hf(self):
         """
         Run the _check_fd tests for spin-restricted and unrestricted

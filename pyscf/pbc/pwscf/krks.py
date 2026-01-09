@@ -52,8 +52,8 @@ def get_rho_for_xc(mf, xctype, C_ks, mocc_ks, mesh=None, Gv=None,
         nrho = 4
     elif xctype == "MGGA":
         nrho = 5
-    elif xctype is None:
-        nrho = 0
+    elif xctype == "HF" or xctype is None:
+        nrho = 1
     else:
         raise ValueError(f"Unsupported xctype {xctype}")
     if spin != 0:
@@ -377,7 +377,12 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         rhovec_R[:] *= (spinfac / nkpts) * ng / dv
         if save_rho:
             self._rhovec_R = rhovec_R
-        if (self.wf_mesh == self.xc_mesh).all():
+        if xctype == "HF" or xctype is None:
+            vxcvec_R = np.zeros(rhovec_R.shape)
+            if vxcvec_R.ndim == 2:
+                vxcvec_R = vxcvec_R[None, :, :]
+            exc = 0
+        elif (self.wf_mesh == self.xc_mesh).all():
             # xc integration is on the same mesh as density generation
             exc, vxcvec_R = self.eval_xc(
                 self.xc, rhovec_R, xctype
