@@ -66,9 +66,7 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
     reduce_latvec = cell.lattice_vectors() / (2*np.pi)
     kdota = dot(kpts, reduce_latvec)
 
-    swapfile = tempfile.NamedTemporaryFile(dir=lib.param.TMPDIR)
-    fswap = lib.H5TmpFile(swapfile.name)
-    swapfile = None
+    fswap = lib.H5TmpFile(dir=lib.param.TMPDIR)
 
     C_ks_R = fswap.create_group("C_ks_R")
     for k in range(nkpts):
@@ -232,7 +230,7 @@ if __name__ == "__main__":
     no = cell.nelectron // 2
     nmo = no + nvir
     mo_slices = [(0,no),(no,nmo),(0,no),(no,nmo)]
-    feri = get_molint_from_C(cell, C_ks, mo_slices, kpts, exxdiv=None,
+    feri = get_molint_from_C(cell, C_ks, kpts, mo_slices, exxdiv=None,
                              erifile=erifile, dataname="eris")
 
     fchk.close()
