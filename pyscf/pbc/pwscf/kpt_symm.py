@@ -494,17 +494,23 @@ class KsymAdaptedPWJK(jk.PWJK):
             """
 
 
-def jksym(mf, with_jk=None, ace_exx=True, outcore=False, mesh=None,
-          basis_ks=None):
+def create_pwjk_handler_symm(cell, kpts_obj=None, exxdiv=None, with_jk=None,
+                             ace_exx=True, outcore=False, mesh=None,
+                             basis_ks=None):
+    if kpts_obj is None:
+        kpts_obj = libkpts.make_kpts(
+            cell,
+            kpts=np.zeros((1, 3)),
+            space_group_symmetry=False,
+            time_reversal_symmetry=False,
+        )
     if with_jk is None:
-        with_jk = KsymAdaptedPWJK(mf.cell, mf.kpts_obj, exxdiv=mf.exxdiv,
+        with_jk = KsymAdaptedPWJK(cell, kpts_obj, exxdiv=exxdiv,
                                   mesh=mesh, basis_ks=basis_ks)
         with_jk.ace_exx = ace_exx
         with_jk.outcore = outcore
 
-    mf.with_jk = with_jk
-
-    return mf
+    return with_jk
 
 
 class KsymMixin:
@@ -554,10 +560,14 @@ class KsymMixin:
             self.set_meshes()
 
     def init_jk(self, with_jk=None, ace_exx=None):
-        if ace_exx is None: ace_exx = self.ace_exx
-        return jksym(self, with_jk=with_jk, ace_exx=ace_exx,
-                     outcore=self.outcore, mesh=self.wf_mesh,
-                     basis_ks=self._basis_data)
+        if ace_exx is None:
+            ace_exx = self.ace_exx
+        self.with_jk = create_pwjk_handler_symm(
+            self.cell, kpts_obj=self.kpts_obj, exxdiv=self.exxdiv,
+            with_jk=with_jk, ace_exx=ace_exx,
+            outcore=self.outcore, mesh=self.wf_mesh,
+            basis_ks=self._basis_data
+        )
 
     def get_init_guess_key(self, cell=None, kpts=None, basis=None, pseudo=None,
                            nvir=None, key="hcore", out=None):
