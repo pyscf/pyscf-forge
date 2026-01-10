@@ -726,13 +726,18 @@ def test_write_cell_gamma_integrals_to_trexio_rks(cart):
         cell0 = pbc.gto.Cell()
         cell0.cart = cart
         cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
-        mf0 = pbc.scf.RHF(cell0, kpt=np.zeros(3)).density_fit()
+        gamma_kpt = np.zeros(3)
+        mf0 = pbc.scf.RHF(cell0, kpt=gamma_kpt).density_fit()
         mf0.kernel()
         assert mf0.converged
 
         overlap = _squeeze_k1(_hermitize(mf0.get_ovlp()))
         kinetic = _squeeze_k1(_hermitize(cell0.pbc_intor('int1e_kin', 1, 1)))
-        df_builder = mf0.with_df.build() if mf0.with_df is not None else pbc.df.MDF(cell0).build()
+        df_builder = (
+            mf0.with_df.build()
+            if mf0.with_df is not None
+            else pbc.df.MDF(cell0, kpts=[gamma_kpt]).build()
+        )
         potential = _squeeze_k1(_hermitize(df_builder.get_nuc()))
         if len(getattr(cell0, '_ecpbas', [])) > 0:
             from pyscf.pbc.gto import ecp
@@ -798,14 +803,19 @@ def test_write_cell_gamma_integrals_to_trexio_uks(cart):
         cell0.spin = 2
         cell0.cart = cart
         cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
-        mf0 = pbc.scf.UKS(cell0, kpt=np.zeros(3)).density_fit()
+        gamma_kpt = np.zeros(3)
+        mf0 = pbc.scf.UKS(cell0, kpt=gamma_kpt).density_fit()
         mf0.xc = 'LDA'
         mf0.kernel()
         assert mf0.converged
 
         overlap = _squeeze_k1(_hermitize(mf0.get_ovlp()))
         kinetic = _squeeze_k1(_hermitize(cell0.pbc_intor('int1e_kin', 1, 1)))
-        df_builder = mf0.with_df.build() if mf0.with_df is not None else pbc.df.MDF(cell0).build()
+        df_builder = (
+            mf0.with_df.build()
+            if mf0.with_df is not None
+            else pbc.df.MDF(cell0, kpts=[gamma_kpt]).build()
+        )
         potential = _squeeze_k1(_hermitize(df_builder.get_nuc()))
         if len(getattr(cell0, '_ecpbas', [])) > 0:
             from pyscf.pbc.gto import ecp
