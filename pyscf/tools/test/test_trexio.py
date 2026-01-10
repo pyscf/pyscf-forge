@@ -579,6 +579,11 @@ def _hermitize(mat):
     return 0.5 * (mat + mat.T.conj())
 
 
+def _squeeze_k1(mat):
+    mat = np.asarray(mat)
+    return mat[0] if mat.ndim == 3 and mat.shape[0] == 1 else mat
+
+
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
 def test_write_molecule_integrals_to_trexio_rks(cart):
     with tempfile.TemporaryDirectory() as d:
@@ -721,17 +726,17 @@ def test_write_cell_gamma_integrals_to_trexio_rks(cart):
         cell0 = pbc.gto.Cell()
         cell0.cart = cart
         cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
-        mf0 = pbc.scf.RHF(cell0).density_fit()
+        mf0 = pbc.scf.RHF(cell0, kpt=np.zeros(3)).density_fit()
         mf0.kernel()
         assert mf0.converged
 
-        overlap = _hermitize(mf0.get_ovlp())
-        kinetic = _hermitize(cell0.pbc_intor('int1e_kin', 1, 1))
+        overlap = _squeeze_k1(_hermitize(mf0.get_ovlp()))
+        kinetic = _squeeze_k1(_hermitize(cell0.pbc_intor('int1e_kin', 1, 1)))
         df_builder = mf0.with_df.build() if mf0.with_df is not None else pbc.df.MDF(cell0).build()
-        potential = _hermitize(df_builder.get_nuc())
+        potential = _squeeze_k1(_hermitize(df_builder.get_nuc()))
         if len(getattr(cell0, '_ecpbas', [])) > 0:
             from pyscf.pbc.gto import ecp
-            potential += _hermitize(ecp.ecp_int(cell0))
+            potential += _squeeze_k1(_hermitize(ecp.ecp_int(cell0)))
         core = kinetic + potential
 
         trexio.to_trexio(mf0, filename)
@@ -744,8 +749,7 @@ def test_write_cell_gamma_integrals_to_trexio_rks(cart):
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
 
         coeff = mf0.mo_coeff
-        if coeff.ndim == 3 and coeff.shape[0] == 1:
-            coeff = coeff[0]
+        coeff = _squeeze_k1(coeff) if getattr(coeff, 'ndim', 0) == 3 else coeff
         mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
         mo_kinetic = _hermitize(coeff.conj().T @ kinetic @ coeff)
         mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
@@ -794,18 +798,18 @@ def test_write_cell_gamma_integrals_to_trexio_uks(cart):
         cell0.spin = 2
         cell0.cart = cart
         cell0.build(atom='H 0 0 0; H 0 0 1', basis='6-31g*', a=np.diag([3.0, 3.0, 5.0]))
-        mf0 = pbc.scf.UKS(cell0).density_fit()
+        mf0 = pbc.scf.UKS(cell0, kpt=np.zeros(3)).density_fit()
         mf0.xc = 'LDA'
         mf0.kernel()
         assert mf0.converged
 
-        overlap = _hermitize(mf0.get_ovlp())
-        kinetic = _hermitize(cell0.pbc_intor('int1e_kin', 1, 1))
+        overlap = _squeeze_k1(_hermitize(mf0.get_ovlp()))
+        kinetic = _squeeze_k1(_hermitize(cell0.pbc_intor('int1e_kin', 1, 1)))
         df_builder = mf0.with_df.build() if mf0.with_df is not None else pbc.df.MDF(cell0).build()
-        potential = _hermitize(df_builder.get_nuc())
+        potential = _squeeze_k1(_hermitize(df_builder.get_nuc()))
         if len(getattr(cell0, '_ecpbas', [])) > 0:
             from pyscf.pbc.gto import ecp
-            potential += _hermitize(ecp.ecp_int(cell0))
+            potential += _squeeze_k1(_hermitize(ecp.ecp_int(cell0)))
         core = kinetic + potential
 
         trexio.to_trexio(mf0, filename)
@@ -818,6 +822,8 @@ def test_write_cell_gamma_integrals_to_trexio_uks(cart):
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
 
         coeff_alpha, coeff_beta = mf0.mo_coeff
+        coeff_alpha = _squeeze_k1(coeff_alpha) if getattr(coeff_alpha, 'ndim', 0) == 3 else coeff_alpha
+        coeff_beta = _squeeze_k1(coeff_beta) if getattr(coeff_beta, 'ndim', 0) == 3 else coeff_beta
         coeff = np.concatenate([coeff_alpha, coeff_beta], axis=1)
         mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
         mo_kinetic = _hermitize(coeff.conj().T @ kinetic @ coeff)
