@@ -270,7 +270,6 @@ def pprpa_contraction(pprpa, tri_vec):
     ntri = tri_vec.shape[0]
     mv_prod = numpy.zeros(shape=[ntri, pprpa.full_dim], dtype=numpy.double)
 
-    pm = 1.0 if pprpa.multi == "s" else -1.0
     is_singlet = 1 if pprpa.multi == "s" else 0
     tri_row_o, tri_col_o = numpy.tril_indices(nocc, is_singlet-1)
     tri_row_v, tri_col_v = numpy.tril_indices(nvir, is_singlet-1)
