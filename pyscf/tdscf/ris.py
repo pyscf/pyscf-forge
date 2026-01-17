@@ -346,7 +346,7 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p, C_q,
 
         if 'K' in calc:
             Pij_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_p)
-            Pij_lower = Pij_tmp[:, tril_indices_p[0], tril_indices_p[1]].reshape(naux, -1)
+            Pij_lower = Pij_tmp[:, tril_indices_p[0], tril_indices_p[1]].reshape(Pij_tmp.shape[0], -1)
             del Pij_tmp
             gc.collect()
 
@@ -355,7 +355,7 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p, C_q,
             gc.collect()
 
             Pab_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_q,C_q)
-            Pab_lower = Pab_tmp[:, tril_indices_q[0], tril_indices_q[1]].reshape(naux, -1)
+            Pab_lower = Pab_tmp[:, tril_indices_q[0], tril_indices_q[1]].reshape(Pab_tmp.shape[0], -1)
             del Pab_tmp
             gc.collect()
 
