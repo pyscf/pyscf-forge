@@ -1815,30 +1815,30 @@ class RisBase(lib.StreamObject):
         With MO truncation, most the occ and vir orbitals (transition pair) are neglected in the exchange part
 
         As shown below, * denotes the included transition pair
-                    -------------------
-                /                  /
-original X =   /                  /  nstates
-                -------------------
-            |******************|
-        n_occ  |******************|  
-            |******************|
-            |******************|
-            |------------------|
+                     -------------------
+                   /                  /
+    original X =  /                  /  nstates
+                 -------------------
+                |******************|
+         n_occ  |******************|  
+                |******************|
+                |******************|
+                |------------------|
                     n_vir
 becomes:
-                    -------------------
-                /                  /
-        X' =  /                  /  nstates
-                -------------------
-            |                  |
-n_occ-rest_occ |                  |  
-            |-----|------------|
-            |*****|            |  
-    rest_occ   |*****|            |
-            |-----|------------|
-            rest_vir
+                     -------------------
+                   /                  /
+            X' =  /                  /  nstates
+                 -------------------
+                |                  |
+ n_occ-rest_occ |                  |  
+                |-----|------------|
+                |*****|            |  
+    rest_occ    |*****|            |
+                |-----|------------|
+                rest_vir
 
-        (If no MO truncation, then n_occ-rest_occ=0 and rest_vir=n_vir)
+            (If no MO truncation, then n_occ-rest_occ=0 and rest_vir=n_vir)
 '''
 class TDA(RisBase):
     def __init__(self, mf, **kwargs):
