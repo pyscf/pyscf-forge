@@ -2026,11 +2026,6 @@ class TDA(RisBase):
         n_vir_a = self.n_vir_a
         n_occ_b = self.n_occ_b
         n_vir_b = self.n_vir_b   
-        rest_occ_a = self.rest_occ_a
-        rest_vir_a = self.rest_vir_a
-        rest_occ_b = self.rest_occ_b
-        rest_vir_b = self.rest_vir_b
-        a_x = self.a_x
 
         # J 
         T_ia_J_a, T_ia_J_b = self.get_T_J_UKS()
@@ -2134,21 +2129,24 @@ class TDA(RisBase):
         log.timer('transition_magnetic_dipole', *cpu0)
 
         if self.RKS:
-            oscillator_strength, rotatory_strength = spectralib.get_spectra(energies=energies, X=X, Y=None, 
-                                                    P=P, mdpol=mdpol,
-                                                    name=self.out_name+'_TDA_ris' if self.out_name else 'TDA_ris', 
-                                                    RKS=True, spectra=self.spectra,
-                                                    print_threshold = self.print_threshold, 
-                                                    n_occ_a=self.n_occ, n_vir_a=self.n_vir, verbose=self.verbose)
+            n_occ_a = self.n_occ
+            n_vir_a = self.n_vir
+            n_occ_b = None
+            n_vir_b = None
         else:
-            oscillator_strength, rotatory_strength = spectralib.get_spectra(energies=energies, X=X, Y=None, 
-                                                    P=P, mdpol=mdpol,
-                                                    name=self.out_name+'_TDA_ris' if self.out_name else 'TDA_ris', 
-                                                    RKS=False, spectra=self.spectra,
-                                                    print_threshold = self.print_threshold, 
-                                                    n_occ_a=self.n_occ_a, n_vir_a=self.n_vir_a, n_occ_b=self.n_occ_b, n_vir_b=self.n_vir_b, 
-                                                    verbose=self.verbose)            
-        
+            n_occ_a = self.n_occ_a
+            n_vir_a = self.n_vir_a
+            n_occ_b = self.n_occ_b
+            n_vir_b = self.n_vir_b
+ 
+        oscillator_strength, rotatory_strength = spectralib.get_spectra(energies=energies, X=X, Y=None, 
+                                                P=P, mdpol=mdpol,
+                                                name=self.out_name+'_TDA_ris' if self.out_name else 'TDA_ris', 
+                                                RKS=self.RKS, spectra=self.spectra,
+                                                print_threshold = self.print_threshold, 
+                                                n_occ_a=n_occ_a, n_vir_a=n_vir_a, n_occ_b=n_occ_b, n_vir_b=n_vir_b, 
+                                                verbose=self.verbose)
+
         energies = energies*HARTREE2EV
 
         self.energies = energies
@@ -2294,6 +2292,232 @@ class TDDFT(RisBase):
 
         return RKS_TDDFT_pure_MVP, hdiag_sq
 
+
+    ''' ===========  UKS hybrid =========== '''
+    def gen_UKS_TDDFT_hybrid_MVP(self):
+        '''hybrid RKS TDDFT'''
+        log = self.log
+        n_occ_a = self.n_occ_a
+        n_vir_a = self.n_vir_a
+        n_occ_b = self.n_occ_b
+        n_vir_b = self.n_vir_b   
+        rest_occ_a = self.rest_occ_a
+        rest_vir_a = self.rest_vir_a
+        rest_occ_b = self.rest_occ_b
+        rest_vir_b = self.rest_vir_b
+        a_x = self.a_x
+
+        # J 
+        T_ia_J_a, T_ia_J_b = self.get_T_J_UKS()
+
+        iajb_MVP_aa = gen_iajb_MVP_Tpq(T_ia=T_ia_J_a, T_jb=T_ia_J_a, log=log)
+        iajb_MVP_bb = gen_iajb_MVP_Tpq(T_ia=T_ia_J_b, T_jb=T_ia_J_b, log=log)
+        iajb_MVP_ab = gen_iajb_MVP_Tpq(T_ia=T_ia_J_a, T_jb=T_ia_J_b, log=log)
+        iajb_MVP_ba = gen_iajb_MVP_Tpq(T_ia=T_ia_J_b, T_jb=T_ia_J_a, log=log)
+
+        # K 
+        T_ia_K_a, T_ia_K_b, T_ij_K_a, T_ij_K_b, T_ab_K_a, T_ab_K_b = self.get_3T_K_UKS()
+
+        ijab_MVP_aa = gen_ijab_MVP_Tpq(T_ij=T_ij_K_a, T_ab=T_ab_K_a, log=log)
+        ijab_MVP_bb = gen_ijab_MVP_Tpq(T_ij=T_ij_K_b, T_ab=T_ab_K_b, log=log)
+        ibja_MVP_aa = gen_ibja_MVP_Tpq(T_ia=T_ia_K_a, log=log)
+        ibja_MVP_bb = gen_ibja_MVP_Tpq(T_ia=T_ia_K_b, log=log)
+
+        hdiag_MVP_a = gen_hdiag_MVP(hdiag=self.hdiag_a, n_occ=n_occ_a, n_vir=n_vir_a)
+        hdiag_MVP_b = gen_hdiag_MVP(hdiag=self.hdiag_b, n_occ=n_occ_b, n_vir=n_vir_b)
+        
+        A_aa_size = n_occ_a * n_vir_a
+        A_bb_size = n_occ_b * n_vir_b
+  
+        def UKS_TDDFT_hybrid_MVP(X, Y):
+            '''
+            UKS
+            [A B][X] = [AX+BY] = [U1]
+            [B A][Y]   [AY+BX]   [U2]
+            A B have 4 blocks, αα, αβ, βα, ββ
+            A = [ Aαα Aαβ ]   B = [ Bαα Bαβ ]
+                [ Aβα Aββ ]       [ Bβα Bββ ]
+
+            X = [ Xα ]        Y = [ Yα ]
+                [ Xβ ]            [ Yβ ]
+
+            (A+B)αα, (A+B)αβ is shown below
+
+            βα, ββ can be obtained by change α to β 
+            we compute (A+B)(X+Y) and (A-B)(X-Y)
+
+            V:= X+Y
+            (A+B)αα Vα = hdiag_MVP(Vα) + 2*iaαjbα_MVP(Vα) - a_x*[ijαabα_MVP(Vα) + ibαjaα_MVP(Vα)]
+                      (A+B)αβ Vβ = 2*iaαjbβ_MVP(Vβ) 
+
+
+
+            A+B = [ (A+B)αα Cαβ ]   x+y = [ Vα ]  
+                  [ (A+B)βα Cββ ]         [ Vβ ]
+            (A+B)(x+y) =   [ (A+B)αα Vα + (A+B)αβ Vβ ]  = [ ApB_XpY_α ]
+                           [ (A+B)βα Vα + (A+B)ββ Vβ ]  = [ ApB_XpY_β ]
+
+            V:= X-Y
+            (A-B)αα Vα = hdiag_MVP(Vα) - a_x*[ijαabα_MVP(Vα) - ibαjaα_MVP(Vα)]
+                  (A-B)αβ Vβ = 0
+
+
+            A-B = [ (A-B)αα  0  ]   x-y = [ Vα ]   
+                  [  0  (A-B)ββ ]         [ Vβ ]                          
+            (A-B)(x-y) =   [ (A-B)αα Vα ] = [ AmB_XmY_α ]
+                           [ (A-B)ββ Vβ ]   [ AmB_XmY_β ]
+            '''
+            nstates = X.shape[0]
+
+            X_a = X[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
+            X_b = X[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
+            Y_a = Y[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
+            Y_b = Y[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
+
+            XpY_a = X_a + Y_a
+            XpY_b = X_b + Y_b
+            XmY_a = X_a - Y_a
+            XmY_b = X_b - Y_b
+
+            XpY_a_trunc = XpY_a[:,n_occ_a-rest_occ_a:,:rest_vir_a]
+            XpY_b_trunc = XpY_b[:,n_occ_b-rest_occ_b:,:rest_vir_b]
+            XmY_a_trunc = XmY_a[:,n_occ_a-rest_occ_a:,:rest_vir_a]
+            XmY_b_trunc = XmY_b[:,n_occ_b-rest_occ_b:,:rest_vir_b]
+
+            '''============== (A+B) (X+Y) ================'''
+            ''' alpha part '''
+            ApB_XpY_a = hdiag_MVP_a(XpY_a) 
+            ApB_XpY_a_trunc = ApB_XpY_a[:,n_occ_a-rest_occ_a:,:rest_vir_a]
+
+            iajb_MVP_aa(XpY_a, factor=2, out=ApB_XpY_a)
+            iajb_MVP_ab(XpY_b, factor=2, out=ApB_XpY_a)
+
+            ijab_MVP_aa(XpY_a_trunc, a_x=a_x, out=ApB_XpY_a_trunc)
+            ibja_MVP_aa(XpY_a_trunc, a_x=a_x, out=ApB_XpY_a_trunc)
+
+
+            ''' beta part (simply change above α to β)'''
+
+            ApB_XpY_b = hdiag_MVP_b(XpY_b) 
+            ApB_XpY_b_trunc = ApB_XpY_b[:,n_occ_b-rest_occ_b:,:rest_vir_b]
+
+            iajb_MVP_bb(XpY_b, factor=2, out=ApB_XpY_b)
+            iajb_MVP_ba(XpY_a, factor=2, out=ApB_XpY_b)
+            
+            ijab_MVP_bb(XpY_b_trunc, a_x=a_x, out=ApB_XpY_b_trunc)
+            ibja_MVP_bb(XpY_b_trunc, a_x=a_x, out=ApB_XpY_b_trunc)
+
+
+            '''============== (A-B) (X-Y) ================'''
+            ''' alpha part '''
+            
+            AmB_XmY_a = hdiag_MVP_a(XmY_a) 
+            AmB_XmY_a_trunc = AmB_XmY_a[:,n_occ_a-rest_occ_a:,:rest_vir_a]
+
+            ijab_MVP_aa(XmY_a_trunc, a_x=a_x, out=AmB_XmY_a_trunc)
+            ibja_MVP_aa(XmY_a_trunc, a_x=-a_x, out=AmB_XmY_a_trunc)
+
+            ''' beta part (simply change above α to β)'''
+
+            AmB_XmY_b = hdiag_MVP_b(XmY_b) 
+            AmB_XmY_b_trunc = AmB_XmY_b[:,n_occ_b-rest_occ_b:,:rest_vir_b]
+
+            ijab_MVP_bb(XmY_b_trunc, a_x=a_x, out=AmB_XmY_b_trunc)
+            ibja_MVP_bb(XmY_b_trunc, a_x=-a_x, out=AmB_XmY_b_trunc)
+
+            '''============== U1 = AX+BY and U2 = AY+BX ================'''
+            ''' (A+B)(X+Y) = AX + BY + AY + BX   (1) ApB_XpY
+                (A-B)(X-Y) = AX + BY - AY - BX   (2) AmB_XmY
+                    (1) + (1) /2 = AX + BY = U1
+                    (1) - (2) /2 = AY + BX = U2
+            '''
+            ApB_XpY_a = ApB_XpY_a.reshape(nstates, A_aa_size) 
+            ApB_XpY_b = ApB_XpY_b.reshape(nstates, A_bb_size)
+            AmB_XmY_a = AmB_XmY_a.reshape(nstates, A_aa_size)
+            AmB_XmY_b = AmB_XmY_b.reshape(nstates, A_bb_size)
+
+            ApB_XpY = np.concatenate([ApB_XpY_a, ApB_XpY_b], axis=1)
+            AmB_XmY = np.concatenate([AmB_XmY_a, AmB_XmY_b], axis=1)
+
+            U1 = (ApB_XpY + AmB_XmY)/2
+            U2 = (ApB_XpY - AmB_XmY)/2
+
+            return U1, U2
+        return UKS_TDDFT_hybrid_MVP, self.hdiag
+
+
+    ''' ===========  UKS pure =========== '''
+    def gen_UKS_TDDFT_pure_MVP(self):
+        '''pure TDDFT'''
+        log = self.log
+        n_occ_a = self.n_occ_a
+        n_vir_a = self.n_vir_a
+        n_occ_b = self.n_occ_b
+        n_vir_b = self.n_vir_b
+
+        T_ia_J_a, T_ia_J_b = self.get_T_J_UKS()
+
+        iajb_MVP_aa = gen_iajb_MVP_Tpq(T_ia=T_ia_J_a, T_jb=T_ia_J_a, log=log)
+        iajb_MVP_bb = gen_iajb_MVP_Tpq(T_ia=T_ia_J_b, T_jb=T_ia_J_b, log=log)
+        iajb_MVP_ab = gen_iajb_MVP_Tpq(T_ia=T_ia_J_a, T_jb=T_ia_J_b, log=log)
+        iajb_MVP_ba = gen_iajb_MVP_Tpq(T_ia=T_ia_J_b, T_jb=T_ia_J_a, log=log)
+
+
+        hdiag_a_sqrt_MVP = gen_hdiag_MVP(hdiag=self.hdiag_a**0.5, n_occ=n_occ_a, n_vir=n_vir_a)
+        hdiag_b_sqrt_MVP = gen_hdiag_MVP(hdiag=self.hdiag_b**0.5, n_occ=n_occ_b, n_vir=n_vir_b)
+        
+
+        hdiag_a_MVP = gen_hdiag_MVP(hdiag=self.hdiag_a, n_occ=n_occ_a, n_vir=n_vir_a)
+        hdiag_b_MVP = gen_hdiag_MVP(hdiag=self.hdiag_b, n_occ=n_occ_b, n_vir=n_vir_b)
+
+        hdiag_a_sq = self.hdiag_a**2
+        hdiag_b_sq = self.hdiag_b**2
+        '''hdiag_sq: preconditioner'''
+        hdiag_sq = np.hstack((hdiag_a_sq, hdiag_b_sq))
+
+        A_aa_size = n_occ_a * n_vir_a
+        A_bb_size = n_occ_b * n_vir_b
+
+        def UKS_TDDFT_pure_MVP(Z):
+            '''       MZ = Z w^2
+                M = (A-B)^1/2(A+B)(A-B)^1/2
+                Z = (A-B)^1/2(X-Y)
+
+                X+Y = (A-B)^1/2 Z * 1/w
+                A+B = hdiag_MVP(V) + 4*iajb_MVP(V)
+                (A-B)^1/2 = hdiag_sqrt_MVP(V)
+                preconditioner = hdiag_sq
+
+                M =  [ (A-B)^1/2αα    0   ] [ (A+B)αα (A+B)αβ ] [ (A-B)^1/2αα    0   ]            Z = [ Zα ]  
+                     [    0   (A-B)^1/2ββ ] [ (A+B)βα (A+B)ββ ] [    0   (A-B)^1/2ββ ]                [ Zβ ]
+            '''
+            nstates = Z.shape[0]
+            Z_a = Z[:, :A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
+            Z_b = Z[:, A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
+
+            AmB_aa_sqrt_Z_a = hdiag_a_sqrt_MVP(Z_a)
+            AmB_bb_sqrt_Z_b = hdiag_b_sqrt_MVP(Z_b)
+
+            MZ_a = hdiag_a_MVP(AmB_aa_sqrt_Z_a) 
+            iajb_MVP_aa(AmB_aa_sqrt_Z_a, factor=2, out=MZ_a)
+            iajb_MVP_ab(AmB_bb_sqrt_Z_b, factor=2, out=MZ_a) 
+
+            MZ_b = hdiag_b_MVP(AmB_bb_sqrt_Z_b) 
+            iajb_MVP_bb(AmB_bb_sqrt_Z_b, factor=2, out=MZ_b)
+            iajb_MVP_ba(AmB_aa_sqrt_Z_a, factor=2, out=MZ_b) 
+
+
+            MZ_a = hdiag_a_sqrt_MVP(MZ_a)
+            MZ_b = hdiag_b_sqrt_MVP(MZ_b)
+
+            MZ_a = MZ_a.reshape(nstates, A_aa_size)
+            MZ_b = MZ_b.reshape(nstates, A_bb_size)
+            MZ = np.concatenate([MZ_a, MZ_b], axis=1)
+
+            return MZ
+
+        return UKS_TDDFT_pure_MVP, hdiag_sq 
+
     def gen_vind(self):
         self.build()
         if self.RKS:
@@ -2303,10 +2527,14 @@ class TDDFT(RisBase):
             elif self.a_x == 0:
                 TDDFT_MVP, hdiag = self.gen_RKS_TDDFT_pure_MVP()
         else:
-            raise NotImplementedError('Does not support UKS method yet')
+            if self.a_x != 0:
+                TDDFT_MVP, hdiag = self.gen_UKS_TDDFT_hybrid_MVP()
+
+            elif self.a_x == 0:
+                TDDFT_MVP, hdiag = self.gen_UKS_TDDFT_pure_MVP()
         return TDDFT_MVP, hdiag
     
-    #  TODO: UKS 
+
     def kernel(self):
         self.build()
         log = self.log
@@ -2346,11 +2574,23 @@ class TDDFT(RisBase):
         mdpol = self.transition_magnetic_dipole()
         log.timer('transition_magnetic_dipole', *cpu0)
 
+        if self.RKS:
+            n_occ_a = self.n_occ
+            n_vir_a = self.n_vir
+            n_occ_b = None
+            n_vir_b = None
+        else:
+            n_occ_a = self.n_occ_a
+            n_vir_a = self.n_vir_a
+            n_occ_b = self.n_occ_b
+            n_vir_b = self.n_vir_b
+
         oscillator_strength, rotatory_strength = spectralib.get_spectra(energies=energies, X=X, Y=Y,
                                                     P=P, mdpol=mdpol, 
-                                                    name=self.out_name+'_TDDFT_ris' if self.out_name else 'TDA_ris',
+                                                    name=self.out_name+'_TDDFT_ris' if self.out_name else 'TDDFT_ris',
                                                     spectra=self.spectra, RKS=self.RKS, print_threshold = self.print_threshold,
-                                                    n_occ_a=self.n_occ, n_vir_a=self.n_vir, verbose=self.verbose)
+                                                    n_occ_a=self.n_occ_a, n_vir_a=self.n_vir_a, n_occ_b=n_occ_b, n_vir_b=n_vir_b, 
+                                                    verbose=self.verbose)
         energies = energies*HARTREE2EV
         if self._citation:
             log.info(CITATION_INFO)
