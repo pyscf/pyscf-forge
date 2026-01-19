@@ -2589,7 +2589,7 @@ class TDDFT(RisBase):
                                                     P=P, mdpol=mdpol, 
                                                     name=self.out_name+'_TDDFT_ris' if self.out_name else 'TDDFT_ris',
                                                     spectra=self.spectra, RKS=self.RKS, print_threshold = self.print_threshold,
-                                                    n_occ_a=self.n_occ_a, n_vir_a=self.n_vir_a, n_occ_b=n_occ_b, n_vir_b=n_vir_b, 
+                                                    n_occ_a=n_occ_a, n_vir_a=n_vir_a, n_occ_b=n_occ_b, n_vir_b=n_vir_b, 
                                                     verbose=self.verbose)
         energies = energies*HARTREE2EV
         if self._citation:
