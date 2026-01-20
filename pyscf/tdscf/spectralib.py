@@ -42,14 +42,14 @@ ECD_SCALING_FACTOR = 500
 def get_g16style_trasn_coeff(state, coeff_vec, sybmol, n_occ, n_vir, print_threshold):
 
     abs_coeff = np.abs(coeff_vec[state, :, :])
-    mask = abs_coeff >= print_threshold*(2**0.5)
+    mask = abs_coeff >= print_threshold
 
     occ_indices, vir_indices = np.where(mask)
 
     if len(occ_indices) == 0:
         return []
 
-    coeff_values = coeff_vec[state, occ_indices, vir_indices]/(2**0.5)
+    coeff_values = coeff_vec[state, occ_indices, vir_indices]
     
     occ_indices += 1  # Convert to 1-based index
     vir_indices += 1 + n_occ  # Convert to 1-based index and offset for vir_indices
@@ -61,7 +61,9 @@ def get_g16style_trasn_coeff(state, coeff_vec, sybmol, n_occ, n_vir, print_thres
 
     return trasn_coeff
 
-def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a, n_occ_b=None, n_vir_b=None, spectra=True, print_threshold=0.001, mdpol=None, verbose=logger.NOTE):
+def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a, 
+                n_occ_b=None, n_vir_b=None, spectra=True, print_threshold=0.001, 
+                mdpol=None, verbose=logger.NOTE):
     '''
     E = hν
     c = λ·ν

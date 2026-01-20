@@ -2129,16 +2129,10 @@ class TDA(RisBase):
         log.timer('transition_magnetic_dipole', *cpu0)
 
         if self.RKS:
-            n_occ_a = self.n_occ
-            n_vir_a = self.n_vir
-            n_occ_b = None
-            n_vir_b = None
+            n_occ_a, n_vir_a, n_occ_b, n_vir_b = self.n_occ, self.n_vir, None, None
         else:
-            n_occ_a = self.n_occ_a
-            n_vir_a = self.n_vir_a
-            n_occ_b = self.n_occ_b
-            n_vir_b = self.n_vir_b
- 
+            n_occ_a, n_vir_a, n_occ_b, n_vir_b = self.n_occ_a, self.n_vir_a, self.n_occ_b, self.n_vir_b
+
         oscillator_strength, rotatory_strength = spectralib.get_spectra(energies=energies, X=X, Y=None, 
                                                 P=P, mdpol=mdpol,
                                                 name=self.out_name+'_TDA_ris' if self.out_name else 'TDA_ris', 
@@ -2575,15 +2569,9 @@ class TDDFT(RisBase):
         log.timer('transition_magnetic_dipole', *cpu0)
 
         if self.RKS:
-            n_occ_a = self.n_occ
-            n_vir_a = self.n_vir
-            n_occ_b = None
-            n_vir_b = None
+            n_occ_a, n_vir_a, n_occ_b, n_vir_b = self.n_occ, self.n_vir, None, None
         else:
-            n_occ_a = self.n_occ_a
-            n_vir_a = self.n_vir_a
-            n_occ_b = self.n_occ_b
-            n_vir_b = self.n_vir_b
+            n_occ_a, n_vir_a, n_occ_b, n_vir_b = self.n_occ_a, self.n_vir_a, self.n_occ_b, self.n_vir_b
 
         oscillator_strength, rotatory_strength = spectralib.get_spectra(energies=energies, X=X, Y=Y,
                                                     P=P, mdpol=mdpol, 
