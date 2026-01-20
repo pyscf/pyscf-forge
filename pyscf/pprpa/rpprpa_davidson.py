@@ -165,7 +165,7 @@ def pprpa_get_trial_vector(pprpa, ntri):
         def __init__(self):
             self.p = -1
             self.q = -1
-            self.eig_sum = max_orb_sum
+            self.eig_sum = max_orb_sum if pprpa.channel == "pp" else -max_orb_sum
 
     pairs = []
     for r in range(ntri):
@@ -210,7 +210,7 @@ def pprpa_get_trial_vector(pprpa, ntri):
             tri_vec[r, pprpa.oo_dim + pq] = 1.0
             tri_vec_sig[r] = 1.0
     else:
-        # find hole-hole pairs with lowest orbital energy summation
+        # find hole-hole pairs with highest orbital energy summation
         for r in range(ntri):
             for p in range(nocc-1, -1, -1):
                 for q in range(nocc-1, p - is_singlet, -1):
@@ -220,7 +220,7 @@ def pprpa_get_trial_vector(pprpa, ntri):
                             valid = False
                             break
                     if (valid is True
-                        and (mo_energy[p] + mo_energy[q]) < pairs[r].eig_sum):
+                        and (mo_energy[p] + mo_energy[q]) > pairs[r].eig_sum):
                         pairs[r].p, pairs[r].q = q, p
                         pairs[r].eig_sum = mo_energy[p] + mo_energy[q]
 
@@ -263,98 +263,59 @@ def pprpa_contraction(pprpa, tri_vec):
     # for convenience, use XX as XX_act in this function
     nocc, nvir, nmo = pprpa.nocc_act, pprpa.nvir_act, pprpa.nmo_act
     mo_energy = pprpa.mo_energy_act
-    Lpq = pprpa.Lpq
-    naux = Lpq.shape[0]
+    Lpi = pprpa.Lpi
+    Lpa = pprpa.Lpa
+    naux = Lpi.shape[0]
 
     ntri = tri_vec.shape[0]
     mv_prod = numpy.zeros(shape=[ntri, pprpa.full_dim], dtype=numpy.double)
 
-    pm = 1.0 if pprpa.multi == "s" else -1.0
     is_singlet = 1 if pprpa.multi == "s" else 0
     tri_row_o, tri_col_o = numpy.tril_indices(nocc, is_singlet-1)
     tri_row_v, tri_col_v = numpy.tril_indices(nvir, is_singlet-1)
 
-    if nocc == 0:
-        for ivec in range(ntri):
-            z_vv = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
-            z_vv[tri_row_v, tri_col_v] = tri_vec[ivec]
-            z_vv[numpy.diag_indices(nvir)] *= 1.0 / numpy.sqrt(2)
+    z_oo = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
+    z_vv = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
+    for ivec in range(ntri):
+        z_oo[tri_row_o, tri_col_o] = tri_vec[ivec][:pprpa.oo_dim]
+        z_oo[numpy.diag_indices(nocc)] *= 1.0 / numpy.sqrt(2)
+        z_vv[tri_row_v, tri_col_v] = tri_vec[ivec][pprpa.oo_dim:]
+        z_vv[numpy.diag_indices(nvir)] *= 1.0 / numpy.sqrt(2)
 
-            # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
-            Lpq_z = einsum("Lps,rs->Lpr", Lpq[:, nocc:, nocc:], z_vv)
+        # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
+        Lpq_z = numpy.zeros(shape=[naux * nmo, nmo], dtype=numpy.double)
+        Lpq_z[:, :nocc] = Lpi.reshape(naux * nmo, nocc) @ z_oo.T
+        Lpq_z[:, nocc:] = Lpa.reshape(naux * nmo, nvir) @ z_vv.T
 
-            # MV_{pq} = \sum_{Lr} Lpq_{L,pr} Lpqz_{L,qr} \pm Lpq_{L,qr} Lpqz_{L,pr}
-            mv_prod_full = einsum("Lpr,Lqr->pq", Lpq[:, nocc:, nocc:], Lpq_z)
-            mv_prod_full += einsum("Lqr,Lpr->pq", Lpq[:, nocc:, nocc:], Lpq_z) * pm
-            mv_prod_full[numpy.diag_indices(nvir)] *= 1.0 / numpy.sqrt(2)
-            mv_prod[ivec] = mv_prod_full[tri_row_v, tri_col_v]
+        # transpose and reshape for faster multiplication
+        Lpq_z = Lpq_z.reshape(naux, nmo, nmo).transpose(1, 0, 2)
+        Lpq_z = Lpq_z.reshape(nmo, naux * nmo)
 
-        orb_sum_vv = numpy.asarray(
-            mo_energy[None, nocc:] + mo_energy[nocc:, None]) - 2.0 * pprpa.mu
-        orb_sum_vv = orb_sum_vv[tri_row_v, tri_col_v]
-        for ivec in range(ntri):
-            oz_vv = orb_sum_vv * tri_vec[ivec]
-            mv_prod[ivec] += oz_vv
-    elif nvir == 0:
-        for ivec in range(ntri):
-            z_oo = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
-            z_oo[tri_row_o, tri_col_o] = tri_vec[ivec]
-            z_oo[numpy.diag_indices(nocc)] *= 1.0 / numpy.sqrt(2)
+        # MV_{pq} = \sum_{Lr} Lpq_{L,pr} Lpqz_{L,qr} \pm Lpq_{L,qr} Lpqz_{L,pr}
+        # NOTE: here assuming Lpq[L,p,q] = Lpq[L,q,p] for real orbitals
+        mv_prod_full = numpy.zeros(shape=[nmo, nmo], dtype=numpy.double)
+        mv_prod_full[:nocc, :nocc] = Lpq_z[:nocc] @ Lpi.reshape(naux * nmo, nocc)
+        mv_prod_full[nocc:, nocc:] = Lpq_z[nocc:] @ Lpa.reshape(naux * nmo, nvir)
+        if pprpa.multi == "s":
+            mv_prod_full += mv_prod_full.T
+        else:
+            mv_prod_full -= mv_prod_full.T
+        mv_prod_full = mv_prod_full.T
+        mv_prod_full[numpy.diag_indices(nmo)] *= 1.0 / numpy.sqrt(2)
+        mv_prod[ivec][: pprpa.oo_dim] =\
+            mv_prod_full[: nocc, : nocc][tri_row_o, tri_col_o]
+        mv_prod[ivec][pprpa.oo_dim:] = \
+            mv_prod_full[nocc:, nocc:][tri_row_v, tri_col_v]
 
-            # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
-            Lpq_z = einsum("Lps,rs->Lpr", Lpq[:, : nocc, : nocc], z_oo)
-
-            # MV_{pq} = \sum_{Lr} Lpq_{L,pr} Lpqz_{L,qr} \pm Lpq_{L,qr} Lpqz_{L,pr}
-            mv_prod_full = einsum("Lpr,Lqr->pq", Lpq[:, : nocc, : nocc], Lpq_z)
-            mv_prod_full += einsum("Lqr,Lpr->pq", Lpq[:, :nocc, :nocc], Lpq_z) * pm
-            mv_prod_full[numpy.diag_indices(nocc)] *= 1.0 / numpy.sqrt(2)
-            mv_prod[ivec] = mv_prod_full[tri_row_o, tri_col_o]
-
-        orb_sum_oo = numpy.asarray(
-            mo_energy[None, : nocc] + mo_energy[: nocc, None]) - 2.0 * pprpa.mu
-        orb_sum_oo = orb_sum_oo[tri_row_o, tri_col_o]
-        for ivec in range(ntri):
-            oz_oo = -orb_sum_oo * tri_vec[ivec]
-            mv_prod[ivec] += oz_oo
-    else:
-        for ivec in range(ntri):
-            z_oo = numpy.zeros(shape=[nocc, nocc], dtype=numpy.double)
-            z_oo[tri_row_o, tri_col_o] = tri_vec[ivec][:pprpa.oo_dim]
-            z_oo[numpy.diag_indices(nocc)] *= 1.0 / numpy.sqrt(2)
-            z_vv = numpy.zeros(shape=[nvir, nvir], dtype=numpy.double)
-            z_vv[tri_row_v, tri_col_v] = tri_vec[ivec][pprpa.oo_dim:]
-            z_vv[numpy.diag_indices(nvir)] *= 1.0 / numpy.sqrt(2)
-
-            # Lpqz_{L,pr} = \sum_s Lpq_{L,ps} z_{rs}
-            Lpq_z = numpy.zeros(shape=[naux, nmo, nmo], dtype=numpy.double)
-            Lpq_z[:, :nocc, :nocc] = einsum("Lps,rs->Lpr", Lpq[:, :nocc, :nocc], z_oo)
-            Lpq_z[:, nocc:, :nocc] = einsum("Lps,rs->Lpr", Lpq[:, nocc:, :nocc], z_oo)
-            Lpq_z[:, :nocc, nocc:] = einsum("Lps,rs->Lpr", Lpq[:, :nocc, nocc:], z_vv)
-            Lpq_z[:, nocc:, nocc:] = einsum("Lps,rs->Lpr", Lpq[:, nocc:, nocc:], z_vv)
-
-            # MV_{pq} = \sum_{Lr} Lpq_{L,pr} Lpqz_{L,qr} \pm Lpq_{L,qr} Lpqz_{L,pr}
-            mv_prod_full = numpy.zeros(shape=[nmo, nmo], dtype=numpy.double)
-            mv_prod_full[:nocc, :nocc] = einsum("Lpr,Lqr->pq", Lpq[:, :nocc], Lpq_z[:, :nocc])
-            mv_prod_full[:nocc, :nocc] += einsum("Lqr,Lpr->pq", Lpq[:, :nocc], Lpq_z[:, :nocc]) * pm
-            mv_prod_full[nocc:, nocc:] = einsum("Lpr,Lqr->pq", Lpq[:, nocc:], Lpq_z[:, nocc:])
-            mv_prod_full[nocc:, nocc:] += einsum("Lqr,Lpr->pq", Lpq[:, nocc:], Lpq_z[:, nocc:]) * pm
-            mv_prod_full[numpy.diag_indices(nmo)] *= 1.0 / numpy.sqrt(2)
-            mv_prod[ivec][: pprpa.oo_dim] =\
-                mv_prod_full[: nocc, : nocc][tri_row_o, tri_col_o]
-            mv_prod[ivec][pprpa.oo_dim:] = \
-                mv_prod_full[nocc:, nocc:][tri_row_v, tri_col_v]
-
-        orb_sum_oo = numpy.asarray(
-            mo_energy[None, : nocc] + mo_energy[: nocc, None]) - 2.0 * pprpa.mu
-        orb_sum_oo = orb_sum_oo[tri_row_o, tri_col_o]
-        orb_sum_vv = numpy.asarray(
-            mo_energy[None, nocc:] + mo_energy[nocc:, None]) - 2.0 * pprpa.mu
-        orb_sum_vv = orb_sum_vv[tri_row_v, tri_col_v]
-        for ivec in range(ntri):
-            oz_oo = -orb_sum_oo * tri_vec[ivec][:pprpa.oo_dim]
-            mv_prod[ivec][:pprpa.oo_dim] += oz_oo
-            oz_vv = orb_sum_vv * tri_vec[ivec][pprpa.oo_dim:]
-            mv_prod[ivec][pprpa.oo_dim:] += oz_vv
+    orb_sum_oo = (mo_energy[None, : nocc] + mo_energy[: nocc, None]) - 2.0 * pprpa.mu
+    orb_sum_oo = orb_sum_oo[tri_row_o, tri_col_o]
+    orb_sum_vv = (mo_energy[None, nocc:] + mo_energy[nocc:, None]) - 2.0 * pprpa.mu
+    orb_sum_vv = orb_sum_vv[tri_row_v, tri_col_v]
+    for ivec in range(ntri):
+        oz_oo = -orb_sum_oo * tri_vec[ivec][:pprpa.oo_dim]
+        mv_prod[ivec][:pprpa.oo_dim] += oz_oo
+        oz_vv = orb_sum_vv * tri_vec[ivec][pprpa.oo_dim:]
+        mv_prod[ivec][pprpa.oo_dim:] += oz_vv
 
     return mv_prod
 
@@ -604,6 +565,8 @@ class RppRPADavidson(StreamObject):
         self.nvir = None  # number of virtual orbitals
         self.mo_energy = numpy.array(self._scf.mo_energy)  # orbital energy
         self.Lpq = None  # three-center density-fitting matrix in MO
+        self.Lpi = None  # three-center density-fitting matrix in MO, [naux, nmo, nocc]
+        self.Lpa = None  # three-center density-fitting matrix in MO, [naux, nmo, nvir]
         self.mo_occ = self._scf.mo_occ  # used in get_nocc() and get_nmo(), not in ppRPA
         self.frozen = 0  # used in get_nocc() and get_nmo(), not in ppRPA
 
@@ -710,8 +673,11 @@ class RppRPADavidson(StreamObject):
         self.check_memory()
 
         cput0 = (logger.process_clock(), logger.perf_counter())
-        if self.Lpq is None:
-            self.Lpq = self.ao2mo()
+        if self.Lpi is None or self.Lpa is None:
+            Lpq = self.ao2mo()
+            self.Lpi = numpy.ascontiguousarray(Lpq[:, :, :self.nocc_act])
+            self.Lpa = numpy.ascontiguousarray(Lpq[:, :, self.nocc_act:])
+            logger.timer(self, "ppRPA integral transformation: %s" % multi, *cput0)
         self.dump_flags()
         kernel(pprpa=self)
         logger.timer(self, "ppRPA Davidson: %s" % multi, *cput0)
@@ -724,3 +690,4 @@ class RppRPADavidson(StreamObject):
             self.xy_t = self.xy.copy()
         self.exci = self.xy = None
         return
+
