@@ -5,7 +5,7 @@ from pyscf.csf_fci import csdstring
 from pyscf.fci import cistring
 from pyscf.fci.spin_op import spin_square0
 from pyscf import lib
-from pyscf.lib import numpy_helper
+from pyscf.lib import numpy_helper, param
 from scipy import special, linalg
 from functools import reduce
 from pyscf.fci.direct_spin1_symm import _gen_strs_irrep
@@ -30,11 +30,13 @@ class ImpossibleSpinError (ImpossibleCIvecError):
         self.smult = smult
 
 class CSFTransformer (lib.StreamObject):
-    def __init__(self, norb, neleca, nelecb, smult, orbsym=None, wfnsym=None):
+    def __init__(self, norb, neleca, nelecb, smult, orbsym=None, wfnsym=None,
+                 max_memory=param.MAX_MEMORY):
         self._norb = self._neleca = self._nelecb = self._smult = self._orbsym = None
         self.wfnsym = wfnsym
         self._update_spin_cache (norb, neleca, nelecb, smult)
         self.orbsym = orbsym
+        self.max_memory = max_memory
 
     def project_civec (self, detarr, order='C', normalize=True, return_norm=False):
         raise NotImplementedError
@@ -43,7 +45,7 @@ class CSFTransformer (lib.StreamObject):
         vec_on_cols = (order.upper () == 'F')
         civec, norm = transform_civec_det2csf (civec, self._norb, self._neleca,
             self._nelecb, self._smult, csd_mask=self.csd_mask, do_normalize=normalize,
-            vec_on_cols=vec_on_cols)
+            vec_on_cols=vec_on_cols, max_memory=self.max_memory)
         civec = self.pack_csf (civec, order=order)
         if return_norm: return civec, norm
         return civec
@@ -52,7 +54,7 @@ class CSFTransformer (lib.StreamObject):
         vec_on_cols = (order.upper () == 'F')
         civec, norm = transform_civec_csf2det (self.unpack_csf (civec), self._norb, self._neleca,
             self._nelecb, self._smult, csd_mask=self.csd_mask, do_normalize=normalize,
-            vec_on_cols=vec_on_cols)
+            vec_on_cols=vec_on_cols, max_memory=self.max_memory)
         if return_norm: return civec, norm
         return civec
 
@@ -64,7 +66,8 @@ class CSFTransformer (lib.StreamObject):
 
     def mat_det2csf_confspace (self, mat, confs):
         mat, csf_addr = transform_opmat_det2csf_pspace (mat, confs, self._norb, self._neleca,
-            self._nelecb, self._smult, self.csd_mask, self.econf_det_mask, self.econf_csf_mask)
+            self._nelecb, self._smult, self.csd_mask, self.econf_det_mask, self.econf_csf_mask,
+            max_memory=self.max_memory)
         return mat, csf_addr
 
     def pack_csf (self, csfvec, order='C'):
@@ -295,7 +298,8 @@ def check_spinstate_norm (detarr, norb, neleca, nelecb, smult, csd_mask=None):
     return transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=csd_mask)[1]
 
 
-def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
+def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
+                       max_memory=param.MAX_MEMORY):
     ''' Project the total spin = s [= (smult-1) / 2] component of a CI vector using CSFs
 
     Args
@@ -320,7 +324,7 @@ def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
     detarr = np.ravel (detarr, order='C')
 
     detarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False,
-                                           csd_mask=csd_mask, project=True)
+                                           csd_mask=csd_mask, project=True, max_memory=max_memory)
     try:
         detnorm = linalg.norm (detarr)
     except Exception as ex:
@@ -333,7 +337,8 @@ def project_civec_csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
     '''
     return detarr / detnorm, detnorm
 
-def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None, vec_on_cols=False, do_normalize=True):
+def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None, vec_on_cols=False,
+                             do_normalize=True, max_memory=param.MAX_MEMORY):
     ''' Express CI vector in terms of CSFs for spin s
 
     Args
@@ -381,7 +386,7 @@ def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
 
     # Driver needs an ndarray of explicit shape (*, ndet)
     csfarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False,
-                                           csd_mask=csd_mask, project=False)
+                                           csd_mask=csd_mask, project=False, max_memory=max_memory)
     if csfarr.size == 0:
         assert (False)
         return np.zeros (0, dtype=detarr.dtype), 0.0
@@ -407,7 +412,8 @@ def transform_civec_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
         csfnorm = 0.0
     return csfarr, csfnorm
 
-def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None, vec_on_cols=False, do_normalize=True):
+def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None, vec_on_cols=False,
+                             do_normalize=True, max_memory=param.MAX_MEMORY):
     ''' Transform CI vector in terms of CSFs back into determinants
 
     Args
@@ -456,7 +462,7 @@ def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None,
         csfarr = np.ascontiguousarray (csfarr.reshape (nvec, ncsf))
 
     detarr = _transform_detcsf_vec_or_mat (csfarr, norb, neleca, nelecb, smult, reverse=True, op_matrix=False,
-                                           csd_mask=csd_mask, project=False)
+                                           csd_mask=csd_mask, project=False, max_memory=max_memory)
 
     # Manipulate detarr back into the original shape
     detnorm = linalg.norm (detarr, axis=1)
@@ -479,7 +485,8 @@ def transform_civec_csf2det (csfarr, norb, neleca, nelecb, smult, csd_mask=None,
         detnorm = 0.0
     return detarr, detnorm
 
-def transform_opmat_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None):
+def transform_opmat_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None,
+                             max_memory=param.MAX_MEMORY):
     ''' Express operator matrix in terms of CSFs for spin s
 
     Args
@@ -498,11 +505,11 @@ def transform_opmat_det2csf (detarr, norb, neleca, nelecb, smult, csd_mask=None)
     assert (detarr.shape == tuple((ndet,ndet)) or detarr.shape == tuple((ndet**2,))), "{} {} (({},{}),{})".format (
         detarr.shape, ndet, neleca, nelecb, norb)
     csfarr = _transform_detcsf_vec_or_mat (detarr, norb, neleca, nelecb, smult, reverse=False, op_matrix=True,
-                                           csd_mask=csd_mask, project=False)
+                                           csd_mask=csd_mask, project=False, max_memory=max_memory)
     return csfarr
 
 def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=False, op_matrix=False, csd_mask=None,
-                                  project=False):
+                                  project=False, max_memory=param.MAX_MEMORY):
     ''' Wrapper to manipulate array into correct shape and transform both dimensions if an operator matrix
 
     Args
@@ -537,10 +544,12 @@ def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=Fals
         assert (nrow == ncol), "operator matrix must be square"
     assert (arr.shape == tuple((nrow, ncol))), "array shape should be {0}; is {1}".format ((nrow, ncol), arr.shape)
 
-    arr = _transform_det2csf (arr, norb, neleca, nelecb, smult, reverse=reverse, csd_mask=csd_mask, project=project)
+    arr = _transform_det2csf (arr, norb, neleca, nelecb, smult, reverse=reverse, csd_mask=csd_mask,
+                              project=project, max_memory=max_memory)
     if op_matrix:
         arr = arr.T
-        arr = _transform_det2csf (arr, norb, neleca, nelecb, smult, reverse=reverse, csd_mask=csd_mask, project=project)
+        arr = _transform_det2csf (arr, norb, neleca, nelecb, smult, reverse=reverse,
+                                  csd_mask=csd_mask, project=project, max_memory=max_memory)
         arr = numpy_helper.transpose (arr, inplace=True)
 
     if arr.size == 0:
@@ -556,7 +565,8 @@ def _transform_detcsf_vec_or_mat (arr, norb, neleca, nelecb, smult, reverse=Fals
     return arr
 
 
-def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_mask=None, project=False):
+def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_mask=None,
+                        project=False, max_memory=param.MAX_MEMORY):
     ''' Must take an array of shape (*, ndet) or (*, ncsf) '''
     #t_start = lib.logger.perf_counter ()
     time_umat = 0
@@ -609,8 +619,15 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
             inparr[:,det_addrs] = 0
             continue
 
+        # sign convention of PySCF is A' B' |vac>
+        # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
+        ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+        ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
+        sgn = (-1) ** (ncomm % 2)
+
         t_ref = lib.logger.perf_counter ()
-        umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult))
+        umat = sgn * get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
+        umat = np.asarray_chkfinite (umat)
         size_umat = max (size_umat, umat.nbytes)
         ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save
         #                 memory when there are too many csfs
@@ -655,7 +672,8 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
     '''
     return outarr
 
-def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd_mask, econf_det_mask, econf_csf_mask):
+def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd_mask,
+                                    econf_det_mask, econf_csf_mask, max_memory=param.MAX_MEMORY):
     ''' Transform an operator matrix from the determinant basis to the csf basis, in a subspace of determinants spanning
         the electron configurations addressed by econfs
 
@@ -740,8 +758,15 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             dj = di + nconf*ndet
             mat_ij = mat[:,di:dj].reshape (nrow, nconf, ndet)
 
+            # sign convention of PySCF is A' B' |vac>
+            # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
+            ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+            ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
+            sgn = (-1) ** (ncomm % 2)
+
             nspin = neleca + nelecb - 2*npair
-            umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult))
+            umat = sgn * get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
+            umat = np.asarray_chkfinite (umat)
 
             outmat[:,ci:cj] = np.tensordot (mat_ij, umat, axes=1).reshape (nrow, ncsf*nconf, order='C')
 
@@ -884,9 +909,7 @@ def get_csfvec_shape (norb, neleca, nelecb, smult):
 
     return min_npair, npair_offset[:-1], npair_dconf_size, npair_sconf_size, npair_csf_size
 
-def get_spin_evecs (nspin, neleca, nelecb, smult):
-    if nspin > 16:
-        raise NotImplementedError ('overflow safety for > 16 singly-occupied orbitals')
+def get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=param.MAX_MEMORY):
     ms = (neleca - nelecb) / 2
     s = (smult - 1) / 2
     #assert (neleca >= nelecb)
@@ -909,6 +932,14 @@ def get_spin_evecs (nspin, neleca, nelecb, smult):
     assert (len (scstrs) == ncsf), "should have {} coupling strings; have {} (nspin={}, s={})".format (
         ncsf, len (scstrs), nspin, s)
 
+    mem_current = lib.current_memory ()[0]
+    mem_rem = max_memory - mem_current
+    mem_reqd = ndet * ncsf * np.dtype (np.float64).itemsize / 1e6
+    if mem_reqd > mem_rem:
+        memstr = ('CSF unitary matrix for {} unpaired of {} total electrons w/ s={:.1f} is too big'
+                  " ({} MB req'd of {} MB remaining; {} MB total available)").format (
+            nspin, neleca+nelecb, s, mem_reqd, mem_rem, max_memory)
+        raise MemoryError (memstr)
     umat = np.ones ((ndet, ncsf), dtype=np.float64)
     twoS = smult-1
     twoMS = neleca - nelecb
@@ -918,8 +949,8 @@ def get_spin_evecs (nspin, neleca, nelecb, smult):
                         spinstrs.ctypes.data_as (ctypes.c_void_p),
                         scstrs.ctypes.data_as (ctypes.c_void_p),
                         ctypes.c_int (nspin),
-                        ctypes.c_int (ndet),
-                        ctypes.c_int (ncsf),
+                        ctypes.c_size_t (ndet),
+                        ctypes.c_size_t (ncsf),
                         ctypes.c_int (twoS),
                         ctypes.c_int (twoMS))
 
@@ -945,7 +976,7 @@ def _test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
         t_start = lib.logger.perf_counter ()
         libcsf.FCICSFmakeS2mat (S2mat.ctypes.data_as (ctypes.c_void_p),
                              spinstrs.ctypes.data_as (ctypes.c_void_p),
-                             ctypes.c_int (ndet),
+                             ctypes.c_size_t (ndet),
                              ctypes.c_int (nspin),
                              ctypes.c_int (twoMS))
         print ("TIME: {} seconds to make S2mat for {} spins with s={}, ms={}".format (
@@ -998,7 +1029,7 @@ def get_scstrs (nspin, smult):
 
     libcsf.FCICSFgetscstrs (scstrs.ctypes.data_as (ctypes.c_void_p),
                             mask.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_int (len (scstrs)),
+                            ctypes.c_size_t (len (scstrs)),
                             ctypes.c_int (nspin))
 
     return np.ascontiguousarray (scstrs[mask], dtype=np.int64)
@@ -1013,7 +1044,7 @@ def addrs2str (nspin, smult, addrs):
     twoS = smult - 1
     libcsf.FCICSFaddrs2str (strs.ctypes.data_as (ctypes.c_void_p),
                             addrs.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_int (nstr),
+                            ctypes.c_size_t (nstr),
                             gentable.ctypes.data_as (ctypes.c_void_p),
                             ctypes.c_int (nspin),
                             ctypes.c_int (twoS))
@@ -1029,7 +1060,7 @@ def strs2addr (nspin, smult, strs):
     twoS = smult - 1
     libcsf.FCICSFstrs2addr (addrs.ctypes.data_as (ctypes.c_void_p),
                             strs.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_int (nstr),
+                            ctypes.c_size_t (nstr),
                             gentable.ctypes.data_as (ctypes.c_void_p),
                             ctypes.c_int (nspin),
                             ctypes.c_int (twoS))
