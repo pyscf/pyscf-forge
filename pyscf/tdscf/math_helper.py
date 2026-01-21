@@ -30,7 +30,7 @@ def get_mem_info(words):
     rss = current_memory()[0] / 1024  # MB to GB
     memory_info = f"{words:35s} *** mem info: {rss:5.1f} / {MAX_MEMORY:5.1f} GB "
     return memory_info
-    
+
 def get_avail_cpumem():
     rss = current_memory()[0]  # in MB
     free_mem = MAX_MEMORY*1024 - rss
@@ -155,9 +155,9 @@ def Gram_Schmidt_bvec(V, bvec):
             del V_chunk, projections_coeff
             bvec -= tmp
             del tmp, projections_coeff, V_chunk
-            
+
             gc.collect()
-        
+
         return bvec
 
 
@@ -262,7 +262,7 @@ size_new    |------------------------------------------------|
 
 
     # W_new = W_holder[size_old:size_new, :]
-        
+
     # sub_A_tmp = dot_product_Vchunk_W(V_holder, W_new, size_bound=size_new, factor=0.6)
     sub_A_tmp = einsum('mn,ln->ml', V_holder[:size_new,:],W_holder[size_old:size_new, :])
 
@@ -273,16 +273,15 @@ size_new    |------------------------------------------------|
     if size_old > 0:
         if symmetry:
             sub_A_tmp = sub_A_holder[:size_old, size_old:size_new].T
-            # print('sub_A_tmp.shape', sub_A_tmp.shape)
-            # print('sub_A_holder[size_old:size_new, :size_old].shape', sub_A_holder[size_old:size_new, :size_old].shape)
+
             sub_A_holder[size_old:size_new, :size_old] = sub_A_tmp
             del sub_A_tmp
-            gc.collect()      
+            gc.collect()
         else:
             # sub_A_tmp = dot_product_Vchunk_W(W_holder, V_new, size_bound=size_old, factor=0.6).T
             sub_A_tmp = einsum('mn,ln->lm', W_holder[:size_old, :], V_holder[size_old:size_new,:])
             sub_A_holder[size_old:size_new, :size_old] = sub_A_tmp
-            del  sub_A_tmp
+            del sub_A_tmp
             gc.collect()
     return sub_A_holder
 
@@ -299,11 +298,11 @@ size_new    |------------------------------------------------|
 #     l,n = B.shape
 
 #     m0 = get_avail_cpumem()
-    
+
 #     AB = np.empty((size_bound, l), dtype=B.dtype)
 
-#     chunk_bytes_B = (n + l) * B.itemsize 
-#     chunk_bytes_A = n * A.itemsize 
+#     chunk_bytes_B = (n + l) * B.itemsize
+#     chunk_bytes_A = n * A.itemsize
 
 #     # Estimate the optimal chunk size based on available memory
 #     chunk_size_B = int((get_avail_cpumem() * factor ) // chunk_bytes_B)
@@ -360,13 +359,13 @@ size_new    |------------------------------------------------|
 #     if out is None:
 #         out = np.zeros((m, l), dtype=A.dtype)
 #     out *= beta
-#     chunk_bytes_A = (m+l) * A.itemsize 
-#     chunk_bytes_B = l * B.itemsize 
+#     chunk_bytes_A = (m+l) * A.itemsize
+#     chunk_bytes_B = l * B.itemsize
 
 #     # Estimate the optimal chunk size based on available memory
 #     chunk_size_A = int((get_avail_cpumem() * factor ) // chunk_bytes_A)
 #     chunk_size_B = int((get_avail_cpumem() * factor ) // chunk_bytes_B)
-    
+
 
 #     chunk_size = min(chunk_size_B, chunk_size_A, size_bound)
 
@@ -375,7 +374,7 @@ size_new    |------------------------------------------------|
 
 #         A_chunk = A[:,p0:p1]
 #         B_chunk = B[p0:p1, :]
-        
+
 #         # out = einsum('mn,nl->ml',A[:,p0:p1], B_chunk, alpha=alpha, beta=beta, out=out)
 #         # out += alpha*einsum('mn,nl->ml',A[:,p0:p1], B_chunk)
 #         tmp = einsum('mn,nl->ml',A_chunk, B_chunk)
@@ -452,7 +451,7 @@ def gen_sub_ab(V_holder, W_holder, U1_holder, U2_holder,
     gen_VW(VV_holder, V_holder, V_holder, size_old, size_new, symmetry=False)
     gen_VW(WW_holder, W_holder, W_holder, size_old, size_new, symmetry=False)
     gen_VW(VW_holder, V_holder, W_holder, size_old, size_new, symmetry=False)
-    
+
     sub_A = VU1_holder[:size_new, :size_new] + WU2_holder[:size_new, :size_new]
     sub_A = utriangle_symmetrize(sub_A)
 
@@ -476,7 +475,7 @@ def Gram_Schmidt_fill_holder(V, count, vecs, double = True):
        this version is io-efficeint
     '''
     # if count == 0:
-    #     return V 
+    #     return V
 
     n_new_vectors, A_size = vecs.shape
     assert V.shape[1] == A_size
@@ -492,7 +491,7 @@ def Gram_Schmidt_fill_holder(V, count, vecs, double = True):
         tmp = einsum('ac,ab->cb', projections_coeff, V[:count,:])
         vecs -= tmp
         del tmp, projections_coeff
-        
+
         if double:
             projections_coeff = einsum('ab,cb->ac', V[:count,:], vecs)  # (chunk_size, n_new_vectors)
             # vecs = einsum('ac,ab->cb', projections_coeff, V_chunk, -1 , 1, out=vecs)  # (n_new_vectors, A_size)
@@ -518,7 +517,7 @@ def Gram_Schmidt_fill_holder(V, count, vecs, double = True):
             continue
 
         if p0+1 == n_new_vectors:
-            break 
+            break
 
         other_vec = vecs[p0+1:,:]
         # print('other_vec.shape', other_vec.shape)
@@ -552,15 +551,10 @@ def nKs_fill_holder(V, count, vecs, double=True):
     for j in range(nvec):
         vec = vecs[j,:].reshape(1,-1)
         norm = np.linalg.norm(vec)
-        if  norm > 1e-14:
+        if norm > 1e-14:
             vec = vec/norm
-            if isinstance(V, np.ndarray):
-                V[count,:] = vec
-                del vec
-            else:
-                vec_cpu = vec.get()
-                V[count,:] = vec_cpu
-                del vec, vec_cpu
+            V[count,:] = vec
+            del vec
             gc.collect()
             count += 1
 
@@ -599,7 +593,6 @@ def check_orthonormal(A):
     '''
     define the orthonormality of a matrix A as the norm of (A.T*A - I)
     '''
-    n = np.shape(A)[1]
     B = einsum('ij,ij->i', A, A)
     B -= 1
     return np.linalg.norm(B)
@@ -637,7 +630,7 @@ def VW_Gram_Schmidt_fill_holder(V_holder, W_holder, m, X_new, Y_new, double=Fals
         xy_norm = (np.dot(x_tmp, x_tmp.T) + np.dot(y_tmp, y_tmp.T))**0.5
 
 
-        if  xy_norm > 1e-14:
+        if xy_norm > 1e-14:
             x_tmp = x_tmp/xy_norm
             y_tmp = y_tmp/xy_norm
 
@@ -661,7 +654,7 @@ def VW_nKs_fill_holder(V_holder, W_holder, m, X_new, Y_new, double=False):
         x_tmp = x_tmp/xy_norm
         y_tmp = y_tmp/xy_norm
 
-        if  xy_norm > 1e-18:
+        if xy_norm > 1e-18:
             x_tmp = x_tmp/xy_norm
             y_tmp = y_tmp/xy_norm
 
@@ -699,8 +692,8 @@ def solve_AX_Xla_B(A, omega, Q):
     return X
 
 def solve_AX_SX(A, S):
-    '''                        AX = SXΩ 
-                               AX = (d^-1/2 S d^-1/2) d^1/2 XΩ 
+    '''                        AX = SXΩ
+                               AX = (d^-1/2 S d^-1/2) d^1/2 XΩ
         d^-1/2 A (d^-1/2 d^1/2) X = L L.T d^1/2 X Ω
         d^-1/2 A d^-1/2 L^-1.T L.T d^1/2 X   = L L.T d^1/2 X Ω
         {L^-1 d^-1/2 A d^-1/2 L^-T} {L.T d^1/2 X}  = {L.T d^1/2 X} Ω
@@ -711,13 +704,13 @@ def solve_AX_SX(A, S):
     '''
     A = np.asarray(A)
     S = np.asarray(S)
-    
+
     d = np.diag(S)
     sqrt_d_inv = np.sqrt(1.0 / d)
 
     precond_S = sqrt_d_inv[:, None] * S * sqrt_d_inv[None, :]
     # np.fill_diagonal(precond_S, 1.0)
-    
+
     L = np.linalg.cholesky(precond_S)
     L_inv = scipy.linalg.solve_triangular(L, np.eye(L.shape[0]), lower=True)
     L_invT = L_inv.T
@@ -728,7 +721,7 @@ def solve_AX_SX(A, S):
 
     DEBUG = False
     if DEBUG:
-        omega_scipy, x_scipy = scipy.linalg.eigh(A.get(), S.get())
+        omega_scipy, x_scipy = scipy.linalg.eigh(A, S)
         x_scipy = np.array(x_scipy)
         assert np.linalg.norm(abs(X) - abs(x_scipy)) < 1e-10
     return omega, X
@@ -909,7 +902,7 @@ def TDDFT_subspace_linear_solver(a, b, sigma, pi, p, q, omega):
                 "SCF not correctly converged is likely to cause this error.\n"
                 "For example, scf converged to the wrong state.\n"
             )
-            raise RuntimeError(error_msg)    
+            raise RuntimeError(error_msg)
     G_inv = np.linalg.inv(G)
 
     '''a ̃+ b ̃= L^−1 d^−1/2 (a+b) d^−1/2 L^−T
@@ -972,16 +965,16 @@ def TDDFT_subspace_linear_solver1(a, b, sigma, pi, p, q, omega):
     B[half_size:,half_size:] = -sigma[:,:]
 
     B_inv = np.linalg.inv(B)
-    M = np.dot(B_inv, A)  
+    M = np.dot(B_inv, A)
     R = np.dot(B_inv,rhs)
 
-    T = scipy.linalg.solve_sylvester(M.get(), -np.diag(omega).get(), R.get())
+    T = scipy.linalg.solve_sylvester(M, -np.diag(omega), R)
     T *= rhs_norm
 
     x = T[:half_size,:]
     y = T[half_size:,:]
 
-    return  x, y
+    return x, y
 
 
 def XmY_2_XY(Z, AmB_sq, omega):

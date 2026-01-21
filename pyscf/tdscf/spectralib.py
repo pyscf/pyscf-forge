@@ -50,7 +50,7 @@ def get_g16style_trasn_coeff(state, coeff_vec, sybmol, n_occ, n_vir, print_thres
         return []
 
     coeff_values = coeff_vec[state, occ_indices, vir_indices]
-    
+
     occ_indices += 1  # Convert to 1-based index
     vir_indices += 1 + n_occ  # Convert to 1-based index and offset for vir_indices
 
@@ -61,8 +61,8 @@ def get_g16style_trasn_coeff(state, coeff_vec, sybmol, n_occ, n_vir, print_thres
 
     return trasn_coeff
 
-def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a, 
-                n_occ_b=None, n_vir_b=None, spectra=True, print_threshold=0.001, 
+def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
+                n_occ_b=None, n_vir_b=None, spectra=True, print_threshold=0.001,
                 mdpol=None, verbose=logger.NOTE):
     '''
     E = hν
@@ -131,7 +131,7 @@ def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
     if RKS:
         ''' 2* because alpha and beta spin '''
         fosc *=2
-        
+
     if isinstance(Y, np.ndarray):
         trans_magnetic_moment = -einsum('ma,na->mn', (X - Y), mdpol)
     else:
@@ -142,7 +142,7 @@ def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
     if RKS:
         ''' 2* because alpha and beta spin  '''
         rotatory_strength *=2
-    
+
     entry = [eV, nm, cm_1, fosc, rotatory_strength]
     data = np.zeros((eV.shape[0],len(entry)))
     for i in range(len(entry)):
@@ -179,19 +179,24 @@ def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
             with open(filename, 'w') as f:
 
                 for state in range(n_state):
-                    log.info(f" Excited State{state+1:4d}:      Singlet-A      {eV[state]:>.4f} eV  {nm[state]:>.2f} nm  f={fosc[state]:>.4f}   <S**2>=0.000")
+                    line = f" Excited State{state+1:4d}:      Singlet-A      {eV[state]:>.4f} eV  {nm[state]:>.2f} nm"
+                    line += f"  f={fosc[state]:>.4f}   <S**2>=0.000"
+                    log.info(line)
                     f.write(f" Excited State{state+1:4d}   1    {eV[state]:>.4f} \n")
-                    trasn_coeff = get_g16style_trasn_coeff(state, X, '->', n_occ=n_occ, n_vir=n_vir, print_threshold=print_threshold)
+                    trasn_coeff = get_g16style_trasn_coeff(state, X, '->', n_occ=n_occ, n_vir=n_vir,
+                                                                    print_threshold=print_threshold)
 
                     if isinstance(Y, np.ndarray):
-                        trasn_coeff += get_g16style_trasn_coeff(state, Y, '<-', n_occ=n_occ, n_vir=n_vir, print_threshold=print_threshold)
+                        trasn_coeff += get_g16style_trasn_coeff(state, Y, '<-', n_occ=n_occ, n_vir=n_vir,
+                                                                    print_threshold=print_threshold)
 
                     results = '\n'.join(trasn_coeff) + '\n\n'
                     log.info(results)
                     f.write(results)
             log.info(f'transition coefficient data written to {filename}')
         else:
-            log.warn('printing UKS transition coefficient not guaranteed to be correct, welcome to contribute to this part ( <S**2> ; print format)')
+            log.warn('printing UKS transition coefficient may not normalized correctly')
+            log.warn('welcome to contribute to this part ( <S**2> ; print format)')
             log.info(f"print RKS transition coefficients larger than {print_threshold:.2e}")
             log.info(f'index of alpha HOMO: {n_occ_a}')
             log.info(f'index of alpha LUMO: {n_occ_a+1}')
@@ -199,7 +204,7 @@ def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
             log.info(f'index of beta LUMO: {n_occ_b+1}')
             n_state = X.shape[0]
             A_aa_size = n_occ_a * n_vir_a
-            A_bb_size = n_occ_b * n_vir_b
+            # A_bb_size = n_occ_b * n_vir_b
             Xa = X[:,:A_aa_size].reshape(n_state, n_occ_a, n_vir_a)
             Xb = X[:,A_aa_size:].reshape(n_state, n_occ_b, n_vir_b)
             if isinstance(Y, np.ndarray):
@@ -211,14 +216,20 @@ def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
             with open(filename, 'w') as f:
 
                 for state in range(n_state):
-                    log.info(f" Excited State{state+1:4d}:      Singlet-A      {eV[state]:>.4f} eV  {nm[state]:>.2f} nm  f={fosc[state]:>.4f}   <S**2>=?")
+                    line = f" Excited State{state+1:4d}:      Singlet-A      {eV[state]:>.4f} eV  {nm[state]:>.2f} nm"
+                    line += f"  f={fosc[state]:>.4f}   <S**2>=?"
+                    log.info(line)
                     f.write(f" Excited State{state+1:4d}   1    {eV[state]:>.4f} \n")
-                    trasn_coeff_a = get_g16style_trasn_coeff(state, Xa, '->', n_occ=n_occ_a, n_vir=n_vir_a, print_threshold=print_threshold)
-                    trasn_coeff_b = get_g16style_trasn_coeff(state, Xb, '->', n_occ=n_occ_b, n_vir=n_vir_b, print_threshold=print_threshold)
+                    trasn_coeff_a = get_g16style_trasn_coeff(state, Xa, '->', n_occ=n_occ_a, n_vir=n_vir_a,
+                                                            print_threshold=print_threshold)
+                    trasn_coeff_b = get_g16style_trasn_coeff(state, Xb, '->', n_occ=n_occ_b, n_vir=n_vir_b,
+                                                            print_threshold=print_threshold)
 
                     if isinstance(Y, np.ndarray):
-                        trasn_coeff_a += get_g16style_trasn_coeff(state, Ya, '<-', n_occ=n_occ_a, n_vir=n_vir_a, print_threshold=print_threshold)
-                        trasn_coeff_b += get_g16style_trasn_coeff(state, Yb, '<-', n_occ=n_occ_b, n_vir=n_vir_b, print_threshold=print_threshold)
+                        trasn_coeff_a += get_g16style_trasn_coeff(state, Ya, '<-', n_occ=n_occ_a, n_vir=n_vir_a,
+                                                            print_threshold=print_threshold)
+                        trasn_coeff_b += get_g16style_trasn_coeff(state, Yb, '<-', n_occ=n_occ_b, n_vir=n_vir_b,
+                                                            print_threshold=print_threshold)
 
                     results = ' alpha \n' + '\n'.join(trasn_coeff_a) + ' \n beta \n' +'\n'.join(trasn_coeff_b) + '\n\n'
                     log.info(results)

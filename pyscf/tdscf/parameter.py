@@ -93,9 +93,9 @@ hbd_func[None] = 1
    list of hardness for elements 1-94, floats, in *Hartree*
     https://github.com/grimme-lab/std2/blob/master/stda.f
 
-    Ghosh, Dulal C., and Nazmul Islam. 
-    "Semiempirical evaluation of the global hardness of the atoms of 103 elements 
-    of the periodic table using the most probable radii as their size descriptors." 
+    Ghosh, Dulal C., and Nazmul Islam.
+    "Semiempirical evaluation of the global hardness of the atoms of 103 elements
+    of the periodic table using the most probable radii as their size descriptors."
     International Journal of Quantum Chemistry 110, no. 6 (2010): 1206-1213.
     (paper data in *eV*)
 '''

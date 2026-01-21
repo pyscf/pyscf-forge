@@ -34,9 +34,9 @@ from pyscf.data.nist import HARTREE2EV
 RIS_PRECOND_CITATION_INFO = '''
 Please cite the TDDFT-ris preconditioning method if you are happy with the fast convergence:
 
-    1.  Zhou, Zehao, and Shane M. Parker. 
-        Converging Time-Dependent Density Functional Theory Calculations in Five Iterations 
-        with Minimal Auxiliary Preconditioning. Journal of Chemical Theory and Computation 
+    1.  Zhou, Zehao, and Shane M. Parker.
+        Converging Time-Dependent Density Functional Theory Calculations in Five Iterations
+        with Minimal Auxiliary Preconditioning. Journal of Chemical Theory and Computation
         20, no. 15 (2024): 6738-6746.
 
     2.  Zhou, Zehao, Fabio Della Sala, and Shane M. Parker.
@@ -44,7 +44,7 @@ Please cite the TDDFT-ris preconditioning method if you are happy with the fast 
         of organic molecules. The Journal of Physical Chemistry Letters
         14, no. 7 (2023): 1968-1976.
 
-    3.  Zhou, Zehao, and Shane M. Parker. 
+    3.  Zhou, Zehao, and Shane M. Parker.
         Accelerating molecular property calculations with
         semiempirical preconditioning. The Journal of Chemical Physics 155, no. 20 (2021).
 
@@ -76,7 +76,7 @@ def _time_profiling(log, t_mvp, t_subgen, t_solve_sub, t_sub2full, t_precond, t_
     example output:
 
     Timing breakdown:
-                            CPU(sec)  wall(sec)    | Percentage 
+                            CPU(sec)  wall(sec)    | Percentage
     mat vec product            3.61       3.67     42.9   42.7   93.6
     proj subspace              0.00       0.00      0.0    0.0    0.0
     solve subspace             0.00       0.00     0.0    0.0    0.0
@@ -93,7 +93,8 @@ def _time_profiling(log, t_mvp, t_subgen, t_solve_sub, t_sub2full, t_precond, t_
     header_time = " ".join(f"{label:>10}" for label in labels)
     log.info(f"{'':<20}  {header_time} | Percentage ")
 
-    t_sum = [t_mvp[i] + t_subgen[i] + t_solve_sub[i] + t_sub2full[i] + t_precond[i] + t_fill_holder[i] for i in range(len(t_total))] 
+    t_sum = [t_mvp[i] + t_subgen[i] + t_solve_sub[i] + t_sub2full[i] + t_precond[i] + t_fill_holder[i]
+                for i in range(len(t_total))]
 
     ''' also calculate the time percentage for each timer '''
     timers = {
@@ -115,7 +116,7 @@ def _time_profiling(log, t_mvp, t_subgen, t_solve_sub, t_sub2full, t_precond, t_
 
 def eigenvalue_diagonal(**kwargs):
     '''solve
-        DX=XΩ 
+        DX=XΩ
         D is diagonal matrix
     '''
     n_states = kwargs['n_states']
@@ -131,7 +132,7 @@ def eigenvalue_diagonal(**kwargs):
     _converged, _energies = True, None
     # print('X norm', np.linalg.norm(X, axis=1))
     return _converged, _energies, X
-   
+
 def linear_diagonal(**kwargs):
     ''' solve  DX=rhs,
         where D is a diagonal matrix'''
@@ -175,15 +176,15 @@ def shifted_linear_diagonal(**kwargs):
     # D = np.where( abs(D) < t, np.sign(D)*t, D)
     # X = rhs/D
     # del rhs, D
-    
+
     X = np.empty_like(rhs)
     for i in range(n_states):
         Di = hdiag - omega[i]                    # 1D: len(hdiag)
-        
+
         # Replace |Di| < t with sign(Di)*t  (avoid np.abs to save memory)
         mask = (Di > -t) & (Di < t)              # Boolean mask for near-zero
         Di = np.where(mask, np.sign(Di) * t, Di)  # In-place friendly
-        
+
         X[i] = rhs[i] / Di                       # Element-wise division
         # rhs[i] /= Di # danger of modifying rhs in-place!!!
 
@@ -219,16 +220,16 @@ def shifted_linear_diagonal_inplace(**kwargs):
     n_states = rhs.shape[0]
     assert n_states == len(omega)
     t = hdiag.dtype.type(1e-14)
-    
+
     # X = np.empty_like(rhs)
     for i in range(n_states):
         Di = hdiag - omega[i]                    # 1D: len(hdiag)
-        
+
         # Replace |Di| < t with sign(Di)*t  (avoid np.abs to save memory)
-        mask = (Di > -t) & (Di < t)  
+        mask = (Di > -t) & (Di < t)
         force = np.sign(Di) * t            # Boolean mask for near-zero
         Di = np.where(mask, force, Di)  # In-place friendly
-        
+
         # X[i] = rhs[i] / Di                       # Element-wise division
         rhs[i] /= Di # danger of modifying rhs in-place!!!
 
@@ -255,35 +256,35 @@ _linear_diagonal_precond   = linear_diagonal
 
 
 '''shifted linear problem'''
-_shifted_linear_diagonal_initguess = shifted_linear_diagonal 
+_shifted_linear_diagonal_initguess = shifted_linear_diagonal
 _shifted_linear_diagonal_precond   = shifted_linear_diagonal
 
-def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue', 
-                  initguess_fn=None, precond_fn=None, rhs=None, 
-                  omega_shift=None, n_states=20,conv_tol=1e-5, 
-                  max_iter=35, extra_init=8, gs_initial=False, gram_schmidt=True, 
+def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
+                  initguess_fn=None, precond_fn=None, rhs=None,
+                  omega_shift=None, n_states=20,conv_tol=1e-5,
+                  max_iter=35, extra_init=8, gs_initial=False, gram_schmidt=True,
                   restart_iter=None,
                   single=False, print_eigeneV_along=False,
                   verbose=logger.NOTE):
     '''
         This solver is used to solve the following problems:
-        (1) Eigenvalue problem, return Ω and X 
-                    AX = XΩ 
-            
+        (1) Eigenvalue problem, return Ω and X
+                    AX = XΩ
+
         (2) Linear system, return X
                     AX = rhs.
             e.g. CPKS problem (A+B)Z = R in TDDFT gradient calculation
 
         (3) Shifted linear system , return X
-                 AX - XΩ = rhs, where Ω is a diagonal matrix. 
+                 AX - XΩ = rhs, where Ω is a diagonal matrix.
             e.g. preconditioning,  Green's function
 
     Theory:
     (1) Eigenvalue problem
-           AX = XΩ 
+           AX = XΩ
         A(Vx) = (Vx)Ω
-        V.TAV x = V.TV xΩ   
-        ax = sxΩ, 
+        V.TAV x = V.TV xΩ
+        ax = sxΩ,
         whehre basis overlap s=V.TV, W=AV
         residual r = AX - XΩ = Wx - XΩ
 
@@ -291,7 +292,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
           AX = P
         A(Vx) = P
         V.TAV x = V.TP
-        ax = p, 
+        ax = p,
         where p = V.TP (but note that P != Vp)
         residual r = AX - P = Wx - P
 
@@ -306,7 +307,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         matrix_vector_product: function
             matrix vector product
             e.g. def mvp(X):
-                    return A.dot(X) 
+                    return A.dot(X)
         hdiag: 1D array
             diagonal of the Hamiltonian matrix
         problem_type: str
@@ -322,31 +323,31 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
         -- for linear and shifted_linear problem:
             rhs: 2D array
-                right hand side of the linear system, required 
+                right hand side of the linear system, required
 
         -- for shifted_linear problem:
             omega_shift: 1D array
-                diagonal of the shift matrix, required 
+                diagonal of the shift matrix, required
 
         conv_tol: float
             convergence tolerance
         max_iter: int
             maximum iterations
         extra_init: int
-            extra number of states to be initialized 
+            extra number of states to be initialized
         restart_iter: int or None
             restart the Krylov solver periodically after this iteration. Default None, no restart.
         gs_initial: bool
-            apply gram_schmidt procedure on the initial guess, 
+            apply gram_schmidt procedure on the initial guess,
             only in the case of gram_schmidt = True, but given wired initial guess
         gram_schmidt: bool
             use Gram-Schmidt orthogonalization
         single: bool
             use single precision
-        print_eigeneV_along: 
+        print_eigeneV_along:
             print energies in each iteration
         verbose: logger.Logger
-            logger object 
+            logger object
 
     Returns:
         converged: the index of converged states/vectors
@@ -358,7 +359,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
     if problem_type not in ['eigenvalue', 'linear', 'shifted_linear']:
         raise ValueError('Invalid problem type, please choose either eigenvalue, linear or shifted_linear.')
-    
+
     if isinstance(verbose, logger.Logger):
         log = verbose
     else:
@@ -378,19 +379,19 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     log.info(f'====== {problem_type.capitalize()} Krylov Solver Starts ======')
     logger.TIMER_LEVEL = 4
     logger.DEBUG1 = 4
-    
+
     log.info(f'n_states={n_states}, conv_tol={conv_tol}, max_iter={max_iter}, extra_init={extra_init}')
 
     ''' detailed timing for each sub module
         cpu0 = (cpu time, wall time, gpu time)'''
     cpu0 = (logger.process_clock(), logger.perf_counter())
-    t_mvp         = [.0, .0] 
-    t_subgen      = [.0, .0] 
-    t_solve_sub   = [.0, .0] 
-    t_sub2full    = [.0, .0] 
-    t_precond     = [.0, .0] 
-    t_fill_holder = [.0, .0] 
-    t_total       = [.0, .0] 
+    t_mvp         = [.0, .0]
+    t_subgen      = [.0, .0]
+    t_solve_sub   = [.0, .0]
+    t_sub2full    = [.0, .0]
+    t_precond     = [.0, .0]
+    t_fill_holder = [.0, .0]
+    t_total       = [.0, .0]
 
     A_size = hdiag.shape[0]
     log.info(f'Size of A matrix = {A_size}')
@@ -399,7 +400,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     elif problem_type in ['linear','shifted_linear']:
         if rhs is None:
             raise ValueError('rhs is required for linear or shifted_linear problem.')
-        
+
         size_new = rhs.shape[0]
         n_states = rhs.shape[0]
 
@@ -407,10 +408,10 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     n_init = size_new
 
     if restart_iter is not None and restart_iter > 0:
-        max_N_mv = size_new + restart_iter * n_states 
+        max_N_mv = size_new + restart_iter * n_states
     else:
-        max_N_mv = size_new + max_iter * n_states 
-    
+        max_N_mv = size_new + max_iter * n_states
+
     holder_mem = max_N_mv*A_size*hdiag.itemsize/(1024**2)
     log.info(f'  V and W holder each uses {holder_mem:.0f} MB memory, with {hdiag.dtype}')
 
@@ -459,7 +460,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
             'shifted_linear': _shifted_linear_diagonal_initguess,
         }
         initguess_fn = initguess_functions[problem_type]
-  
+
 
     ''' Generate initial guess '''
     log.info('generating initial guess')
@@ -475,8 +476,8 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         omega_shift = np.asarray(omega_shift, dtype=hdiag.dtype)
         _converged, init_guess_X = initguess_fn(hdiag=hdiag, rhs=rhs, omega_shift=omega_shift)
     log.timer(f' {problem_type.capitalize()} initguess_fn cost', *cpu0)
-    
-    
+
+
     cpu0 = (logger.process_clock(), logger.perf_counter())
 
     size_old = 0
@@ -496,12 +497,12 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
 
     log.info('initial guess done')
-    
+
 
     if precond_fn and callable(precond_fn):
         log.info(' use user-specified function for preconditioning.')
     else:
-        log.info(' use hdiag for preconditioning.')   
+        log.info(' use hdiag for preconditioning.')
         precond_functions = {
             'eigenvalue':     _eigenvalue_diagonal_precond,
             'linear':         _linear_diagonal_precond,
@@ -509,7 +510,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         }
         precond_fn = precond_functions[problem_type]
         precond_fn = partial(precond_fn, hdiag=hdiag)
-    
+
     ''' Davidson iteration starts!
     '''
     for ii in range(max_iter):
@@ -522,7 +523,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
 
         log.info(f'     X {X.shape} {X.nbytes//1024**2} MB')
-        log.info(f'     V_holder[:size_new, :] {V_holder[:size_new, :].shape} {V_holder[:size_new, :].nbytes/1024**3:.2f} GB')
+        log.info(f'     V_holder[:size_new, :] {V_holder[:size_new, :].nbytes/1024**3:.2f} GB')
         log.info(f'     subspace size: {size_new}')
 
 
@@ -544,14 +545,14 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         sub_A_holder = math_helper.gen_VW(sub_A_holder, V_holder, W_holder, size_old, size_new, symmetry=True)
         math_helper.gen_VW(sub_A_holder, V_holder, W_holder, size_old, size_new, symmetry=True)
         log.info(get_mem_info('     sub_A_holder updated'))
-        
+
         sub_A = sub_A_holder[:size_new, :size_new]
         if problem_type in ['linear','shifted_linear']:
             sub_rhs_holder = math_helper.gen_VP(sub_rhs_holder, V_holder, rhs, size_old, size_new)
             sub_rhs = sub_rhs_holder[:size_new, :]
 
         _time_add(log, t_subgen, t0)
-        
+
         ''' solve subsapce problem
             solution x is column-wise vectors
             each vetcor contains elements of linear combination coefficient of projection basis
@@ -568,7 +569,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 ''' solve ax=xΩ '''
                 omega, x = np.linalg.eigh(sub_A)
             else:
-                ''' solve ax=sxΩ 
+                ''' solve ax=sxΩ
                 # preconditioned solver: d^-1/2 s d^-1/2'''
                 omega, x = math_helper.solve_AX_SX(sub_A, overlap_s)
 
@@ -586,7 +587,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 ''' solve ax - xΩ = sub_rhs '''
                 x = math_helper.solve_AX_Xla_B(sub_A, omega_shift, sub_rhs)
             else:
-                ''' solve ax - s xΩ = sub_rhs 
+                ''' solve ax - s xΩ = sub_rhs
                     => s^-1 ax - xΩ = s^-1 sub_rhs
                 TODO need precondition step: s/d first'''
                 s_inv = np.linalg.inv(overlap_s)
@@ -595,9 +596,9 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         _time_add(log, t_solve_sub, t0)
         log.info(get_mem_info('     after solving subspace'))
         t0 = (logger.process_clock(), logger.perf_counter())
-        
+
         ''' compute the residual
-            full_X is current guess solution 
+            full_X is current guess solution
             AX is A.dot(full_X)'''
 
 
@@ -609,13 +610,13 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         log.info(get_mem_info('     after AX = xTW'))
 
         if problem_type == 'eigenvalue':
-            ''' r = AX - XΩ 
-                  = AVx - VxΩ 
+            ''' r = AX - XΩ
+                  = AVx - VxΩ
                   = Wx - VxΩ '''
             X_omega = (omega[:,None] * xT).dot(V_holder[:size_new,:])
             residual -= X_omega
             del X_omega
-  
+
         elif problem_type == 'linear':
             ''' r = AX - rhs '''
             residual -= rhs
@@ -635,7 +636,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         ''' Check convergence '''
         r_norms = np.linalg.norm(residual, axis=1)
 
-        
+
         max_idx = np.argmax(r_norms)
         log.debug('              state :  |R|  unconverge')
         for state in range(len(r_norms)):
@@ -663,28 +664,30 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
                 size_old = n_init
                 size_new = fill_holder(V_holder, size_old, current_X)
-                
+
                 del current_X
                 gc.collect()
 
-            else:    
+            else:
                 ''' Preconditioning step '''
                 index_bool = r_norms > conv_tol
                 t0 = (logger.process_clock(), logger.perf_counter())
                 log.info(get_mem_info('     ▸ Preconditioning starts'))
 
-                # residual_unconv = residual[index_bool, :] with boolean indexing creates a copy, which costs extra memory
-                # instead, manually move the unconverged residual vectors forehead, use residual[:unconverged_idx.size, :] to save memory
+                # residual_unconv = residual[index_bool, :] with boolean indexing creates a copy,
+                #  which costs extra memory
+                # instead, manually move the unconverged residual vectors forehead,
+                # use residual[:unconverged_idx.size, :] to save memory
 
                 unconverged_idx = np.where(r_norms.ravel() > conv_tol)[0]
                 log.info(f'              number of unconverged states: {unconverged_idx.size}')
-                
+
                 pos = 0
                 for idx in unconverged_idx:
-                    if idx != pos: 
+                    if idx != pos:
                         residual[pos,:] = residual[idx,:]
                     pos += 1
-                    
+
                 residual_unconv = residual[:unconverged_idx.size, :]
 
                 if problem_type == 'eigenvalue':
@@ -702,7 +705,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 ''' put the new guess XY into the holder '''
                 t0 = (logger.process_clock(), logger.perf_counter())
                 log.info(get_mem_info('     ▸ Preconditioning ends'))
-                
+
                 # _V_holder, size_new = fill_holder(V_holder, size_old, X_new)
                 log.info('     putting new guesses into the holder')
 
@@ -722,7 +725,9 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 _time_add(log, t_fill_holder, t0)
 
     if ii == max_iter - 1 and max_norm >= conv_tol:
-        log.info(f'=== {problem_type.capitalize()} Krylov Solver not converged below {conv_tol:.2e} due to max iteration limit ! ===')
+        log.info(f'=== {problem_type.capitalize()} Krylov Solver not converged below {conv_tol:.2e} ===')
+        log.info('==== max iteration limit reached ! ====')
+
         log.info(f'Current residual norms: {r_norms.tolist()}')
         log.info(f'max residual norms {np.max(r_norms)}')
 
@@ -733,7 +738,7 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     log.info(f'Final subspace size = {sub_A.shape[0]}')
 
     full_X = x.T.dot(V_holder[:size_new,:])
-    
+
     if problem_type in['linear', 'shifted_linear']:
         full_X *= rhs_norm
 
@@ -753,8 +758,8 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         return converged, full_X
 
 def nested_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
-        rhs=None, omega_shift=None, n_states=20, conv_tol=1e-5, 
-        max_iter=8, gram_schmidt=True, single=False, verbose=logger.INFO, 
+        rhs=None, omega_shift=None, n_states=20, conv_tol=1e-5,
+        max_iter=8, gram_schmidt=True, single=False, verbose=logger.INFO,
         init_mvp=None, precond_mvp=None, extra_init=3, extra_init_diag=8,
         init_conv_tol=1e-3, init_max_iter=10,
         precond_conv_tol=1e-2, precond_max_iter=10,
@@ -806,7 +811,7 @@ def nested_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue'
         raise ValueError('Invalid problem type, please choose either eigenvalue, linear or shifted_linear.')
 
     # Define micro_init_precond mapping
-    #    the problem_type of 
+    #    the problem_type of
     #    macro problem      intial guess      preconditioner
     micro_init_precond = {
         'eigenvalue':     ['eigenvalue',     'shifted_linear'],
@@ -814,7 +819,7 @@ def nested_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue'
         'shifted_linear': ['shifted_linear', 'shifted_linear']
     }
 
-    # Setup initial guess 
+    # Setup initial guess
     if callable(init_mvp):
         log.info('Using iterative initial guess')
 
@@ -823,7 +828,7 @@ def nested_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue'
             krylov_solver,
             problem_type=init_problem_type, hdiag=hdiag,
             matrix_vector_product=init_mvp,
-            conv_tol=init_conv_tol, max_iter=init_max_iter, 
+            conv_tol=init_conv_tol, max_iter=init_max_iter,
             restart_iter=init_restart_iter,
             gram_schmidt=gram_schmidt, single=single, verbose=log.verbose-2
         )
@@ -831,7 +836,7 @@ def nested_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue'
         log.info('Using diagonal initial guess')
         initguess_fn = None
 
-    # Setup preconditioner 
+    # Setup preconditioner
     if callable(precond_mvp):
         log.info('Using iterative preconditioner')
 
@@ -858,7 +863,7 @@ def nested_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue'
         problem_type=problem_type, n_states=n_states,
         rhs=rhs, omega_shift=omega_shift, extra_init=extra_init,
         initguess_fn=initguess_fn, precond_fn=precond_fn,
-        conv_tol=conv_tol, max_iter=max_iter, 
+        conv_tol=conv_tol, max_iter=max_iter,
         gram_schmidt=gram_schmidt, single=single, verbose=verbose,
         restart_iter=restart_iter, print_eigeneV_along=print_eigeneV_along,
     )
@@ -870,8 +875,8 @@ following is for TDDFT'''
 
 def ABBA_eigenvalue_diagonal(**kwargs):
     '''solve
-        [ D 0 ] X = [ 1  0 ] X Ω 
-        [ 0 D ] Y   [ 0 -1 ] Y 
+        [ D 0 ] X = [ 1  0 ] X Ω
+        [ 0 D ] Y   [ 0 -1 ] Y
         D is diagonal matrix
         DX =  X Ω => D = Ω
         DY = -Y Ω => 2DY = 0 => Y=0
@@ -920,71 +925,71 @@ _ABBA_eigenvalue_diagonal_precond  = ABBA_shifted_linear_diagonal
 
 
 '''shifted linear problem'''
-_ABBA_shifted_linear_diagonal_initguess = ABBA_shifted_linear_diagonal 
+_ABBA_shifted_linear_diagonal_initguess = ABBA_shifted_linear_diagonal
 _ABBA_shifted_linear_diagonal_precond   = ABBA_shifted_linear_diagonal
 
-def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue', 
+def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                   initguess_fn=None, precond_fn=None, rhs_1=None, rhs_2=None,
-                  omega_shift=None, n_states=20,conv_tol=1e-5, 
-                  max_iter=35, extra_init=8, gram_schmidt=True, 
+                  omega_shift=None, n_states=20,conv_tol=1e-5,
+                  max_iter=35, extra_init=8, gram_schmidt=True,
                   single=False, verbose=logger.NOTE):
     '''
         This solver is used to solve the following problems:
 
         (1) eigenvalue problem, return Ω and [X,Y]
-            [ A B ] X = [ 1  0 ] X Ω 
-            [ B A ] Y   [ 0 -1 ] Y 
+            [ A B ] X = [ 1  0 ] X Ω
+            [ B A ] Y   [ 0 -1 ] Y
             e.g. Casida equation
 
         (2) shifted linear system , return X
             [ A B ] X - [ 1  0 ] Y Ω = [rhs_1]
             [ B A ] Y   [ 0 -1 ] X     [rhs_2]
-            where Ω is a diagonal matrix. 
-            e.g. dynamic polarizability     
+            where Ω is a diagonal matrix.
+            e.g. dynamic polarizability
 
         Note:
-        in the case of linear equation,  
+        in the case of linear equation,
             [ A B ] X  = [rhs_1]
-            [ B A ] Y  = [rhs_2],   
+            [ B A ] Y  = [rhs_2],
         =>  (A+B)(X+Y) = rhs_1 + rhs_2
         fallback to normal krylov solver above
 
     Theory:
 
-    (1) Eigenvalue problem: 
+    (1) Eigenvalue problem:
 
-        [ A B ] X = [ 1  0 ] X Ω 
-        [ B A ] Y   [ 0 -1 ] Y   
-    
+        [ A B ] X = [ 1  0 ] X Ω
+        [ B A ] Y   [ 0 -1 ] Y
+
         use a linear combination of projection basis V,W to expand X,Y
         [X] = [ V W ] [x]
         [Y] = [ W V ] [y]
 
         so that
 
-        [ V.T W.T ] [ A B ] [ V W ] [x] = [ V.T W.T ] [ 1  0 ] [ V W ] [x] Ω 
-        [ W.T V.T ] [ B A ] [ W V ] [y]   [ W.T V.T ] [ 0 -1 ] [ W V ] [y]  
+        [ V.T W.T ] [ A B ] [ V W ] [x] = [ V.T W.T ] [ 1  0 ] [ V W ] [x] Ω
+        [ W.T V.T ] [ B A ] [ W V ] [y]   [ W.T V.T ] [ 0 -1 ] [ W V ] [y]
 
-        [ a b ] x = [  σ  π ] X Ω 
-        [ b a ] y   [ -π -σ ] Y  
+        [ a b ] x = [  σ  π ] X Ω
+        [ b a ] y   [ -π -σ ] Y
 
         where
             a = [V.T W.T][A B][V] = [V.T W.T][U1] = VU1 + WU2
                          [B A][W]            [U2]
 
-                where 
+                where
                     [U1] = [A B][V] = [ AV + BW ]
                     [U2]   [B A][W]   [ AW + BV ]
 
-            similarly, 
+            similarly,
             b = [W.T V.T][A B][W] = [W.T V.T][U1] = WU1 + VU2
                          [B A][V]            [U2]
 
             the projection basis overlap matrix is
 
-            σ = [V.T W.T][ V] = V.TV - W.TW 
+            σ = [V.T W.T][ V] = V.TV - W.TW
                          [-W]
-                        
+
             π = [V.T W.T][ W] = V.TW - W.TV
                          [-V]
 
@@ -999,7 +1004,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         Y_full = Wx + Vy
 
 
-    (1) Shifted linear system: 
+    (1) Shifted linear system:
             [ A B ] X - [ 1  0 ] Y Ω = [P]
             [ B A ] Y   [ 0 -1 ] X     [Q]
         P, Q denotes rhs_1, rhs_2
@@ -1009,11 +1014,11 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
         [p] = [ V.T W.T ][P]
         [q]   [ W.T V.T ][Q]
-            
+
     Args:
         matrix_vector_product: function
-            matrix vector product  
-            e.g. 
+            matrix vector product
+            e.g.
             def matrix_vector_product(X, Y):
                 U1 = X.dot(A) + Y.dot(B)
                 U2 = Y.dot(A) + X.dot(B)
@@ -1034,20 +1039,20 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
         -- for shifted_linear problem:
             omega_shift: 1D array
-                diagonal of the shift matrix, required 
+                diagonal of the shift matrix, required
 
         conv_tol: float
             convergence tolerance
         max_iter: int
             maximum iterations
         extra_init: int
-            extra number of states to be initialized 
+            extra number of states to be initialized
         gram_schmidt: bool
             use Gram-Schmidt orthogonalization
         single: bool
             use single precision
         verbose: logger.Logger
-            logger object 
+            logger object
 
     Returns:
         omega: 1D array
@@ -1058,7 +1063,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     '''
     if problem_type not in ['eigenvalue',  'shifted_linear']:
         raise ValueError('Invalid problem type, please choose either eigenvalue or shifted_linear.')
-    
+
 
     if isinstance(verbose, logger.Logger):
         log = verbose
@@ -1100,11 +1105,11 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     elif problem_type == 'shifted_linear':
         if rhs_1 is None or rhs_2 is None:
             raise ValueError('rhs_1 and rhs_2 is required for shifted_linear problem.')
-        
+
         size_new = rhs_1.shape[0]
         n_states = rhs_1.shape[0]
 
-    max_N_mv = size_new + max_iter * n_states 
+    max_N_mv = size_new + max_iter * n_states
 
     holder_mem = 4 * max_N_mv * A_size * hdiag.itemsize/(1024**2)
     log.info(f'  V W U1 U2 holder use {holder_mem:.2f} MB memory')
@@ -1152,10 +1157,10 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         '''
         log.info(nks_citation)
         fill_holder = math_helper.VW_nKs_fill_holder
-        '''Unlike the standard Krylov solver for symmatric matrix, 
-           in the case of ABBA, the overalp matrix σ π is always needed (non-identity), 
+        '''Unlike the standard Krylov solver for symmatric matrix,
+           in the case of ABBA, the overalp matrix σ π is always needed (non-identity),
            no matter whether use Gram_Schmidt or nKs '''
-    
+
     if initguess_fn and callable(initguess_fn):
         log.info(' use user-specified function to generate initial guess.')
     else:
@@ -1174,19 +1179,20 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         _converged, _energies, init_guess_X, init_guess_Y = initguess_fn(n_states=size_new, hdiag=hdiag)
 
     elif problem_type =='shifted_linear':
-        _converged, init_guess_X, init_guess_Y = initguess_fn(hdiag=hdiag, rhs_1=rhs_1, rhs_2=rhs_2, omega_shift=omega_shift)
-    
-    V_holder, W_holder, size_new = fill_holder(V_holder=V_holder, 
+        _converged, init_guess_X, init_guess_Y = initguess_fn(hdiag=hdiag, rhs_1=rhs_1, rhs_2=rhs_2,
+                                                             omega_shift=omega_shift)
+
+    V_holder, W_holder, size_new = fill_holder(V_holder=V_holder,
                                                W_holder=W_holder,
-                                               m=size_old, 
-                                               X_new=init_guess_X, 
+                                               m=size_old,
+                                               X_new=init_guess_X,
                                                Y_new=init_guess_Y)
     log.info('initial guess done')
 
     if precond_fn and callable(precond_fn):
         log.info(' use user-specified function for preconditioning.')
     else:
-        log.info(' use hdiag for preconditioning.')   
+        log.info(' use hdiag for preconditioning.')
         precond_functions = {
             'eigenvalue':     _ABBA_eigenvalue_diagonal_precond,
             'shifted_linear': _ABBA_shifted_linear_diagonal_precond,
@@ -1202,13 +1208,13 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         X = V_holder[size_old:size_new, :]
         Y = W_holder[size_old:size_new, :]
         U1_holder[size_old:size_new, :], U2_holder[size_old:size_new, :] = matrix_vector_product(X=X,Y=Y)
-        
+
         _time_add(log, t_mvp, t0)
         log.info(f'     X {X.shape} {X.nbytes//1024**2} MB')
         log.info(f'     Y {Y.shape} {Y.nbytes//1024**2} MB')
         del X, Y
-        log.info(f'     V_holder[:size_new, :] {V_holder[:size_new, :].shape} {V_holder[:size_new, :].nbytes/1024**3:.2f} GB')
-        log.info(f'     W_holder[:size_new, :] {W_holder[:size_new, :].shape} {W_holder[:size_new, :].nbytes/1024**3:.2f} GB')
+        log.info(f'     V_holder[:size_new, :]  {V_holder[:size_new, :].nbytes/1024**3:.2f} GB')
+        log.info(f'     W_holder[:size_new, :]  {W_holder[:size_new, :].nbytes/1024**3:.2f} GB')
 
         log.info(f'     subspace size: {size_new}')
 
@@ -1242,7 +1248,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
         '''
         compute the residual
-        X_full, Y_full is current guess solution 
+        X_full, Y_full is current guess solution
         '''
         t0 = (logger.process_clock(), logger.perf_counter())
 
@@ -1276,7 +1282,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
             break
 
         else:
-            '''  preconditioning step 
+            '''  preconditioning step
                 only precondition the residual vectors that are not converged
                 to save memory, do not indexbool since it creates a new array
             '''
@@ -1285,26 +1291,28 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
             # residual_2 = residual_2[index_bool,:]
             unconverged_idx = np.where(r_norms.ravel() > conv_tol)[0]
             log.info(f'              number of unconverged states: {unconverged_idx.size}')
-            
+
             pos = 0
             for idx in unconverged_idx:
-                if idx != pos: 
+                if idx != pos:
                     residual_1[pos,:] = residual_1[idx,:]
                     residual_2[pos,:] = residual_2[idx,:]
 
                 pos += 1
-            
+
             residual_1_unconv = residual_1[:unconverged_idx.size,:]
             residual_2_unconv = residual_2[:unconverged_idx.size,:]
 
             t0 = (logger.process_clock(), logger.perf_counter())
             log.debug('     Preconditioning starts')
             if problem_type == 'eigenvalue':
-                _converged, X_new, Y_new = precond_fn(rhs_1=residual_1_unconv, rhs_2=residual_2_unconv, omega_shift=omega[unconverged_idx])
-                
+                _converged, X_new, Y_new = precond_fn(rhs_1=residual_1_unconv, rhs_2=residual_2_unconv,
+                                                     omega_shift=omega[unconverged_idx])
+
             elif problem_type =='shifted_linear':
-                _converged, X_new, Y_new = precond_fn(rhs_1=residual_1_unconv, rhs_2=residual_2_unconv, omega_shift=omega_shift[unconverged_idx])
-            
+                _converged, X_new, Y_new = precond_fn(rhs_1=residual_1_unconv, rhs_2=residual_2_unconv,
+                                                     omega_shift=omega_shift[unconverged_idx])
+
             log.debug('     Preconditioning ends')
             _time_add(log, t_precond, t0)
 
@@ -1316,15 +1324,16 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                                                         X_new=X_new,
                                                         Y_new=Y_new,
                                                         m=size_old)
-        
+
 
         if size_new == size_old:
             log.warn('All new guesses kicked out during filling holder !!!!!!!')
             break
         _time_add(log, t_fill_holder, t0)
-    
+
     if ii == (max_iter -1) and max_norm >= conv_tol:
-        log.warn(f'=== {problem_type.capitalize()} ABBA Krylov Solver eigen solver not converged below {conv_tol:.2e} due to max iteration limit ! ===')
+        log.warn(f'=== {problem_type.capitalize()} ABBA Krylov Solver solver not converged below {conv_tol:.2e} ===')
+        log.warn(f' ==== max iteration limit: {max_iter} reached ====')
         log.warn(f'Current residual norms: {r_norms.tolist()}')
         log.warn(f'max residual norms {np.max(r_norms)}')
 
@@ -1334,7 +1343,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     log.info(f'Maximum residual norm = {max_norm:.2e}')
     log.info(f'Final subspace size = {sub_A.shape[0]}')
 
-    
+
     if problem_type == 'shifted_linear':
         X_full = X_full * rhs_norm
         Y_full = Y_full * rhs_norm
@@ -1353,8 +1362,8 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         return converged, X_full, Y_full
 
 def nested_ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
-        rhs_1=None, rhs_2=None, omega_shift=None, n_states=20, conv_tol=1e-5, 
-        max_iter=8, gram_schmidt=True, single=False, verbose=logger.INFO, 
+        rhs_1=None, rhs_2=None, omega_shift=None, n_states=20, conv_tol=1e-5,
+        max_iter=8, gram_schmidt=True, single=False, verbose=logger.INFO,
         init_mvp=None, precond_mvp=None, extra_init=3, extra_init_diag=8,
         init_conv_tol=1e-3, init_max_iter=10,
         precond_conv_tol=1e-2, precond_max_iter=10):
@@ -1405,14 +1414,14 @@ def nested_ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenv
         raise ValueError('Invalid problem type, please choose either eigenvalue or shifted_linear.')
 
     # Define micro_init_precond mapping
-    #    the problem_type of 
+    #    the problem_type of
     #    macro problem      intial guess      preconditioner
     micro_init_precond = {
         'eigenvalue':     ['eigenvalue',     'shifted_linear'],
         'shifted_linear': ['shifted_linear', 'shifted_linear']
     }
 
-    # Setup initial guess 
+    # Setup initial guess
     if callable(init_mvp):
         log.info('Using iterative initial guess')
 
@@ -1428,7 +1437,7 @@ def nested_ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenv
         log.info('Using diagonal initial guess')
         initguess_fn = None
 
-    # Setup preconditioner 
+    # Setup preconditioner
     if callable(precond_mvp):
         log.info('Using iterative preconditioner')
 
@@ -1454,7 +1463,7 @@ def nested_ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenv
         problem_type=problem_type, n_states=n_states,
         rhs_1=rhs_1, rhs_2=rhs_2, omega_shift=omega_shift, extra_init=extra_init,
         initguess_fn=initguess_fn, precond_fn=precond_fn,
-        conv_tol=conv_tol, max_iter=max_iter, 
+        conv_tol=conv_tol, max_iter=max_iter,
         gram_schmidt=gram_schmidt, single=single, verbose=verbose
     )
     log.info(RIS_PRECOND_CITATION_INFO)
@@ -1485,11 +1494,11 @@ def example_krylov_solver():
     _converged, solution_vectors = krylov_solver(matrix_vector_product=matrix_vector_product, hdiag=hdiag,
                             problem_type='linear', rhs=rhs,
                             conv_tol=1e-5, max_iter=35,gram_schmidt=True, verbose=5, single=False)
-    
+
     _converged, solution_vectors_shifted = krylov_solver(matrix_vector_product=matrix_vector_product, hdiag=hdiag,
                             problem_type='shifted_linear', rhs=rhs, omega_shift=omega_shift,
                             conv_tol=1e-5, max_iter=35,gram_schmidt=True, verbose=5, single=False)
-    
+
     return eigenvalues, eigenvecters, solution_vectors, solution_vectors_shifted
 
 def example_ABBA_krylov_solver():
@@ -1499,7 +1508,7 @@ def example_ABBA_krylov_solver():
     n_vec = 5
     A = np.random.rand(A_size,A_size)*0.01
     B = np.random.rand(A_size,A_size)*0.005
-    
+
     A = A + A.T
     B = B + B.T
 
@@ -1525,6 +1534,6 @@ def example_ABBA_krylov_solver():
     _converged, X_shifted, Y_shifted = ABBA_krylov_solver(matrix_vector_product=matrix_vector_product, hdiag=hdiag,
                             problem_type='shifted_linear', rhs_1=rhs_1, rhs_2=rhs_2, omega_shift=omega_shift,
                             conv_tol=1e-5, max_iter=35,gram_schmidt=True, verbose=5, single=False)
-    
+
     return eigenvalues, X, Y, X_shifted, Y_shifted
 
