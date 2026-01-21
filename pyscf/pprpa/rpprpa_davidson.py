@@ -327,10 +327,10 @@ def pprpa_expand_space(
     Args:
         pprpa (ppRPA_Davidson): ppRPA_Davidson object.
         first_state (int): index of first particle-particle or hole-hole state.
-        tri_vec (double ndarray): trial vector.
+        tri_vec (double/complex ndarray): trial vector.
         tri_vec_sig (int array): signature of trial vector.
-        mv_prod (double ndarray): product matrix of ppRPA matrix and trial vector.
-        v_tri (double ndarray): eigenvector of subspace matrix.
+        mv_prod (double/complex ndarray): product matrix of ppRPA matrix and trial vector.
+        v_tri (double/complex ndarray): eigenvector of subspace matrix.
 
     Returns:
         conv (bool): if Davidson algorithm is converged.
@@ -394,7 +394,7 @@ def pprpa_expand_space(
 
         for ivec in range(ntri):
             # compute product between new vector and old vector
-            inp = -inner_product(residue[iroot], tri_vec[ivec], pprpa.oo_dim)
+            inp = -inner_product(tri_vec[ivec].conj(), residue[iroot], pprpa.oo_dim)
             # eliminate parallel part
             if tri_vec_sig[ivec] < 0:
                 inp = -inp
@@ -402,10 +402,10 @@ def pprpa_expand_space(
 
         # add a new trial vector
         if len(residue[iroot][abs(residue[iroot]) > residue_thresh]) > 0:
-            assert ntri < max_vec, (
+            assert ntri <= max_vec, (
                 "ppRPA Davidson expansion failed! ntri %d exceeds max_vec %d!" %
                 (ntri, max_vec))
-            inp = inner_product(residue[iroot], residue[iroot], pprpa.oo_dim)
+            inp = inner_product(residue[iroot].conj(), residue[iroot], pprpa.oo_dim)
             tri_vec_sig[ntri] = 1 if inp > 0 else -1
             tri_vec[ntri] = residue[iroot] / numpy.sqrt(abs(inp))
             ntri = ntri + 1
@@ -663,7 +663,7 @@ class RppRPADavidson(StreamObject):
         return
 
     def kernel(self, multi):
-        """Run ppRPA direct diagonalization.
+        """Run ppRPA davidson diagonalization.
 
         Args:
             multi (char): multiplicity.

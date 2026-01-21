@@ -284,7 +284,7 @@ def get_chemical_potential(nocc, mo_energy):
     return mu
 
 
-def ao2mo(pprpa):
+def ao2mo(pprpa, full_mo=False):
     """Get three-center density-fitting matrix in MO active space.
 
     Args:
@@ -296,11 +296,15 @@ def ao2mo(pprpa):
     mf = pprpa._scf
     mo_coeff = mf.mo_coeff
     nocc = pprpa.nocc
-    nocc_act, nvir_act, nmo_act = pprpa.nocc_act, pprpa.nvir_act, pprpa.nmo_act
 
     nao = mo_coeff.shape[0]
     mo = numpy.asarray(mo_coeff, order='F')
-    ijslice = (nocc-nocc_act, nocc+nvir_act, nocc-nocc_act, nocc+nvir_act)
+    if full_mo:
+        nocc_act, nvir_act, nmo_act = nocc, mo.shape[1] - nocc, mo.shape[1]
+        ijslice = (0, mo.shape[1], 0, mo.shape[1])
+    else:
+        nocc_act, nvir_act, nmo_act = pprpa.nocc_act, pprpa.nvir_act, pprpa.nmo_act
+        ijslice = (nocc-nocc_act, nocc+nvir_act, nocc-nocc_act, nocc+nvir_act)
 
     if isinstance(mf, (scf.rhf.RHF, dft.rks.RKS)):
         # molecule
@@ -367,7 +371,7 @@ def pprpa_orthonormalize_eigenvector(multi, nocc, exci, xy):
         multi (string): multiplicity.
         nocc (int): number of occupied orbitals.
         exci (double array): ppRPA eigenvalue.
-        xy (double ndarray): ppRPA eigenvector.
+        xy (double/complex ndarray): ppRPA eigenvector.
     """
     nroot = xy.shape[0]
 
@@ -379,18 +383,18 @@ def pprpa_orthonormalize_eigenvector(multi, nocc, exci, xy):
     # determine the vector is pp or hh
     sig = numpy.zeros(shape=[nroot], dtype=numpy.double)
     for i in range(nroot):
-        sig[i] = 1 if inner_product(xy[i], xy[i], oo_dim) > 0 else -1
+        sig[i] = 1 if inner_product(xy[i].conj(), xy[i], oo_dim).real > 0 else -1
 
     # eliminate parallel component
     for i in range(nroot):
         for j in range(i):
             if abs(exci[i] - exci[j]) < 1.0e-7:
-                inp = inner_product(xy[i], xy[j], oo_dim)
+                inp = inner_product(xy[j].conj(), xy[i], oo_dim)
                 xy[i] -= sig[j] * xy[j] * inp
 
     # normalize
     for i in range(nroot):
-        inp = inner_product(xy[i], xy[i], oo_dim)
+        inp = inner_product(xy[i].conj(), xy[i], oo_dim).real
         inp = numpy.sqrt(abs(inp))
         xy[i] /= inp
 
