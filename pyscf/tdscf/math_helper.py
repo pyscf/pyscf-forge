@@ -733,7 +733,7 @@ def TDDFT_subspace_eigen_solver2(a, b, sigma, pi, nroots):
     d = abs(np.diag(sigma))
     d_mh = d**(-0.5)
 
-    s_m_p = einsum('i,ij,j->ij', d_mh, sigma - pi, d_mh)
+    s_m_p = np.einsum('i,ij,j->ij', d_mh, sigma - pi, d_mh)
 
     '''LU = d^−1/2 (σ − π) d^−1/2'''
     ''' A = LU '''
@@ -744,7 +744,7 @@ def TDDFT_subspace_eigen_solver2(a, b, sigma, pi, nroots):
 
     U_invT = U_inv.T
     '''U^-T d^−1/2 (a−b) d^-1/2 U^-1 = GG^T '''
-    d_amb_d = einsum('i,ij,j->ij', d_mh, a-b, d_mh)
+    d_amb_d = np.einsum('i,ij,j->ij', d_mh, a-b, d_mh)
     GGT = np.dot(U_invT, np.dot(d_amb_d, U_inv))
 
     G = np.linalg.cholesky(GGT)
@@ -761,7 +761,7 @@ def TDDFT_subspace_eigen_solver2(a, b, sigma, pi, nroots):
     G_inv = np.linalg.inv(G)
 
     ''' M = G^T L^−1 d^−1/2 (a+b) d^−1/2 L^−T G '''
-    d_apb_d = einsum('i,ij,j->ij', d_mh, a+b, d_mh)
+    d_apb_d = np.einsum('i,ij,j->ij', d_mh, a+b, d_mh)
     M = np.dot(G.T, np.dot(L_inv, np.dot(d_apb_d, np.dot(L_inv.T, G))))
 
     omega2, Z = np.linalg.eigh(M)
@@ -777,8 +777,8 @@ def TDDFT_subspace_eigen_solver2(a, b, sigma, pi, nroots):
     ''' It requires Z^T Z = 1/Ω '''
     ''' x+y = d^−1/2 L^−T GZ Ω^-0.5 '''
     ''' x−y = d^−1/2 U^−1 G^−T Z Ω^0.5 '''
-    x_p_y = einsum('i,ik,k->ik', d_mh, L_inv.T.dot(G.dot(Z)), omega**-0.5)
-    x_m_y = einsum('i,ik,k->ik', d_mh, U_inv.dot(G_inv.T.dot(Z)), omega**0.5)
+    x_p_y = np.einsum('i,ik,k->ik', d_mh, L_inv.T.dot(G.dot(Z)), omega**-0.5)
+    x_m_y = np.einsum('i,ik,k->ik', d_mh, U_inv.dot(G_inv.T.dot(Z)), omega**0.5)
 
     x = (x_p_y + x_m_y)/2
     y = x_p_y - x
@@ -879,7 +879,7 @@ def TDDFT_subspace_linear_solver(a, b, sigma, pi, p, q, omega):
 
     ''' TODO:replace LU decompose to cholesky '''
     '''LU = d^−1/2 (σ − π) d^−1/2 '''
-    s_m_p = einsum('i,ij,j->ij', d_mh, sigma - pi, d_mh)
+    s_m_p = np.einsum('i,ij,j->ij', d_mh, sigma - pi, d_mh)
     L, U = scipy.linalg.lu(s_m_p, permute_l=True)
     L_inv = np.linalg.inv(L)
     U_inv = np.linalg.inv(U)
@@ -890,7 +890,7 @@ def TDDFT_subspace_linear_solver(a, b, sigma, pi, p, q, omega):
     p_m_q_tilde = np.dot(U_invT, d_mh.reshape(-1,1)*(p-q))
 
     ''' a ̃−b ̃= U^-T d^−1/2 (a−b) d^-1/2 U^-1 = GG^T'''
-    d_amb_d = einsum('i,ij,j->ij', d_mh, a-b, d_mh)
+    d_amb_d = np.einsum('i,ij,j->ij', d_mh, a-b, d_mh)
     GGT = np.dot(U_invT, np.dot(d_amb_d, U_inv))
 
     G = np.linalg.cholesky(GGT)
@@ -908,7 +908,7 @@ def TDDFT_subspace_linear_solver(a, b, sigma, pi, p, q, omega):
     '''a ̃+ b ̃= L^−1 d^−1/2 (a+b) d^−1/2 L^−T
        M = G^T (a ̃+ b ̃) G
     '''
-    d_apb_d = einsum('i,ij,j->ij', d_mh, a+b, d_mh)
+    d_apb_d = np.einsum('i,ij,j->ij', d_mh, a+b, d_mh)
     a_p_b_tilde = np.dot(np.dot(L_inv, d_apb_d),  L_inv.T)
 
     M = np.dot(np.dot(G.T, a_p_b_tilde), G)
