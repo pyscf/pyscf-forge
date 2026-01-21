@@ -258,7 +258,7 @@ def ao2mo(pprpa, full_mo=False):
                 Lpq += 1j * nr_e2(pprpa.with_df._cderi, mo_tmp, ijslice, aosym='s2')
                 mo_tmp = numpy.asarray(numpy.hstack((mo_b.imag, -mo_b.real)), order='F')
                 Lpq += 1j * nr_e2(pprpa.with_df._cderi, mo_tmp, ijslice, aosym='s2')
-                
+
             return Lpq.reshape(naux, nmo_act, nmo_act)
         else:
             logger.warn(pprpa, 'Memory may not be enough!')
@@ -267,7 +267,7 @@ def ao2mo(pprpa, full_mo=False):
         raise NotImplementedError("GppRPA for periodic systems is not implemented yet.")
     else:
         raise NotImplementedError("GppRPA only supports GHF/GKS reference now.")
-    
+
 
 def complex_matrix_norm(matrix):
     """Calculate the Complex norm of each matrix element.
@@ -375,8 +375,8 @@ class GppRPADavidson(RppRPADavidson):
         super().__init__(
             mf, nocc_act, nvir_act, channel, nroot, max_vec, max_iter,
             residue_thresh, print_thresh, auxbasis)
-        # Most of the GPPRPA formulations are just the complex-valued 
-        # extention of those in triplet RPPRA, since they both use 
+        # Most of the GPPRPA formulations are just the complex-valued
+        # extention of those in triplet RPPRA, since they both use
         # the antisymmetric two-electron integrals.
         self.multi = "t"
 
@@ -415,4 +415,3 @@ class GppRPADavidson(RppRPADavidson):
         self.exci_t = self.exci.copy()
         self.xy_t = self.xy.copy()
         return
-    

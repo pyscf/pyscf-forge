@@ -45,7 +45,7 @@ def grad_elec(pprpa_grad, xy, mult, atmlst=None):
         # To my opinion, aux_response should always be True for DFHF
         aux_response = mf_grad.auxbasis_response
     else:
-        logger.warn(pprpa, 
+        logger.warn(pprpa,
                     'The analytical gradient of the ppRPA must be used with the density\n\
                     fitting mean-field method. The calculation will proceed but the analytical\n\
                     gradient is no longer exact (does NOT agree with numerical gradients).')
@@ -101,7 +101,7 @@ def grad_elec(pprpa_grad, xy, mult, atmlst=None):
             vhf = lib.tag_array(vhf, aux=vhf_aux)
         else:
             vxc, vjk = get_veff_rks(mf_grad, mol, (dm0_hf, dm0))
-        
+
         vjk[1] += _contract_xc_kernel(mf, mf.xc, dm0, None, False, False, True)[0][1:]*0.5
 
         aoslices = mol.aoslice_by_atom()
@@ -421,7 +421,7 @@ def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
     slice_i = choose_slice('i', nfrozen_occ, nocc, nvir, nfrozen_vir)
     slice_a = choose_slice('a', nfrozen_occ, nocc, nvir, nfrozen_vir)
     naux = Lpq_full.shape[0]
-    
+
     # Special cases for TDA
     if label1 == 'p':
         if nocc == 0:
@@ -496,7 +496,8 @@ def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
         # slow (more copies) but more readable version
         # out = np.concatenate((
         # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "i"),
-        # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "a")), axis=1)
+        # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "a")), 
+        # axis=1)
         out = np.zeros((n1, nocc + nvir), dtype=occ_y_mat.dtype)
         L1i = np.ascontiguousarray(Lpq_full[:, slice1, slice_i]).reshape(-1, nocc)  # (Pt,k)
         Lia = np.ascontiguousarray(Lpq_full[:, slice_i, slice_a]).reshape(-1, nvir).conj()  # (P,l,b)*->(Pl,b)
