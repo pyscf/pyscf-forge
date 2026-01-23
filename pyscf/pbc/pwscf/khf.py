@@ -1375,7 +1375,7 @@ def converge_band(mf, C_ks, mocc_ks, kpts, Cout_ks=None,
 
 
 def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
-                    erifile=None):
+                    erifile=None, remove_occ=False):
     """ Turn input GTO basis into a set of contracted PWs, project out the
     occupied PW bands, and then diagonalize the vir-vir block of the Fock
     matrix.
@@ -1389,6 +1389,10 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
             C_ks (PW occ + CPW vir), mo_energy, mo_occ will be written to this
             file. If not provided, mf.chkfile is used. A RuntimeError is raised
             if the latter is None.
+        remove_occ (bool):
+            If True, project the occupied PW orbitals out of the GTO basis,
+            resulting in (nao - nocc) virtual orbitals, If False, create
+            a virtual orbital for every GTO, yielding (nao) virtual orbitals.
     """
     from pyscf.pbc.pwscf.smearing import has_smearing
     log = logger.Logger(mf.stdout, mf.verbose)
@@ -1445,6 +1449,13 @@ def get_cpw_virtual(mf, basis, amin=None, amax=None, thr_lindep=1e-14,
             Cv = Cv[:, mf._basis_data[k].indexes]
         occ = np.where(mocc_ks0[k]>THR_OCC)[0]
         Co = get_kcomp(Co_ks, k, occ=occ)
+        if remove_occ:
+            Cv2 = Cv - lib.dot(lib.dot(Cv, Co.conj().T), Co)
+            ovlp2 = lib.dot(Cv, Cv2.conj().T).T
+            ovlp = lib.dot(Cv, Cv.conj().T).T
+            e, u = scipy.linalg.eigh(ovlp2, ovlp)
+            u = u[:, Co.shape[0]:]
+            Cv = lib.dot(u.T, Cv)
         Cv -= lib.dot(lib.dot(Cv, Co.conj().T), Co)
         Cv = pw_helper.orth(cell, Cv, thr_lindep=thr_lindep, follow=False)
         C = np.vstack([Co,Cv])
@@ -1905,12 +1916,14 @@ class PWKSCF(pbc_hf.KSCF):
                     with_pp._ecpnloc_initialized = False
                     with_pp.vppnlocWks = None
 
-    def get_cpw_virtual(self, basis, amin=None, amax=None, thr_lindep=1e-14):
+    def get_cpw_virtual(self, basis, amin=None, amax=None, thr_lindep=1e-14,
+                        remove_occ=False):
         self.e_tot, self.mo_energy, self.mo_occ = get_cpw_virtual(
                                                         self, basis,
                                                         amin=amin, amax=amax,
                                                         thr_lindep=thr_lindep,
-                                                        erifile=None)
+                                                        erifile=None,
+                                                        remove_occ=remove_occ)
         return self.mo_energy, self.mo_occ
 
     kernel_charge = kernel_charge

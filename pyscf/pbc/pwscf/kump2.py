@@ -23,7 +23,9 @@ import tempfile
 import numpy as np
 
 from pyscf.pbc.pwscf import kmp2
-from pyscf.pbc.pwscf.pw_helper import (get_nocc_ks_from_mocc, wf_ifft)
+from pyscf.pbc.pwscf.pw_helper import (
+    get_nocc_ks_from_mocc, wf_ifft, wf_fft, get_mesh_map
+)
 from pyscf.pbc.pwscf.kuhf import get_spin_component
 from pyscf.pbc import tools
 from pyscf import lib
@@ -54,7 +56,7 @@ def fill_oovv(oovv, v_ia, Co_kj_R, Cv_kb_R, fac=None):
 
 
 def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
-               basis_ks=None):
+               basis_ks=None, ecut_eri=None):
     """ Compute both direct (d) and exchange (x) contributions together.
     """
     log = logger.Logger(cell.stdout, cell.verbose)
@@ -72,7 +74,15 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
     else:
         assert len(basis_ks) == nkpts
         mesh = basis_ks[0].mesh
-    coords = cell.get_uniform_grids(mesh=mesh)
+    if ecut_eri is not None:
+        eri_mesh = cell.cutoff_to_mesh(ecut_eri)
+        if (eri_mesh > mesh).any():
+            log.warn("eri_mesh larger than mesh, so eri_mesh is ignored.")
+            eri_mesh = mesh
+    else:
+        eri_mesh = mesh
+
+    coords = cell.get_uniform_grids(mesh=eri_mesh)
     ngrids = coords.shape[0]
 
     reduce_latvec = cell.lattice_vectors() / (2*np.pi)
@@ -126,6 +136,10 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
     fswap = lib.H5TmpFile(swapfile.name)
     swapfile = None
 
+    use_eri_mesh = not (np.array(mesh) == eri_mesh).all()
+    if use_eri_mesh:
+        eri_inds = get_mesh_map(cell, None, None, mesh=mesh, mesh2=eri_mesh)
+
 # ifft to make C(G) --> C(r)
 # note the ordering of spin and k-pt indices is swapped
     C_ks_R = fswap.create_group("C_ks_R")
@@ -135,7 +149,12 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
             key = "%d"%k
             C_k = C_ks_s[key][()]
             # C_ks_R["%s/%d"%(key,s)] = tools.ifft(C_k, mesh)
-            C_ks_R["%s/%d"%(key,s)] = wf_ifft(C_k, mesh, basis_ks[k])
+            C_k = wf_ifft(C_k, mesh, basis_ks[k])
+            if use_eri_mesh:
+                C_k = wf_fft(C_k, mesh)
+                C_k = C_k[..., eri_inds]
+                C_k = wf_ifft(C_k, eri_mesh)
+            C_ks_R["%s/%d"%(key,s)] = C_k
             C_k = None
 
     v_ia_ks_R = fswap.create_group("v_ia_ks_R")
@@ -165,7 +184,7 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
             kpta = kpts[ka]
             nocc_a = nocc_sps[ka]
             nvir_a = nvir_sps[ka]
-            coulG = tools.get_coulG(cell, kpta-kpti, exx=False, mesh=mesh)
+            coulG = tools.get_coulG(cell, kpta-kpti, exx=False, mesh=eri_mesh)
 
             key_ka = "%d"%ka
             if key_ka in v_ia_ks_R: del v_ia_ks_R[key_ka]
@@ -177,8 +196,8 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
 
                 for i in range(nocc_i[s]):
                     v_ia = tools.fft(Co_ki_R[s][i].conj() *
-                                     Cv_ka_R, mesh) * coulG
-                    v_ia_R[i] = tools.ifft(v_ia, mesh)
+                                     Cv_ka_R, eri_mesh) * coulG
+                    v_ia_R[i] = tools.ifft(v_ia, eri_mesh)
 
                 v_ia_ks_R["%s/%d"%(key_ka,s)] = v_ia_R
                 v_ia_R = Cv_ka_R = None
@@ -381,7 +400,8 @@ class PWKUMP2(kmp2.PWKRMP2):
 
         self.e_corr = kernel_dx_(cell, kpts, chkfile, summary, nvir=nvir,
                                  nvir_lst=nvir_lst,
-                                 basis_ks=self._scf._basis_data)
+                                 basis_ks=self._scf._basis_data,
+                                 ecut_eri=self.ecut_eri)
 
         self._finalize()
 

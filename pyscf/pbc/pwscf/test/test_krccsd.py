@@ -49,6 +49,9 @@ class KnownValues(unittest.TestCase):
         pcc = pwscf.PWKRCCSD(pmf)
         pcc.kernel()
         assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-6)
+        pcc.ecut_eri = 15
+        pcc.kernel()
+        assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-4)
 
         if test_scf:
             pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
@@ -63,6 +66,9 @@ class KnownValues(unittest.TestCase):
             pwcc = pwscf.PWKRCCSD(pwmf)
             pwcc.kernel()
             # Just to make sure the code stays consistent
+            assert_allclose(pwcc.e_corr, -0.03234330656841895, atol=1.e-4, rtol=0)
+            pwcc.ecut_eri = 15
+            pwcc.kernel()
             assert_allclose(pwcc.e_corr, -0.03234330656841895, atol=1.e-4, rtol=0)
 
     def test_krccsd(self):

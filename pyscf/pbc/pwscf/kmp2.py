@@ -24,7 +24,8 @@ import tempfile
 import numpy as np
 
 from pyscf.pbc.pwscf.pw_helper import (get_nocc_ks_from_mocc, get_kcomp,
-                                       set_kcomp, wf_ifft)
+                                       set_kcomp, wf_ifft, wf_fft,
+                                       get_mesh_map)
 from pyscf.pbc import tools
 from pyscf import lib
 from pyscf.lib import logger
@@ -73,7 +74,7 @@ def fill_oovv(oovv, v_ia, Co_kj_R, Cv_kb_R, fac=None):
 
 
 def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
-               frozen=None, basis_ks=None):
+               frozen=None, basis_ks=None, ecut_eri=None):
     """ Compute both direct (d) and exchange (x) contributions together.
 
     Args:
@@ -106,7 +107,15 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
     else:
         assert len(basis_ks) == nkpts
         mesh = basis_ks[0].mesh
-    coords = cell.get_uniform_grids(mesh=mesh)
+    if ecut_eri is not None:
+        eri_mesh = cell.cutoff_to_mesh(ecut_eri)
+        if (eri_mesh > mesh).any():
+            log.warn("eri_mesh larger than mesh, so eri_mesh is ignored.")
+            eri_mesh = mesh
+    else:
+        eri_mesh = mesh
+
+    coords = cell.get_uniform_grids(mesh=eri_mesh)
     ngrids = coords.shape[0]
 
     reduce_latvec = cell.lattice_vectors() / (2*np.pi)
@@ -179,12 +188,19 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
         C_ks_R = fswap.create_group("C_ks_R")
         v_ia_ks_R = fswap.create_group("v_ia_ks_R")
 
+    use_eri_mesh = not (np.array(mesh) == eri_mesh).all()
+    if use_eri_mesh:
+        eri_inds = get_mesh_map(cell, None, None, mesh=mesh, mesh2=eri_mesh)
+
     for k in range(nkpts):
         C_k = get_kcomp(C_ks, k)
         if frozen is not None:
             C_k = C_k[frozen:]
-        # C_k = tools.ifft(C_k, mesh)
         C_k = wf_ifft(C_k, mesh, basis_ks[k])
+        if use_eri_mesh:
+            C_k = wf_fft(C_k, mesh)
+            C_k = C_k[..., eri_inds]
+            C_k = wf_ifft(C_k, eri_mesh)
         set_kcomp(C_k, C_ks_R, k)
         C_k = None
 
@@ -217,7 +233,7 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
             kpta = kpts[ka]
             nvir_a = nvir_ks[ka]
             vir_a = vir_ks[ka]
-            coulG = tools.get_coulG(cell, kpta-kpti, exx=False, mesh=mesh)
+            coulG = tools.get_coulG(cell, kpta-kpti, exx=False, mesh=eri_mesh)
 
             Cv_ka_R = get_kcomp(C_ks_R, ka, occ=vir_a)
             if incore:
@@ -229,8 +245,8 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
                                     buffer=buf1)
 
             for i in range(nocc_i):
-                v_ia = tools.fft(Co_ki_R[i].conj() * Cv_ka_R, mesh) * coulG
-                v_ia_R[i] = tools.ifft(v_ia, mesh)
+                v_ia = tools.fft(Co_ki_R[i].conj() * Cv_ka_R, eri_mesh) * coulG
+                v_ia_R[i] = tools.ifft(v_ia, eri_mesh)
 
             set_kcomp(v_ia_R, v_ia_ks_R, ka)
             v_ia_R = Cv_ka_R = None
@@ -421,6 +437,7 @@ class PWKRMP2:
 
         self.nvir = nvir
         self.frozen = frozen
+        self.ecut_eri = None
 
 ##################################################
 # don't modify the following attributes, they are not input options
@@ -484,7 +501,8 @@ class PWKRMP2:
 
         self.e_corr = kernel_dx_(cell, kpts, chkfile, summary, nvir=nvir,
                                  nvir_lst=nvir_lst, frozen=frozen,
-                                 basis_ks=self._scf._basis_data)
+                                 basis_ks=self._scf._basis_data,
+                                 ecut_eri=self.ecut_eri)
 
         self._finalize()
 

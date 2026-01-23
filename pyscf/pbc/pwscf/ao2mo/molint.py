@@ -29,7 +29,8 @@ from pyscf import lib
 from pyscf.lib import logger
 from pyscf.pbc import tools
 
-from pyscf.pbc.pwscf.pw_helper import get_kcomp, set_kcomp, wf_ifft
+from pyscf.pbc.pwscf.pw_helper import get_kcomp, set_kcomp, wf_ifft, wf_fft, \
+                                      get_mesh_map
 
 dot = lib.dot
 einsum = np.einsum
@@ -41,7 +42,8 @@ def kconserv(kpt123, reduce_latvec, kdota):
 
 
 def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
-                      erifile=None, dataname="eris", basis_ks=None):
+                      erifile=None, dataname="eris", basis_ks=None,
+                      ecut_eri=None):
     """
     Args:
         C_ks : list or h5py group
@@ -59,14 +61,23 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         mesh = cell.mesh
     else:
         mesh = basis_ks[0].mesh
-    coords = cell.get_uniform_grids(mesh=mesh)
-    ngrids = coords.shape[0]
-    fac = ngrids**3. / cell.vol / nkpts
 
     reduce_latvec = cell.lattice_vectors() / (2*np.pi)
     kdota = dot(kpts, reduce_latvec)
 
     fswap = lib.H5TmpFile(dir=lib.param.TMPDIR)
+
+    if ecut_eri is not None:
+        eri_mesh = cell.cutoff_to_mesh(ecut_eri)
+        if (np.array(mesh) == eri_mesh).all():
+            eri_mesh = None
+        if (eri_mesh > mesh).any():
+            log.warn("eri_mesh larger than mesh, so eri_mesh is ignored.")
+            eri_mesh = None
+        if eri_mesh is not None:
+            eri_inds = get_mesh_map(cell, None, None, mesh=mesh, mesh2=eri_mesh)
+    else:
+        eri_mesh = None
 
     C_ks_R = fswap.create_group("C_ks_R")
     for k in range(nkpts):
@@ -74,8 +85,19 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         basis = None if basis_ks is None else basis_ks[k]
         # C_k = tools.ifft(C_k, mesh)
         C_k = wf_ifft(C_k, mesh, basis=basis)
+        if eri_mesh is not None:
+            C_k = wf_fft(C_k, mesh)
+            C_k = C_k[..., eri_inds]
+            C_k = wf_ifft(C_k, eri_mesh)
         set_kcomp(C_k, C_ks_R, k)
         C_k = None
+
+    if eri_mesh is not None:
+        mesh = eri_mesh
+
+    coords = cell.get_uniform_grids(mesh=mesh)
+    ngrids = coords.shape[0]
+    fac = ngrids**3. / cell.vol / nkpts
 
     dtype = np.complex128
     if mo_slices is None:

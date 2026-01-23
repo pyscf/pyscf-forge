@@ -69,6 +69,7 @@ class PWKRCCSD:
         self.frozen = frozen
         self.kpts = mf.kpts
         self.mcc = None
+        self.ecut_eri = None
 
         # not input options
         self._nmo = None
@@ -143,7 +144,7 @@ class _ERIS:
         )
 
         eris = get_molint_from_C(
-            cell, mo_coeff, kpts, basis_ks=mf._basis_data
+            cell, mo_coeff, kpts, basis_ks=mf._basis_data, ecut_eri=cc.ecut_eri
         ).transpose(0,2,1,3,5,4,6)
 
         no = cc.nocc

@@ -59,6 +59,9 @@ class KnownValues(unittest.TestCase):
         pwmp = pwscf.KMP2(pwmf)
         pwmp.kernel()
         assert_allclose(pwmp.e_corr, e_corr0, atol=1.e-4, rtol=0)
+        pwmp.ecut_eri = 20
+        pwmp.kernel()
+        assert_allclose(pwmp.e_corr, e_corr0, atol=1.e-4, rtol=0)
 
         pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
         pwmf.nvir = 10 # request 10 virtual states
@@ -69,8 +72,11 @@ class KnownValues(unittest.TestCase):
         pwmp.kernel()
         # higher relative error threshold because the PW basis is different
         assert_allclose(abs((pwmp.e_corr - e_corr0) / e_corr0),
-                       0, atol=5.e-2, rtol=0)
-
+                        0, atol=5.e-2, rtol=0)
+        pwmp.ecut_eri = 20
+        pwmp.kernel()
+        assert_allclose(abs((pwmp.e_corr - e_corr0) / e_corr0),
+                        0, atol=5.e-2, rtol=0)
 
     def test_alle(self):
         atom = "He 0 0 0"
