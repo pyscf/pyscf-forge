@@ -4,7 +4,7 @@ from pyscf.ao2mo._ao2mo import nr_e2
 from pyscf.lib import logger, current_memory
 from .rpprpa_davidson import RppRPADavidson, pprpa_get_trial_vector, pprpa_expand_space
 from .rpprpa_direct import pprpa_print_a_pair, inner_product, pprpa_orthonormalize_eigenvector
-
+from pyscf.data.nist import HARTREE2EV
 
 
 def kernel(pprpa):
@@ -302,7 +302,7 @@ def pprpa_davidson_print_eigenvector(pprpa, exci0, exci, xy):
     tri_row_v, tri_col_v = numpy.tril_indices(nvir_act, -1)
 
     nroot = len(exci)
-    au2ev = 27.211386
+    au2ev = HARTREE2EV
     if pprpa.channel == "pp":
         for iroot in range(nroot):
             logger.info(pprpa, "#%-d excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV",

@@ -26,6 +26,7 @@ from pyscf.lib import einsum, logger, StreamObject, current_memory
 from pyscf.mp.mp2 import get_nocc, get_nmo
 from pyscf.pbc.df.fft_ao2mo import _format_kpts
 from pyscf.scf.hf import KohnShamDFT
+from pyscf.data.nist import HARTREE2EV
 
 
 def diagonalize_pprpa_singlet(nocc, mo_energy, Lpq, mu=None):
@@ -441,7 +442,7 @@ def pprpa_print_direct_eigenvector(pprpa, multi, exci0, exci, xy):
     tri_row_o, tri_col_o = numpy.tril_indices(nocc_act, is_singlet-1)
     tri_row_v, tri_col_v = numpy.tril_indices(nvir_act, is_singlet-1)
 
-    au2ev = 27.211386
+    au2ev = HARTREE2EV
 
     for istate in range(min(pprpa.hh_state, oo_dim)):
         logger.info(pprpa, "#%-d %s de-excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV",

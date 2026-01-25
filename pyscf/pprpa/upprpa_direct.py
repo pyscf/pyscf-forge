@@ -24,6 +24,7 @@ from pyscf.lib import einsum, logger, StreamObject, current_memory
 from pyscf.mp.ump2 import get_nocc, get_nmo
 from pyscf.pbc.df.fft_ao2mo import _format_kpts
 from pyscf.ao2mo._ao2mo import nr_e2
+from pyscf.data.nist import HARTREE2EV
 from pyscf.scf.hf import KohnShamDFT
 from pyscf.pprpa.rpprpa_direct import inner_product, ij2index, \
     pprpa_orthonormalize_eigenvector, \
@@ -343,7 +344,7 @@ def pprpa_print_direct_eigenvector(
         tri_row_o, tri_col_o = numpy.tril_indices(nocc, -1)
         tri_row_v, tri_col_v = numpy.tril_indices(nvir, -1)
 
-    au2ev = 27.211386
+    au2ev = HARTREE2EV
 
     # =====================> two-electron removal <======================
     for istate in range(min(hh_state, oo_dim)):

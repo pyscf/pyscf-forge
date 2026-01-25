@@ -22,6 +22,7 @@ import scipy
 
 from pyscf.lib import einsum, logger, StreamObject
 from pyscf.mp.mp2 import get_nocc, get_nmo
+from pyscf.data.nist import HARTREE2EV
 
 from pyscf.pprpa.rpprpa_direct import ao2mo, inner_product, ij2index, \
     get_chemical_potential, pprpa_orthonormalize_eigenvector, pprpa_print_a_pair
@@ -440,7 +441,7 @@ def pprpa_davidson_print_eigenvector(pprpa, multi, exci0, exci, xy):
     tri_row_v, tri_col_v = numpy.tril_indices(nvir_act, is_singlet-1)
 
     nroot = len(exci)
-    au2ev = 27.211386
+    au2ev = HARTREE2EV
     if pprpa.channel == "pp":
         for iroot in range(nroot):
             logger.info(pprpa, "#%-d %s excitation:  exci= %-12.4f  eV   2e=  %-12.4f  eV",

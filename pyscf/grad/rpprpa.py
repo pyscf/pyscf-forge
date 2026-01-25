@@ -496,7 +496,7 @@ def contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ
         # slow (more copies) but more readable version
         # out = np.concatenate((
         # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "i"),
-        # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "a")), 
+        # contraction_2rdm_Lpq(occ_y_mat, vir_x_mat, Lpq_full, nocc, nvir, nfrozen_occ, nfrozen_vir, label1, "a")),
         # axis=1)
         out = np.zeros((n1, nocc + nvir), dtype=occ_y_mat.dtype)
         L1i = np.ascontiguousarray(Lpq_full[:, slice1, slice_i]).reshape(-1, nocc)  # (Pt,k)
