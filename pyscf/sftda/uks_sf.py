@@ -154,7 +154,7 @@ class CasidaTDDFT(TDA_SF):
                                     tol=self.conv_tol,
                                     nroots=nstates_new,
                                     max_cycle=self.max_cycle,
-                                    # max_space=self.max_space, 
+                                    # max_space=self.max_space,
                                     pick=pickeig,
                                     verbose=log)
 

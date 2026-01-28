@@ -8,6 +8,7 @@ reused across different contexts.
 import numpy
 import scipy.linalg
 from pyscf import lib
+from functools import reduce
 
 
 def make_natural_orbitals(cell, kpts, dms):
@@ -46,7 +47,7 @@ def make_natural_orbitals(cell, kpts, dms):
     for i, dm in enumerate(dms):
         for k, s in enumerate(sk):
             # Diagonalize the DM in AO basis: S^{1/2} * DM * S^{1/2}
-            A = lib.reduce(numpy.dot, (s, dm[k], s))
+            A = reduce(numpy.dot, (s, dm[k], s))
             w, v = scipy.linalg.eigh(A, b=s)
 
             # Sort eigenvalues/eigenvectors in descending order
