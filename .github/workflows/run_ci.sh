@@ -14,6 +14,7 @@ pip install pytest
 pip install .
 
 pip install trexio
+pip install mcfun
 
 # TODO: check if pyscf code is changed using dist-info file
 #pip uninstall -y pyscf-forge

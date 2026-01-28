@@ -436,7 +436,7 @@ class TDA_SF(TDBase):
                               tol=self.conv_tol,
                               nroots=nstates_new, lindep=self.lindep,
                               max_cycle=self.max_cycle,
-                              max_space=self.max_space,
+                              # max_space=self.max_space,
                               verbose=log)
 
         nmo = self._scf.mo_occ[0].size
