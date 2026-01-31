@@ -27,6 +27,7 @@ from pyscf import mcscf
 from pyscf import fci
 from pyscf import ao2mo
 from pyscf.pbc import gto as pbcgto
+from pyscf.mcscf import mc1step, mc2step, casci
 
 import trexio
 
@@ -36,7 +37,7 @@ def to_trexio(obj, filename, backend='h5', ci_threshold=None, chunk_size=None):
             _mol_to_trexio(obj, tf)
         elif isinstance(obj, scf.hf.SCF):
             _scf_to_trexio(obj, tf)
-        elif isinstance(obj, mcscf.casci.CASCI) or isinstance(obj, mcscf.CASSCF):
+        elif isinstance(obj, (casci.CASCI, mc1step.CASSCF)):
             ci_threshold = ci_threshold if ci_threshold is not None else 0.
             chunk_size = chunk_size if chunk_size is not None else 100000
             _mcscf_to_trexio(obj, tf, ci_threshold=ci_threshold, chunk_size=chunk_size)
