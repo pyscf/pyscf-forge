@@ -314,12 +314,17 @@ def test_mf_k_grid_uhf_ae_6_31g(cart):
 
 ## molecule, segment contraction (6-31g), all-electron, RHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
-def test_mcscf_rhf_ae_6_31g(cart):
+@pytest.mark.parametrize(
+    "mc_constructor",
+    [pyscf.mcscf.CASCI, pyscf.mcscf.CASSCF],
+    ids=["casci", "casscf"],
+)
+def test_mcscf_rhf_ae_6_31g(cart, mc_constructor):
     with tempfile.TemporaryDirectory() as d:
         filename = os.path.join(d, 'test.h5')
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g', cart=cart)
         mf0 = mol0.RHF().run()
-        mc0 = pyscf.mcscf.CASCI(mf0, 2, 2)
+        mc0 = mc_constructor(mf0, 2, 2)
         mc0.kernel()
         trexio.to_trexio(mc0, filename)
 
@@ -406,12 +411,17 @@ def test_mcscf_rhf_ae_6_31g(cart):
 
 ## molecule, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
-def test_mcscf_uhf_ae_6_31g(cart):
+@pytest.mark.parametrize(
+    "mc_constructor",
+    [pyscf.mcscf.CASCI, pyscf.mcscf.CASSCF],
+    ids=["casci", "casscf"],
+)
+def test_mcscf_uhf_ae_6_31g(cart, mc_constructor):
     with tempfile.TemporaryDirectory() as d:
         filename = os.path.join(d, 'test.h5')
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g', spin=2, cart=cart)
         mf0 = mol0.UHF().run()
-        mc0 = pyscf.mcscf.CASCI(mf0, 2, 2)
+        mc0 = mc_constructor(mf0, 2, 2)
         mc0.kernel()
         trexio.to_trexio(mc0, filename)
 
@@ -529,6 +539,7 @@ def test_mcscf_uhf_ae_6_31g(cart):
         e_act = np.einsum("ij,ij->", h1eff, dm1_cas) + 0.5 * np.einsum("ijkl,ijkl->", h2eff, dm2_cas)
         e_reconstructed = ecore + e_act
         assert abs(e_reconstructed - mc0.e_tot) < 1e-8
+
 
 #################################################################
 # reading/writing `mol` from/to trexio file + SCF run.
