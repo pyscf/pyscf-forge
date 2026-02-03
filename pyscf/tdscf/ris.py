@@ -482,6 +482,7 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
     n_eri3c_per_aux = nao * nao * 1
     bytes_per_aux = (  n_eri3c_per_aux + n_Ppq_per_aux) * int3c_dtype.itemsize
     batch_size = min(naux, max(1, int(get_avail_cpumem() * 0.5 // bytes_per_aux)) )
+    log.info(f'batch_size: {batch_size}')
 
     DEBUG = False
     if DEBUG:

@@ -729,6 +729,12 @@ def solve_AX_SX(A, S):
 def TDDFT_subspace_eigen_solver2(a, b, sigma, pi, nroots):
     ''' [ a b ] x - [ σ   π] x  Ω = 0 '''
     ''' [ b a ] y   [-π  -σ] y    = 0 '''
+    original_dtype = a.dtype
+    if original_dtype != np.float64:
+        a = a.astype(np.float64)
+        b = b.astype(np.float64)
+        sigma = sigma.astype(np.float64)
+        pi = pi.astype(np.float64)
 
     d = abs(np.diag(sigma))
     d_mh = d**(-0.5)
@@ -782,6 +788,11 @@ def TDDFT_subspace_eigen_solver2(a, b, sigma, pi, nroots):
 
     x = (x_p_y + x_m_y)/2
     y = x_p_y - x
+
+    if original_dtype != np.float64:
+        omega = omega.astype(original_dtype)
+        x = x.astype(original_dtype)
+        y = y.astype(original_dtype)
     return omega, x, y
 
 def TDDFT_subspace_eigen_solver3(a, b, sigma, pi, k):
