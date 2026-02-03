@@ -971,7 +971,7 @@ def ABBA_shifted_linear_diagonal(**kwargs):
 
     # Optional: if memory is extremely tight, can del mask here
     del Di, mask
-    release_memory()
+    gc.collect()
     _converged = True
     return _converged, X, Y
 
