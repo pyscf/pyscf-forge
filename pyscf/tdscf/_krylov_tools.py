@@ -886,7 +886,7 @@ def ABBA_eigenvalue_diagonal(**kwargs):
     _converged, _energies = True, None
     return _converged, _energies, X, Y
 
-def ABBA_shifted_linear_diagonal(**kwargs):
+def ABBA_shifted_linear_diagonal_backup(**kwargs):
     '''solve
         [ D 0 ] X - [ 1  0 ] X Ω = [rhs_1]
         [ 0 D ] Y   [ 0 -1 ] Y     [rhs_2]
@@ -916,6 +916,64 @@ def ABBA_shifted_linear_diagonal(**kwargs):
 
     _converged = True
     return _converged, X_new, Y_new
+
+def ABBA_shifted_linear_diagonal(**kwargs):
+    """
+    Solve shifted linear systems with very low extra memory:
+        D X - X Ω = rhs_1
+        D Y + Y Ω = rhs_2
+
+    Where D is diagonal (given by hdiag), Ω is diagonal (given by omega_shift)
+
+    This version computes row-by-row to avoid creating full broadcasted matrices.
+    Extra memory ~ O(A_size) instead of O(n_states × A_size)
+    """
+    rhs_1 = kwargs['rhs_1']       # shape: (n_states, A_size)
+    rhs_2 = kwargs['rhs_2']
+    hdiag = kwargs['hdiag']       # shape: (A_size,)
+    omega = kwargs['omega_shift'] # shape: (n_states,)
+
+    n_states, A_size = rhs_1.shape
+    assert rhs_2.shape == (n_states, A_size)
+    assert len(hdiag) == A_size
+    assert len(omega) == n_states
+
+    dtype = hdiag.dtype
+    t = dtype.type(1e-12)   # threshold, can be 1e-14 if you prefer stricter
+
+    # Pre-allocate output arrays (can reuse rhs_1/rhs_2 if you allow in-place)
+    X = np.empty_like(rhs_1)
+    Y = np.empty_like(rhs_2)
+
+    # Reuse a single temporary row vector
+    Di = np.empty(A_size, dtype=dtype)
+
+    for i in range(n_states):
+        # 1. Compute D - omega_i  for X
+        np.subtract(hdiag, omega[i], out=Di)           # Di = hdiag - omega[i]
+
+        # Avoid division by near-zero
+        mask = (Di > -t) & (Di < t)
+        Di = np.where(mask, np.sign(Di) * t, Di)    # in-place where if possible
+
+        # X[i] = rhs_1[i] / Di
+        np.divide(rhs_1[i], Di, out=X[i])
+
+        # 2. Compute D + omega_i  for Y
+        np.add(hdiag, omega[i], out=Di)                # reuse Di: Di = hdiag + omega[i]
+
+        # Same safeguard
+        mask = (Di > -t) & (Di < t)
+        Di = np.where(mask, np.sign(Di) * t, Di)
+
+        # Y[i] = rhs_2[i] / Di
+        np.divide(rhs_2[i], Di, out=Y[i])
+
+    # Optional: if memory is extremely tight, can del mask here
+    del Di, mask
+    release_memory()
+    _converged = True
+    return _converged, X, Y
 
 
 '''eigenvalue problem'''
