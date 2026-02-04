@@ -275,13 +275,16 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
         except AttributeError:
             csf_addr = csf_addr[np.argsort(hdiag_csf[csf_addr])[:npsp]]
 
-    npsp_det = len(det_addr)
-    npsp_csf = len(csf_addr)
+
 
     # To build
     econf_addr = np.unique (transformer.econf_csf_mask[csf_addr])
     det_addr = np.concatenate ([np.nonzero (transformer.econf_det_mask == conf)[0]
         for conf in econf_addr])
+
+    npsp_det = len(det_addr)
+    npsp_csf = len(csf_addr)
+
     lib.logger.debug (fci, ("csf.pspace: Lowest-energy %s CSFs correspond to %s configurations"
         " which are spanned by %s determinants"), npsp_csf, econf_addr.size, npsp_det)
 
