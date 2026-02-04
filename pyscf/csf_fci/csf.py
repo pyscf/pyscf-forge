@@ -275,24 +275,26 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
         except AttributeError:
             csf_addr = csf_addr[np.argsort(hdiag_csf[csf_addr])[:npsp]]
 
+    npsp_det = len(det_addr)
+    npsp_csf = len(csf_addr)
+
     # To build
     econf_addr = np.unique (transformer.econf_csf_mask[csf_addr])
     det_addr = np.concatenate ([np.nonzero (transformer.econf_det_mask == conf)[0]
         for conf in econf_addr])
     lib.logger.debug (fci, ("csf.pspace: Lowest-energy %s CSFs correspond to %s configurations"
-        " which are spanned by %s determinants"), npsp, econf_addr.size, det_addr.size)
+        " which are spanned by %s determinants"), npsp_csf, econf_addr.size, npsp_det)
 
     addra, addrb = divmod(det_addr, nb)
     stra = cistring.addrs2str(norb, neleca, addra)
     strb = cistring.addrs2str(norb, nelecb, addrb)
-    npsp_det = len(det_addr)
     safety_factor = 1.2
-    nfloats_h0 = (npsp_det+npsp)**2.0
+    nfloats_h0 = (npsp_det+npsp_csf)**2.0
     mem_h0 = safety_factor * nfloats_h0 * np.dtype (float).itemsize / 1e6
     deltam = lib.current_memory ()[0] - m0
     mem_remaining = max_memory - deltam
     memstr = ("pspace_size of {} CSFs -> {} determinants requires {} MB, cf {} MB "
-              "remaining memory").format (npsp, npsp_det, mem_h0, mem_remaining)
+              "remaining memory").format (npsp_csf, npsp_det, mem_h0, mem_remaining)
     if mem_h0 > mem_remaining:
         raise MemoryError (memstr)
     lib.logger.debug (fci, memstr)
@@ -346,15 +348,15 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
                            np.max (np.abs(resid)))
 
     # We got extra CSFs from building the configurations most of the time.
-    if csf_addr.size > npsp:
+    lib.logger.debug1 (fci, "csf_solver.pspace: asked for %s-CSF pspace; found %s CSFs",
+                       csf_addr.size, npsp_csf)
+    if csf_addr.size > npsp_csf:
         try:
-            csf_addr_2 = np.argpartition(np.diag (h0), npsp-1)[:npsp]
+            csf_addr_2 = np.argpartition(np.diag (h0), npsp_csf-1)[:npsp_csf]
         except AttributeError:
-            csf_addr_2 = np.argsort(np.diag (h0))[:npsp]
+            csf_addr_2 = np.argsort(np.diag (h0))[:npsp_csf]
         csf_addr = csf_addr[csf_addr_2]
         h0 = h0[np.ix_(csf_addr_2,csf_addr_2)]
-    npsp_csf = csf_addr.size
-    lib.logger.debug1 (fci, "csf_solver.pspace: asked for %s-CSF pspace; found %s CSFs", npsp, npsp_csf)
 
     t0 = lib.logger.timer_debug1 (fci, "csf.pspace wrapup", *t0)
     return csf_addr, h0
