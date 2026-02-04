@@ -25,7 +25,7 @@ from pyscf.tdscf.math_helper import get_avail_cpumem, get_mem_info
 from pyscf.data.nist import HARTREE2EV
 from pyscf.lib import logger, einsum
 
-logger.TIMER_LEVEL = 5
+logger.TIMER_LEVEL = 4
 
 CITATION_INFO = """
 Please cite the TDDFT-ris method:
@@ -615,23 +615,31 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
     if RKS:
         if calc == 'J':
             Tia = einsum2dot(upper_inv_eri2c, Pia)
+            del Pia
+            gc.collect()
             return Tia
 
         if calc == 'K':
             Tij = eri2c_inv.dot(Pij, out=Pij)
             Tab = Pab
+            del Pij
+            gc.collect()
             return Tij, Tab
 
         if calc == 'JK':
             Tia = einsum2dot(upper_inv_eri2c, Pia)
             Tij = eri2c_inv.dot(Pij, out=Pij)
             Tab = Pab
+            del Pia
+            gc.collect()
             return Tia, Tij, Tab
 
     elif UKS:
         if calc == 'J':
             Tia_a = einsum2dot(upper_inv_eri2c, Pia_a)
             Tia_b = einsum2dot(upper_inv_eri2c, Pia_b)
+            del Pia_a, Pia_b
+            gc.collect()
             return Tia_a, Tia_b
 
         if calc == 'K':
@@ -639,6 +647,8 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
             Tij_b = eri2c_inv.dot(Pij_b, out=Pij_b)
             Tab_a = Pab_a
             Tab_b = Pab_b
+            del Pij_a, Pij_b
+            gc.collect()
             return Tij_a, Tij_b, Tab_a, Tab_b
 
         if calc == 'JK':
@@ -648,6 +658,8 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
             Tij_b = eri2c_inv.dot(Pij_b, out=Pij_b)
             Tab_a = Pab_a
             Tab_b = Pab_b
+            del Pia_a, Pia_b
+            gc.collect()
             return Tia_a, Tia_b, Tij_a, Tij_b, Tab_a, Tab_b
 
 
@@ -741,6 +753,7 @@ def gen_iajb_MVP_Tpq(T_ia, T_jb=None, log=None):
             iajb_V (np.ndarray): Result tensor of shape (m, n_occ, n_vir).
         '''
         # Get the shape of the tensors
+        cpu0 = (logger.process_clock(), logger.perf_counter())
         nauxao, n_occ, n_vir = T_ia.shape
         n_state, n_occ, n_vir = V.shape
         # Initialize result tensor
@@ -778,6 +791,7 @@ def gen_iajb_MVP_Tpq(T_ia, T_jb=None, log=None):
             del tmp
             gc.collect()
 
+        log.timer(' iajb_MVP time', *cpu0)
         return out
 
     return iajb_MVP
@@ -836,7 +850,7 @@ def gen_ijab_MVP_Tpq(T_ij, T_ab, log=None):
             ijab_X (np.ndarray): Result tensor of shape (n_state, n_occ, n_vir).
         '''
 
-
+        cpu0 = (logger.process_clock(), logger.perf_counter())
         n_state, n_occ, n_vir = X.shape    # Dimensions of X
 
         # Initialize result tensor
@@ -892,7 +906,7 @@ def gen_ijab_MVP_Tpq(T_ij, T_ab, log=None):
 
             gc.collect()
             # Release intermediate variables and clean up memory
-
+        log.timer(' ijab_MVP time', *cpu0)
         log.info(get_mem_info('          ijab_MVP done'))
         return out
 
@@ -921,6 +935,7 @@ def gen_ibja_MVP_Tpq(T_ia, log=None):
         Returns:
             ibja_V (np.ndarray): Result tensor of shape (n_state, n_occ, n_vir).
         '''
+        cpu0 = (logger.process_clock(), logger.perf_counter())
         nauxao, n_occ, n_vir = T_ia.shape
         n_state, n_occ, n_vir = V.shape
 
@@ -951,6 +966,7 @@ def gen_ibja_MVP_Tpq(T_ia, log=None):
 
             gc.collect()
 
+        log.timer(' ibja_MVP time', *cpu0)
         return out
 
     return ibja_MVP
@@ -1589,7 +1605,7 @@ class RisBase(lib.StreamObject):
                         single=self.single, log=log)
 
         log.timer('build T_ia_J', *cpu0)
-        log.info(get_mem_info('after T_ia_J'))
+        log.info(get_mem_info('after T_ia_J_RKS'))
         return T_ia_J
 
     def get_2T_K_RKS(self):
@@ -2537,7 +2553,6 @@ class TDDFT(RisBase):
 
 
     def kernel(self):
-        self.build()
         log = self.log
         TDDFT_MVP, hdiag = self.gen_vind()
         if self.a_x != 0:

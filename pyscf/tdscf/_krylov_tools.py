@@ -1265,11 +1265,13 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         t0 = (logger.process_clock(), logger.perf_counter())
         X = V_holder[size_old:size_new, :]
         Y = W_holder[size_old:size_new, :]
+        log.info(f'     X {X.shape} {X.nbytes//1024**2} MB')
+        log.info(f'     Y {Y.shape} {Y.nbytes//1024**2} MB')
         U1_holder[size_old:size_new, :], U2_holder[size_old:size_new, :] = matrix_vector_product(X=X,Y=Y)
 
         _time_add(log, t_mvp, t0)
-        log.info(f'     X {X.shape} {X.nbytes//1024**2} MB')
-        log.info(f'     Y {Y.shape} {Y.nbytes//1024**2} MB')
+        log.timer(' total MVP time', *t0)
+
         del X, Y
         log.info(f'     V_holder[:size_new, :]  {V_holder[:size_new, :].nbytes/1024**3:.2f} GB')
         log.info(f'     W_holder[:size_new, :]  {W_holder[:size_new, :].nbytes/1024**3:.2f} GB')
@@ -1303,6 +1305,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
             x,y = math_helper.TDDFT_subspace_linear_solver(sub_A, sub_B, sigma, pi, sub_rhs_1, sub_rhs_2, omega_shift)
 
         _time_add(log, t_solve_sub, t0)
+        log.timer(' solve subspace problem time', *t0)
 
         '''
         compute the residual
@@ -1327,14 +1330,23 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
             residual_2 = np.dot(x.T, U2) + np.dot(y.T, U1) + omega_shift.reshape(-1, 1) * Y_full - rhs_2
 
         _time_add(log, t_sub2full, t0)
-
+        log.timer(' compute residual time', *t0)
         ''' Check convergence '''
         residual = np.hstack((residual_1, residual_2))
 
         r_norms = np.linalg.norm(residual, axis=1)
         max_norm = np.max(r_norms)
 
-        log.info(f'            max|R|: {max_norm:<10.2e} subspace_size = {sub_A.shape[0]}')
+        max_idx = np.argmax(r_norms)
+        log.debug('              state :  ||R||2  unconverged')
+        for state in range(len(r_norms)):
+            if r_norms[state] < conv_tol:
+                log.debug(f'              {state+1:>5d} {r_norms[state]:.2e}')
+            else:
+                log.debug(f'              {state+1:>5d} {r_norms[state]:.2e} *')
+
+        max_norm = np.max(r_norms)
+        log.info(f'              max|R|: {max_norm:>12.2e}, state {max_idx+1}')
 
         if max_norm < conv_tol or ii == (max_iter -1):
             break
@@ -1373,7 +1385,7 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
             log.debug('     Preconditioning ends')
             _time_add(log, t_precond, t0)
-
+            log.timer(' preconditioning time', *t0)
             ''' put the new guess XY into the holder '''
             t0 = (logger.process_clock(), logger.perf_counter())
             size_old = size_new
@@ -1382,12 +1394,12 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                                                         X_new=X_new,
                                                         Y_new=Y_new,
                                                         m=size_old)
+            if size_new == size_old:
+                log.info('All new guesses kicked out during filling holder !!!!!!!')
+                break
+            _time_add(log, t_fill_holder, t0)
+            log.timer(' fill holder time', *t0)
 
-
-        if size_new == size_old:
-            log.warn('All new guesses kicked out during filling holder !!!!!!!')
-            break
-        _time_add(log, t_fill_holder, t0)
 
     if ii == (max_iter -1) and max_norm >= conv_tol:
         log.warn(f'=== {problem_type.capitalize()} ABBA Krylov Solver solver not converged below {conv_tol:.2e} ===')
