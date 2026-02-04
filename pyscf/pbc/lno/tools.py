@@ -39,7 +39,8 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
 
     mo_energy, mo_coeff = eig(fock, s1e)
 
-    mf = scf.RHF(scell, kpt=kpts[0])
+    # mf = scf.RHF(scell, kpt=kpts[0])
+    mf = scf.RHF(scell, kpt=kpts[0]).rs_density_fit(auxbasis=kmf.with_df.auxbasis)
     mf.mo_coeff = mo_coeff
     mf.mo_energy = mo_energy
     mf.mo_occ = mf.get_occ()
