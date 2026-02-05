@@ -301,7 +301,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
     if mem_h0 > mem_remaining:
         raise MemoryError (memstr)
     lib.logger.debug (fci, memstr)
-    h0 = np.zeros((npsp_det,npsp_det))
+    h0 = np.ascontiguousarray(np.zeros((npsp_det,npsp_det), dtype=np.float64))
     h1e_ab = unpack_h1e_ab (h1e)
     h1e_a = np.ascontiguousarray(h1e_ab[0])
     h1e_b = np.ascontiguousarray(h1e_ab[1])
@@ -309,6 +309,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
     g2e_ab = g2e_bb = g2e_aa = g2e
     _debug_g2e (fci, g2e, eri, norb) # Exploring g2e nan bug; remove later?
     t0 = lib.logger.timer_debug1 (fci, "csf.pspace: index manipulation", *t0)
+
     libfci.FCIpspace_h0tril_uhf(h0.ctypes.data_as(ctypes.c_void_p),
                                 h1e_a.ctypes.data_as(ctypes.c_void_p),
                                 h1e_b.ctypes.data_as(ctypes.c_void_p),
