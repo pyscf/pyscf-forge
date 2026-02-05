@@ -44,7 +44,7 @@ if MAX_MEMORY_MB <= 0:
     except:
         MAX_MEMORY_MB = FALLBACK_MB
 
-MAX_MEMORY = MAX_MEMORY_MB * 1024 # in GB
+MAX_MEMORY = MAX_MEMORY_MB / 1024 # in GB
 
 def get_mem_info(words):
     rss = current_memory()[0] / 1024  # MB to GB
