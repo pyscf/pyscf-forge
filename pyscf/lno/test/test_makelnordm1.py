@@ -18,7 +18,6 @@ import unittest
 import numpy as np
 from functools import reduce
 
-from sqlalchemy import over
 from pyscf import __config__
 setattr(__config__, 'lnocc_DEBUG_BLKSIZE', True)    # debug outcore mode
 from pyscf import gto, scf, lo, lib
