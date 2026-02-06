@@ -784,7 +784,7 @@ class LNOCCSD(LNO):
 
     @property
     def e_tot_ccsd_t(self):
-        return self.e_corr_ccsd_t + self.e_tot_ccsd
+        return self.e_corr_ccsd_t + self.e_tot_scf
 
     @property
     def e_tot_pt2(self):
@@ -806,7 +806,7 @@ class LNOCCSD(LNO):
         return self.e_corr_ccsd_t - self.e_corr_pt2 + ept2
 
     def e_tot_ccsd_t_pt2corrected(self, ept2):
-        return self.e_tot_ccsd + self.e_corr_ccsd_t_pt2corrected(ept2)
+        return self.e_tot_scf + self.e_corr_ccsd_t_pt2corrected(ept2)
 
 
 class LNOCCSD_T(LNOCCSD):

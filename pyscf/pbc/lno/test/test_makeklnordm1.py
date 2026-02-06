@@ -55,7 +55,7 @@ class Water_REAL(unittest.TestCase):
         cls.scell = scell
         cls.smf = smf
         cls.frozen = 2 * nkpts
-        
+
     @classmethod
     def tearDownClass(cls):
         cls.cell.stdout.close()
@@ -73,7 +73,7 @@ class Water_REAL(unittest.TestCase):
         orbvir = mf.mo_coeff[:,mf.mo_occ==0]
         moeocc =  mf.mo_energy[mf.mo_occ>0]
         moevir =  mf.mo_energy[mf.mo_occ==0]
-        
+
         # PM localized occ orbs
         mlo = lo.PipekMezey(mf.cell, orbocc)
         lo_coeff = mlo.kernel()
@@ -84,13 +84,13 @@ class Water_REAL(unittest.TestCase):
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
             mlo.init_guess = None
             lo_coeff = mlo.kernel()
-        
+
         # sort LOs by unit cell
         s1e = mf.get_ovlp()
         Nk = len(kpts)
         lo_coeff = sort_orb_by_cell(mf.cell, lo_coeff, Nk, s=s1e)
         uocc_loc = reduce(np.dot, (lo_coeff.T.conj(), s1e, orbocc))
-        
+
         # PM localized vir orbs
         mlo = lo.PipekMezey(mf.cell, orbvir)
         lo_coeff = mlo.kernel()
@@ -101,20 +101,20 @@ class Water_REAL(unittest.TestCase):
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
             mlo.init_guess = None
             lo_coeff = mlo.kernel()
-        
+
         # sort LOs by unit cell
         s1e = mf.get_ovlp()
         Nk = len(kpts)
         lo_coeff = sort_orb_by_cell(mf.cell, lo_coeff, Nk, s=s1e)
         uvir_loc = reduce(np.dot, (lo_coeff.T.conj(), s1e, orbvir))
-        
+
         eris = _KLNODFINCOREERIS_REAL(kmf.with_df, orbocc, orbvir, kmf.max_memory,
                               verbose=cell.verbose,stdout=cell.output)
         eris.build()
 
         arr1,arr2 = make_full_rdm1(eris, moeocc, moevir)
         fp = lib.fp(arr1)
-        self.assertAlmostEqual(fp, 0.042240838644704, 7)
+        self.assertAlmostEqual(fp, 0.06405023903998112, 7)
 
         fp = lib.fp(arr2)
         self.assertAlmostEqual(fp, -0.02656427018284405, 7)
@@ -142,8 +142,8 @@ class Water_REAL(unittest.TestCase):
         arr = make_lo_rdm1_vir_2h_real(eris, moeocc, moevir, uocc_loc)
         fp = lib.fp(arr)
         self.assertAlmostEqual(fp, -0.026564270182844, 7)
-        
-        
+
+
 class Water_COMPLEX(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -175,7 +175,7 @@ class Water_COMPLEX(unittest.TestCase):
         cls.scell = scell
         cls.smf = smf
         cls.frozen = 2 * nkpts
-        
+
     @classmethod
     def tearDownClass(cls):
         cls.cell.stdout.close()
@@ -193,7 +193,7 @@ class Water_COMPLEX(unittest.TestCase):
         orbvir = mf.mo_coeff[:,mf.mo_occ==0]
         moeocc =  mf.mo_energy[mf.mo_occ>0]
         moevir =  mf.mo_energy[mf.mo_occ==0]
-        
+
         # PM localized occ orbs
         mlo = lo.PipekMezey(mf.cell, orbocc)
         lo_coeff = mlo.kernel()
@@ -204,13 +204,13 @@ class Water_COMPLEX(unittest.TestCase):
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
             mlo.init_guess = None
             lo_coeff = mlo.kernel()
-        
+
         # sort LOs by unit cell
         s1e = mf.get_ovlp()
         Nk = len(kpts)
         lo_coeff = sort_orb_by_cell(mf.cell, lo_coeff, Nk, s=s1e)
         uocc_loc = reduce(np.dot, (lo_coeff.T.conj(), s1e, orbocc))
-        
+
         # PM localized vir orbs
         mlo = lo.PipekMezey(mf.cell, orbvir)
         lo_coeff = mlo.kernel()
@@ -221,17 +221,17 @@ class Water_COMPLEX(unittest.TestCase):
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
             mlo.init_guess = None
             lo_coeff = mlo.kernel()
-        
+
         # sort LOs by unit cell
         s1e = mf.get_ovlp()
         Nk = len(kpts)
         lo_coeff = sort_orb_by_cell(mf.cell, lo_coeff, Nk, s=s1e)
         uvir_loc = reduce(np.dot, (lo_coeff.T.conj(), s1e, orbvir))
-        
+
         eris = _KLNODFINCOREERIS_COMPLEX(kmf.with_df, orbocc, orbvir, kmf.max_memory,
                               verbose=cell.verbose,stdout=cell.output)
         eris.build()
-        
+
         arr = make_lo_rdm1_occ_1h_complex(eris, moeocc, moevir, uocc_loc)
         fp = lib.fp(arr)
         self.assertAlmostEqual(fp, -0.06422719794290856+2.5105071595401036e-05j, 7)

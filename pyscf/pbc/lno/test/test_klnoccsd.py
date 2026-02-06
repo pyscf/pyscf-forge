@@ -57,7 +57,7 @@ class WaterDimer(unittest.TestCase):
         cls.scell = scell
         cls.smf = smf
         cls.frozen = 2 * nkpts
-    
+
     @classmethod
     def tearDownClass(cls):
         cls.cell.stdout.close()

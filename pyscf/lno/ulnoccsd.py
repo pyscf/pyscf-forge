@@ -234,7 +234,10 @@ def _make_df_eris_outcore(mycc, mo_coeff=None):
         Lvo[blk] = Lpq[:,va,oa]
         # Lvv[blk] = lib.pack_tril(Lpq[:,va,va].reshape(-1,nvira,nvira))
         # Bugfix (Ardavan) for case where nvirb is 0
-        Lvv[blk] = lib.pack_tril(Lpq[:,va,va].reshape(-1,nvira,nvira)) if nvira > 0 else np.empty((Lpq.shape[0], 0), dtype=Lpq.dtype)
+        if nvira > 0:
+            Lvv[blk] = lib.pack_tril(Lpq[:,va,va].reshape(-1,nvira,nvira))
+        else:
+            np.empty((Lpq.shape[0], 0), dtype=Lpq.dtype)
 
         # (L|bb)
         Lpq = einsum('Lab,ap,bq->Lpq', eri1, mob, mob)
@@ -243,8 +246,11 @@ def _make_df_eris_outcore(mycc, mo_coeff=None):
         LVO[blk] = Lpq[:,vb,ob]
         # LVV[blk] = lib.pack_tril(Lpq[:,vb,vb].reshape(-1,nvirb,nvirb))
         # Bugfix (Ardavan) for case where nvirb is 0
-        LVV[blk] = lib.pack_tril(Lpq[:,vb,vb].reshape(-1,nvirb,nvirb)) if nvirb > 0 else np.empty((Lpq.shape[0], 0), dtype=Lpq.dtype)
-        
+        if nvirb > 0:
+            LVV[blk] = lib.pack_tril(Lpq[:,vb,vb].reshape(-1,nvirb,nvirb))
+        else:
+            np.empty((Lpq.shape[0], 0), dtype=Lpq.dtype)
+
     Loo = Loo.reshape(naux,nocca*nocca)
     Lov = Lov.reshape(naux,nocca*nvira)
     Lvo = Lvo.reshape(naux,nocca*nvira)
