@@ -125,7 +125,7 @@ def kernel(mlno, lo_coeff, frag_lolist, lno_type, lno_thresh=None, lno_pct_occ=N
         if mlno.prune_lno_basis:
             # compute domain
             mf_frag, lnofrag, uocc_loc, eris, frozen = \
-            domain.prune_lno_basis(mf, lnofrag, orbloc, uocc_loc, eris,
+                domain.prune_lno_basis(mf, lnofrag, orbloc, uocc_loc, eris,
                                    frozen, bp_thr=mlno.lno_basis_thresh)
 
             log.info('Domain: %d/%d basis functions', mf_frag.mol.nao,

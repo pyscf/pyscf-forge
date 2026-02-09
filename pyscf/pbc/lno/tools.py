@@ -17,6 +17,16 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
     from pyscf.scf.hf import eig
     from pyscf.pbc import scf
 
+    if not kmf.istype('KRHF'):
+        raise TypeError('k2s_scf only works for KRHF')
+
+    dfobj = getattr(kmf, "with_df", None)
+    if dfobj is None:
+        raise RuntimeError("k2s_scf requires kmf to be density-fitted (kmf.with_df is None)")
+
+    from pyscf.pbc.df.df import GDF
+    from pyscf.pbc.df.rsdf import RSDF
+
     cell = kmf.cell
     kpts = kmf.kpts
     Nk = len(kpts)
@@ -39,7 +49,17 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
 
     mo_energy, mo_coeff = eig(fock, s1e)
 
-    mf = scf.RHF(scell, kpt=kpts[0])
+    if isinstance(dfobj, RSDF):
+        mf = scf.RHF(scell, kpt=kpts[0]).rs_density_fit(auxbasis=dfobj.auxbasis)
+    elif isinstance(dfobj, GDF):
+        mf = scf.RHF(scell, kpt=kpts[0]).density_fit(auxbasis=dfobj.auxbasis)
+    else:
+        # NOTE: please add more DF types if needed
+        raise TypeError(
+            "k2s_scf requires kmf.with_df to be GDF or RSDF; got "
+            f"{dfobj.__class__.__module__}.{dfobj.__class__.__name__}"
+        )
+
     mf.mo_coeff = mo_coeff
     mf.mo_energy = mo_energy
     mf.mo_occ = mf.get_occ()

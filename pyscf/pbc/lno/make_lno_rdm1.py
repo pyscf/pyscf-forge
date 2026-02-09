@@ -127,8 +127,8 @@ def make_full_rdm1(eris, moeocc, moevir, with_occ=True, with_vir=True):
             jvLR = jvLI = None
             denom = None
             if with_occ:
-                dmoo[i0:i1,j0:j1]  = 4*lib.einsum('iakc,jbkc->ij', t2ijvv, t2ijvv)
-                dmoo[i0:i1,j0:j1] -= 2*lib.einsum('iakc,jckb->ij', t2ijvv, t2ijvv)
+                dmoo[i0:i1,j0:j1]  = 4*lib.einsum('iakb,jakb->ij', t2ijvv, t2ijvv)
+                dmoo[i0:i1,j0:j1] -= 2*lib.einsum('iakb,jbka->ij', t2ijvv, t2ijvv)
             if with_vir:
                 dmvv  = 4*lib.einsum('iajc,ibjc->ab', t2ijvv, t2ijvv)
                 dmvv -= 2*lib.einsum('iajc,icjb->ab', t2ijvv, t2ijvv)
@@ -462,7 +462,7 @@ def make_lo_rdm1_vir_1h_real(eris, moeocc, moevir, u):
     logger.debug1(eris, 'make_lo_rdm1_vir_1h :  nocc = %d  nvir = %d  nOcc = %d  naux = %d  '
                   'occblksize = %d  peak mem = %.2f MB',
                   nocc, nvir, nOcc, naux, occblksize, mem_peak)
-    bufsize = nocc*min(nocc,occblksize)*nvir**2
+    bufsize = min(nOcc,occblksize)*min(nocc,occblksize)*nvir**2
     buf = np.empty(bufsize, dtype=REAL)
 
     moeOcc, u = subspace_eigh(np.diag(moeocc), u)

@@ -17,6 +17,7 @@
 import unittest
 import numpy as np
 from functools import reduce
+
 from pyscf import __config__
 setattr(__config__, 'lnocc_DEBUG_BLKSIZE', True)    # debug outcore mode
 from pyscf import gto, scf, lo, lib
@@ -62,10 +63,10 @@ class WaterDimer(unittest.TestCase):
 
         orbocc = mf.mo_coeff[:,frozen:np.count_nonzero(mf.mo_occ)]
         orbvir = mf.mo_coeff[:,np.count_nonzero(mf.mo_occ):]
-        
+
         moeocc = mf.mo_energy[frozen:np.count_nonzero(mf.mo_occ)]
         moevir = mf.mo_energy[np.count_nonzero(mf.mo_occ):]
-        
+
         # occ PM localization
         mlo = lo.PipekMezey(mol, orbocc)
         occloc = mlo.kernel()
@@ -76,9 +77,9 @@ class WaterDimer(unittest.TestCase):
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
             mlo.init_guess = None
             occloc = mlo.kernel()
-        
+
         uocc_loc = reduce(np.dot, (occloc.T.conj(), mf.get_ovlp(), orbocc))
-        
+
         # vir PM localization
         mlo = lo.PipekMezey(mol, orbvir)
         virloc = mlo.kernel()
@@ -89,47 +90,87 @@ class WaterDimer(unittest.TestCase):
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
             mlo.init_guess = None
             virloc = mlo.kernel()
-            
+
         uvir_loc = reduce(np.dot, (virloc.T.conj(), mf.get_ovlp(), orbvir))
 
 
         eris=_LNODFINCOREERIS(mf.with_df, orbocc ,orbvir, mf.max_memory,
                               verbose=mol.verbose,stdout=mol.output)
         eris.build()
-        
+
+        # arr = make_full_rdm1_occ(eris, moeocc, moevir)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, 0.02856113869995006, 7)
+
+        # arr = make_full_rdm1_vir(eris, moeocc, moevir)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.01925614120035, 7)
+
+        # arr = make_lo_rdm1_occ_1h(eris, moeocc, moevir, uocc_loc)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.02856113869994, 7)
+
+        # arr = make_lo_rdm1_occ_1p(eris, moeocc, moevir, uvir_loc)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.02856113869994, 7)
+
+        # arr = make_lo_rdm1_occ_2p(eris, moeocc, moevir, uvir_loc)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.02856113869994, 7)
+
+        # arr = make_lo_rdm1_vir_1h(eris, moeocc, moevir, uocc_loc)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.01925614120035, 7)
+
+        # arr = make_lo_rdm1_vir_1p(eris, moeocc, moevir, uvir_loc)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.01925614120035, 7)
+
+        # arr = make_lo_rdm1_vir_2h(eris, moeocc, moevir, uocc_loc)
+        # fp = lib.fp(arr)
+        # self.assertAlmostEqual(fp, -0.01925614120035, 7)
+
+
+        # NOTE: RDM1 validation is performed in the AO basis to avoid numerical ambiguities arising from MO degeneracies.
         arr = make_full_rdm1_occ(eris, moeocc, moevir)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, 0.014104086826269, 7)
-        
+        ao_arr = reduce(np.dot, (orbocc, arr, orbocc.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, 0.008582041501554553, 7)
+
         arr = make_full_rdm1_vir(eris, moeocc, moevir)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.01925614120035, 7)
-        
+        ao_arr = reduce(np.dot, (orbvir, arr, orbvir.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, 0.044855160932431, 7)
+
         arr = make_lo_rdm1_occ_1h(eris, moeocc, moevir, uocc_loc)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.02856113869994, 7)
-        
+        ao_arr = reduce(np.dot, (orbocc, arr, orbocc.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, -0.008582041501554828, 7)
+
         arr = make_lo_rdm1_occ_1p(eris, moeocc, moevir, uvir_loc)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.02856113869994, 7)
-        
+        ao_arr = reduce(np.dot, (orbocc, arr, orbocc.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, -0.008582041501554807, 7)
+
         arr = make_lo_rdm1_occ_2p(eris, moeocc, moevir, uvir_loc)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.02856113869994, 7)
-        
+        ao_arr = reduce(np.dot, (orbocc, arr, orbocc.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, -0.008582041501554796, 7)
+
         arr = make_lo_rdm1_vir_1h(eris, moeocc, moevir, uocc_loc)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.01925614120035, 7)
-        
+        ao_arr = reduce(np.dot, (orbvir, arr, orbvir.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, 0.04485516093243097, 7)
+
         arr = make_lo_rdm1_vir_1p(eris, moeocc, moevir, uvir_loc)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.01925614120035, 7)
-        
+        ao_arr = reduce(np.dot, (orbvir, arr, orbvir.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, 0.04485516093243104, 7)
+
         arr = make_lo_rdm1_vir_2h(eris, moeocc, moevir, uocc_loc)
-        fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.01925614120035, 7)
-
-
+        ao_arr = reduce(np.dot, (orbvir, arr, orbvir.T.conj()))
+        fp = lib.fp(ao_arr)
+        self.assertAlmostEqual(fp, 0.04485516093243097, 7)
 
 if __name__ == "__main__":
     print("TESTS FOR MAKE RDM1")

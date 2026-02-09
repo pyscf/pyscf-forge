@@ -24,7 +24,7 @@ from pyscf.lib import logger
 from pyscf.gto.mole import inter_distance
 from pyscf import lno
 
-def prune_lno_basis(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None, 
+def prune_lno_basis(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
                     fock=None, bp_thr=0.98):
     """
     Create Boughton-Pulay domain by pruning basis functions unnecessary for
@@ -35,34 +35,34 @@ def prune_lno_basis(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
     bp_thr : Float, optional
         Boughton-Pulay threshold parameter. The default is 0.98.
     """
-    
+
     if type(orbloc)==list:
         return(
-        _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None, 
+            _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
                             fock=None, bp_thr=bp_thr))
     else:
         return(
-        _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None, 
+            _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
                             fock=None, bp_thr=bp_thr))
-    
 
-def _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None, 
+
+def _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
                 fock=None, bp_thr=0.98):
-    
+
     mol = mf.mol
     #
     if s1e is None:
         s1e = mol.intor_symmetric('int1e_ovlp')
-        
+
     if fock is None:
         fock = mf.get_fock()
-        
+
     #
     frozen, maskact = lno.lnoccsd.get_maskact(frozen, mo_coeff.shape[1])
     orbact = mo_coeff[:, maskact]
     maskocc = mf.mo_occ > 1e-10
     N_occ_act = np.sum(maskocc & maskact)
-    
+
     #
     domains = get_bp_domain(mol, orbact, bp_thr=bp_thr)
     atmlst = unique(domains)
@@ -73,7 +73,7 @@ def _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
     _df = df.DF(fake_mol, auxbasis=mf.auxbasis)
     _df.build()
     fake_mol.verbose=mol.verbose
-    
+
     #
     ao_idx = ao_index_by_atom(mol, atmlst)
     s21 = s1e[ao_idx]
@@ -88,11 +88,11 @@ def _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
         lmo_i_prj = lo.orth.vec_lowdin(lmo_i_prj, s=s22)
         orbloc_new.append(lmo_i_prj)
     orbloc_new = np.hstack(orbloc_new)
-    
+
     s_lmo = orbloc_new.conj().T @ s21 @ orbloc
     uocc_loc_prj = uocc_loc@s_lmo
-    
-    
+
+
     # project LNOs
     lno_new = []
     for i in range(orbact.shape[1]):
@@ -101,43 +101,43 @@ def _prune_rlno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
         lno_i_prj = lo.orth.vec_lowdin(lno_i_prj, s=s22)
         lno_new.append(lno_i_prj)
     lno_new = np.hstack(lno_new)
-    
+
     moE_new, moC_new = lno.lno.subspace_eigh(fock22, lno_new)
-    
+
     _mo_occ = np.zeros((moE_new.size), dtype=np.int32)
     _mo_occ[0:N_occ_act] = 2
-    
+
     #
     fake_mf = mf.copy()
     fake_mf.mol = fake_mol
     fake_mf.with_df = _df
-    fake_mf.converged = True    
+    fake_mf.converged = True
 
     fake_mf.mo_coeff = moC_new
     fake_mf.mo_energy = moE_new
     fake_mf.mo_occ = _mo_occ
-    
+
     return fake_mf, lno_new, uocc_loc_prj, eris, []
 
-def _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None, 
+def _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
                 fock=None, bp_thr=0.98):
-    
+
     mol = mf.mol
     #
     if s1e is None:
         s1e = mol.intor_symmetric('int1e_ovlp')
-        
+
     if fock is None:
         fock = mf.get_fock()
-        
+
     #
     _, maskact_a = lno.lnoccsd.get_maskact(frozen[0], mo_coeff[0].shape[1])
     _, maskact_b = lno.lnoccsd.get_maskact(frozen[1], mo_coeff[1].shape[1])
-    
+
     orbact_a = mo_coeff[0][:, maskact_a]
     orbact_b = mo_coeff[1][:, maskact_b]
     orbact = [orbact_a,orbact_b]
-    
+
     #
     domains = get_bp_domain(mol, np.hstack([orbact_a,orbact_b]), bp_thr=bp_thr)
     atmlst = unique(domains)
@@ -148,17 +148,17 @@ def _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
     _df = df.DF(fake_mol, auxbasis=mf.auxbasis)
     _df.build()
     fake_mol.verbose=mol.verbose
-    
-    
-    
+
+
+
     # basis projected matrices
     ao_idx = ao_index_by_atom(mol, atmlst)
     s21 = s1e[ao_idx]
     s22 = s1e[np.ix_(ao_idx, ao_idx)]
-    
+
     fock22_a = fock[0][np.ix_(ao_idx, ao_idx)]
     fock22_b = fock[1][np.ix_(ao_idx, ao_idx)]
-    
+
     # project LMOs
     orbloc_new = [[],[]]
     for n in range(2):
@@ -171,18 +171,18 @@ def _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
             orbloc_new[n] = np.hstack(orbloc_new[n])
         else:
             orbloc_new[n] = orbloc[n][ao_idx,:]
-        
+
     s_lmo_a = orbloc_new[0].conj().T @ s21 @ orbloc[0]
     s_lmo_b = orbloc_new[1].conj().T @ s21 @ orbloc[1]
 
     uocc_loc_prj = [None,] * 2
     uocc_loc_prj[0] = uocc_loc[0]@s_lmo_a
     uocc_loc_prj[1] = uocc_loc[1]@s_lmo_b
-                
+
     # project LNOs
     Nact = [maskact_a.sum(), maskact_b.sum()]
     Nact_max = max(Nact)
-    
+
     # pad lnos so that both alpha/beta have the same number of orbitals
     lno_new = np.zeros((2,len(ao_idx),Nact_max))
     frozen = [[],[]]
@@ -198,8 +198,8 @@ def _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
 
     moE_new_a, moC_new_a = lno.lno.subspace_eigh(fock22_a, lno_new[0])
     moE_new_b, moC_new_b = lno.lno.subspace_eigh(fock22_b, lno_new[1])
-    
-    # freeze extra orbitals and ensure they are virtual 
+
+    # freeze extra orbitals and ensure they are virtual
     indxzero_a = np.argsort(np.abs(moE_new_a))[0:len(frozen[0])]
     indxzero_b = np.argsort(np.abs(moE_new_b))[0:len(frozen[1])]
     Nocc_act_a = np.sum( (mf.mo_occ[0] > 1e-10) & maskact_a)
@@ -213,52 +213,52 @@ def _prune_ulno(mf, mo_coeff, orbloc, uocc_loc, eris, frozen, s1e=None,
         if i not in indxzero_a:
             _mo_occ[0,i] = 1
             k+=1
-    
+
     k = 0
     for i in range(Nact_max):
         if k >= Nocc_act_b:
             break
         if i not in indxzero_b:
             _mo_occ[1,i] = 1
-            k+=1    
+            k+=1
 
     # construct new mf object
     fake_mf = mf.copy()
     fake_mf.mol = fake_mol
     fake_mf.with_df = _df
-    fake_mf.converged = True    
+    fake_mf.converged = True
 
     fake_mf.mo_coeff = np.array([moC_new_a,moC_new_b])
     fake_mf.mo_energy = np.array([moE_new_a,moE_new_b])
     fake_mf.mo_occ = _mo_occ
-    
+
     return fake_mf, lno_new, uocc_loc_prj, eris, frozen
 
 def get_bp_domain(mol, mos, s1e=None, bp_thr=0.98,
                   q_thr=0.8, q_type='lowdin', atmlst=None):
     """
     BP domains based on partial Mulliken/Lowdin charges.
-    
-    Domains are constructed based a total bp_threshold of 0.98 
+
+    Domains are constructed based a total bp_threshold of 0.98
     (98% of the each MO must be contained within the corresponding domain)
-    
+
     """
     if s1e is None:
         s1e = mol.intor_symmetric('int1e_ovlp')
-        
+
     if q_thr is None:
         q_thr = 0.8
-        
+
     if atmlst is None:
         atmlst = np.arange(mol.natm)
 
     mos = np.asarray(mos)
     if mos.ndim == 1:
         mos = mos.reshape(-1,1)
-        
+
     assert mos.ndim == 2
     nao, nmo = mos.shape
-    
+
     assert nao == mol.nao
 
     rr = atom_distance(mol, atmlst)
@@ -266,33 +266,33 @@ def get_bp_domain(mol, mos, s1e=None, bp_thr=0.98,
     bp_atmlst = []
 
     for i in range(nmo):
-        
+
         # compute atomic charges
         orbi = mos[:,i]
         if q_type=='mulliken':
             GOP = orbi * np.dot(s1e, orbi)
 
-        
+
         elif q_type=='lowdin':
             e, v = np.linalg.eigh(s1e)
             s_half = v @ np.diag(np.sqrt(np.abs(e))) @ v.T
             GOP = np.dot(s_half, orbi)**2
-            
+
         q = np.asarray([GOP[aoslices[a,0]:aoslices[a,1]].sum() for a in atmlst])
-                
+
         sorted_indices = q.argsort()[::-1]
         q_sorted = q[sorted_indices]
         cumsum = np.cumsum(q_sorted)
         icut = np.where(cumsum >= q_thr)[0][0] if len(np.where(cumsum >= q_thr)[0]) > 0 else len(sorted_indices)
         indx = sorted_indices[0:icut + 1]
         _atms = atmlst[indx]
-        
-        
+
+
         if len(_atms) > 0:
             domain_pop = _compute_bpvalue(mol, orbi, s1e, _atms)
         else:
-            domain_pop = 0 
-        
+            domain_pop = 0
+
         # if the domain does not cover bp_thr of the MO, loop over nearby atoms
         # and add them to the domain as necessary
         if domain_pop < bp_thr:
@@ -306,7 +306,7 @@ def get_bp_domain(mol, mos, s1e=None, bp_thr=0.98,
                     domain_pop = _compute_bpvalue(mol, orbi, s1e, _atms)
                     if domain_pop >= bp_thr:
                         break
-                    
+
         bp_atmlst.append(_atms)
 
     return bp_atmlst
@@ -365,10 +365,9 @@ def project_mo(mo1, s21, s22):
 
 #%%
 if __name__ == '__main__':
-    from pyscf import gto, scf, mp, cc, lo
+    from pyscf import mp, cc
     from pyscf.cc.ccsd_t import kernel as CCSD_T
     from pyscf.data.elements import chemcore
-    from pyscf import lno
 
     # water 4-mer
     atom = '''
@@ -402,7 +401,7 @@ if __name__ == '__main__':
     # LNO-CCSD(T) calculation: here we scan over a list of thresholds
     mcc = lno.LNOCCSD(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=4)
     mcc.prune_lno_basis=True
-    
+
     threshs=np.asarray([0.95,0.98,0.99,1.0])
     elno_ccsd = np.zeros_like(threshs)
     for i,thresh in enumerate(threshs):
@@ -411,7 +410,7 @@ if __name__ == '__main__':
         mcc.lno_thresh = [1e-4, 1e-5]
         mcc.kernel()
         elno_ccsd[i] = mcc.e_corr_ccsd
-    
+
     print(elno_ccsd)
 
-        
+
