@@ -1294,6 +1294,9 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
 
         _time_add(log, t_subgen, t0)
 
+        # norm1, norm2 = math_helper.check_VW_orthogonality(V_holder[:size_new, :], W_holder[:size_new, :])
+        # log.info(f'     VVWW norm: {norm1:.2e}, VWTW norm: {norm2:.2e}')
+
         ''' solve subsapce problem
             solution x,y are column-wise vectors
             each vetcor contains elements of linear combination coefficient of projection basis

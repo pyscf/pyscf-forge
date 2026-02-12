@@ -1110,3 +1110,24 @@ if __name__ == '__main__':
     S = S.dot(S.T)
 
     solve_AX_SX(A, S)
+
+
+def check_VW_orthogonality(V, W):
+    '''
+    check whether V and W are orthogonal
+
+    [ V W ]  [ V W ]T  = I
+    [ W V ]  [ W V ]
+
+    V VT + W WT = I
+    V WT + W VT = 0
+
+    (W VT + V WT = 0
+    W WT + V VT = I)
+    '''
+
+    VVWW = einsum('ij,kj->ik', V, V) + einsum('ij,kj->ik', W, W)
+    VWTW = einsum('ij,kj->ik', V, W) + einsum('ij,kj->ik', W, V)
+    norm1 = np.linalg.norm(VVWW - np.eye(VVWW.shape[0]))
+    norm2 = np.linalg.norm(VWTW)
+    return norm1, norm2

@@ -168,13 +168,22 @@ def get_uvPCupCvq_to_Ppq(eri3c: np.ndarray, C_pT: np.ndarray, C_q: np.ndarray):
 
 def einsum2dot(a, b):
     P, Q = a.shape
-    assert P == Q
+    # assert P == Q
     Q, p, q = b.shape
     b_2d = b.reshape(Q, p*q)
 
     ab = a.dot(b_2d)
-    del b_2d, b
-    return ab.reshape(P, p, q)
+
+    del b_2d
+
+    result = ab.reshape(P, p, q)
+
+    del ab
+    gc.collect()
+
+    # result = einsum('PQ,Qpq->Ppq', a, b)
+
+    return result
 
 
 def calculate_batches_by_basis_count(mol, max_nbf_per_batch):
@@ -212,181 +221,181 @@ def calculate_batches_by_basis_count(mol, max_nbf_per_batch):
     return batches
 
 
-def get_Tpq1(mol, auxmol, lower_inv_eri2c, C_p, C_q,
-           calc='JK',omega=None, alpha=None, beta=None,
-           log=None, in_ram=True, single=True):
-    """
-    (3c2e_{Puv}, C_{up}, C_{vq} -> Ppq)。
+# def get_Tpq1(mol, auxmol, lower_inv_eri2c, C_p, C_q,
+#            calc='JK',omega=None, alpha=None, beta=None,
+#            log=None, in_ram=True, single=True):
+#     """
+#     (3c2e_{Puv}, C_{up}, C_{vq} -> Ppq)。
 
-    Parameters:
-        mol: pyscf.gto.Mole
-        auxmol: pyscf.gto.Mole
-        C_p: np.ndarray (nao, p)
-        C_q: np.ndarray  (nao, q)
+#     Parameters:
+#         mol: pyscf.gto.Mole
+#         auxmol: pyscf.gto.Mole
+#         C_p: np.ndarray (nao, p)
+#         C_q: np.ndarray  (nao, q)
 
-        lower_inv_eri2c is the inverse of the lower part of the 2-center Coulomb integral
-        in the case of RSH, lower_inv_eri2c already includes the RSH factor when parsed into this function
-        thus lower_inv_eri2c do not need specific processing
+#         lower_inv_eri2c is the inverse of the lower part of the 2-center Coulomb integral
+#         in the case of RSH, lower_inv_eri2c already includes the RSH factor when parsed into this function
+#         thus lower_inv_eri2c do not need specific processing
 
-    Returns:
-        Tpq: np.ndarray (naux, nao, nao)
-    """
+#     Returns:
+#         Tpq: np.ndarray (naux, nao, nao)
+#     """
 
-    nao = mol.nao
-    naux = auxmol.nao
+#     nao = mol.nao
+#     naux = auxmol.nao
 
-    pmol = mol + auxmol
-    pmol.cart = mol.cart
+#     pmol = mol + auxmol
+#     pmol.cart = mol.cart
 
-    tag = '_cart' if mol.cart else '_sph'
+#     tag = '_cart' if mol.cart else '_sph'
 
-    siz_p = C_p.shape[1]
-    siz_q = C_q.shape[1]
+#     siz_p = C_p.shape[1]
+#     siz_q = C_q.shape[1]
 
-    int3c_dtype = np.dtype(np.float32 if single else np.float64)
-    log.info(f'int3c_dtype: {int3c_dtype}')
+#     int3c_dtype = np.dtype(np.float32 if single else np.float64)
+#     log.info(f'int3c_dtype: {int3c_dtype}')
 
-    if 'J' in calc:
-        Pia = np.empty((naux, siz_p, siz_q), dtype=int3c_dtype)
+#     if 'J' in calc:
+#         Pia = np.empty((naux, siz_p, siz_q), dtype=int3c_dtype)
 
-    if 'K' in calc:
-        '''only store lower triangle of Tij and Tab'''
-        n_tri_p = (siz_p * (siz_p + 1)) // 2
-        n_tri_q = (siz_q * (siz_q + 1)) // 2
-        Pij = np.empty((naux, n_tri_p), dtype=int3c_dtype)
-        Pab = np.empty((naux, n_tri_q), dtype=int3c_dtype)
+#     if 'K' in calc:
+#         '''only store lower triangle of Tij and Tab'''
+#         n_tri_p = (siz_p * (siz_p + 1)) // 2
+#         n_tri_q = (siz_q * (siz_q + 1)) // 2
+#         Pij = np.empty((naux, n_tri_p), dtype=int3c_dtype)
+#         Pab = np.empty((naux, n_tri_q), dtype=int3c_dtype)
 
-        tril_indices_p = np.tril_indices(siz_p)
-        tril_indices_q = np.tril_indices(siz_q)
+#         tril_indices_p = np.tril_indices(siz_p)
+#         tril_indices_q = np.tril_indices(siz_q)
 
-    byte_eri3c = nao * nao * int3c_dtype.itemsize
+#     byte_eri3c = nao * nao * int3c_dtype.itemsize
 
-    n_eri3c_per_aux = nao * nao * 1
-    n_Ppq_per_aux = siz_p * nao  + siz_p * siz_q * 1.5
+#     n_eri3c_per_aux = nao * nao * 1
+#     n_Ppq_per_aux = siz_p * nao  + siz_p * siz_q * 1.5
 
-    bytes_per_aux = (  n_eri3c_per_aux + n_Ppq_per_aux) * int3c_dtype.itemsize
-    batch_size = min(naux, max(16, int(get_avail_cpumem() * 0.5 // bytes_per_aux)) )
+#     bytes_per_aux = (  n_eri3c_per_aux + n_Ppq_per_aux) * int3c_dtype.itemsize
+#     batch_size = min(naux, max(16, int(get_avail_cpumem() * 0.5 // bytes_per_aux)) )
 
-    DEBUG = False
-    if DEBUG:
-        batch_size = 2
+#     DEBUG = False
+#     if DEBUG:
+#         batch_size = 2
 
-    log.info(f'eri3c per aux dimension will take {byte_eri3c / 1024**2:.0f} MB memory')
-    log.info(f'eri3c per aux batch will take {byte_eri3c * batch_size / 1024**2:.0f} MB memory')
-    log.info(get_mem_info('before generate int3c2e'))
+#     log.info(f'eri3c per aux dimension will take {byte_eri3c / 1024**2:.0f} MB memory')
+#     log.info(f'eri3c per aux batch will take {byte_eri3c * batch_size / 1024**2:.0f} MB memory')
+#     log.info(get_mem_info('before generate int3c2e'))
 
-    upper_inv_eri2c = lower_inv_eri2c.T
+#     upper_inv_eri2c = lower_inv_eri2c.T
 
-    if 'K' in calc:
-        eri2c_inv = lower_inv_eri2c.dot(upper_inv_eri2c)
-        eri2c_inv = eri2c_inv.astype(int3c_dtype, copy=False)
-
-
-    if omega and omega != 0:
-
-        log.info(f'omega {omega}')
-        mol_omega = mol.copy()
-        auxmol_omega = auxmol.copy()
-
-        mol_omega.omega = omega
-        auxmol_omega.omega = omega
-
-        pmol_omega = mol_omega + auxmol_omega
-        pmol_omega.cart = mol.cart
+#     if 'K' in calc:
+#         eri2c_inv = lower_inv_eri2c.dot(upper_inv_eri2c)
+#         eri2c_inv = eri2c_inv.astype(int3c_dtype, copy=False)
 
 
-    batches = calculate_batches_by_basis_count(auxmol, batch_size)
+#     if omega and omega != 0:
 
-    p1 = 0
-    for start_shell, end_shell in batches:
-        shls_slice = (
-            0, mol.nbas,            # First dimension (mol)
-            0, mol.nbas,            # Second dimension (mol)
-            mol.nbas + start_shell,   # Start of aux basis
-            mol.nbas + end_shell      # End of aux basis (exclusive)
-        )
+#         log.info(f'omega {omega}')
+#         mol_omega = mol.copy()
+#         auxmol_omega = auxmol.copy()
 
-        eri3c_batch = pmol.intor('int3c2e' + tag, shls_slice=shls_slice)
+#         mol_omega.omega = omega
+#         auxmol_omega.omega = omega
 
-        aux_batch_size = eri3c_batch.shape[2]
-
-        p0, p1 = p1, p1 + aux_batch_size
-
-        if omega and omega != 0:
-            eri3c_batch_omega = pmol_omega.intor('int3c2e' + tag, shls_slice=shls_slice)
-            ''' eri3c_batch_tmp = alpha * eri3c_batch_tmp + beta * eri3c_batch_omega_tmp '''
-            eri3c_batch       *= alpha
-            eri3c_batch_omega *= beta
-            eri3c_batch       += eri3c_batch_omega
-            del eri3c_batch_omega
-
-        DEBUG = False
-        if DEBUG:
-            ''' generate full eri3c_batch and compare with incore.aux_e2(mol, auxmol) '''
-            from pyscf.df import incore
-            ref = incore.aux_e2(mol, auxmol)
-            log.info(f'eri3c_batch.shape {eri3c_batch.shape}')
-            if omega and omega != 0:
-                mol_omega = mol.copy()
-                auxmol_omega = auxmol.copy()
-                mol_omega.omega = omega
-                ref_omega = incore.aux_e2(mol_omega, auxmol_omega)
-                ref = alpha * ref + beta * ref_omega
-                log.info(f'eref.shape {ref.shape}')
-            log.info(f'-------------eri3c DEBUG: out vs .incore.aux_e2(mol, auxmol) {abs(eri3c_batch-ref).max()}')
-            assert abs(eri3c_batch-ref).max() < 1e-10
-
-        eri3c_batch = eri3c_batch.astype(int3c_dtype, copy=False)
-        eri3c_batch = eri3c_batch.transpose(2, 1, 0)
-
-        '''Puv -> Ppq, AO->MO transform '''
-        if 'J' in calc:
-            Pia[p0:p1,:,:] = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_q)
-
-        if 'K' in calc:
-            Pij_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_p)
-            Pij_lower = Pij_tmp[:, tril_indices_p[0], tril_indices_p[1]].reshape(Pij_tmp.shape[0], -1)
-            del Pij_tmp
-            gc.collect()
-
-            Pij[p0:p1,:] = Pij_lower
-            del Pij_lower
-            gc.collect()
-
-            Pab_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_q,C_q)
-            Pab_lower = Pab_tmp[:, tril_indices_q[0], tril_indices_q[1]].reshape(Pab_tmp.shape[0], -1)
-            del Pab_tmp
-            gc.collect()
-
-            Pab[p0:p1,:] = Pab_lower
-            del Pab_lower
-            gc.collect()
-
-        last_reported = 0
-        progress = int(100.0 * p1 / naux)
-
-        if progress % 20 == 0 and progress != last_reported:
-            log.last_reported = progress
-            log.info(f'get_Tpq batch {p1} / {naux} done ({progress} percent). aux_batch_size: {aux_batch_size}')
+#         pmol_omega = mol_omega + auxmol_omega
+#         pmol_omega.cart = mol.cart
 
 
-    log.info(f' get_Tpq {calc} all batches processed')
-    log.info(get_mem_info('after generate Ppq'))
+#     batches = calculate_batches_by_basis_count(auxmol, batch_size)
 
-    if calc == 'J':
-        Tia = einsum2dot(upper_inv_eri2c, Pia)
-        return Tia
+#     p1 = 0
+#     for start_shell, end_shell in batches:
+#         shls_slice = (
+#             0, mol.nbas,            # First dimension (mol)
+#             0, mol.nbas,            # Second dimension (mol)
+#             mol.nbas + start_shell,   # Start of aux basis
+#             mol.nbas + end_shell      # End of aux basis (exclusive)
+#         )
 
-    if calc == 'K':
-        Tij = eri2c_inv.dot(Pij, out=Pij)
-        Tab = Pab
-        return Tij, Tab
+#         eri3c_batch = pmol.intor('int3c2e' + tag, shls_slice=shls_slice)
 
-    if calc == 'JK':
-        Tia = einsum2dot(upper_inv_eri2c, Pia)
-        Tij = eri2c_inv.dot(Pij, out=Pij)
-        Tab = Pab
-        return Tia, Tij, Tab
+#         aux_batch_size = eri3c_batch.shape[2]
+
+#         p0, p1 = p1, p1 + aux_batch_size
+
+#         if omega and omega != 0:
+#             eri3c_batch_omega = pmol_omega.intor('int3c2e' + tag, shls_slice=shls_slice)
+#             ''' eri3c_batch_tmp = alpha * eri3c_batch_tmp + beta * eri3c_batch_omega_tmp '''
+#             eri3c_batch       *= alpha
+#             eri3c_batch_omega *= beta
+#             eri3c_batch       += eri3c_batch_omega
+#             del eri3c_batch_omega
+
+#         DEBUG = False
+#         if DEBUG:
+#             ''' generate full eri3c_batch and compare with incore.aux_e2(mol, auxmol) '''
+#             from pyscf.df import incore
+#             ref = incore.aux_e2(mol, auxmol)
+#             log.info(f'eri3c_batch.shape {eri3c_batch.shape}')
+#             if omega and omega != 0:
+#                 mol_omega = mol.copy()
+#                 auxmol_omega = auxmol.copy()
+#                 mol_omega.omega = omega
+#                 ref_omega = incore.aux_e2(mol_omega, auxmol_omega)
+#                 ref = alpha * ref + beta * ref_omega
+#                 log.info(f'eref.shape {ref.shape}')
+#             log.info(f'-------------eri3c DEBUG: out vs .incore.aux_e2(mol, auxmol) {abs(eri3c_batch-ref).max()}')
+#             assert abs(eri3c_batch-ref).max() < 1e-10
+
+#         eri3c_batch = eri3c_batch.astype(int3c_dtype, copy=False)
+#         eri3c_batch = eri3c_batch.transpose(2, 1, 0)
+
+#         '''Puv -> Ppq, AO->MO transform '''
+#         if 'J' in calc:
+#             Pia[p0:p1,:,:] = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_q)
+
+#         if 'K' in calc:
+#             Pij_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_p)
+#             Pij_lower = Pij_tmp[:, tril_indices_p[0], tril_indices_p[1]].reshape(Pij_tmp.shape[0], -1)
+#             del Pij_tmp
+#             gc.collect()
+
+#             Pij[p0:p1,:] = Pij_lower
+#             del Pij_lower
+#             gc.collect()
+
+#             Pab_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_q,C_q)
+#             Pab_lower = Pab_tmp[:, tril_indices_q[0], tril_indices_q[1]].reshape(Pab_tmp.shape[0], -1)
+#             del Pab_tmp
+#             gc.collect()
+
+#             Pab[p0:p1,:] = Pab_lower
+#             del Pab_lower
+#             gc.collect()
+
+#         last_reported = 0
+#         progress = int(100.0 * p1 / naux)
+
+#         if progress % 20 == 0 and progress != last_reported:
+#             log.last_reported = progress
+#             log.info(f'get_Tpq batch {p1} / {naux} done ({progress} percent). aux_batch_size: {aux_batch_size}')
+
+
+#     log.info(f' get_Tpq {calc} all batches processed')
+#     log.info(get_mem_info('after generate Ppq'))
+
+#     if calc == 'J':
+#         Tia = einsum2dot(upper_inv_eri2c, Pia)
+#         return Tia
+
+#     if calc == 'K':
+#         Tij = eri2c_inv.dot(Pij, out=Pij)
+#         Tab = Pab
+#         return Tij, Tab
+
+#     if calc == 'JK':
+#         Tia = einsum2dot(upper_inv_eri2c, Pia)
+#         Tij = eri2c_inv.dot(Pij, out=Pij)
+#         Tab = Pab
+#         return Tia, Tij, Tab
 
 
 def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_q_b=None, RKS=False, UKS=False,
@@ -546,8 +555,10 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
             log.info(f'-------------eri3c DEBUG: out vs .incore.aux_e2(mol, auxmol) {abs(eri3c_batch-ref).max()}')
             assert abs(eri3c_batch-ref).max() < 1e-10
 
-        eri3c_batch = eri3c_batch.astype(int3c_dtype, copy=False)
-        eri3c_batch = eri3c_batch.transpose(2, 1, 0)
+        tmp_astype = eri3c_batch.astype(int3c_dtype, copy=False)
+        del eri3c_batch
+        eri3c_batch = tmp_astype.transpose(2, 1, 0)
+        del tmp_astype
 
 
         '''Puv -> Ppq, AO->MO transform '''
@@ -600,7 +611,7 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
                 del Pab_b_tmp
                 Pab_b[p0:p1,:] = Pab_b_lower
                 del Pab_b_lower
-
+        del eri3c_batch
         gc.collect()
 
         last_reported = 0
@@ -615,6 +626,7 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
     if RKS:
         if calc == 'J':
             Tia = einsum2dot(upper_inv_eri2c, Pia)
+            # Tia = einsum('PQ,Qpq->Ppq', upper_inv_eri2c, Pia)
             del Pia
             gc.collect()
             return Tia
@@ -630,7 +642,7 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
             Tia = einsum2dot(upper_inv_eri2c, Pia)
             Tij = eri2c_inv.dot(Pij, out=Pij)
             Tab = Pab
-            del Pia
+            del Pia, Pij
             gc.collect()
             return Tia, Tij, Tab
 
