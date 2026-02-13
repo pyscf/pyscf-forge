@@ -30,7 +30,7 @@ from pyscf.tdscf._lr_eig import MAX_SPACE_INC
 
 
 def davidson_nosym1(aop, x0, precond, tol=1e-12, max_cycle=50, lindep=1e-12, callback=None,
-                    max_space=20, 
+                    max_space=20,
                     max_memory=MAX_MEMORY, nroots=1, pick=None, verbose=logger.WARN):
     '''
     slightly modified from pyscf.lib.linalg.davidson_nosym1 with vectorization support
@@ -49,7 +49,7 @@ def davidson_nosym1(aop, x0, precond, tol=1e-12, max_cycle=50, lindep=1e-12, cal
         log = verbose
     else:
         log = logger.Logger(sys.stdout, verbose)
-    
+
     toloose = tol ** 0.5
     log.debug1('tol %g  toloose %g', tol, toloose)
 
@@ -162,7 +162,7 @@ def davidson_nosym1(aop, x0, precond, tol=1e-12, max_cycle=50, lindep=1e-12, cal
         xt_norm = xt_norm[keep_mask]
 
         if len(xt)==0:
-            log.debug('Linear dependency in trial subspace. |r| for each state %s', 
+            log.debug('Linear dependency in trial subspace. |r| for each state %s',
                       dx_norm)
             conv = dx_norm < toloose
             break
@@ -291,7 +291,7 @@ class CasidaTDDFT(TDA_SF):
         else:
             y0 = np.zeros((nx, noccb*nvira))
         return np.hstack([x0.reshape(nx, -1), y0])
-        
+
 
     def gen_pickeig(self, extype=1):
         '''

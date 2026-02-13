@@ -55,7 +55,7 @@ class KnownValues(unittest.TestCase):
             [-1.5136629388e-16, -1.4738926078e-02,  8.3734966765e-03]]
         )
         self.assertAlmostEqual(abs(tdg.de - ref).max(), 0, 4)
-    
+
     def test_mcol_lda_tda(self):
         mf = self.mol.UKS(xc='SVWN').run()
         td = mf.TDA_SF().set(extype=0, collinear_samples=50, nstates=2).run()
@@ -75,7 +75,7 @@ class KnownValues(unittest.TestCase):
             [-1.3166296104e-16, -1.4522652407e-02, -1.8472200133e-03]]
         )
         self.assertAlmostEqual(abs(tdg.de - ref).max(), 0, 4)
-    
+
     def test_mcol_b3lyp_tda(self):
         mf = self.mol.UKS(xc='B3LYP').run()
         td = mf.TDA_SF().set(extype=0, collinear_samples=50, nstates=2).run()
@@ -135,7 +135,7 @@ class KnownValues(unittest.TestCase):
             [-1.2028615208e-16, -1.4280801923e-02, -4.3644887121e-03]]
         )
         self.assertAlmostEqual(abs(tdg.de - ref).max(), 0, 4)
-    
+
     def test_mcol_cam_tda(self):
         mf = self.mol.UKS(xc='CAM-B3LYP').run()
         td = mf.TDA_SF().set(extype=0, collinear_samples=50, nstates=2).run()
@@ -175,7 +175,7 @@ class KnownValues(unittest.TestCase):
             [-7.4950221683e-17, -8.5650850136e-03,  7.9015027954e-03]]
         )
         self.assertAlmostEqual(abs(tdg.de - ref).max(), 0, 4)
-    
+
 
 if __name__ == "__main__":
     print("Full Tests for spin-flip-TDA analytic gradient with multicollinear functionals and collinear functionals")

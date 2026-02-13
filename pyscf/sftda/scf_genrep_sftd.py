@@ -24,7 +24,7 @@ from pyscf.dft import KohnShamDFT, numint, numint2c
 # import fcuntion
 from pyscf.sftda.numint2c_sftd import cache_xc_kernel_sf
 
-def gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0, 
+def gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0,
                         collinear_samples=200, max_memory=None):
     '''
     Generate a function to compute the product of Spin-flip UKS response function
@@ -42,7 +42,7 @@ def gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0,
         ni.libxc.test_deriv_order(mf.xc, 2, raise_error=True)
 
         if mf.nlc or ni.libxc.is_nlc(mf.xc):
-            logger.warn(mf, 'NLC functional found in DFT object. Its contribution is ' \
+            logger.warn(mf, 'NLC functional found in DFT object. Its contribution is '
             'not included in the TDDFT response function.')
         omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, mol.spin)
         hybrid = ni.libxc.is_hybrid_xc(mf.xc)

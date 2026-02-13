@@ -202,7 +202,7 @@ def spin_square(tdobj, state=None):
                     + lib.einsum('nai,nbj,ia,bj->n', ys.conj(), ys, sba_ov, sab_vo) \
                     - 2 * lib.einsum('nai,nbj,ai,bj->n', xs.conj(), ys, sba_vo, sab_vo).real
         ds2 = P_ab - 2 * sz + 1
-    
+
     s2s = s20 + ds2.real
     if isinstance(state, int):
         return s2s[0]
@@ -261,7 +261,7 @@ def analyze(tdobj, verbose=None):
                 statesymlabel = symm.irrep_id2name(mol.groupname, statesymid)
             log.note('Excited State %3d: %4s (State: %4s) %12.5f eV   <S^2>: %6.4f',
                      i+1, wfnsymlabel, statesymlabel, e_ev, S2)
-        
+
         if log.verbose >= logger.INFO:
             if tdobj.extype==0:
                 for o, v in zip(* np.where(abs(x) > 0.1)):
@@ -581,7 +581,7 @@ class TDA_SF(TDBase):
             occidxa = mo_occ[0] > 0
             viridxb = mo_occ[1] == 0
             e_ia = mo_energy[1][None, viridxb] - mo_energy[0][occidxa, None]
-        
+
         e_ia = e_ia.ravel()
         nov = e_ia.size
         nstates = min(nstates, nov)

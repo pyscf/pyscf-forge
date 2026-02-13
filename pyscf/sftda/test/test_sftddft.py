@@ -142,7 +142,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(abs(td.e - ref).max(), 0, 4)
         e = diagonalize_tddft(mf, extype=1, collinear_samples=50, nstates=2)
         self.assertAlmostEqual(abs(e - td.e).max(), 0, 4)
-    
+
     def test_mcol_cam_tddft(self):
         mf = self.mol.UKS(xc='CAM-B3LYP').run()
         ref = np.array([0.4595200285, 0.5715324610])
@@ -158,7 +158,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(abs(td.e - ref).max(), 0, 4)
         e = diagonalize_tddft(mf, extype=1, collinear_samples=50, nstates=2)
         self.assertAlmostEqual(abs(e - td.e).max(), 0, 4)
-    
+
     def test_col_cam_tddft(self):
         mf = self.mol.UKS(xc='CAM-B3LYP').run()
         ref = np.array([0.4749112597, 0.6040293216])

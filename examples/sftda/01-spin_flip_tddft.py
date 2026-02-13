@@ -50,7 +50,7 @@ sfd_tddft.extype = 1 # 1 for spin-flip-down excitations
 
 # collinear_samples: Grid points for multicollinear integration.
 # 20 is a typical robust value. -1 for SF-TDDFT using collinear functional
-sfd_tddft.collinear_samples = 20 
+sfd_tddft.collinear_samples = 20
 
 sfd_tddft.kernel()
 sfd_tddft.analyze(verbose=4) # Verbose=4 shows orbital composition
@@ -121,6 +121,6 @@ sfu_tddft.kernel()
 sfu_tddft.analyze(verbose=4)
 
 print("\n--- Compare with Casida Neg-Norm Roots ---")
-# Spin-flip-up roots appear as negative eigenvalues in the full Casida matrix 
+# Spin-flip-up roots appear as negative eigenvalues in the full Casida matrix
 sfu_evals_val = eigenvals[norms < 0]
 print(f"Casida derived Spin-flip-up Energies (eV): \n{-sfu_evals_val[-5:][::-1] * 27.2114}")

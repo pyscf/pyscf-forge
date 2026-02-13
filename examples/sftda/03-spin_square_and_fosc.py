@@ -33,8 +33,8 @@ td.analyze()
 print(td.spin_square(state=[1, 2, 3])) # state=[1, 2, 3] for the 1st, 2nd, and 3rd excited states
 
 # 2. Oscillator Strengths between Excited States
-# ref:   The "starting" state (Reference state). 
+# ref:   The "starting" state (Reference state).
 #        Here ref=1 refers to the first excited state.
-# state: The "target" states. 
+# state: The "target" states.
 #        state=[2, 3] means we calculate transitions: 1 -> 2 and 1 -> 3.
 print(td.oscillator_strength(ref=1, state=[2, 3]))
