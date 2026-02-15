@@ -1,4 +1,23 @@
-PySCF-Forge 1.0.3 (2024-01-20)
+PySCF-Forge 1.1.0 (2026-02-20)
+------------------------------
+* New features
+  - PBC with plane-wave basis functions
+  - TDDFT-ris (TDDFT with minimal auxiliary basis)
+  - FOMO-CASCI (Floating Occupation Molecular Orbital CASCI) and its nuclear gradients
+  - GHF based ppRPA and nuclear gradients
+  - LNO-CCSD for molecules and PBC systems
+  - MC-PDFT with translated meta-GGA functionals
+  - MC-PDFT meta-GGA nuclear gradients
+  - Hybrid MC-PDFT nuclear Gradients
+  - Spin-flip TDDFT nuclear gradients
+  - Spin-flip non-orthogonal configuration interaction
+  - CSF-based FCI solver
+  - Linear Nk OCCRI method + ISDF
+  - DSRG-MRPT2
+  - Improved TREXIO interface, supporting two-electron integrals
+
+
+PySCF-Forge 1.0.3 (2025-01-20)
 ------------------------------
 * New features
   - MC23 functional for MCPDFT
@@ -37,6 +56,6 @@ PySCF-Forge 1.0.0 (2024-05-31)
   - MC-PDFT and CMS-PDFT dipole moment
   - CMS-PDFT transition dipole moment
   - MC-PDFT energy decomposition analysis
-  - LRDF (Long-Range Density Fitting) for energy and analytical nuclear gradients and Hessian 
+  - LRDF (Long-Range Density Fitting) for energy and analytical nuclear gradients and Hessian
   - Spin-flip TDA using multi-collinear functionals
   - M3SOSCF (Markovian Multiagent Monte-Carlo second order SCF) method
