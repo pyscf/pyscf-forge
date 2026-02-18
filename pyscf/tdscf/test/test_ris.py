@@ -31,10 +31,10 @@ def diagonalize(a, b, nroots=5):
                      [-b.conj(),-a.conj()]])
     e, xy = np.linalg.eig(np.asarray(h))
     sorted_indices = np.argsort(e)
-    
+
     e_sorted = e[sorted_indices]
     xy_sorted = xy[:, sorted_indices]
-    
+
     e_sorted_final = e_sorted[e_sorted > 1e-3]
     xy_sorted = xy_sorted[:, e_sorted > 1e-3]
     return e_sorted_final[:nroots], xy_sorted[:, :nroots]
@@ -85,7 +85,7 @@ class KnownValues(unittest.TestCase):
         print('ref_energies    ', ', '.join(f'{e:.6f}' for e in ref_energies))
         print('tda_pbe fosc    ', ', '.join(f'{f:.6f}' for f in fosc))
         print('ref_fosc        ', ', '.join(f'{f:.6f}' for f in ref_fosc))
-        
+
         self.assertAlmostEqual(abs(energies[:len(ref_energies)] - ref_energies).max(), 0, PLACES)
         self.assertAlmostEqual(abs(fosc[:len(ref_fosc)] - ref_fosc).max(),0, PLACES)
 
@@ -188,7 +188,7 @@ class KnownValues(unittest.TestCase):
 
         self.assertAlmostEqual(abs(energies[:len(ref_energies)] - ref_energies).max(),0, PLACES)
         self.assertAlmostEqual(abs(fosc[:len(ref_fosc)] - ref_fosc).max(),0, PLACES)
-    
+
     def test_tddft_pbe_get_ab(self):
         """Test TDDFT-ris get_ab method with PBE0 functional"""
         mf = self.mf_pbe
@@ -229,3 +229,4 @@ class KnownValues(unittest.TestCase):
 if __name__ == "__main__":
     print("Full Tests for TDDFT-RIS with PBE, PBE0, and wB97x")
     unittest.main()
+
