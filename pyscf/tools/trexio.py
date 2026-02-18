@@ -744,44 +744,62 @@ def _trexio_concat_spin_coeff(Ca, Cb):
     return np.concatenate([Ca, Cb], axis=1)
 
 
+def _trexio_resolve_class(path: str):
+    obj = pyscf
+    for part in path.split("."):
+        obj = getattr(obj, part, None)
+        if obj is None:
+            return None
+    return obj if isinstance(obj, type) else None
+
+
+def _trexio_is_instance_of_any(obj, class_paths):
+    classes = tuple(
+        cls
+        for cls in (_trexio_resolve_class(path) for path in class_paths)
+        if cls is not None
+    )
+    return bool(classes) and isinstance(obj, classes)
+
+
 def _trexio_is_rohf_roks_mf(mf_obj) -> bool:
-    return isinstance(
+    return _trexio_is_instance_of_any(
         mf_obj,
         (
-            scf.rohf.ROHF,
-            dft.roks.ROKS,
-            pbc.scf.rohf.ROHF,
-            pbc.scf.krohf.KROHF,
-            pbc.dft.roks.ROKS,
-            pbc.dft.kroks.KROKS,
+            "scf.rohf.ROHF",
+            "dft.roks.ROKS",
+            "pbc.scf.rohf.ROHF",
+            "pbc.scf.krohf.KROHF",
+            "pbc.dft.roks.ROKS",
+            "pbc.dft.kroks.KROKS",
         ),
     )
 
 
 def _trexio_is_uhf_uks_mf(mf_obj) -> bool:
-    return isinstance(
+    return _trexio_is_instance_of_any(
         mf_obj,
         (
-            scf.uhf.UHF,
-            dft.uks.UKS,
-            pbc.scf.uhf.UHF,
-            pbc.dft.uks.UKS,
-            pbc.scf.kuhf.KUHF,
-            pbc.dft.kuks.KUKS,
+            "scf.uhf.UHF",
+            "dft.uks.UKS",
+            "pbc.scf.uhf.UHF",
+            "pbc.dft.uks.UKS",
+            "pbc.scf.kuhf.KUHF",
+            "pbc.dft.kuks.KUKS",
         ),
     )
 
 
 def _trexio_is_rhf_rks_mf(mf_obj) -> bool:
-    return isinstance(
+    return _trexio_is_instance_of_any(
         mf_obj,
         (
-            scf.hf.RHF,
-            dft.rks.RKS,
-            pbc.scf.rhf.RHF,
-            pbc.dft.rks.RKS,
-            pbc.scf.krhf.KRHF,
-            pbc.dft.krks.KRKS,
+            "scf.hf.RHF",
+            "dft.rks.RKS",
+            "pbc.scf.rhf.RHF",
+            "pbc.dft.rks.RKS",
+            "pbc.scf.krhf.KRHF",
+            "pbc.dft.krks.KRKS",
         ),
     )
 
