@@ -249,28 +249,14 @@ def _scf_to_trexio(mf, trexio_file):
             trexio.write_pbc_k_point_weight(trexio_file, weights[np.newaxis])
             trexio.write_pbc_madelung(trexio_file, madelung)
 
-            if isinstance(
-                mf,
-                (
-                    pbc.scf.uhf.UHF,
-                    pbc.dft.uks.UKS,
-                    pbc.scf.kuhf.KUHF,
-                    pbc.dft.kuks.KUKS,
-                ),
-            ):
+            if _trexio_is_uhf_uks_mf(mf):
                 mo_type = "UHF"
-                if isinstance(mf, (pbc.scf.uhf.UHF, pbc.dft.uks.UKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo_up, mo_dn = mf.mo_coeff
-                elif isinstance(mf, (pbc.scf.kuhf.KUHF, pbc.dft.kuks.KUKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo_up, mo_dn = mf.mo_coeff
+                mo_energy = np.ravel(mf.mo_energy)
+                mo_num = mo_energy.size
+                mo_up, mo_dn = mf.mo_coeff
+                if np.ndim(mo_up) == 3:
                     mo_up = mo_up[0]
                     mo_dn = mo_dn[0]
-                else:
-                    raise NotImplementedError(f"Conversion function for {mf.__class__}")
                 idx = _order_ao_index(mf.mol)
                 mo_up = mo_up[idx].T
                 mo_dn = mo_dn[idx].T
@@ -294,26 +280,18 @@ def _scf_to_trexio(mf, trexio_file):
                 mo_spin[:num_mo_up] = 0
                 mo_spin[num_mo_up:] = 1
 
-            elif isinstance(
-                mf,
-                (
-                    pbc.scf.krhf.KRHF,
-                    pbc.dft.krks.KRKS,
-                    pbc.scf.rhf.RHF,
-                    pbc.dft.rks.RKS,
-                ),
-            ):
+            elif _trexio_is_rohf_roks_mf(mf):
+                raise NotImplementedError(
+                    "ROHF/ROKS support will be implemented in the next version."
+                )
+
+            elif _trexio_is_rhf_rks_mf(mf):
                 mo_type = "RHF"
-                if isinstance(mf, (pbc.scf.rhf.RHF, pbc.dft.rks.RKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo = mf.mo_coeff
-                elif isinstance(mf, (pbc.scf.krhf.KRHF, pbc.dft.krks.KRKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo = mf.mo_coeff[0]
-                else:
-                    raise NotImplementedError(f"Conversion function for {mf.__class__}")
+                mo_energy = np.ravel(mf.mo_energy)
+                mo_num = mo_energy.size
+                mo = mf.mo_coeff
+                if np.ndim(mo) == 3:
+                    mo = mo[0]
                 idx = _order_ao_index(mf.mol)
                 mo = mo[idx].T  # dim (num_mo, num_ao) but it is f-contiguous
                 mo_coefficient = np.ascontiguousarray(
@@ -357,15 +335,7 @@ def _scf_to_trexio(mf, trexio_file):
             mo_occ_pbc = []
             mo_spin_pbc = []
 
-            if isinstance(
-                mf,
-                (
-                    pbc.scf.uhf.UHF,
-                    pbc.dft.uks.UKS,
-                    pbc.scf.kuhf.KUHF,
-                    pbc.dft.kuks.KUKS,
-                ),
-            ):
+            if _trexio_is_uhf_uks_mf(mf):
                 mo_type = "UHF"
                 # Check for split structure (common in KUKS/KDF): ([up...], [dn...])
                 is_split_spin = isinstance(mf.mo_coeff, tuple) and len(mf.mo_coeff) == 2
@@ -424,7 +394,12 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_occ_pbc.append(mo_occ)
                     mo_spin_pbc.append(mo_spin)
 
-            else:
+            elif _trexio_is_rohf_roks_mf(mf):
+                raise NotImplementedError(
+                    "ROHF/ROKS support will be implemented in the next version."
+                )
+
+            elif _trexio_is_rhf_rks_mf(mf):
                 mo_type = "RHF"
                 for i_k, _ in enumerate(kpts):
                     mo_energy = mf.mo_energy[i_k]
@@ -447,6 +422,9 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_coefficient_imag_pbc.append(mo_coefficient_imag)
                     mo_occ_pbc.append(mo_occ)
                     mo_spin_pbc.append(mo_spin)
+
+            else:
+                raise NotImplementedError(f"Conversion function for {mf.__class__}")
 
             # stack the results
             mo_k_point_pbc = np.array(mo_k_point_pbc)
@@ -472,7 +450,7 @@ def _scf_to_trexio(mf, trexio_file):
 
     # Open systems
     else:
-        if isinstance(mf, (scf.uhf.UHF, dft.uks.UKS)):
+        if _trexio_is_uhf_uks_mf(mf):
             mo_type = "UHF"
             mo_energy = np.ravel(mf.mo_energy)
             mo_num = mo_energy.size
@@ -489,7 +467,11 @@ def _scf_to_trexio(mf, trexio_file):
             mo_occ = np.ravel(mf.mo_occ)
             mo_spin = np.zeros(mo_energy.size, dtype=int)
             mo_spin[mf.mo_energy[0].size :] = 1
-        else:
+        elif _trexio_is_rohf_roks_mf(mf):
+            raise NotImplementedError(
+                "ROHF/ROKS support will be implemented in the next version."
+            )
+        elif _trexio_is_rhf_rks_mf(mf):
             mo_type = "RHF"
             mo_energy = mf.mo_energy
             mo_num = mo_energy.size
@@ -501,6 +483,8 @@ def _scf_to_trexio(mf, trexio_file):
             )  # dim (num_mo, num_ao) and it is c-contiguous
             mo_occ = mf.mo_occ
             mo_spin = np.zeros(mo_energy.size, dtype=int)
+        else:
+            raise NotImplementedError(f"Conversion function for {mf.__class__}")
 
         # 4.2 Molecular orbitals (mo group)
         trexio.write_mo_type(trexio_file, mo_type)
@@ -682,8 +666,6 @@ def mol_from_trexio(filename):
         return mol.build()
 
 _REAL_ONLY_TOL = 1e-12
-
-
 def _trexio_ensure_real(x, *, tol=_REAL_ONLY_TOL, what="Complex data encountered but the backend is real-only."):
     if np.iscomplexobj(x):
         if np.all(np.abs(np.imag(x)) <= tol):
@@ -704,7 +686,27 @@ def _trexio_is_gamma_single_k(obj) -> bool:
     return True
 
 
-def _trexio_get_uks_coeff_pair(mf_obj, *, expect_gamma=False):
+def _trexio_get_rhf_coeff_matrix(mf_obj, *, expect_gamma=False):
+    coeff = mf_obj.mo_coeff
+    if isinstance(coeff, np.ndarray):
+        if coeff.ndim == 2:
+            return coeff
+        if expect_gamma and coeff.ndim == 3 and coeff.shape[0] == 1:
+            return coeff[0]
+    elif isinstance(coeff, (list, tuple)) and len(coeff) == 1:
+        arr = np.asarray(coeff[0])
+        if arr.ndim == 2:
+            return arr
+        if expect_gamma and arr.ndim == 3 and arr.shape[0] == 1:
+            return arr[0]
+
+    raise ValueError(
+        f"Unsupported RHF/RKS mo_coeff layout for {mf_obj.__class__}: "
+        f"shape={np.asarray(coeff, dtype=object).shape}"
+    )
+
+
+def _trexio_get_uks_coeff_matrices(mf_obj, *, expect_gamma=False):
     C = mf_obj.mo_coeff
     if isinstance(C, (list, tuple)) and len(C) == 2:
         Ca, Cb = C
@@ -740,6 +742,49 @@ def _trexio_concat_spin_coeff(Ca, Cb):
     if Ca.ndim != 2 or Cb.ndim != 2:
         raise ValueError(f"Unexpected UKS/UHF mo_coeff shapes: Ca {Ca.shape}, Cb {Cb.shape}")
     return np.concatenate([Ca, Cb], axis=1)
+
+
+def _trexio_is_rohf_roks_mf(mf_obj) -> bool:
+    return isinstance(
+        mf_obj,
+        (
+            scf.rohf.ROHF,
+            dft.roks.ROKS,
+            pbc.scf.rohf.ROHF,
+            pbc.scf.krohf.KROHF,
+            pbc.dft.roks.ROKS,
+            pbc.dft.kroks.KROKS,
+        ),
+    )
+
+
+def _trexio_is_uhf_uks_mf(mf_obj) -> bool:
+    return isinstance(
+        mf_obj,
+        (
+            scf.uhf.UHF,
+            dft.uks.UKS,
+            pbc.scf.uhf.UHF,
+            pbc.dft.uks.UKS,
+            pbc.scf.kuhf.KUHF,
+            pbc.dft.kuks.KUKS,
+        ),
+    )
+
+
+def _trexio_is_rhf_rks_mf(mf_obj) -> bool:
+    return isinstance(
+        mf_obj,
+        (
+            scf.hf.RHF,
+            dft.rks.RKS,
+            pbc.scf.rhf.RHF,
+            pbc.dft.rks.RKS,
+            pbc.scf.krhf.KRHF,
+            pbc.dft.krks.KRKS,
+        ),
+    )
+
 
 def write_2e_eri(
     mf, filename, backend='h5', basis='mo', df_engine='MDF', sym='s1',
@@ -783,6 +828,18 @@ def write_2e_eri(
         For complex ERIs, non-Gamma PBC data, or unsupported symmetry in MO.
     """
 
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_2e_eri."
+        )
+
     basis = basis.upper()
     sym = sym.lower()
     is_pbc = hasattr(mf, 'cell')
@@ -810,10 +867,9 @@ def write_2e_eri(
             if sym == 's8':
                 raise NotImplementedError("MO ERI does not support s8 symmetry")
             mo_compact = sym == 's4'
-            if (isinstance(mf.mo_coeff, (list, tuple)) or
-                (isinstance(mf.mo_coeff, np.ndarray) and mf.mo_coeff.ndim >= 3 and mf.mo_coeff.shape[0] == 2)):
+            if is_uhf_like:
                 # UKS/UHF -> concatenate [alpha | beta], include cross-spin terms
-                Ca, Cb = _trexio_get_uks_coeff_pair(mf)
+                Ca, Cb = _trexio_get_uks_coeff_matrices(mf)
                 C = _trexio_concat_spin_coeff(Ca, Cb)  # (nao, nalpha+nbeta)
                 if getattr(mf, '_eri', None) is not None:
                     eri_mo = ao2mo.incore.full(mf._eri, C, compact=mo_compact)
@@ -831,8 +887,8 @@ def write_2e_eri(
                     if eri_mo.ndim < 4:
                         eri_mo = ao2mo.restore(1, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
-            else:  # RHF/RKS
-                C = mf.mo_coeff
+            elif is_rhf_like:  # RHF/RKS
+                C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=False)
                 if getattr(mf, '_eri', None) is not None:
                     eri_mo = ao2mo.incore.full(mf._eri, C, compact=mo_compact)
                 else:
@@ -849,6 +905,10 @@ def write_2e_eri(
                     if eri_mo.ndim < 4:
                         eri_mo = ao2mo.restore(1, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+            else:
+                raise NotImplementedError(
+                    f"Conversion function for {mf.__class__} is not implemented in write_2e_eri(MO)."
+                )
 
         # PBC (Gamma only)
         else:
@@ -858,10 +918,9 @@ def write_2e_eri(
                 raise NotImplementedError("PBC MO-ERI does not support s8 symmetry; use s1 or s4")
             dfobj = _df_obj()
 
-            if (isinstance(mf.mo_coeff, (list, tuple)) or
-                (isinstance(mf.mo_coeff, np.ndarray) and mf.mo_coeff.ndim >= 3 and mf.mo_coeff.shape[0] == 2)):
+            if is_uhf_like:
                 # UKS/UHF @ Gamma: combined MO matrix [Ca | Cb]
-                Ca, Cb = _trexio_get_uks_coeff_pair(mf, expect_gamma=True)
+                Ca, Cb = _trexio_get_uks_coeff_matrices(mf, expect_gamma=True)
                 C = _trexio_concat_spin_coeff(Ca, Cb)
                 eri_mo = dfobj.get_mo_eri((C, C, C, C))
                 eri_mo = _trexio_ensure_real(
@@ -881,10 +940,8 @@ def write_2e_eri(
                     if eri_mo.ndim == 4:
                         eri_mo = ao2mo.restore(4, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
-            else:  # RHF/RKS @ Gamma
-                C = mf.mo_coeff
-                if C.ndim == 3 and C.shape[0] == 1:  # normalize (1,nao,nmo) -> (nao,nmo)
-                    C = C[0]
+            elif is_rhf_like:  # RHF/RKS @ Gamma
+                C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=True)
                 eri_mo = dfobj.get_mo_eri((C, C, C, C))
                 eri_mo = _trexio_ensure_real(
                     eri_mo,
@@ -903,6 +960,10 @@ def write_2e_eri(
                     if eri_mo.ndim == 4:
                         eri_mo = ao2mo.restore(4, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+            else:
+                raise NotImplementedError(
+                    f"Conversion function for {mf.__class__} is not implemented in write_2e_eri(PBC-MO)."
+                )
 
     # ---------------------
     # AO-basis ERI writing (spin-independent even for UKS/UHF)
@@ -953,6 +1014,7 @@ def write_2e_eri(
                 ),
             )
             _write_2e_int_eri(np.ascontiguousarray(eri_ao), filename, backend, 'AO', sym=sym)
+
 
 def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
     basis = basis.upper()
@@ -1079,6 +1141,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
                 trexio.write_ao_2e_int_eri(tf, offset, end - offset, idx, val)
             offset = end
 
+
 def write_1e_eri(
     mf, filename, backend='h5', basis='AO', df_engine='MDF',
 ):
@@ -1117,6 +1180,18 @@ def write_1e_eri(
     NotImplementedError
         For complex data, non-Gamma PBC calculations, or unsupported MO layout.
     """
+
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_1e_eri."
+        )
 
     basis = basis.upper()
     if basis not in ('AO', 'MO'):
@@ -1230,37 +1305,15 @@ def write_1e_eri(
                 trexio.write_ao_1e_int_ecp(tf, ecp_mat)
         return
 
-    def _get_rhf_coeff(mf_obj):
-        coeff = mf_obj.mo_coeff
-        if isinstance(coeff, np.ndarray):
-            if coeff.ndim == 2:
-                return coeff
-            if coeff.ndim == 3 and coeff.shape[0] == 1:
-                return coeff[0]
-        if isinstance(coeff, (list, tuple)) and len(coeff) == 1:
-            arr = np.asarray(coeff[0])
-            if arr.ndim == 2:
-                return arr
-        raise TypeError(
-            "Unsupported mo_coeff layout for RHF/RKS object in MO one-electron integrals"
-        )
-
-    if (
-        isinstance(mf.mo_coeff, (list, tuple)) and len(mf.mo_coeff) == 2
-    ) or (
-        isinstance(mf.mo_coeff, np.ndarray) and mf.mo_coeff.ndim >= 3 and mf.mo_coeff.shape[0] == 2
-    ):
-        Ca, Cb = _trexio_get_uks_coeff_pair(mf, expect_gamma=is_pbc)
+    if is_uhf_like:
+        Ca, Cb = _trexio_get_uks_coeff_matrices(mf, expect_gamma=is_pbc)
         C = _trexio_concat_spin_coeff(Ca, Cb)
+    elif is_rhf_like:
+        C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=is_pbc)
     else:
-        C = _get_rhf_coeff(mf)
-
-    if is_pbc and C.ndim == 3:
-        if C.shape[0] != 1:
-            raise NotImplementedError(
-                "MO one-electron integrals currently support single-k Gamma calculations only."
-            )
-        C = C[0]
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_1e_eri(MO)."
+        )
 
     if C.ndim != 2:
         raise ValueError(f"MO coefficient matrix must be 2D, got shape {C.shape}")
@@ -1308,6 +1361,7 @@ def write_1e_eri(
         with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
             trexio.write_mo_1e_int_ecp(tf, mo_ecp)
 
+
 def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5', basis='AO'):
     basis = basis.upper()
     if basis not in ('AO', 'MO'):
@@ -1335,6 +1389,7 @@ def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5',
             trexio.write_mo_1e_int_kinetic(tf, kinetic)
             trexio.write_mo_1e_int_potential_n_e(tf, potential)
             trexio.write_mo_1e_int_core_hamiltonian(tf, core)
+
 
 def write_1b_rdm(mf, filename, backend='h5'):
     """Write a one-body reduced density matrix in MO basis to TREXIO.
@@ -1368,34 +1423,40 @@ def write_1b_rdm(mf, filename, backend='h5'):
         For complex densities or non-Gamma PBC calculations.
     """
 
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
 
-    is_uhf_like = isinstance(
-        mf,
-        (
-            scf.uhf.UHF,
-            dft.uks.UKS,
-            pbc.scf.uhf.UHF,
-            pbc.dft.uks.UKS,
-            pbc.scf.kuhf.KUHF,
-            pbc.dft.kuks.KUKS,
-        ),
-    )
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_1b_rdm."
+        )
 
     # MO-basis density is diagonal in canonical orbitals
-    if is_uhf_like and isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
-        occ_a, occ_b = mf.mo_occ
-        occ_a = np.asarray(occ_a)
-        occ_b = np.asarray(occ_b)
+    if is_uhf_like:
+        if isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
+            occ_a, occ_b = mf.mo_occ
+            occ_a = np.asarray(occ_a)
+            occ_b = np.asarray(occ_b)
+        else:
+            occ = np.asarray(mf.mo_occ)
+            if occ.ndim >= 2 and occ.shape[0] == 2:
+                occ_a, occ_b = occ[0], occ[1]
+            else:
+                raise ValueError(
+                    f"Unsupported UHF/UKS mo_occ layout for {mf.__class__}: shape {occ.shape}"
+                )
     else:
         occ = np.asarray(mf.mo_occ)
-        if is_uhf_like and occ.ndim == 2 and occ.shape[0] == 2:
-            occ_a, occ_b = occ[0], occ[1]
-        else:
-            occ_a = occ
-            occ_b = None
+        occ_a = occ
+        occ_b = None
 
     if is_pbc and isinstance(occ_a, np.ndarray) and occ_a.ndim == 2:
         if occ_a.shape[0] != 1:
@@ -1404,6 +1465,11 @@ def write_1b_rdm(mf, filename, backend='h5'):
         occ_a = occ_a[0]
         if occ_b is not None and occ_b.ndim == 2:
             occ_b = occ_b[0]
+
+    if occ_a.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for alpha/spin-summed branch, got shape {occ_a.shape}")
+    if occ_b is not None and occ_b.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for beta branch, got shape {occ_b.shape}")
 
     if occ_b is not None:
         dm_a = np.diag(occ_a)
@@ -1445,6 +1511,7 @@ def write_1b_rdm(mf, filename, backend='h5'):
                 trexio.write_mo_num(tf, nmo)
             trexio.write_rdm_1e(tf, dm)
 
+
 def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
     """Write a two-body reduced density matrix in MO basis to TREXIO.
 
@@ -1481,34 +1548,40 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         For non-Gamma PBC calculations.
     """
 
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
 
-    is_uhf_like = isinstance(
-        mf,
-        (
-            scf.uhf.UHF,
-            dft.uks.UKS,
-            pbc.scf.uhf.UHF,
-            pbc.dft.uks.UKS,
-            pbc.scf.kuhf.KUHF,
-            pbc.dft.kuks.KUKS,
-        ),
-    )
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_2b_rdm."
+        )
 
     # Spin-summed occupations or spin-separated for UHF/UKS
-    if is_uhf_like and isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
-        occ_a, occ_b = mf.mo_occ
-        occ_a = np.asarray(occ_a)
-        occ_b = np.asarray(occ_b)
+    if is_uhf_like:
+        if isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
+            occ_a, occ_b = mf.mo_occ
+            occ_a = np.asarray(occ_a)
+            occ_b = np.asarray(occ_b)
+        else:
+            occ = np.asarray(mf.mo_occ)
+            if occ.ndim >= 2 and occ.shape[0] == 2:
+                occ_a, occ_b = occ[0], occ[1]
+            else:
+                raise ValueError(
+                    f"Unsupported UHF/UKS mo_occ layout for {mf.__class__}: shape {occ.shape}"
+                )
     else:
         occ = np.asarray(mf.mo_occ)
-        if is_uhf_like and occ.ndim == 2 and occ.shape[0] == 2:
-            occ_a, occ_b = occ[0], occ[1]
-        else:
-            occ_a = occ
-            occ_b = None
+        occ_a = occ
+        occ_b = None
 
     if is_pbc and isinstance(occ_a, np.ndarray) and occ_a.ndim == 2:
         if occ_a.shape[0] != 1:
@@ -1517,6 +1590,11 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         occ_a = occ_a[0]
         if occ_b is not None and occ_b.ndim == 2:
             occ_b = occ_b[0]
+
+    if occ_a.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for alpha/spin-summed branch, got shape {occ_a.shape}")
+    if occ_b is not None and occ_b.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for beta branch, got shape {occ_b.shape}")
 
     if occ_b is not None:
         dm_a = np.diag(occ_a)
