@@ -41,7 +41,7 @@ if MAX_MEMORY_MB <= 0:
             MAX_MEMORY_MB = kb // 1024
         else:
             MAX_MEMORY_MB = FALLBACK_MB
-    except:
+    except OSError:
         MAX_MEMORY_MB = FALLBACK_MB
 
 MAX_MEMORY = MAX_MEMORY_MB / 1024 # in GB
