@@ -1,4 +1,4 @@
-#/usr/bin/env python
+#!/usr/bin/env python
 # Copyright 2014-2024 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,20 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyscf import scf
-from pyscf.dft import KohnShamDFT
+from pyscf import scf, dft
 from pyscf.sftda import uks_sf
 from pyscf.sftda.uks_sf import TDUKS_SF
 
 
 def TDA_SF(mf):
     mf = mf.remove_soscf()
-    if isinstance(mf, scf.rohf.ROHF):
-        if isinstance(mf, KohnShamDFT):
+    if isinstance(mf, scf.rohf.ROHF) or isinstance(mf, scf.hf_symm.SymAdaptedROHF):
+        if isinstance(mf, dft.roks.ROKS) or isinstance(mf, dft.rks_symm.SymAdaptedROKS):
             mf = mf.to_uks()
         else:
             mf = mf.to_uhf()
     return mf.TDA_SF()
 
+
 def TDDFT_SF(mf):
+    mf = mf.remove_soscf()
+    if isinstance(mf, scf.rohf.ROHF) or isinstance(mf, scf.hf_symm.SymAdaptedROHF):
+        if isinstance(mf, dft.roks.ROKS) or isinstance(mf, dft.rks_symm.SymAdaptedROKS):
+            mf = mf.to_uks()
+        else:
+            mf = mf.to_uhf()
     return mf.TDDFT_SF()

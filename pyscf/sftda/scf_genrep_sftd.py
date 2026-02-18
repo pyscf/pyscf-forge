@@ -1,4 +1,4 @@
-#/usr/bin/env python
+#!/usr/bin/env python
 # Copyright 2014-2024 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,18 +15,19 @@
 
 # This file can be merged into pyscf.scf._response_functions.py
 
-import numpy
+import numpy as np
 from pyscf import lib
 from pyscf.lib import logger
 from pyscf.scf import uhf
-from pyscf.dft import numint,numint2c
+from pyscf.dft import KohnShamDFT, numint, numint2c
 
 # import fcuntion
-from pyscf.sftda.numint_sftd import nr_uks_fxc_sf,nr_uks_fxc_sf_tda
 from pyscf.sftda.numint2c_sftd import cache_xc_kernel_sf
 
-def _gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0, extype=0, collinear_samples=200, max_memory=None):
-    '''Generate a function to compute the product of Spin Flip UKS response function
+def gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0,
+                        collinear_samples=200, max_memory=None):
+    '''
+    Generate a function to compute the product of Spin-flip UKS response function
     and UKS density matrices.
     '''
     assert isinstance(mf, (uhf.UHF))
@@ -34,96 +35,50 @@ def _gen_uhf_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0, extype=0, coll
     if mo_occ is None: mo_occ = mf.mo_occ
     mol = mf.mol
 
-    ni = numint2c.NumInt2C()
-    ni.collinear = 'mcol'
-    ni.collinear_samples = collinear_samples
-    ni.libxc.test_deriv_order(mf.xc, 2, raise_error=True)
-    if mf.nlc or ni.libxc.is_nlc(mf.xc):
-        logger.warn(mf, 'NLC functional found in DFT object.  Its second '
-                    'deriviative is not available. Its contribution is '
-                    'not included in the response function.')
-    omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, mol.spin)
-    hybrid = ni.libxc.is_hybrid_xc(mf.xc)
+    if isinstance(mf, KohnShamDFT):
+        ni = numint2c.NumInt2C()
+        ni.collinear = 'mcol'
+        ni.collinear_samples = collinear_samples
+        ni.libxc.test_deriv_order(mf.xc, 2, raise_error=True)
 
-    # mf can be pbc.dft.UKS object with multigrid
-    if (not hybrid and
-        'MultiGridFFTDF' == getattr(mf, 'with_df', None).__class__.__name__):
-        raise NotImplementedError("Spin Flip TDDFT doesn't support pbc calculations.")
+        if mf.nlc or ni.libxc.is_nlc(mf.xc):
+            logger.warn(mf, 'NLC functional found in DFT object. Its contribution is '
+            'not included in the TDDFT response function.')
+        omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, mol.spin)
+        hybrid = ni.libxc.is_hybrid_xc(mf.xc)
 
-    fxc = cache_xc_kernel_sf(ni,mol, mf.grids, mf.xc, mo_coeff, mo_occ, deriv=2, spin=1)[2]
-    dm0 = None
+        if collinear_samples >= 0:
+            fxc = 2.0 * cache_xc_kernel_sf(ni, mol, mf.grids, mf.xc, mo_coeff, mo_occ, deriv=2, spin=1)[2]
 
-    if max_memory is None:
-        mem_now = lib.current_memory()[0]
-        max_memory = max(2000, mf.max_memory*.8-mem_now)
+        dm0 = None
 
-    def vind(dm1):
-        in2 = numint.NumInt()
-        v1 = nr_uks_fxc_sf(in2,mol, mf.grids, mf.xc, dm0, dm1, 0, hermi,
-                               None, None, fxc, extype=extype,max_memory=max_memory)
-        if not hybrid:
-            # No with_j because = 0 in spin flip part.
-            pass
-        else:
-            vk = mf.get_k(mol, dm1, hermi=hermi)
-            vkT= mf.get_k(mol, dm1.transpose(0,1,3,2), hermi=hermi)
-            vk *= hyb
-            vkT*= hyb
-            if omega > 1e-10:  # For range separated Coulomb
-                vk += mf.get_k(mol, dm1, hermi, omega) * (alpha-hyb)
-                vkT+= mf.get_k(mol, dm1.transpose(0,1,3,2), hermi, omega) * (alpha-hyb)
+        if max_memory is None:
+            max_memory = mf.max_memory
+        max_memory = max_memory * 0.8 - lib.current_memory()[0]
 
-            vk1A_b2a,vk1A_a2b = vk
-            vk1B_a2b,vk1B_b2a = vkT
-            vk1 = numpy.asarray((vk1A_b2a,vk1A_a2b,vk1B_b2a,vk1B_a2b))
-            v1 -= vk1
-        return v1
-    return vind
-
-def _gen_uhf_tda_response_sf(mf, mo_coeff=None, mo_occ=None, hermi=0, collinear_samples=200, max_memory=None):
-    '''Generate a function to compute the product of Spin Flip UKS response function
-    and UKS density matrices.
-    '''
-    assert isinstance(mf, (uhf.UHF))
-    if mo_coeff is None: mo_coeff = mf.mo_coeff
-    if mo_occ is None: mo_occ = mf.mo_occ
-    mol = mf.mol
-
-    ni = numint2c.NumInt2C()
-    ni.collinear = 'mcol'
-    ni.collinear_samples = collinear_samples
-    ni.libxc.test_deriv_order(mf.xc, 2, raise_error=True)
-    if mf.nlc or ni.libxc.is_nlc(mf.xc):
-        logger.warn(mf, 'NLC functional found in DFT object.  Its second '
-                    'deriviative is not available. Its contribution is '
-                    'not included in the response function.')
-    omega, alpha, hyb = ni.rsh_and_hybrid_coeff(mf.xc, mol.spin)
-    hybrid = ni.libxc.is_hybrid_xc(mf.xc)
-
-    # mf can be pbc.dft.UKS object with multigrid
-    if (not hybrid and
-        'MultiGridFFTDF' == getattr(mf, 'with_df', None).__class__.__name__):
-        raise NotImplementedError("Spin Flip TDDFT doesn't support pbc calculations.")
-
-    fxc = cache_xc_kernel_sf(ni,mol, mf.grids, mf.xc, mo_coeff, mo_occ, deriv=2, spin=1)[2]
-    dm0 = None
-
-    if max_memory is None:
-        mem_now = lib.current_memory()[0]
-        max_memory = max(2000, mf.max_memory*.8-mem_now)
-
-    def vind(dm1):
-        in2 = numint.NumInt()
-        v1 = nr_uks_fxc_sf_tda(in2,mol, mf.grids, mf.xc, dm0, dm1, 0, hermi,
-                               None, None, fxc, max_memory=max_memory)
-        if not hybrid:
-            # No with_j because = 0 in spin flip part.
-            pass
-        else:
-            vk = mf.get_k(mol, dm1, hermi=hermi)
-            vk *= hyb
-            if omega > 1e-10:  # For range separated Coulomb
-                vk += mf.get_k(mol, dm1, hermi, omega) * (alpha-hyb)
-            v1 -= vk
-        return v1
-    return vind
+        def vind(dm1):
+            if collinear_samples < 0:
+                v1 = np.zeros_like(dm1)
+            else:
+                in2 = numint.NumInt()
+                v1 = in2.nr_rks_fxc(mol, mf.grids, mf.xc, dm0, dm1, 0, hermi,
+                                    None, None, fxc, max_memory=max_memory)
+            if hybrid:
+                # j = 0 in spin flip part.
+                if omega == 0:
+                    vk = mf.get_k(mol, dm1, hermi) * hyb
+                elif alpha == 0: # LR=0, only SR exchange
+                    vk = mf.get_k(mol, dm1, hermi, omega=-omega) * hyb
+                elif hyb == 0: # SR=0, only LR exchange
+                    vk = mf.get_k(mol, dm1, hermi, omega=omega) * alpha
+                else: # SR and LR exchange with different ratios
+                    vk = mf.get_k(mol, dm1, hermi) * hyb
+                    vk += mf.get_k(mol, dm1, hermi, omega=omega) * (alpha-hyb)
+                v1 -= vk
+            return v1
+        return vind
+    else: # HF
+        def vind(dm1):
+            vk = mf.get_k(mol, dm1, hermi)
+            return -vk
+        return vind
