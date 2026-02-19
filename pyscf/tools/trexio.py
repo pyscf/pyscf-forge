@@ -32,9 +32,24 @@ from pyscf.mcscf import mc1step, mc2step, casci
 import trexio
 
 
+def _trexio_backend_const(backend='h5'):
+    if isinstance(backend, int):
+        return backend
+
+    key = 'h5' if backend is None else str(backend).strip().lower()
+    if key in ('h5', 'hdf5'):
+        return trexio.TREXIO_HDF5
+    if key in ('text', 'txt'):
+        return trexio.TREXIO_TEXT
+    if key == 'auto':
+        return trexio.TREXIO_AUTO
+    raise ValueError("backend must be one of 'h5', 'hdf5', 'text', 'txt', or 'auto'")
+
+
 
 def to_trexio(obj, filename, backend="h5", ci_threshold=None, chunk_size=None):
-    with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+    back_end = _trexio_backend_const(backend)
+    with trexio.File(filename, "u", back_end=back_end) as tf:
         if isinstance(obj, gto.Mole) or isinstance(obj, pbcgto.Cell):
             _mol_to_trexio(obj, tf)
         elif isinstance(obj, scf.hf.SCF):
@@ -497,7 +512,7 @@ def _scf_to_trexio(mf, trexio_file):
 
 
 def _cc_to_trexio(cc_obj, trexio_file):
-    raise NotImplementedError
+    raise NotImplementedError("CC conversion is not implemented yet.")
 
 
 def _get_cas_rdm1s(cas_obj, ncas):
@@ -1219,6 +1234,8 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         i, j = np.tril_indices(n)
         return i.astype(np.int32), j.astype(np.int32)
 
+    back_end = _trexio_backend_const(backend)
+
     if sym == 's1':
         if eri.ndim != 4:
             raise ValueError(f'ERI array must be a full 4D tensor (p,q,r,s); got ndim={eri.ndim}')
@@ -1234,7 +1251,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         idx=idx.flatten()
 
         # write ERI
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if basis == 'AO':
                 if not trexio.has_ao_num(tf):
                     trexio.write_ao_num(tf, n)
@@ -1259,7 +1276,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         total = npair * npair
         chunk = 100000
 
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if basis == 'AO':
                 if not trexio.has_ao_num(tf):
                     trexio.write_ao_num(tf, n)
@@ -1304,7 +1321,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
     tri_i, tri_j = np.tril_indices(npair)
     chunk = 100000
 
-    with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+    with trexio.File(filename, "u", back_end=back_end) as tf:
         if basis == 'AO':
             if not trexio.has_ao_num(tf):
                 trexio.write_ao_num(tf, n)
@@ -1386,6 +1403,7 @@ def write_1e_eri(
         )
 
     basis = basis.upper()
+    back_end = _trexio_backend_const(backend)
     if basis not in ('AO', 'MO'):
         raise ValueError("basis must be either 'AO' or 'MO'")
 
@@ -1476,7 +1494,7 @@ def write_1e_eri(
     if basis == 'AO':
         _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend, 'AO')
         if ecp_mat is not None:
-            with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+            with trexio.File(filename, "u", back_end=back_end) as tf:
                 trexio.write_ao_1e_int_ecp(tf, ecp_mat)
         return
 
@@ -1508,7 +1526,7 @@ def write_1e_eri(
         mo_overlap, mo_kinetic, mo_potential, mo_core, filename, backend, 'MO'
     )
     if mo_ecp is not None:
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             trexio.write_mo_1e_int_ecp(tf, mo_ecp)
 
 
@@ -1521,8 +1539,9 @@ def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5',
     kinetic = np.ascontiguousarray(kinetic)
     potential = np.ascontiguousarray(potential)
     core = np.ascontiguousarray(core)
+    back_end = _trexio_backend_const(backend)
 
-    with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+    with trexio.File(filename, "u", back_end=back_end) as tf:
         if basis == 'AO':
             ao_dim = overlap.shape[0]
             if not trexio.has_ao_num(tf):
@@ -1578,6 +1597,7 @@ def write_1b_rdm(mf, filename, backend='h5'):
             "ROHF/ROKS support will be implemented in the next version."
         )
 
+    back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
@@ -1632,7 +1652,7 @@ def write_1b_rdm(mf, filename, backend='h5'):
             dm_b = np.real(dm_b)
         dm_a = np.ascontiguousarray(dm_a)
         dm_b = np.ascontiguousarray(dm_b)
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             nmo_up = dm_a.shape[0]
             nmo_dn = dm_b.shape[0]
             if nmo_dn != nmo_up:
@@ -1652,7 +1672,7 @@ def write_1b_rdm(mf, filename, backend='h5'):
         if np.iscomplexobj(dm):
             dm = np.real(dm)
         dm = np.ascontiguousarray(dm)
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             nmo = dm.shape[0]
             if not trexio.has_mo_num(tf):
                 trexio.write_mo_num(tf, nmo)
@@ -1700,6 +1720,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
             "ROHF/ROKS support will be implemented in the next version."
         )
 
+    back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
@@ -1777,7 +1798,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         flat_dd = g2_dd.reshape(-1)
         flat_ud = g2_ud.reshape(-1)
 
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if not trexio.has_mo_num(tf):
                 trexio.write_mo_num(tf, nmo)
 
@@ -1825,7 +1846,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         idx = lib.cartesian_prod([np.arange(nmo, dtype=np.int32)] * 4)
         flat_g2 = g2.reshape(-1)
 
-        with trexio.File(filename, "u", back_end=trexio.TREXIO_AUTO) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if not trexio.has_mo_num(tf):
                 trexio.write_mo_num(tf, nmo)
 

@@ -56,6 +56,22 @@ def test_mol_ae_6_31g(cart):
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
 
 
+@pytest.mark.parametrize(
+    "backend,ext",
+    [("h5", "h5"), ("text", "text")],
+    ids=["backend=h5", "backend=text"],
+)
+def test_mol_ae_6_31g_backend(backend, ext):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, f"test.{ext}")
+        mol0 = pyscf.M(atom="H 0 0 0; F 0 0 1", basis="6-31g**", cart=False)
+        trexio.to_trexio(mol0, filename, backend=backend)
+        mol1 = trexio.mol_from_trexio(filename)
+        s0, t0, v0 = _get_integrals(mol0)
+        s1, t1, v1 = _get_integrals(mol1)
+        _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
+
+
 ## molecule, general contraction (ccpv5z), all-electron
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
 def test_mol_ae_ccpv5z(cart):
@@ -986,6 +1002,40 @@ def test_write_molecule_integrals_sym_s1_to_trexio_rhf_ae(cart):
             assert n_read == size
             np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), mo_idx_exp)
             np.testing.assert_allclose(np.asarray(val), mo_val_exp, atol=DIFF_TOL)
+
+
+@pytest.mark.parametrize(
+    "backend,ext",
+    [("h5", "h5"), ("text", "text")],
+    ids=["backend=h5", "backend=text"],
+)
+def test_write_integrals_to_trexio_rhf_backend(backend, ext):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, f'mol_integrals.{ext}')
+
+        mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g*', cart=False)
+        mf0 = mol0.RHF().run()
+
+        overlap = _hermitize(mf0.get_ovlp())
+
+        trexio.to_trexio(mf0, filename, backend=backend)
+
+        trexio.write_1e_eri(mf0, filename, backend=backend, basis='AO')
+        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            np.testing.assert_allclose(
+                trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL
+            )
+
+        ao_eri = mol0.intor('int2e', aosym='s1')
+        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
+        trexio.write_2e_eri(mf0, filename, backend=backend, basis='AO', sym='s1')
+        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            assert trexio_lib.has_ao_2e_int_eri(tf)
+            size = trexio_lib.read_ao_2e_int_eri_size(tf)
+            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
+            assert n_read == size
+            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
+            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
 
 
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
