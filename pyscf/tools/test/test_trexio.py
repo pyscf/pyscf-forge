@@ -479,22 +479,7 @@ def test_mcscf_rhf_ae_6_31g(cart, mc_constructor):
         assert abs(np.asarray(occ1) - expected_occ).max() < DIFF_TOL
 
         calc_int64_num = (mc0.ncore + mc0.ncas + 63) // 64
-        if int64_num <= 0:
-            int64_num = calc_int64_num
-        else:
-            int64_num = max(int64_num, calc_int64_num)
-
-        def _normalize_det_list(det_list_in):
-            if isinstance(det_list_in, (tuple, list)):
-                if len(det_list_in) > 0 and isinstance(det_list_in[0], np.ndarray):
-                    if all(np.isscalar(x) for x in det_list_in[1:]):
-                        det_list_in = det_list_in[0]
-            if isinstance(det_list_in, np.ndarray):
-                if det_list_in.ndim == 2:
-                    return [np.asarray(row, dtype=np.int64) for row in det_list_in]
-                if det_list_in.ndim == 1:
-                    return [np.asarray(det_list_in, dtype=np.int64)]
-            return [np.asarray(row, dtype=np.int64) for row in det_list_in]
+        int64_num = max(int64_num, calc_int64_num)
 
         occsa, occsb, _, _ = trexio._get_occsa_and_occsb(mc0, mc0.ncas, mc0.nelecas, 0.0)
         expected_det_list = []
@@ -505,11 +490,9 @@ def test_mcscf_rhf_ae_6_31g(cart, mc_constructor):
             det_b = np.asarray(trexio.trexio.to_bitfield_list(int64_num, occsb_upshifted), dtype=np.int64)
             expected_det_list.append(np.hstack([det_a, det_b]).astype(np.int64, copy=False))
 
-        det_list_norm = _normalize_det_list(det_list)
-        expected_det_list_norm = _normalize_det_list(expected_det_list)
-        assert len(det_list_norm) == len(expected_det_list_norm)
-        for det_row, expected_row in zip(det_list_norm, expected_det_list_norm):
-            assert np.array_equal(det_row, expected_row)
+        det_list_arr = np.asarray(det_list[0], dtype=np.int64)
+        expected_det_arr = np.asarray(expected_det_list, dtype=np.int64)
+        assert np.array_equal(det_list_arr, expected_det_arr)
 
 
         dm1_cas, dm2_cas = trexio._get_cas_rdm12(mc0, mc0.ncas)
@@ -546,8 +529,8 @@ def test_mcscf_rhf_ae_6_31g(cart, mc_constructor):
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
 @pytest.mark.parametrize(
     "mc_constructor",
-    [pyscf.mcscf.CASCI, pyscf.mcscf.CASSCF],
-    ids=["casci", "casscf"],
+    [pyscf.mcscf.UCASCI, pyscf.mcscf.UCASSCF],
+    ids=["ucasci", "ucasscf"],
 )
 def test_mcscf_uhf_ae_6_31g(cart, mc_constructor):
     with tempfile.TemporaryDirectory() as d:
@@ -555,45 +538,20 @@ def test_mcscf_uhf_ae_6_31g(cart, mc_constructor):
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g', spin=2, cart=cart)
         mf0 = mol0.UHF().run()
         mc0 = mc_constructor(mf0, 2, 2)
+        if isinstance(mc0, pyscf.mcscf.umc1step.UCASSCF): # workaround for an issue in PySCF.
+            mc0.chkfile = None
         mc0.kernel()
         trexio.to_trexio(mc0, filename)
 
+        ncore = mc0.ncore[0]
+
         ncas = mc0.ncas
-        neleca, nelecb = mc0.nelecas
-        if hasattr(mc0.fcisolver, 'make_rdm1s'):
-            rdm1a, rdm1b = mc0.fcisolver.make_rdm1s(mc0.ci, ncas, mc0.nelecas)
-        else:
-            rdm1 = mc0.fcisolver.make_rdm1(mc0.ci, ncas, mc0.nelecas)
-            total = neleca + nelecb
-            if total > 0:
-                rdm1a = rdm1 * (neleca / total)
-                rdm1b = rdm1 * (nelecb / total)
-            else:
-                rdm1a = rdm1 * 0.0
-                rdm1b = rdm1 * 0.0
+        rdm1a, rdm1b = mc0.fcisolver.make_rdm1s(mc0.ci, ncas, mc0.nelecas)
 
         nat_occ_a = np.linalg.eigvalsh(rdm1a)[::-1]
         nat_occ_b = np.linalg.eigvalsh(rdm1b)[::-1]
 
-        def _get_uhf_mo_pair(mo_coeff):
-            if isinstance(mo_coeff, (tuple, list)) and len(mo_coeff) == 2:
-                return mo_coeff[0], mo_coeff[1]
-            if isinstance(mo_coeff, np.ndarray):
-                if mo_coeff.ndim == 3 and mo_coeff.shape[0] == 2:
-                    return mo_coeff[0], mo_coeff[1]
-                if mo_coeff.ndim == 2:
-                    return mo_coeff, mo_coeff
-            return None
-
-        mo_pair = _get_uhf_mo_pair(mc0.mo_coeff)
-        if mo_pair is None:
-            mo_pair = _get_uhf_mo_pair(mc0._scf.mo_coeff)
-        if mo_pair is None:
-            mo_pair = _get_uhf_mo_pair(mf0.mo_coeff)
-        if mo_pair is None:
-            raise ValueError("Unable to determine UHF mo_coeff pair for expected occupations.")
-
-        mo_up, mo_dn = mo_pair
+        mo_up, mo_dn = mc0.mo_coeff
         num_mo_up = mo_up.shape[1]
         num_mo_dn = mo_dn.shape[1]
 
@@ -605,71 +563,44 @@ def test_mcscf_uhf_ae_6_31g(cart, mc_constructor):
 
         occ_alpha = np.zeros(num_mo_up)
         occ_beta = np.zeros(num_mo_dn)
-        occ_alpha[:mc0.ncore] = 1.0
-        occ_beta[:mc0.ncore] = 1.0
-        occ_alpha[mc0.ncore:mc0.ncore + ncas] = nat_occ_a
-        occ_beta[mc0.ncore:mc0.ncore + ncas] = nat_occ_b
+        occ_alpha[:ncore] = 1.0
+        occ_beta[:ncore] = 1.0
+        occ_alpha[ncore:ncore + ncas] = nat_occ_a
+        occ_beta[ncore:ncore + ncas] = nat_occ_b
 
         occ1_arr = np.asarray(occ1)
-        rdm1_total = rdm1a + rdm1b
-        nat_occ_total = np.linalg.eigvalsh(rdm1_total)[::-1]
-        occ_total = np.zeros(num_mo_up)
-        occ_total[:mc0.ncore] = 2.0
-        occ_total[mc0.ncore:mc0.ncore + ncas] = nat_occ_total
 
-        is_uhf = isinstance(mc0._scf, (
-            pyscf.scf.uhf.UHF,
-            pyscf.dft.uks.UKS,
-            pyscf.pbc.scf.kuhf.KUHF,
-            pyscf.pbc.dft.kuks.KUKS,
-        ))
-
-        if is_uhf:
-            expected_occ = np.concatenate([occ_alpha, occ_beta])
-            assert occ1_arr.size == num_mo_up + num_mo_dn
-        else:
-            expected_occ = occ_total
-            assert occ1_arr.size == num_mo_up
+        expected_occ = np.concatenate([occ_alpha, occ_beta])
+        assert occ1_arr.size == num_mo_up + num_mo_dn
 
         assert abs(occ1_arr - expected_occ).max() < DIFF_TOL
 
-        calc_int64_num = (mc0.ncore + mc0.ncas + 63) // 64
-        if int64_num <= 0:
-            int64_num = calc_int64_num
-        else:
-            int64_num = max(int64_num, calc_int64_num)
-
-        def _normalize_det_list(det_list_in):
-            if isinstance(det_list_in, (tuple, list)):
-                if len(det_list_in) > 0 and isinstance(det_list_in[0], np.ndarray):
-                    if all(np.isscalar(x) for x in det_list_in[1:]):
-                        det_list_in = det_list_in[0]
-            if isinstance(det_list_in, np.ndarray):
-                if det_list_in.ndim == 2:
-                    return [np.asarray(row, dtype=np.int64) for row in det_list_in]
-                if det_list_in.ndim == 1:
-                    return [np.asarray(det_list_in, dtype=np.int64)]
-            return [np.asarray(row, dtype=np.int64) for row in det_list_in]
+        calc_int64_num = (ncore + mc0.ncas + 63) // 64
+        int64_num = max(int64_num, calc_int64_num)
 
         occsa, occsb, _, _ = trexio._get_occsa_and_occsb(mc0, mc0.ncas, mc0.nelecas, 0.0)
         expected_det_list = []
         for a, b in zip(occsa, occsb):
-            occsa_upshifted = [orb for orb in range(mc0.ncore)] + [orb + mc0.ncore for orb in a]
-            occsb_upshifted = [orb for orb in range(mc0.ncore)] + [orb + mc0.ncore for orb in b]
+            occsa_upshifted = [orb for orb in range(ncore)] + [orb + ncore for orb in a]
+            occsb_upshifted = [orb for orb in range(ncore)] + [orb + ncore for orb in b]
             det_a = np.asarray(trexio.trexio.to_bitfield_list(int64_num, occsa_upshifted), dtype=np.int64)
             det_b = np.asarray(trexio.trexio.to_bitfield_list(int64_num, occsb_upshifted), dtype=np.int64)
             expected_det_list.append(np.hstack([det_a, det_b]).astype(np.int64, copy=False))
 
-        det_list_norm = _normalize_det_list(det_list)
-        expected_det_list_norm = _normalize_det_list(expected_det_list)
-        assert len(det_list_norm) == len(expected_det_list_norm)
-        for det_row, expected_row in zip(det_list_norm, expected_det_list_norm):
-            assert np.array_equal(det_row, expected_row)
+        det_list_arr = np.asarray(det_list[0], dtype=np.int64)
+        expected_det_arr = np.asarray(expected_det_list, dtype=np.int64)
+        assert np.array_equal(det_list_arr, expected_det_arr)
 
-        dm1_cas, dm2_cas = trexio._get_cas_rdm12(mc0, mc0.ncas)
         h1eff, ecore = trexio._get_cas_h1eff(mc0)
         h2eff = trexio._get_cas_h2eff(mc0, mc0.ncas)
-        e_act = np.einsum("ij,ij->", h1eff, dm1_cas) + 0.5 * np.einsum("ijkl,ijkl->", h2eff, dm2_cas)
+        dm1a, dm1b, dm2aa, dm2ab, dm2bb = trexio._get_cas_rdm12s(mc0, mc0.ncas)
+        e_act = (
+            np.einsum("ij,ij->", h1eff[0], dm1a)
+            + np.einsum("ij,ij->", h1eff[1], dm1b)
+            + 0.5 * np.einsum("ijkl,ijkl->", h2eff[0], dm2aa)
+            + np.einsum("ijkl,ijkl->", h2eff[1], dm2ab)
+            + 0.5 * np.einsum("ijkl,ijkl->", h2eff[2], dm2bb)
+        )
         e_reconstructed = ecore + e_act
         assert abs(e_reconstructed - mc0.e_tot) < 1e-8
 
@@ -2225,16 +2156,8 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_uhf_ae(cart):
             if core_ao.ndim == 1:
                 core_ao = core_ao.reshape(nao, nao)
 
-            dm_ao = mf0.make_rdm1()
-            dm_a = dm_b = None
-            if isinstance(dm_ao, (tuple, list)) and len(dm_ao) == 2:
-                dm_a, dm_b = dm_ao
-                dm_tot = dm_a + dm_b
-            elif isinstance(dm_ao, np.ndarray) and dm_ao.ndim == 3 and dm_ao.shape[0] == 2:
-                dm_a, dm_b = dm_ao[0], dm_ao[1]
-                dm_tot = dm_a + dm_b
-            else:
-                dm_tot = dm_ao
+            dm_a, dm_b = mf0.make_rdm1()
+            dm_tot = dm_a + dm_b
 
             ao_eri_size = trexio_lib.read_ao_2e_int_eri_size(tf)
             assert ao_eri_size == nao ** 4
@@ -2253,24 +2176,17 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_uhf_ae(cart):
             W_ao_chem = W_ao_phys.transpose(0, 2, 1, 3)
 
             J = np.einsum('pqrs,rs->pq', W_ao_chem, dm_tot)
+            K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
+            K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
+
             e_ao = e_nn
-            if dm_a is not None and dm_b is not None:
-                K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
-                K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
-
-                e_ao += np.einsum('pq,pq->', dm_a, core_ao)
-                e_ao += np.einsum('pq,pq->', dm_b, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.5 * (
-                    np.einsum('pq,pq->', dm_a, K_a)
-                    + np.einsum('pq,pq->', dm_b, K_b)
-                )
-            else:
-                K = np.einsum('prqs,rs->pq', W_ao_chem, dm_tot)
-
-                e_ao += np.einsum('pq,pq->', dm_tot, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.25 * np.einsum('pq,pq->', dm_tot, K)
+            e_ao += np.einsum('pq,pq->', dm_a, core_ao)
+            e_ao += np.einsum('pq,pq->', dm_b, core_ao)
+            e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
+            e_ao -= 0.5 * (
+                np.einsum('pq,pq->', dm_a, K_a)
+                + np.einsum('pq,pq->', dm_b, K_b)
+            )
 
             # MO energy reconstruction
             n = trexio_lib.read_mo_num(tf)
@@ -2543,16 +2459,8 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_uhf_ecp(cart):
             if core_ao.ndim == 1:
                 core_ao = core_ao.reshape(nao, nao)
 
-            dm_ao = mf0.make_rdm1()
-            dm_a = dm_b = None
-            if isinstance(dm_ao, (tuple, list)) and len(dm_ao) == 2:
-                dm_a, dm_b = dm_ao
-                dm_tot = dm_a + dm_b
-            elif isinstance(dm_ao, np.ndarray) and dm_ao.ndim == 3 and dm_ao.shape[0] == 2:
-                dm_a, dm_b = dm_ao[0], dm_ao[1]
-                dm_tot = dm_a + dm_b
-            else:
-                dm_tot = dm_ao
+            dm_a, dm_b = mf0.make_rdm1()
+            dm_tot = dm_a + dm_b
 
             ao_eri_size = trexio_lib.read_ao_2e_int_eri_size(tf)
             assert ao_eri_size == nao ** 4
@@ -2571,24 +2479,17 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_uhf_ecp(cart):
             W_ao_chem = W_ao_phys.transpose(0, 2, 1, 3)
 
             J = np.einsum('pqrs,rs->pq', W_ao_chem, dm_tot)
+            K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
+            K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
+
             e_ao = e_nn
-            if dm_a is not None and dm_b is not None:
-                K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
-                K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
-
-                e_ao += np.einsum('pq,pq->', dm_a, core_ao)
-                e_ao += np.einsum('pq,pq->', dm_b, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.5 * (
-                    np.einsum('pq,pq->', dm_a, K_a)
-                    + np.einsum('pq,pq->', dm_b, K_b)
-                )
-            else:
-                K = np.einsum('prqs,rs->pq', W_ao_chem, dm_tot)
-
-                e_ao += np.einsum('pq,pq->', dm_tot, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.25 * np.einsum('pq,pq->', dm_tot, K)
+            e_ao += np.einsum('pq,pq->', dm_a, core_ao)
+            e_ao += np.einsum('pq,pq->', dm_b, core_ao)
+            e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
+            e_ao -= 0.5 * (
+                np.einsum('pq,pq->', dm_a, K_a)
+                + np.einsum('pq,pq->', dm_b, K_b)
+            )
 
             # MO energy reconstruction
             n = trexio_lib.read_mo_num(tf)
@@ -2811,16 +2712,8 @@ def test_energy_molecule_integrals_sym_s4_in_trexio_uhf_ae(cart):
             if core_ao.ndim == 1:
                 core_ao = core_ao.reshape(nao, nao)
 
-            dm_ao = mf0.make_rdm1()
-            dm_a = dm_b = None
-            if isinstance(dm_ao, (tuple, list)) and len(dm_ao) == 2:
-                dm_a, dm_b = dm_ao
-                dm_tot = dm_a + dm_b
-            elif isinstance(dm_ao, np.ndarray) and dm_ao.ndim == 3 and dm_ao.shape[0] == 2:
-                dm_a, dm_b = dm_ao[0], dm_ao[1]
-                dm_tot = dm_a + dm_b
-            else:
-                dm_tot = dm_ao
+            dm_a, dm_b = mf0.make_rdm1()
+            dm_tot = dm_a + dm_b
 
             ao_eri_size = trexio_lib.read_ao_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, ao_eri_size)
@@ -2829,24 +2722,17 @@ def test_energy_molecule_integrals_sym_s4_in_trexio_uhf_ae(cart):
             W_ao_chem = W_ao_phys.transpose(0, 2, 1, 3)
 
             J = np.einsum('pqrs,rs->pq', W_ao_chem, dm_tot)
+            K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
+            K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
+
             e_ao = e_nn
-            if dm_a is not None and dm_b is not None:
-                K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
-                K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
-
-                e_ao += np.einsum('pq,pq->', dm_a, core_ao)
-                e_ao += np.einsum('pq,pq->', dm_b, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.5 * (
-                    np.einsum('pq,pq->', dm_a, K_a)
-                    + np.einsum('pq,pq->', dm_b, K_b)
-                )
-            else:
-                K = np.einsum('prqs,rs->pq', W_ao_chem, dm_tot)
-
-                e_ao += np.einsum('pq,pq->', dm_tot, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.25 * np.einsum('pq,pq->', dm_tot, K)
+            e_ao += np.einsum('pq,pq->', dm_a, core_ao)
+            e_ao += np.einsum('pq,pq->', dm_b, core_ao)
+            e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
+            e_ao -= 0.5 * (
+                np.einsum('pq,pq->', dm_a, K_a)
+                + np.einsum('pq,pq->', dm_b, K_b)
+            )
 
             # MO energy reconstruction
             n = trexio_lib.read_mo_num(tf)
@@ -3018,16 +2904,8 @@ def test_energy_molecule_integrals_sym_s8_in_trexio_uhf_ae(cart):
             if core_ao.ndim == 1:
                 core_ao = core_ao.reshape(nao, nao)
 
-            dm_ao = mf0.make_rdm1()
-            dm_a = dm_b = None
-            if isinstance(dm_ao, (tuple, list)) and len(dm_ao) == 2:
-                dm_a, dm_b = dm_ao
-                dm_tot = dm_a + dm_b
-            elif isinstance(dm_ao, np.ndarray) and dm_ao.ndim == 3 and dm_ao.shape[0] == 2:
-                dm_a, dm_b = dm_ao[0], dm_ao[1]
-                dm_tot = dm_a + dm_b
-            else:
-                dm_tot = dm_ao
+            dm_a, dm_b = mf0.make_rdm1()
+            dm_tot = dm_a + dm_b
 
             ao_eri_size = trexio_lib.read_ao_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, ao_eri_size)
@@ -3036,23 +2914,16 @@ def test_energy_molecule_integrals_sym_s8_in_trexio_uhf_ae(cart):
             W_ao_chem = W_ao_phys.transpose(0, 2, 1, 3)
 
             J = np.einsum('pqrs,rs->pq', W_ao_chem, dm_tot)
+            K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
+            K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
+
             e_ao = e_nn
-            if dm_a is not None and dm_b is not None:
-                K_a = np.einsum('prqs,rs->pq', W_ao_chem, dm_a)
-                K_b = np.einsum('prqs,rs->pq', W_ao_chem, dm_b)
-
-                e_ao += np.einsum('pq,pq->', dm_a, core_ao)
-                e_ao += np.einsum('pq,pq->', dm_b, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.5 * (
-                    np.einsum('pq,pq->', dm_a, K_a)
-                    + np.einsum('pq,pq->', dm_b, K_b)
-                )
-            else:
-                K = np.einsum('prqs,rs->pq', W_ao_chem, dm_tot)
-
-                e_ao += np.einsum('pq,pq->', dm_tot, core_ao)
-                e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
-                e_ao -= 0.25 * np.einsum('pq,pq->', dm_tot, K)
+            e_ao += np.einsum('pq,pq->', dm_a, core_ao)
+            e_ao += np.einsum('pq,pq->', dm_b, core_ao)
+            e_ao += 0.5 * np.einsum('pq,pq->', dm_tot, J)
+            e_ao -= 0.5 * (
+                np.einsum('pq,pq->', dm_a, K_a)
+                + np.einsum('pq,pq->', dm_b, K_b)
+            )
 
         assert abs(e_ao - mf0.e_tot) < 1e-8
