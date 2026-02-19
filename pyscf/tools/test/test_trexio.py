@@ -2927,3 +2927,256 @@ def test_energy_molecule_integrals_sym_s8_in_trexio_uhf_ae(cart):
             )
 
         assert abs(e_ao - mf0.e_tot) < 1e-8
+
+
+#################################################################
+# ROHF/ROKS unsupported behavior (1:1 counterparts to UHF/UKS).
+# Note: ROHF/ROKS support will be implemented, and these tests will be updated accordingly.
+#################################################################
+
+def _assert_rohf_roks_not_implemented(func, *args, **kwargs):
+    with pytest.raises(NotImplementedError, match="ROHF/ROKS support will be implemented."):
+        func(*args, **kwargs)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_rohf_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        mol0 = pyscf.M(atom="H 0 0 0; H 0 0 1", basis="6-31g", spin=2, cart=cart)
+        mf0 = mol0.ROHF().density_fit()
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_gamma_roks_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g", a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pyscf.pbc.dft.ROKS(cell0).density_fit()
+        mf0.xc = "LDA"
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_general_roks_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        kfrac = (0.25, 0.25, 0.25)
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g", a=np.diag([3.0, 3.0, 5.0]))
+        kpt0 = cell0.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf0 = pyscf.pbc.dft.ROKS(cell0, kpt=kpt0).density_fit()
+        mf0.xc = "LDA"
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_single_grid_roks_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        kmesh = (1, 1, 1)
+        filename = os.path.join(d, "test.h5")
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g", a=np.diag([3.0, 3.0, 5.0]))
+        kpts0 = cell0.make_kpts(kmesh)
+        mf0 = pyscf.pbc.dft.KROKS(cell0, kpts=kpts0).density_fit()
+        mf0.xc = "LDA"
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mf_k_grid_roks_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        kmesh = (1, 1, 2)
+        filename = os.path.join(d, "test.h5")
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g", a=np.diag([3.0, 3.0, 5.0]))
+        kpts0 = cell0.make_kpts(kmesh)
+        mf0 = pyscf.pbc.dft.KROKS(cell0, kpts=kpts0).density_fit()
+        mf0.xc = "LDA"
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+@pytest.mark.parametrize("mc_constructor", [pyscf.mcscf.CASCI, pyscf.mcscf.CASSCF], ids=["casci", "casscf"])
+def test_mcscf_rohf_ae_6_31g_not_implemented(cart, mc_constructor):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        mol0 = pyscf.M(atom="H 0 0 0; F 0 0 1", basis="6-31g", spin=2, cart=cart)
+        mf0 = mol0.ROHF().run()
+        mc0 = mc_constructor(mf0, 2, 2)
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mc0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_cell_k_gamma_scf_roks_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g", a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pyscf.pbc.dft.ROKS(cell0).density_fit()
+        mf0.xc = "LDA"
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_cell_k_general_scf_roks_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        kfrac = (0.25, 0.25, 0.25)
+        cell0 = pyscf.pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g", a=np.diag([3.0, 3.0, 5.0]))
+        kpt0 = cell0.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
+        mf0 = pyscf.pbc.dft.ROKS(cell0, kpt=kpt0).density_fit()
+        mf0.xc = "LDA"
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mol_scf_rohf_ae_6_31g_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        mol0 = pyscf.M(atom="H 0 0 0; H 0 0 1", basis="6-31g", spin=2, cart=cart)
+        mf0 = mol0.ROHF().density_fit()
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_mol_rohf_ccecp_ccpvqz_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "test.h5")
+        mol0 = pyscf.M(atom="H 0 0 0; F 0 0 1", basis="ccecp-ccpvdz", ecp="ccecp", spin=2, cart=cart)
+        mf0 = mol0.ROHF().density_fit()
+        _assert_rohf_roks_not_implemented(trexio.to_trexio, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_write_molecule_integrals_sym_s1_to_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "rohf_s1.h5")
+        mol0 = pyscf.M(atom="O 0 0 0", basis="6-31g*", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_1e_eri, mf0, filename, basis="AO")
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_write_molecule_integrals_sym_s4_to_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "rohf_s4.h5")
+        mol0 = pyscf.M(atom="O 0 0 0", basis="6-31g*", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO", sym="s4")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_write_molecule_integrals_sym_s8_to_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "rohf_s8.h5")
+        mol0 = pyscf.M(atom="O 0 0 0", basis="6-31g*", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO", sym="s8")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_write_cell_gamma_integrals_sym_s1_to_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "cell_rohf_s1.h5")
+        cell0 = pbc.gto.Cell()
+        cell0.spin = 2
+        cell0.cart = cart
+        cell0.build(atom="H 0 0 0; H 0 0 1", basis="6-31g*", a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pbc.scf.ROHF(cell0, kpt=np.zeros(3)).density_fit()
+        _assert_rohf_roks_not_implemented(trexio.write_1e_eri, mf0, filename, basis="AO")
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_crystal_integrals_sym_s1_in_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_crys_rohf_s1.h5")
+        cell = pyscf.pbc.gto.Cell()
+        cell.cart = cart
+        cell.spin = 2
+        cell.unit = "Bohr"
+        cell.build(atom="H 0 0 0; H 0 0 1.4", basis="sto-3g", a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pyscf.pbc.scf.ROHF(cell)
+        _assert_rohf_roks_not_implemented(trexio.write_1e_eri, mf0, filename, basis="AO")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_crystal_integrals_sym_s1_in_trexio_rohf_ccecp_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_crys_rohf_ccecp_s1.h5")
+        cell = pyscf.pbc.gto.Cell()
+        cell.cart = cart
+        cell.spin = 2
+        cell.unit = "Bohr"
+        cell.exp_to_discard = 0.2
+        cell.build(atom="H 0 0 0; H 0 0 2.6", basis="ccecp-ccpvdz", ecp="ccecp", a=np.diag([6.0, 6.0, 6.0]))
+        mf0 = pyscf.pbc.scf.ROHF(cell)
+        _assert_rohf_roks_not_implemented(trexio.write_1e_eri, mf0, filename, basis="AO")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_crystal_integrals_sym_s4_in_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_crys_rohf_s4.h5")
+        cell = pyscf.pbc.gto.Cell()
+        cell.cart = cart
+        cell.spin = 2
+        cell.unit = "Bohr"
+        cell.build(atom="H 0 0 0; H 0 0 1.4", basis="sto-3g", a=np.diag([3.0, 3.0, 5.0]))
+        mf0 = pyscf.pbc.scf.ROHF(cell)
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO", sym="s4")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_molecule_integrals_sym_s1_in_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_mol_rohf_s1.h5")
+        mol0 = pyscf.M(atom="O 0 0 0", basis="6-31g*", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_1e_eri, mf0, filename, basis="AO")
+        _assert_rohf_roks_not_implemented(trexio.write_1b_rdm, mf0, filename)
+        _assert_rohf_roks_not_implemented(trexio.write_2b_rdm, mf0, filename)
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_molecule_integrals_sym_s1_in_trexio_rohf_ecp_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_mol_rohf_ecp_s1.h5")
+        mol0 = pyscf.M(atom="H 0 0 0; F 0 0 1", basis="ccecp-ccpvdz", ecp="ccecp", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_1e_eri, mf0, filename, basis="AO")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_molecule_integrals_sym_s4_in_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_mol_rohf_s4.h5")
+        mol0 = pyscf.M(atom="O 0 0 0", basis="6-31g*", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO", sym="s4")
+
+
+@pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+def test_energy_molecule_integrals_sym_s8_in_trexio_rohf_ae_not_implemented(cart):
+    with tempfile.TemporaryDirectory() as d:
+        filename = os.path.join(d, "e_mol_rohf_s8.h5")
+        mol0 = pyscf.M(atom="O 0 0 0", basis="6-31g*", spin=2, cart=cart)
+        mf0 = mol0.ROHF()
+        _assert_rohf_roks_not_implemented(trexio.write_2e_eri, mf0, filename, basis="AO", sym="s8")
