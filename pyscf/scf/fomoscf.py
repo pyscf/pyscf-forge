@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Arshad Mehmood, IACS, Stony Brook University 
+# Author: Arshad Mehmood, IACS, Stony Brook University
 # Email: arshad.mehmood@stonybrook.edu
 # Date: 30 December 2025
 #
@@ -41,7 +41,7 @@ def fomo_scf(mf, temperature, method='gaussian', sigma=None, restricted=None):
             The mean-field object to be wrapped.
         temperature : float
             Electronic temperature expressed as kT in Hartree (atomic units).
-            This matches PySCF MO energies (Hartree). 
+            This matches PySCF MO energies (Hartree).
         method : str
             Broadening scheme:
                 'gaussian'  - Gaussian broadening with integrated occupations.
@@ -71,7 +71,7 @@ def fomo_scf(mf, temperature, method='gaussian', sigma=None, restricted=None):
     >>> mf.kernel()
     """
     mf_fomo = copy(mf)
-    
+
     # Reset SCF internal state to allow re-running
     mf_fomo.converged = False
     mf_fomo.mo_energy = None
@@ -148,7 +148,8 @@ def fomo_scf(mf, temperature, method='gaussian', sigma=None, restricted=None):
             base_occ = numpy.zeros(nmo)
         else:
             ncore, ncas = restricted
-            ncore = int(ncore); ncas = int(ncas)
+            ncore = int(ncore)
+            ncas = int(ncas)
             if ncore < 0 or ncas <= 0 or (ncore + ncas) > nmo:
                 raise ValueError('restricted must be (ncore, ncas) with 0<=ncore and ncore+ncas<=nmo')
             idx = numpy.arange(ncore, ncore+ncas)
@@ -197,7 +198,8 @@ def fomo_scf(mf, temperature, method='gaussian', sigma=None, restricted=None):
                 base = numpy.zeros(eps.size)
             else:
                 ncore, ncas = restricted_spin
-                ncore = int(ncore); ncas = int(ncas)
+                ncore = int(ncore)
+                ncas = int(ncas)
                 idx = numpy.arange(ncore, ncore+ncas)
                 base = numpy.zeros(eps.size)
                 base[:ncore] = 1.0
@@ -258,12 +260,12 @@ def fomo_scf(mf, temperature, method='gaussian', sigma=None, restricted=None):
 
 if __name__ == '__main__':
     from pyscf import gto
-    
+
     mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='ccpvdz', verbose=4)
-    
+
     mf = scf.RHF(mol)
     mf = fomo_scf(mf, temperature=0.01, method='gaussian')
     mf.kernel()
-    
+
     print('FOMO-RHF Energy:', mf.e_tot)
     print('FOMO Occupations:', mf.mo_occ)
