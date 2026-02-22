@@ -3,4 +3,4 @@
 set -e
 
 cd ./pyscf
-pytest -k 'not _slow'
+pytest --import-mode=importlib -k 'not _slow'
