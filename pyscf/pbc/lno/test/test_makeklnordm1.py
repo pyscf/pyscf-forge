@@ -109,7 +109,7 @@ class Water_REAL(unittest.TestCase):
         uvir_loc = reduce(np.dot, (lo_coeff.T.conj(), s1e, orbvir))
 
         eris = _KLNODFINCOREERIS_REAL(kmf.with_df, orbocc, orbvir, kmf.max_memory,
-                              verbose=cell.verbose,stdout=cell.output)
+                              verbose=cell.verbose,stdout=cell.stdout)
         eris.build()
 
         arr1,arr2 = make_full_rdm1(eris, moeocc, moevir)
@@ -229,7 +229,7 @@ class Water_COMPLEX(unittest.TestCase):
         uvir_loc = reduce(np.dot, (lo_coeff.T.conj(), s1e, orbvir))
 
         eris = _KLNODFINCOREERIS_COMPLEX(kmf.with_df, orbocc, orbvir, kmf.max_memory,
-                              verbose=cell.verbose,stdout=cell.output)
+                              verbose=cell.verbose,stdout=cell.stdout)
         eris.build()
 
         arr = make_lo_rdm1_occ_1h_complex(eris, moeocc, moevir, uocc_loc)
