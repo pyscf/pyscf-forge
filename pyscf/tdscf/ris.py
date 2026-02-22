@@ -25,8 +25,6 @@ from pyscf.tdscf.math_helper import get_avail_cpumem, get_mem_info
 from pyscf.data.nist import HARTREE2EV
 from pyscf.lib import logger, einsum
 
-logger.TIMER_LEVEL = 4
-
 CITATION_INFO = """
 Please cite the TDDFT-ris method:
 
@@ -1246,9 +1244,6 @@ class RisBase(lib.StreamObject):
 
         # self._tensor_in_ram = tensor_in_ram
         # self._krylov_in_ram = krylov_in_ram
-
-        # logger.WARN = 6
-        # pyscf.lib.logger.WARN=6
 
         self.log = logger.new_logger(verbose=self.verbose)
 
