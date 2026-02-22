@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-'''
+"""
 TREX-IO interface
 
 References:
@@ -9,7 +9,7 @@ References:
 
 Installation instruction:
     https://github.com/TREX-CoE/trexio/blob/master/python/README.md
-'''
+"""
 
 import re
 import math
@@ -24,30 +24,48 @@ from pyscf import dft
 from pyscf import pbc
 from pyscf import mcscf
 from pyscf import fci
-from pyscf.pbc import gto as pbcgto
 from pyscf import ao2mo
+from pyscf.pbc import gto as pbcgto
 from pyscf.pbc import df as pbcdf, tools as pbctools
+from pyscf.mcscf import mc1step, mc2step, casci
 
 import trexio
 
-def to_trexio(obj, filename, backend='h5', ci_threshold=None, chunk_size=None):
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+
+def _trexio_backend_const(backend='h5'):
+    if isinstance(backend, int):
+        return backend
+
+    key = 'h5' if backend is None else str(backend).strip().lower()
+    if key in ('h5', 'hdf5'):
+        return trexio.TREXIO_HDF5
+    if key in ('text', 'txt'):
+        return trexio.TREXIO_TEXT
+    if key == 'auto':
+        return trexio.TREXIO_AUTO
+    raise ValueError("backend must be one of 'h5', 'hdf5', 'text', 'txt', or 'auto'")
+
+
+
+def to_trexio(obj, filename, backend="h5", ci_threshold=None, chunk_size=None):
+    back_end = _trexio_backend_const(backend)
+    with trexio.File(filename, "u", back_end=back_end) as tf:
         if isinstance(obj, gto.Mole) or isinstance(obj, pbcgto.Cell):
             _mol_to_trexio(obj, tf)
         elif isinstance(obj, scf.hf.SCF):
             _scf_to_trexio(obj, tf)
-        elif isinstance(obj, mcscf.casci.CASCI) or isinstance(obj, mcscf.CASSCF):
+        elif isinstance(obj, (casci.CASCI, mc1step.CASSCF, mcscf.ucasci.UCASCI, mcscf.umc1step.UCASSCF)):
             ci_threshold = ci_threshold if ci_threshold is not None else 0.
             chunk_size = chunk_size if chunk_size is not None else 100000
             _mcscf_to_trexio(obj, tf, ci_threshold=ci_threshold, chunk_size=chunk_size)
         else:
-            raise NotImplementedError(f'Conversion function for {obj.__class__}')
+            raise NotImplementedError(f"Conversion function for {obj.__class__}")
+
 
 def _mol_to_trexio(mol, trexio_file):
     # 1 Metadata
     trexio.write_metadata_code_num(trexio_file, 1)
-    trexio.write_metadata_code(trexio_file, [f'PySCF-v{pyscf.__version__}'])
-    #trexio.write_metadata_package_version(trexio_file, f'TREXIO-v{trexio.__version__}')
+    trexio.write_metadata_code(trexio_file, [f"PySCF-v{pyscf.__version__}"])
 
     # 2 System
     trexio.write_nucleus_num(trexio_file, mol.natm)
@@ -65,9 +83,9 @@ def _mol_to_trexio(mol, trexio_file):
         trexio.write_pbc_periodic(trexio_file, True)
         # 2.2 Cell
         lattice = mol.lattice_vectors()
-        a = lattice[0] # unit is Bohr
-        b = lattice[1] # unit is Bohr
-        c = lattice[2] # unit is Bohr
+        a = lattice[0]  # unit is Bohr
+        b = lattice[1]  # unit is Bohr
+        c = lattice[2]  # unit is Bohr
         trexio.write_cell_a(trexio_file, a)
         trexio.write_cell_b(trexio_file, b)
         trexio.write_cell_c(trexio_file, c)
@@ -77,7 +95,7 @@ def _mol_to_trexio(mol, trexio_file):
 
     # 2.4 Electron (electron group)
     electron_up_num, electron_dn_num = mol.nelec
-    trexio.write_electron_num(trexio_file, electron_up_num + electron_dn_num )
+    trexio.write_electron_num(trexio_file, electron_up_num + electron_dn_num)
     trexio.write_electron_up_num(trexio_file, electron_up_num)
     trexio.write_electron_dn_num(trexio_file, electron_dn_num)
 
@@ -89,20 +107,22 @@ def _mol_to_trexio(mol, trexio_file):
         trexio.write_nucleus_repulsion(trexio_file, 0.0)
 
     # 3.1 Basis set
-    trexio.write_basis_type(trexio_file, 'Gaussian')
-    if any(mol._bas[:,gto.NCTR_OF] > 1):
+    trexio.write_basis_type(trexio_file, "Gaussian")
+    if any(mol._bas[:, gto.NCTR_OF] > 1):
         mol = _to_segment_contraction(mol)
     trexio.write_basis_shell_num(trexio_file, mol.nbas)
-    trexio.write_basis_prim_num(trexio_file, int(mol._bas[:,gto.NPRIM_OF].sum()))
-    trexio.write_basis_nucleus_index(trexio_file, mol._bas[:,gto.ATOM_OF])
-    trexio.write_basis_shell_ang_mom(trexio_file, mol._bas[:,gto.ANG_OF])
+    trexio.write_basis_prim_num(trexio_file, int(mol._bas[:, gto.NPRIM_OF].sum()))
+    trexio.write_basis_nucleus_index(trexio_file, mol._bas[:, gto.ATOM_OF])
+    trexio.write_basis_shell_ang_mom(trexio_file, mol._bas[:, gto.ANG_OF])
     trexio.write_basis_shell_factor(trexio_file, np.ones(mol.nbas))
-    prim2sh = [[ib]*nprim for ib, nprim in enumerate(mol._bas[:,gto.NPRIM_OF])]
+    prim2sh = [[ib] * nprim for ib, nprim in enumerate(mol._bas[:, gto.NPRIM_OF])]
     trexio.write_basis_shell_index(trexio_file, np.hstack(prim2sh))
     trexio.write_basis_exponent(trexio_file, np.hstack(mol.bas_exps()))
     coef = [mol.bas_ctr_coeff(i).ravel() for i in range(mol.nbas)]
     trexio.write_basis_coefficient(trexio_file, np.hstack(coef))
-    prim_norms = [gto.gto_norm(mol.bas_angular(i), mol.bas_exp(i)) for i in range(mol.nbas)]
+    prim_norms = [
+        gto.gto_norm(mol.bas_angular(i), mol.bas_exp(i)) for i in range(mol.nbas)
+    ]
     trexio.write_basis_prim_factor(trexio_file, np.hstack(prim_norms))
 
     # 3.2 Effective core potentials (ecp group)
@@ -201,25 +221,30 @@ def _mol_to_trexio(mol, trexio_file):
         trexio.write_ao_cartesian(trexio_file, 1)
         ao_shell = []
         ao_normalization = []
-        for i, ang_mom in enumerate(mol._bas[:,gto.ANG_OF]):
-            ao_shell += [i] * int((ang_mom+1) * (ang_mom+2) / 2)
+        for i, ang_mom in enumerate(mol._bas[:, gto.ANG_OF]):
+            ao_shell += [i] * int((ang_mom + 1) * (ang_mom + 2) / 2)
             # note: PySCF(libintc) normalizes s and p only.
             if ang_mom == 0 or ang_mom == 1:
-                ao_normalization += [float(np.sqrt((2*ang_mom+1)/(4*np.pi)))] * int((ang_mom+1) * (ang_mom+2) / 2)
+                ao_normalization += [
+                    float(np.sqrt((2 * ang_mom + 1) / (4 * np.pi)))
+                ] * int((ang_mom + 1) * (ang_mom + 2) / 2)
             else:
-                ao_normalization += [1.0] * int((ang_mom+1) * (ang_mom+2) / 2)
+                ao_normalization += [1.0] * int((ang_mom + 1) * (ang_mom + 2) / 2)
     else:
         trexio.write_ao_cartesian(trexio_file, 0)
         ao_shell = []
         ao_normalization = []
-        for i, ang_mom in enumerate(mol._bas[:,gto.ANG_OF]):
-            ao_shell += [i] * (2*ang_mom+1)
+        for i, ang_mom in enumerate(mol._bas[:, gto.ANG_OF]):
+            ao_shell += [i] * (2 * ang_mom + 1)
             # note: TREXIO employs the solid harmonics notation,; thus, we need these factors.
-            ao_normalization += [float(np.sqrt((2*ang_mom+1)/(4*np.pi)))] * (2*ang_mom+1)
+            ao_normalization += [float(np.sqrt((2 * ang_mom + 1) / (4 * np.pi)))] * (
+                2 * ang_mom + 1
+            )
 
     trexio.write_ao_num(trexio_file, int(mol.nao))
     trexio.write_ao_shell(trexio_file, ao_shell)
     trexio.write_ao_normalization(trexio_file, ao_normalization)
+
 
 def _scf_to_trexio(mf, trexio_file):
     mol = mf.mol
@@ -240,28 +265,26 @@ def _scf_to_trexio(mf, trexio_file):
             trexio.write_pbc_k_point_weight(trexio_file, weights[np.newaxis])
             trexio.write_pbc_madelung(trexio_file, madelung)
 
-            if isinstance(mf, (pbc.scf.uhf.UHF, pbc.dft.uks.UKS, pbc.scf.kuhf.KUHF, pbc.dft.kuks.KUKS)):
-                mo_type = 'UHF'
-                if isinstance(mf, (pbc.scf.uhf.UHF, pbc.dft.uks.UKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo_up, mo_dn = mf.mo_coeff
-                elif isinstance(mf, (pbc.scf.kuhf.KUHF, pbc.dft.kuks.KUKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo_up, mo_dn = mf.mo_coeff
+            if _trexio_is_uhf_uks_mf(mf):
+                mo_type = "UHF"
+                mo_energy = np.ravel(mf.mo_energy)
+                mo_num = mo_energy.size
+                mo_up, mo_dn = mf.mo_coeff
+                if np.ndim(mo_up) == 3:
                     mo_up = mo_up[0]
                     mo_dn = mo_dn[0]
-                else:
-                    raise NotImplementedError(f'Conversion function for {mf.__class__}')
                 idx = _order_ao_index(mf.mol)
                 mo_up = mo_up[idx].T
                 mo_dn = mo_dn[idx].T
                 num_mo_up = len(mo_up)
                 num_mo_dn = len(mo_dn)
                 assert num_mo_up + num_mo_dn == mo_num
-                mo=np.concatenate([mo_up, mo_dn], axis=0) # dim (num_mo, num_ao) but it is f-contiguous
-                mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
+                mo = np.concatenate(
+                    [mo_up, mo_dn], axis=0
+                )  # dim (num_mo, num_ao) but it is f-contiguous
+                mo_coefficient = np.ascontiguousarray(
+                    mo
+                )  # dim (num_mo, num_ao) and it is c-contiguous
                 if np.all(np.isreal(mo_coefficient)):
                     mo_coefficient_real = mo_coefficient
                     mo_coefficient_imag = None
@@ -269,25 +292,27 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_coefficient_real = mo_coefficient.real
                     mo_coefficient_imag = mo_coefficient.imag
                 mo_occ = np.ravel(mf.mo_occ)
-                mo_spin = np.zeros(num_mo_up+num_mo_dn, dtype=int)
+                mo_spin = np.zeros(num_mo_up + num_mo_dn, dtype=int)
                 mo_spin[:num_mo_up] = 0
                 mo_spin[num_mo_up:] = 1
 
-            elif isinstance(mf, (pbc.scf.krhf.KRHF, pbc.dft.krks.KRKS, pbc.scf.rhf.RHF, pbc.dft.rks.RKS)):
-                mo_type = 'RHF'
-                if isinstance(mf, (pbc.scf.rhf.RHF, pbc.dft.rks.RKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo = mf.mo_coeff
-                elif isinstance(mf, (pbc.scf.krhf.KRHF, pbc.dft.krks.KRKS)):
-                    mo_energy = np.ravel(mf.mo_energy)
-                    mo_num = mo_energy.size
-                    mo = mf.mo_coeff[0]
-                else:
-                    raise NotImplementedError(f'Conversion function for {mf.__class__}')
+            elif _trexio_is_rohf_roks_mf(mf):
+                raise NotImplementedError(
+                    "ROHF/ROKS support will be implemented in the next version."
+                )
+
+            elif _trexio_is_rhf_rks_mf(mf):
+                mo_type = "RHF"
+                mo_energy = np.ravel(mf.mo_energy)
+                mo_num = mo_energy.size
+                mo = mf.mo_coeff
+                if np.ndim(mo) == 3:
+                    mo = mo[0]
                 idx = _order_ao_index(mf.mol)
-                mo = mo[idx].T # dim (num_mo, num_ao) but it is f-contiguous
-                mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
+                mo = mo[idx].T  # dim (num_mo, num_ao) but it is f-contiguous
+                mo_coefficient = np.ascontiguousarray(
+                    mo
+                )  # dim (num_mo, num_ao) and it is c-contiguous
                 if np.all(np.isreal(mo_coefficient)):
                     mo_coefficient_real = mo_coefficient
                     mo_coefficient_imag = None
@@ -297,12 +322,12 @@ def _scf_to_trexio(mf, trexio_file):
                 mo_occ = np.ravel(mf.mo_occ)
                 mo_spin = np.zeros(mo_num, dtype=int)
             else:
-                raise NotImplementedError(f'Conversion function for {mf.__class__}')
+                raise NotImplementedError(f"Conversion function for {mf.__class__}")
 
             # 4.2 Molecular orbitals (mo group)
             trexio.write_mo_type(trexio_file, mo_type)
             trexio.write_mo_num(trexio_file, mo_num)
-            trexio.write_mo_k_point(trexio_file, [0]*mo_num)
+            trexio.write_mo_k_point(trexio_file, [0] * mo_num)
             trexio.write_mo_coefficient(trexio_file, mo_coefficient_real)
             if mo_coefficient_imag is not None:
                 trexio.write_mo_coefficient_im(trexio_file, mo_coefficient_imag)
@@ -323,24 +348,88 @@ def _scf_to_trexio(mf, trexio_file):
             mo_energy_pbc = []
             mo_coefficient_real_pbc = []
             mo_coefficient_imag_pbc = []
-            mo_occ_pbc= []
+            mo_occ_pbc = []
             mo_spin_pbc = []
 
-            if isinstance(mf, (pbc.scf.uhf.UHF, pbc.dft.uks.UKS, pbc.scf.kuhf.KUHF, pbc.dft.kuks.KUKS)):
-                mo_type = 'UHF'
+            if _trexio_is_uhf_uks_mf(mf):
+                mo_type = "UHF"
+                # Check for split structure (common in KUKS/KDF): ([up...], [dn...])
+                is_split_spin = isinstance(mf.mo_coeff, tuple) and len(mf.mo_coeff) == 2
+
                 for i_k, _ in enumerate(kpts):
-                    mo_energy = np.ravel(mf.mo_energy[i_k])
+                    if is_split_spin:
+                        e_up = mf.mo_energy[0][i_k]
+                        e_dn = mf.mo_energy[1][i_k]
+                        mo_energy = np.concatenate([np.ravel(e_up), np.ravel(e_dn)])
+
+                        mo_up = mf.mo_coeff[0][i_k]
+                        mo_dn = mf.mo_coeff[1][i_k]
+
+                        occ_up = mf.mo_occ[0][i_k]
+                        occ_dn = mf.mo_occ[1][i_k]
+                        mo_occ = np.concatenate([np.ravel(occ_up), np.ravel(occ_dn)])
+                    else:
+                        mo_energy = np.ravel(mf.mo_energy[i_k])
+                        mo_up, mo_dn = mf.mo_coeff[i_k]
+                        mo_occ = np.ravel(mf.mo_occ[i_k])
+
                     mo_num = mo_energy.size
-                    mo_up, mo_dn = mf.mo_coeff[i_k]
                     idx = _order_ao_index(mf.mol)
                     mo_up = mo_up[idx].T
                     mo_dn = mo_dn[idx].T
-                    mo=np.concatenate([mo_up, mo_dn], axis=0) # dim (num_mo, num_ao) but it is f-contiguous
-                    mo_coefficient_real = np.ascontiguousarray(mo.real) # dim (num_mo, num_ao) and it is c-contiguous
-                    mo_coefficient_imag = np.ascontiguousarray(mo.imag) # dim (num_mo, num_ao) and it is c-contiguous
+                    mo = np.concatenate(
+                        [mo_up, mo_dn], axis=0
+                    )  # dim (num_mo, num_ao) but it is f-contiguous
+                    mo_coefficient_real = np.ascontiguousarray(
+                        mo.real
+                    )  # dim (num_mo, num_ao) and it is c-contiguous
+                    mo_coefficient_imag = np.ascontiguousarray(
+                        mo.imag
+                    )  # dim (num_mo, num_ao) and it is c-contiguous
+
+                    mo_spin = np.zeros(mo_energy.size, dtype=int)
+                    # Use size of up component to split spin
+                    if is_split_spin:
+                        mo_spin[e_up.size :] = 1
+                    else:
+                        # Assumes mo_energy was flattened from (up, dn)
+                        # If mo_energy[i_k] is tuple (up, dn), ravel joins them.
+                        # We need size of up.
+                        if isinstance(mf.mo_energy[i_k], (tuple, list)):
+                            mo_spin[mf.mo_energy[i_k][0].size :] = 1
+                        else:
+                            # If somehow not tuple?
+                            # Fallback to half?
+                            mo_spin[mo_energy.size // 2 :] = 1
+
+                    mo_k_point_pbc += [i_k] * mo_energy.size
+                    mo_num_pbc += mo_energy.size
+                    mo_energy_pbc.append(mo_energy)
+                    mo_coefficient_real_pbc.append(mo_coefficient_real)
+                    mo_coefficient_imag_pbc.append(mo_coefficient_imag)
+                    mo_occ_pbc.append(mo_occ)
+                    mo_spin_pbc.append(mo_spin)
+
+            elif _trexio_is_rohf_roks_mf(mf):
+                raise NotImplementedError(
+                    "ROHF/ROKS support will be implemented in the next version."
+                )
+
+            elif _trexio_is_rhf_rks_mf(mf):
+                mo_type = "RHF"
+                for i_k, _ in enumerate(kpts):
+                    mo_energy = mf.mo_energy[i_k]
+                    mo = mf.mo_coeff[i_k]
+                    idx = _order_ao_index(mf.mol)
+                    mo = mo[idx].T
+                    mo_coefficient_real = np.ascontiguousarray(
+                        mo.real
+                    )  # dim (num_mo, num_ao) and it is c-contiguous
+                    mo_coefficient_imag = np.ascontiguousarray(
+                        mo.imag
+                    )  # dim (num_mo, num_ao) and it is c-contiguous
                     mo_occ = np.ravel(mf.mo_occ[i_k])
                     mo_spin = np.zeros(mo_energy.size, dtype=int)
-                    mo_spin[mf.mo_energy[i_k][0].size:] = 1
 
                     mo_k_point_pbc += [i_k] * mo_energy.size
                     mo_num_pbc += mo_energy.size
@@ -351,30 +440,17 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_spin_pbc.append(mo_spin)
 
             else:
-                mo_type = 'RHF'
-                for i_k, _ in enumerate(kpts):
-                    mo_energy = mf.mo_energy[i_k]
-                    mo = mf.mo_coeff[i_k]
-                    idx = _order_ao_index(mf.mol)
-                    mo = mo[idx].T
-                    mo_coefficient_real = np.ascontiguousarray(mo.real) # dim (num_mo, num_ao) and it is c-contiguous
-                    mo_coefficient_imag = np.ascontiguousarray(mo.imag) # dim (num_mo, num_ao) and it is c-contiguous
-                    mo_occ = np.ravel(mf.mo_occ[i_k])
-                    mo_spin = np.zeros(mo_energy.size, dtype=int)
-
-                    mo_k_point_pbc += [i_k] * mo_energy.size
-                    mo_num_pbc += mo_energy.size
-                    mo_energy_pbc.append(mo_energy)
-                    mo_coefficient_real_pbc.append(mo_coefficient_real)
-                    mo_coefficient_imag_pbc.append(mo_coefficient_imag)
-                    mo_occ_pbc.append(mo_occ)
-                    mo_spin_pbc.append(mo_spin)
+                raise NotImplementedError(f"Conversion function for {mf.__class__}")
 
             # stack the results
             mo_k_point_pbc = np.array(mo_k_point_pbc)
             mo_energy_pbc = np.concatenate(mo_energy_pbc)
-            mo_coefficient_real_pbc = np.ascontiguousarray(np.vstack(mo_coefficient_real_pbc)) # it is c-contiguous
-            mo_coefficient_imag_pbc = np.ascontiguousarray(np.vstack(mo_coefficient_imag_pbc)) # it is c-contiguous
+            mo_coefficient_real_pbc = np.ascontiguousarray(
+                np.vstack(mo_coefficient_real_pbc)
+            )  # it is c-contiguous
+            mo_coefficient_imag_pbc = np.ascontiguousarray(
+                np.vstack(mo_coefficient_imag_pbc)
+            )  # it is c-contiguous
             mo_occ_pbc = np.concatenate(mo_occ_pbc)
             mo_spin_pbc = np.concatenate(mo_spin_pbc)
 
@@ -390,29 +466,41 @@ def _scf_to_trexio(mf, trexio_file):
 
     # Open systems
     else:
-        if isinstance(mf, (scf.uhf.UHF, dft.uks.UKS)):
-            mo_type = 'UHF'
+        if _trexio_is_uhf_uks_mf(mf):
+            mo_type = "UHF"
             mo_energy = np.ravel(mf.mo_energy)
             mo_num = mo_energy.size
             mo_up, mo_dn = mf.mo_coeff
             idx = _order_ao_index(mf.mol)
             mo_up = mo_up[idx].T
             mo_dn = mo_dn[idx].T
-            mo=np.concatenate([mo_up, mo_dn], axis=0) # dim (num_mo, num_ao) but it is f-contiguous
-            mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
+            mo = np.concatenate(
+                [mo_up, mo_dn], axis=0
+            )  # dim (num_mo, num_ao) but it is f-contiguous
+            mo_coefficient = np.ascontiguousarray(
+                mo
+            )  # dim (num_mo, num_ao) and it is c-contiguous
             mo_occ = np.ravel(mf.mo_occ)
             mo_spin = np.zeros(mo_energy.size, dtype=int)
-            mo_spin[mf.mo_energy[0].size:] = 1
-        else:
-            mo_type = 'RHF'
+            mo_spin[mf.mo_energy[0].size :] = 1
+        elif _trexio_is_rohf_roks_mf(mf):
+            raise NotImplementedError(
+                "ROHF/ROKS support will be implemented in the next version."
+            )
+        elif _trexio_is_rhf_rks_mf(mf):
+            mo_type = "RHF"
             mo_energy = mf.mo_energy
             mo_num = mo_energy.size
             mo = mf.mo_coeff
             idx = _order_ao_index(mf.mol)
-            mo = mo[idx].T # dim (num_mo, num_ao) but it is f-contiguous
-            mo_coefficient = np.ascontiguousarray(mo) # dim (num_mo, num_ao) and it is c-contiguous
+            mo = mo[idx].T  # dim (num_mo, num_ao) but it is f-contiguous
+            mo_coefficient = np.ascontiguousarray(
+                mo
+            )  # dim (num_mo, num_ao) and it is c-contiguous
             mo_occ = mf.mo_occ
             mo_spin = np.zeros(mo_energy.size, dtype=int)
+        else:
+            raise NotImplementedError(f"Conversion function for {mf.__class__}")
 
         # 4.2 Molecular orbitals (mo group)
         trexio.write_mo_type(trexio_file, mo_type)
@@ -422,61 +510,289 @@ def _scf_to_trexio(mf, trexio_file):
         trexio.write_mo_occupation(trexio_file, mo_occ)
         trexio.write_mo_spin(trexio_file, mo_spin)
 
+
 def _cc_to_trexio(cc_obj, trexio_file):
-    raise NotImplementedError
+    raise NotImplementedError("CC conversion is not implemented yet.")
+
+
+def _get_cas_rdm1s(cas_obj, ncas):
+    neleca, nelecb = cas_obj.nelecas
+    if hasattr(cas_obj.fcisolver, 'make_rdm1s'):
+        rdm1a, rdm1b = cas_obj.fcisolver.make_rdm1s(cas_obj.ci, ncas, cas_obj.nelecas)
+    else:
+        rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
+        total = neleca + nelecb
+        if total > 0:
+            rdm1a = rdm1 * (neleca / total)
+            rdm1b = rdm1 * (nelecb / total)
+        else:
+            rdm1a = rdm1 * 0.0
+            rdm1b = rdm1 * 0.0
+    return rdm1a, rdm1b
+
+
+def _get_cas_rdm12(cas_obj, ncas):
+    if hasattr(cas_obj.fcisolver, 'make_rdm12'):
+        return cas_obj.fcisolver.make_rdm12(cas_obj.ci, ncas, cas_obj.nelecas)
+    raise NotImplementedError(f'fcisolver {cas_obj.fcisolver.__class__} does not support make_rdm12')
+
+
+def _get_cas_rdm12s(cas_obj, ncas):
+    if hasattr(cas_obj.fcisolver, 'make_rdm12s'):
+        out = cas_obj.fcisolver.make_rdm12s(cas_obj.ci, ncas, cas_obj.nelecas)
+        if isinstance(out, (tuple, list)):
+            if len(out) == 5:
+                return out
+            if len(out) == 2:
+                dm1s, dm2s = out
+                if isinstance(dm1s, (tuple, list)) and isinstance(dm2s, (tuple, list)):
+                    if len(dm1s) == 2 and len(dm2s) == 3:
+                        return dm1s[0], dm1s[1], dm2s[0], dm2s[1], dm2s[2]
+        raise ValueError("Unexpected return from make_rdm12s")
+    raise NotImplementedError(f'fcisolver {cas_obj.fcisolver.__class__} does not support make_rdm12s')
+
+
+def _get_cas_h1eff(cas_obj):
+    return cas_obj.get_h1eff()
+
+
+def _get_cas_h2eff(cas_obj, ncas):
+    h2eff = cas_obj.get_h2eff()
+    if isinstance(h2eff, (tuple, list)):
+        h2_blocks = []
+        for block in h2eff:
+            if block.ndim == 4:
+                h2_blocks.append(block)
+            else:
+                h2_blocks.append(ao2mo.restore(1, block, ncas))
+        return tuple(h2_blocks)
+    if h2eff.ndim == 4:
+        return h2eff
+    return ao2mo.restore(1, h2eff, ncas)
+
+
+def _write_sparse_4index(trexio_file, writer, idx, data):
+    num = data.size
+    writer(trexio_file, 0, num, idx.reshape(num, 4).astype(np.int32).ravel(), data.ravel())
+
+
+def _ijkl_indices(n):
+    grid = np.indices((n, n, n, n), dtype=np.int32)
+    return grid.reshape(4, -1).T
+
+
+def _gather_4index(data4, idx):
+    return data4[idx[:, 0], idx[:, 1], idx[:, 2], idx[:, 3]]
+
+
+def _trexio_ncore_scalar(ncore):
+    if isinstance(ncore, (tuple, list, np.ndarray)):
+        if len(ncore) != 2:
+            raise NotImplementedError(f"Unsupported ncore layout: {ncore}")
+        if ncore[0] != ncore[1]:
+            raise NotImplementedError(
+                f"Different alpha/beta ncore is not supported: {ncore}"
+            )
+        return int(ncore[0])
+    return int(ncore)
+
 
 def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
     mol = cas_obj.mol
+    scf_obj = cas_obj._scf
     _mol_to_trexio(mol, trexio_file)
-    mo_energy_cas = cas_obj.mo_energy
+
+    mo_energy_cas = getattr(cas_obj, 'mo_energy', None)
     mo_cas = cas_obj.mo_coeff
-    num_mo = mo_energy_cas.size
-    spin_cas = np.zeros(mo_energy_cas.size, dtype=int)
-    mo_type_cas = 'CAS'
-    trexio.write_mo_type(trexio_file, mo_type_cas)
     idx = _order_ao_index(mol)
-    trexio.write_mo_num(trexio_file, num_mo)
-    trexio.write_mo_coefficient(trexio_file, mo_cas[idx].T.ravel())
-    trexio.write_mo_energy(trexio_file, mo_energy_cas)
-    trexio.write_mo_spin(trexio_file, spin_cas)
 
-    ncore = cas_obj.ncore
+    ncore = _trexio_ncore_scalar(cas_obj.ncore)
     ncas = cas_obj.ncas
-    mo_classes = np.array(["Virtual"] * num_mo, dtype=str)  # Initialize all MOs as Virtual
-    mo_classes[:ncore] = "Core"
-    mo_classes[ncore:ncore + ncas] = "Active"
-    trexio.write_mo_class(trexio_file, list(mo_classes))
 
-    occupation = np.zeros(num_mo)
-    occupation[:ncore] = 2.0
-    rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
-    natural_occ = np.linalg.eigh(rdm1)[0]
-    occupation[ncore:ncore + ncas] = natural_occ[::-1]
-    occupation[ncore + ncas:] = 0.0
+    if _trexio_is_rohf_roks_mf(scf_obj):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    is_uhf = _trexio_is_uhf_uks_mf(scf_obj)
+    is_rhf = _trexio_is_rhf_rks_mf(scf_obj)
+    if not (is_uhf or is_rhf):
+        raise NotImplementedError(f"Conversion function for {scf_obj.__class__}")
+
+    if is_uhf:
+        mo_type_cas = 'CAS'
+        mo_up, mo_dn = mo_cas
+        mo_up = mo_up[idx].T
+        mo_dn = mo_dn[idx].T
+        num_mo_up = mo_up.shape[0]
+        num_mo_dn = mo_dn.shape[0]
+        num_mo = num_mo_up + num_mo_dn
+        mo_coefficient = np.ascontiguousarray(np.concatenate([mo_up, mo_dn], axis=0))
+
+        mo_energy = np.zeros(num_mo, dtype=float) #not well defined for UHF-CAS, so we set dummy values.
+
+        mo_spin = np.zeros(num_mo, dtype=int)
+        mo_spin[num_mo_up:] = 1
+
+        mo_classes = np.array(["Virtual"] * num_mo, dtype=str)
+        mo_classes[:ncore] = "Core"
+        mo_classes[ncore:ncore + ncas] = "Active"
+        beta_start = num_mo_up
+        mo_classes[beta_start:beta_start + ncore] = "Core"
+        mo_classes[beta_start + ncore:beta_start + ncore + ncas] = "Active"
+
+        occ_alpha = np.zeros(num_mo_up)
+        occ_beta = np.zeros(num_mo_dn)
+        occ_alpha[:ncore] = 1.0
+        occ_beta[:ncore] = 1.0
+        rdm1a, rdm1b = _get_cas_rdm1s(cas_obj, ncas)
+        nat_occ_a = np.linalg.eigvalsh(rdm1a)[::-1]
+        nat_occ_b = np.linalg.eigvalsh(rdm1b)[::-1]
+        occ_alpha[ncore:ncore + ncas] = nat_occ_a
+        occ_beta[ncore:ncore + ncas] = nat_occ_b
+        occupation = np.concatenate([occ_alpha, occ_beta])
+
+    else:
+        mo_type_cas = 'CAS'
+        mo_energy = np.ravel(mo_energy_cas)
+        num_mo = mo_energy.size
+        mo = mo_cas[idx].T
+        mo_coefficient = np.ascontiguousarray(mo)
+        mo_spin = np.zeros(num_mo, dtype=int)
+
+        mo_classes = np.array(["Virtual"] * num_mo, dtype=str)
+        mo_classes[:ncore] = "Core"
+        mo_classes[ncore:ncore + ncas] = "Active"
+
+        occupation = np.zeros(num_mo)
+        occupation[:ncore] = 2.0
+        rdm1 = cas_obj.fcisolver.make_rdm1(cas_obj.ci, ncas, cas_obj.nelecas)
+        natural_occ = np.linalg.eigvalsh(rdm1)[::-1]
+        occupation[ncore:ncore + ncas] = natural_occ
+        occupation[ncore + ncas:] = 0.0
+
+    trexio.write_mo_type(trexio_file, mo_type_cas)
+    trexio.write_mo_num(trexio_file, num_mo)
+    trexio.write_mo_coefficient(trexio_file, mo_coefficient)
+    trexio.write_mo_energy(trexio_file, mo_energy)
+    trexio.write_mo_spin(trexio_file, mo_spin)
+    trexio.write_mo_class(trexio_file, list(mo_classes))
     trexio.write_mo_occupation(trexio_file, occupation)
 
-    total_elec_cas = sum(cas_obj.nelecas)
+    nelec_cas = cas_obj.nelecas
 
-    _det_to_trexio(cas_obj, ncas, total_elec_cas, trexio_file, ci_threshold, chunk_size)
+    _det_to_trexio(cas_obj, ncas, nelec_cas, trexio_file, ci_threshold, chunk_size)
+
+    if is_uhf:
+        dm1a, dm1b, dm2aa, dm2ab, dm2bb = _get_cas_rdm12s(cas_obj, ncas)
+
+        rdm1_up = np.zeros((num_mo, num_mo))
+        rdm1_dn = np.zeros((num_mo, num_mo))
+        rdm1_up[ncore:ncore + ncas, ncore:ncore + ncas] = dm1a
+        beta_start = num_mo_up
+        rdm1_dn[beta_start + ncore:beta_start + ncore + ncas,
+                beta_start + ncore:beta_start + ncore + ncas] = dm1b
+
+        if trexio.has_rdm_1e_up(trexio_file):
+            trexio.delete_rdm_1e_up(trexio_file)
+        if trexio.has_rdm_1e_dn(trexio_file):
+            trexio.delete_rdm_1e_dn(trexio_file)
+        trexio.write_rdm_1e_up(trexio_file, rdm1_up)
+        trexio.write_rdm_1e_dn(trexio_file, rdm1_dn)
+
+        idx_uu_base = _ijkl_indices(ncas)
+        data_uu = _gather_4index(dm2aa, idx_uu_base)
+        idx_uu = idx_uu_base[:, [2, 3, 0, 1]] + ncore
+        _write_sparse_4index(
+            trexio_file,
+            trexio.write_rdm_2e_upup,
+            idx_uu,
+            data_uu,
+        )
+
+        idx_dd_base = _ijkl_indices(ncas)
+        data_dd = _gather_4index(dm2bb, idx_dd_base)
+        idx_dd = idx_dd_base[:, [2, 3, 0, 1]] + beta_start + ncore
+        _write_sparse_4index(
+            trexio_file,
+            trexio.write_rdm_2e_dndn,
+            idx_dd,
+            data_dd,
+        )
+
+        idx_ud_base = _ijkl_indices(ncas)
+        data_ud = _gather_4index(dm2ab, idx_ud_base)
+        idx_ud = idx_ud_base[:, [2, 3, 0, 1]].copy()
+        idx_ud[:, 0] += ncore
+        idx_ud[:, 1] += beta_start + ncore
+        idx_ud[:, 2] += ncore
+        idx_ud[:, 3] += beta_start + ncore
+        _write_sparse_4index(
+            trexio_file,
+            trexio.write_rdm_2e_updn,
+            idx_ud,
+            data_ud,
+        )
+
+    else:
+        dm1_cas, dm2_cas = _get_cas_rdm12(cas_obj, ncas)
+        h1eff, _ = _get_cas_h1eff(cas_obj)
+        h2eff = _get_cas_h2eff(cas_obj, ncas)
+
+        dm1_full = np.zeros((num_mo, num_mo))
+        dm1_full[ncore:ncore + ncas, ncore:ncore + ncas] = dm1_cas
+
+        h1_full = np.zeros((num_mo, num_mo))
+        h1_full[ncore:ncore + ncas, ncore:ncore + ncas] = h1eff
+
+        if trexio.has_rdm_1e(trexio_file):
+            trexio.delete_rdm_1e(trexio_file)
+        trexio.write_rdm_1e(trexio_file, dm1_full)
+
+        if trexio.has_mo_1e_int_core_hamiltonian(trexio_file):
+            trexio.delete_mo_1e_int_core_hamiltonian(trexio_file)
+        trexio.write_mo_1e_int_core_hamiltonian(trexio_file, h1_full)
+
+        idx_base = _ijkl_indices(ncas)
+        data_rdm2 = _gather_4index(dm2_cas, idx_base)
+        data_h2 = _gather_4index(h2eff, idx_base)
+        idx = idx_base + ncore
+        # Physicist notation: store as (k, l, i, j) to match rdm2 layout and UHF blocks.
+        idx_rdm2 = idx[:, [2, 3, 0, 1]]
+        idx_phys = idx[:, [2, 3, 0, 1]]
+        _write_sparse_4index(
+            trexio_file,
+            trexio.write_rdm_2e,
+            idx_rdm2,
+            data_rdm2,
+        )
+
+        _write_sparse_4index(
+            trexio_file,
+            trexio.write_mo_2e_int_eri,
+            idx_phys,
+            data_h2,
+        )
+
 
 def mol_from_trexio(filename):
-    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-        assert trexio.read_basis_type(tf) == 'Gaussian'
+    with trexio.File(filename, "r", back_end=trexio.TREXIO_AUTO) as tf:
+        assert trexio.read_basis_type(tf) == "Gaussian"
         pbc_periodic = trexio.read_pbc_periodic(tf)
         labels = trexio.read_nucleus_label(tf)
         coords = trexio.read_nucleus_coord(tf)
-        elements = [s+str(i) for i, s in enumerate(labels)]
+        elements = [s + str(i) for i, s in enumerate(labels)]
 
         if pbc_periodic:
             mol = pbcgto.Cell()
-            mol.unit = 'Bohr'
+            mol.unit = "Bohr"
             a = np.asarray(trexio.read_cell_a(tf), dtype=float)
             b = np.asarray(trexio.read_cell_b(tf), dtype=float)
             c = np.asarray(trexio.read_cell_c(tf), dtype=float)
             mol.a = np.vstack([a, b, c])
         else:
             mol = gto.Mole()
-            mol.unit = 'Bohr'
+            mol.unit = "Bohr"
 
         mol.atom = list(zip(elements, coords))
         up_num = trexio.read_electron_up_num(tf)
@@ -486,30 +802,36 @@ def mol_from_trexio(filename):
 
         if trexio.has_ecp(tf):
             # --- read TREXIO ECP arrays ---
-            z_core      = trexio.read_ecp_z_core(tf)                 # shape (natm,)
-            max_l1_arr  = trexio.read_ecp_max_ang_mom_plus_1(tf)     # shape (natm,)
-            nuc_idx     = trexio.read_ecp_nucleus_index(tf)          # shape (ecp_num,)
-            ang_mom_enc = trexio.read_ecp_ang_mom(tf)                # shape (ecp_num,)
-            coeff_arr   = trexio.read_ecp_coefficient(tf)            # shape (ecp_num,)
-            exp_arr     = trexio.read_ecp_exponent(tf)               # shape (ecp_num,)
-            power_arr   = trexio.read_ecp_power(tf)                  # shape (ecp_num,)
+            z_core = trexio.read_ecp_z_core(tf)  # shape (natm,)
+            max_l1_arr = trexio.read_ecp_max_ang_mom_plus_1(tf)  # shape (natm,)
+            nuc_idx = trexio.read_ecp_nucleus_index(tf)  # shape (ecp_num,)
+            ang_mom_enc = trexio.read_ecp_ang_mom(tf)  # shape (ecp_num,)
+            coeff_arr = trexio.read_ecp_coefficient(tf)  # shape (ecp_num,)
+            exp_arr = trexio.read_ecp_exponent(tf)  # shape (ecp_num,)
+            power_arr = trexio.read_ecp_power(tf)  # shape (ecp_num,)
 
             # --- aggregate primitives per (nucleus, l); decode local channel to l = -1 ---
-            per_atom = defaultdict(lambda: defaultdict(list))  # per_atom[n][l] -> [(power, exp, coeff), ...]
+            per_atom = defaultdict(
+                lambda: defaultdict(list)
+            )  # per_atom[n][l] -> [(power, exp, coeff), ...]
             for k in range(len(nuc_idx)):
-                n   = int(nuc_idx[k])
+                n = int(nuc_idx[k])
                 l_e = int(ang_mom_enc[k])
                 # local channel was encoded as max_l1_arr[n]; decode to l = -1
                 l_d = -1 if l_e == int(max_l1_arr[n]) else l_e
-                p   = int(power_arr[k])                # stored as r-2 on write
-                e   = float(exp_arr[k])
-                c   = float(coeff_arr[k])
+                p = int(power_arr[k])  # stored as r-2 on write
+                e = float(exp_arr[k])
+                c = float(coeff_arr[k])
                 per_atom[n][l_d].append((p, e, c))
 
             def _is_dummy_ul_s(items):
                 # H/He dummy record injected at write time: (power=0, exp=1.0, coeff=0.0)
-                return (len(items) == 1 and items[0][0] == 0
-                        and abs(items[0][1] - 1.0) < 1e-12 and abs(items[0][2]) < 1e-300)
+                return (
+                    len(items) == 1
+                    and items[0][0] == 0
+                    and abs(items[0][1] - 1.0) < 1e-12
+                    and abs(items[0][2]) < 1e-300
+                )
 
             ecp_dict = {}
             for n, raw_sym in enumerate(labels):
@@ -517,7 +839,7 @@ def mol_from_trexio(filename):
                 if re.match(r"X-.*", raw_sym):
                     continue
 
-                zc   = int(z_core[n]) if n < len(z_core) else 0
+                zc = int(z_core[n]) if n < len(z_core) else 0
                 lmap = dict(per_atom.get(n, {}))
 
                 # drop intentional dummy ul-s for H/He if present
@@ -537,7 +859,7 @@ def mol_from_trexio(filename):
                     if not items:
                         continue
                     r_list = [p + 2 for p, _, _ in items]
-                    max_r  = max(r_list)
+                    max_r = max(r_list)
                     buckets = [[] for _ in range(max_r + 1)]  # r in [0..max_r]
                     for (p, e, c), r in zip(items, r_list):
                         if r < 0:
@@ -571,8 +893,9 @@ def mol_from_trexio(filename):
         p1 = 0
         for ia, at_ls in enumerate(_group_by(ls, nuc_idx)):
             p0, p1 = p1, p1 + at_ls.size
-            at_basis = [[l, *zip(e, c)]
-                        for l, e, c in zip(ls[p0:p1], exps[p0:p1], coef[p0:p1])]
+            at_basis = [
+                [l, *zip(e, c)] for l, e, c in zip(ls[p0:p1], exps[p0:p1], coef[p0:p1])
+            ]
             basis[elements[ia]] = at_basis
 
         # To avoid the mol.build() sort the basis, disable mol.basis and set the
@@ -580,224 +903,6 @@ def mol_from_trexio(filename):
         mol.basis = {}
         mol._basis = basis
         return mol.build()
-
-def scf_from_trexio(filename):
-    mol = mol_from_trexio(filename)
-
-    if isinstance(mol, pbcgto.Cell):
-        # PBC case
-        with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-            k_point_num = trexio.read_pbc_k_point_num(tf)
-
-        # Single WF
-        if k_point_num == 1:
-            with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-                kpts = trexio.read_pbc_k_point(tf)
-                num_mo    = trexio.read_mo_num(tf)
-                mo_energy = trexio.read_mo_energy(tf)
-                mo_coeff  = trexio.read_mo_coefficient(tf)
-                if trexio.has_mo_coefficient_im(tf):
-                    mo_coeff_imag = trexio.read_mo_coefficient_im(tf)
-                else:
-                    mo_coeff_imag = None
-                mo_occ    = trexio.read_mo_occupation(tf)
-                mo_spin    = trexio.read_mo_spin(tf)
-
-            nao = mol.nao
-            idx = _order_ao_index(mol)
-            uniq = np.unique(mo_spin)
-
-            # UHF
-            if set(uniq.tolist()) == {0, 1}:
-                i_up = np.where(mo_spin == 0)[0]
-                i_dn = np.where(mo_spin == 1)[0]
-
-                if mo_coeff_imag is not None:
-                    mo_up_out = mo_coeff[i_up, :]  # (nmo_up, nao)
-                    mo_dn_out = mo_coeff[i_dn, :]  # (nmo_dn, nao)
-                    mo_up_imag_out = mo_coeff_imag[i_up, :]  # (nmo_up, nao)
-                    mo_dn_imag_out = mo_coeff_imag[i_dn, :]  # (nmo_dn, nao)
-                    mo_up_pyscf = np.empty((nao, mo_up_out.shape[0]), dtype=(mo_coeff+1j*mo_coeff_imag).dtype)
-                    mo_dn_pyscf = np.empty((nao, mo_dn_out.shape[0]), dtype=(mo_coeff+1j*mo_coeff_imag).dtype)
-                    mo_up_pyscf[idx, :] = mo_up_out.T + 1j * mo_up_imag_out.T
-                    mo_dn_pyscf[idx, :] = mo_dn_out.T + 1j * mo_dn_imag_out.T
-                else:
-                    mo_up_out = mo_coeff[i_up, :]  # (nmo_up, nao)
-                    mo_dn_out = mo_coeff[i_dn, :]  # (nmo_dn, nao)
-                    mo_up_pyscf = np.empty((nao, mo_up_out.shape[0]), dtype=mo_coeff.dtype)
-                    mo_dn_pyscf = np.empty((nao, mo_dn_out.shape[0]), dtype=mo_coeff.dtype)
-                    mo_up_pyscf[idx, :] = mo_up_out.T
-                    mo_dn_pyscf[idx, :] = mo_dn_out.T
-
-                mf = mol.UHF(kpt=kpts[0])
-                mf.mo_coeff  = (mo_up_pyscf, mo_dn_pyscf)
-                mf.mo_energy = (mo_energy[i_up], mo_energy[i_dn])
-                mf.mo_occ    = (mo_occ[i_up],   mo_occ[i_dn])
-                return mf
-
-            # RHF
-            elif set(uniq.tolist()) == {0} or set(uniq.tolist()) == {1}:
-                mf = mol.RHF(kpt=kpts[0])
-                if mo_coeff_imag is not None:
-                    mf.mo_coeff = np.empty((nao, num_mo), dtype=(mo_coeff + 1j * mo_coeff_imag).dtype)
-                    mf.mo_coeff[idx, :] = mo_coeff.T + 1j * mo_coeff_imag.T
-                else:
-                    mf.mo_coeff = np.empty((nao, num_mo), dtype=mo_coeff.dtype)
-                    mf.mo_coeff[idx, :] = mo_coeff.T
-                mf.mo_energy = mo_energy
-                mf.mo_occ    = mo_occ
-                return mf
-
-            else:
-                raise ValueError(f'Unknown spin multiplicity {uniq}')
-
-        # Multi WFs
-        else:
-            with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-                kpts = trexio.read_pbc_k_point(tf)
-                num_mo    = trexio.read_mo_num(tf)
-                mo_energy = trexio.read_mo_energy(tf)
-                mo_coeff  = trexio.read_mo_coefficient(tf)
-                mo_coeff_imag = trexio.read_mo_coefficient_im(tf)
-                mo_occ    = trexio.read_mo_occupation(tf)
-                mo_spin    = trexio.read_mo_spin(tf)
-                mo_k_point = trexio.read_mo_k_point(tf)
-
-            nao = mol.nao
-            idx = _order_ao_index(mol)
-            uniq = np.unique(mo_spin)
-
-            # UHF
-            if set(uniq.tolist()) == {0, 1}:
-                mo_energy_all_k = []
-                mo_occ_all_k = []
-                mo_coeff_all_k = []
-
-                for i_k in range(k_point_num):
-                    mask = (mo_k_point == i_k)
-                    mo_energy_k = mo_energy[mask]
-                    mo_occ_k    = mo_occ[mask]
-                    mo_spin_k   = mo_spin[mask]
-                    mo_coeff_k = mo_coeff[mask, :]
-                    mo_coeff_k_imag = mo_coeff_imag[mask, :]
-
-                    mask_up = (mo_spin_k == 0)   # alpha
-                    mask_dn = (mo_spin_k == 1)   # beta
-
-                    mo_energy_k_up = mo_energy_k[mask_up]
-                    mo_occ_k_up    = mo_occ_k[mask_up]
-                    mo_coeff_k_up  = mo_coeff_k[mask_up, :]
-                    mo_coeff_k_imag_up = mo_coeff_k_imag[mask_up, :]
-
-                    mo_energy_k_dn = mo_energy_k[mask_dn]
-                    mo_occ_k_dn    = mo_occ_k[mask_dn]
-                    mo_coeff_k_dn  = mo_coeff_k[mask_dn, :]
-                    mo_coeff_k_imag_dn = mo_coeff_k_imag[mask_dn, :]
-
-                    mo_coeff_k_up_ = np.empty((nao, len(mo_energy_k_up)),
-                                              dtype=(mo_coeff_k_up + 1j * mo_coeff_k_imag_up).dtype)
-                    mo_coeff_k_up_[idx, :] = mo_coeff_k_up.T + 1j * mo_coeff_k_imag_up.T
-
-                    mo_coeff_k_dn_ = np.empty((nao, len(mo_energy_k_dn)),
-                                              dtype=(mo_coeff_k_dn + 1j * mo_coeff_k_imag_dn).dtype)
-                    mo_coeff_k_dn_[idx, :] = mo_coeff_k_dn.T + 1j * mo_coeff_k_imag_dn.T
-
-                    mo_energy_all_k.append((mo_energy_k_up, mo_energy_k_dn))
-                    mo_occ_all_k.append((mo_occ_k_up, mo_occ_k_dn))
-                    mo_coeff_all_k.append((mo_coeff_k_up_, mo_coeff_k_dn_))
-
-                mf = mol.KUHF(kpts=kpts)
-                mf.mo_coeff = mo_coeff_all_k
-                mf.mo_energy = mo_energy_all_k
-                mf.mo_occ = mo_occ_all_k
-                return mf
-
-            # RHF
-            elif set(uniq.tolist()) == {0} or set(uniq.tolist()) == {1}:
-                mo_energy_all_k = []
-                mo_occ_all_k = []
-                mo_coeff_all_k = []
-
-                for i_k in range(k_point_num):
-                    mask = (mo_k_point == i_k)
-                    mo_energy_k = mo_energy[mask]
-                    mo_occ_k    = mo_occ[mask]
-                    mo_spin_k   = mo_spin[mask]
-                    mo_coeff_k = mo_coeff[mask, :]
-                    mo_coeff_k_imag = mo_coeff_imag[mask, :]
-
-                    mo_coeff_k_ = np.empty((nao, len(mo_energy_k)), dtype=(mo_coeff_k + 1j * mo_coeff_k_imag).dtype)
-                    mo_coeff_k_[idx, :] = mo_coeff_k.T + 1j * mo_coeff_k_imag.T
-
-                    mo_energy_all_k.append(mo_energy_k)
-                    mo_occ_all_k.append(mo_occ_k)
-                    mo_coeff_all_k.append(mo_coeff_k_)
-
-                mf = mol.KRHF(kpts=kpts)
-                mf.mo_coeff = mo_coeff_all_k
-                mf.mo_energy = mo_energy_all_k
-                mf.mo_occ    = mo_occ_all_k
-                return mf
-
-            else:
-                raise ValueError(f'Unknown spin multiplicity {uniq}')
-
-
-    else:
-        # Non-periodic case
-        with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-            num_mo    = trexio.read_mo_num(tf)
-            mo_energy = trexio.read_mo_energy(tf)
-            mo_coeff  = trexio.read_mo_coefficient(tf)
-            mo_occ    = trexio.read_mo_occupation(tf)
-            mo_spin    = trexio.read_mo_spin(tf)
-
-        nao = mol.nao
-        idx = _order_ao_index(mol)
-
-        uniq = np.unique(mo_spin)
-
-        # UHF
-        if set(uniq.tolist()) == {0, 1}:
-            i_up = np.where(mo_spin == 0)[0]
-            i_dn = np.where(mo_spin == 1)[0]
-
-            mo_up_out = mo_coeff[i_up, :]  # (nmo_up, nao)
-            mo_dn_out = mo_coeff[i_dn, :]  # (nmo_dn, nao)
-
-            mo_up_pyscf = np.empty((nao, mo_up_out.shape[0]), dtype=mo_coeff.dtype)
-            mo_dn_pyscf = np.empty((nao, mo_dn_out.shape[0]), dtype=mo_coeff.dtype)
-            mo_up_pyscf[idx, :] = mo_up_out.T
-            mo_dn_pyscf[idx, :] = mo_dn_out.T
-
-            mf = mol.UHF()
-            mf.mo_coeff  = (mo_up_pyscf, mo_dn_pyscf)
-            mf.mo_energy = (mo_energy[i_up], mo_energy[i_dn])
-            mf.mo_occ    = (mo_occ[i_up],   mo_occ[i_dn])
-            return mf
-
-        # RHF
-        elif set(uniq.tolist()) == {0} or set(uniq.tolist()) == {1}:
-            mf = mol.RHF()
-            mf.mo_coeff = np.empty((nao, num_mo), dtype=mo_coeff.dtype)
-            mf.mo_coeff[idx, :] = mo_coeff.T
-            mf.mo_energy = mo_energy
-            mf.mo_occ    = mo_occ
-            return mf
-
-        else:
-            raise ValueError(f'Unknown spin multiplicity {uniq}')
-
-_REAL_ONLY_TOL = 1e-12
-
-
-def _trexio_ensure_real(x, *, tol=_REAL_ONLY_TOL, what="Complex data encountered but the backend is real-only."):
-    if np.iscomplexobj(x):
-        if np.all(np.abs(np.imag(x)) <= tol):
-            x = np.real(x)
-        else:
-            raise NotImplementedError(what)
-    return x
 
 
 def _trexio_is_gamma_single_k(obj) -> bool:
@@ -811,7 +916,27 @@ def _trexio_is_gamma_single_k(obj) -> bool:
     return True
 
 
-def _trexio_get_uks_coeff_pair(mf_obj, *, expect_gamma=False):
+def _trexio_get_rhf_coeff_matrix(mf_obj, *, expect_gamma=False):
+    coeff = mf_obj.mo_coeff
+    if isinstance(coeff, np.ndarray):
+        if coeff.ndim == 2:
+            return coeff
+        if expect_gamma and coeff.ndim == 3 and coeff.shape[0] == 1:
+            return coeff[0]
+    elif isinstance(coeff, (list, tuple)) and len(coeff) == 1:
+        arr = np.asarray(coeff[0])
+        if arr.ndim == 2:
+            return arr
+        if expect_gamma and arr.ndim == 3 and arr.shape[0] == 1:
+            return arr[0]
+
+    raise ValueError(
+        f"Unsupported RHF/RKS mo_coeff layout for {mf_obj.__class__}: "
+        f"shape={np.asarray(coeff, dtype=object).shape}"
+    )
+
+
+def _trexio_get_uks_coeff_matrices(mf_obj, *, expect_gamma=False):
     C = mf_obj.mo_coeff
     if isinstance(C, (list, tuple)) and len(C) == 2:
         Ca, Cb = C
@@ -848,6 +973,53 @@ def _trexio_concat_spin_coeff(Ca, Cb):
         raise ValueError(f"Unexpected UKS/UHF mo_coeff shapes: Ca {Ca.shape}, Cb {Cb.shape}")
     return np.concatenate([Ca, Cb], axis=1)
 
+
+def _trexio_is_rohf_roks_mf(mf_obj) -> bool:
+    return isinstance(
+        mf_obj,
+        (
+            scf.rohf.ROHF,
+            dft.roks.ROKS,
+            pbc.scf.rohf.ROHF,
+            pbc.scf.krohf.KROHF,
+            pbc.dft.roks.ROKS,
+            pbc.dft.kroks.KROKS,
+        ),
+    ) and not _trexio_is_uhf_uks_mf(mf_obj)
+
+
+def _trexio_is_uhf_uks_mf(mf_obj) -> bool:
+    return isinstance(
+        mf_obj,
+        (
+            scf.uhf.UHF,
+            dft.uks.UKS,
+            pbc.scf.uhf.UHF,
+            pbc.dft.uks.UKS,
+            pbc.scf.kuhf.KUHF,
+            pbc.dft.kuks.KUKS,
+        ),
+    )
+
+
+def _trexio_is_rhf_rks_mf(mf_obj) -> bool:
+    return (
+        isinstance(
+            mf_obj,
+            (
+                scf.hf.RHF,
+                dft.rks.RKS,
+                pbc.scf.rhf.RHF,
+                pbc.dft.rks.RKS,
+                pbc.scf.krhf.KRHF,
+                pbc.dft.krks.KRKS,
+            ),
+        )
+        and not _trexio_is_uhf_uks_mf(mf_obj)
+        and not _trexio_is_rohf_roks_mf(mf_obj)
+    )
+
+
 def write_2e_eri(
     mf, filename, backend='h5', basis='mo', df_engine='MDF', sym='s1',
 ):
@@ -872,10 +1044,10 @@ def write_2e_eri(
         ERI symmetry/packing. MO supports ``s1``/``s4``; AO supports
         ``s1``/``s4``/``s8``.
 
-    Behavior
-    --------
-    - Real-only backend: complex ERIs are rejected unless the imaginary part
-      is <=1e-12 (in which case it is discarded).
+        Behavior
+        --------
+        - Two-electron integrals are treated as real-valued in this interface.
+            If non-real values are detected, ``ValueError`` is raised.
     - PBC: only single-k Gamma is supported; non-Gamma raises
       ``NotImplementedError``.
     - MO + UHF/UKS: constructs the combined coefficient matrix ``[Ca | Cb]``
@@ -887,8 +1059,20 @@ def write_2e_eri(
     ValueError
         For invalid ``basis``/``sym`` combinations or unexpected shapes.
     NotImplementedError
-        For complex ERIs, non-Gamma PBC data, or unsupported symmetry in MO.
+        For non-Gamma PBC data or unsupported symmetry in MO.
     """
+
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_2e_eri."
+        )
 
     basis = basis.upper()
     sym = sym.lower()
@@ -908,6 +1092,14 @@ def write_2e_eri(
             return pbcdf.GDF(mf.cell).build()
         raise ValueError("df_engine must be 'MDF' or 'GDF'.")
 
+    def _require_real_2e(eri):
+        eri = np.asarray(eri)
+        if np.iscomplexobj(eri):
+            if np.any(np.imag(eri) != 0):
+                raise ValueError("Two-electron integrals must be real-valued.")
+            eri = np.real(eri)
+        return eri
+
     # ---------------------
     # MO-basis ERI writing
     # ---------------------
@@ -917,45 +1109,36 @@ def write_2e_eri(
             if sym == 's8':
                 raise NotImplementedError("MO ERI does not support s8 symmetry")
             mo_compact = sym == 's4'
-            if (isinstance(mf.mo_coeff, (list, tuple)) or
-                (isinstance(mf.mo_coeff, np.ndarray) and mf.mo_coeff.ndim >= 3 and mf.mo_coeff.shape[0] == 2)):
+            if is_uhf_like:
                 # UKS/UHF -> concatenate [alpha | beta], include cross-spin terms
-                Ca, Cb = _trexio_get_uks_coeff_pair(mf)
+                Ca, Cb = _trexio_get_uks_coeff_matrices(mf)
                 C = _trexio_concat_spin_coeff(Ca, Cb)  # (nao, nalpha+nbeta)
                 if getattr(mf, '_eri', None) is not None:
                     eri_mo = ao2mo.incore.full(mf._eri, C, compact=mo_compact)
                 else:
                     eri_mo = ao2mo.kernel(mf.mol, C, compact=mo_compact)
-                eri_mo = _trexio_ensure_real(
-                    eri_mo,
-                    what=(
-                        "Complex ERI encountered but the backend is real-only. "
-                        "Use Gamma-point (k=0) or a complex-capable backend."
-                    ),
-                )
+                eri_mo = _require_real_2e(eri_mo)
                 nmo = C.shape[1]
                 if sym == 's1':
                     if eri_mo.ndim < 4:
                         eri_mo = ao2mo.restore(1, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
-            else:  # RHF/RKS
-                C = mf.mo_coeff
+            elif is_rhf_like:  # RHF/RKS
+                C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=False)
                 if getattr(mf, '_eri', None) is not None:
                     eri_mo = ao2mo.incore.full(mf._eri, C, compact=mo_compact)
                 else:
                     eri_mo = ao2mo.kernel(mf.mol, C, compact=mo_compact)
-                eri_mo = _trexio_ensure_real(
-                    eri_mo,
-                    what=(
-                        "Complex ERI encountered but the backend is real-only. "
-                        "Use Gamma-point (k=0) or a complex-capable backend."
-                    ),
-                )
+                eri_mo = _require_real_2e(eri_mo)
                 nmo = C.shape[1]
                 if sym == 's1':
                     if eri_mo.ndim < 4:
                         eri_mo = ao2mo.restore(1, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+            else:
+                raise NotImplementedError(
+                    f"Conversion function for {mf.__class__} is not implemented in write_2e_eri(MO)."
+                )
 
         # PBC (Gamma only)
         else:
@@ -965,19 +1148,12 @@ def write_2e_eri(
                 raise NotImplementedError("PBC MO-ERI does not support s8 symmetry; use s1 or s4")
             dfobj = _df_obj()
 
-            if (isinstance(mf.mo_coeff, (list, tuple)) or
-                (isinstance(mf.mo_coeff, np.ndarray) and mf.mo_coeff.ndim >= 3 and mf.mo_coeff.shape[0] == 2)):
+            if is_uhf_like:
                 # UKS/UHF @ Gamma: combined MO matrix [Ca | Cb]
-                Ca, Cb = _trexio_get_uks_coeff_pair(mf, expect_gamma=True)
+                Ca, Cb = _trexio_get_uks_coeff_matrices(mf, expect_gamma=True)
                 C = _trexio_concat_spin_coeff(Ca, Cb)
                 eri_mo = dfobj.get_mo_eri((C, C, C, C))
-                eri_mo = _trexio_ensure_real(
-                    eri_mo,
-                    what=(
-                        "Complex ERI encountered but the backend is real-only. "
-                        "Use Gamma-point (k=0) or a complex-capable backend."
-                    ),
-                )
+                eri_mo = _require_real_2e(eri_mo)
                 nmo = C.shape[1]
                 if sym == 's1':
                     if eri_mo.ndim == 2:
@@ -988,18 +1164,10 @@ def write_2e_eri(
                     if eri_mo.ndim == 4:
                         eri_mo = ao2mo.restore(4, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
-            else:  # RHF/RKS @ Gamma
-                C = mf.mo_coeff
-                if C.ndim == 3 and C.shape[0] == 1:  # normalize (1,nao,nmo) -> (nao,nmo)
-                    C = C[0]
+            elif is_rhf_like:  # RHF/RKS @ Gamma
+                C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=True)
                 eri_mo = dfobj.get_mo_eri((C, C, C, C))
-                eri_mo = _trexio_ensure_real(
-                    eri_mo,
-                    what=(
-                        "Complex ERI encountered but the backend is real-only. "
-                        "Use Gamma-point (k=0) or a complex-capable backend."
-                    ),
-                )
+                eri_mo = _require_real_2e(eri_mo)
                 nmo = C.shape[1]
                 if sym == 's1':
                     if eri_mo.ndim == 2:
@@ -1010,6 +1178,10 @@ def write_2e_eri(
                     if eri_mo.ndim == 4:
                         eri_mo = ao2mo.restore(4, eri_mo, nmo)
                 _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+            else:
+                raise NotImplementedError(
+                    f"Conversion function for {mf.__class__} is not implemented in write_2e_eri(PBC-MO)."
+                )
 
     # ---------------------
     # AO-basis ERI writing (spin-independent even for UKS/UHF)
@@ -1025,13 +1197,7 @@ def write_2e_eri(
             if eri2.shape != (nao * nao, nao * nao):
                 raise RuntimeError(f"Unexpected ERI shape {eri2.shape}; expected ({nao*nao}, {nao*nao}) at Gamma.")
             eri_ao = eri2.reshape(nao, nao, nao, nao)
-            eri_ao = _trexio_ensure_real(
-                eri_ao,
-                what=(
-                    "Complex ERI encountered but the backend is real-only. "
-                    "Use Gamma-point (k=0) or a complex-capable backend."
-                ),
-            )
+            eri_ao = _require_real_2e(eri_ao)
             if sym == 's4':
                 eri_ao = ao2mo.restore(4, eri_ao, nao)
             elif sym == 's8':
@@ -1052,14 +1218,9 @@ def write_2e_eri(
                         eri_ao = ao2mo.restore(1, eri_ao, n_ao)
             else:
                 eri_ao = mf.mol.intor('int2e', aosym=sym)
-            eri_ao = _trexio_ensure_real(
-                eri_ao,
-                what=(
-                    "Complex ERI encountered but the backend is real-only. "
-                    "Use Gamma-point (k=0) or a complex-capable backend."
-                ),
-            )
+            eri_ao = _require_real_2e(eri_ao)
             _write_2e_int_eri(np.ascontiguousarray(eri_ao), filename, backend, 'AO', sym=sym)
+
 
 def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
     basis = basis.upper()
@@ -1072,6 +1233,8 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
     def _pair_from_tril(n):
         i, j = np.tril_indices(n)
         return i.astype(np.int32), j.astype(np.int32)
+
+    back_end = _trexio_backend_const(backend)
 
     if sym == 's1':
         if eri.ndim != 4:
@@ -1088,7 +1251,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         idx=idx.flatten()
 
         # write ERI
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if basis == 'AO':
                 if not trexio.has_ao_num(tf):
                     trexio.write_ao_num(tf, n)
@@ -1113,7 +1276,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         total = npair * npair
         chunk = 100000
 
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if basis == 'AO':
                 if not trexio.has_ao_num(tf):
                     trexio.write_ao_num(tf, n)
@@ -1158,7 +1321,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
     tri_i, tri_j = np.tril_indices(npair)
     chunk = 100000
 
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, "u", back_end=back_end) as tf:
         if basis == 'AO':
             if not trexio.has_ao_num(tf):
                 trexio.write_ao_num(tf, n)
@@ -1186,6 +1349,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
                 trexio.write_ao_2e_int_eri(tf, offset, end - offset, idx, val)
             offset = end
 
+
 def write_1e_eri(
     mf, filename, backend='h5', basis='AO', df_engine='MDF',
 ):
@@ -1209,10 +1373,11 @@ def write_1e_eri(
     df_engine : {'MDF', 'GDF'}, optional
         Density-fitting engine for PBC integrals (Gamma-only).
 
-    Behavior
-    --------
-    - Real-only backend: imaginary parts larger than 1e-12 raise
-      ``NotImplementedError``; smaller parts are discarded.
+        Behavior
+        --------
+        - Complex one-electron integrals are not supported in this interface.
+            If overlap/kinetic/potential/core are complex, ``NotImplementedError``
+            is raised.
     - PBC: only single-k Gamma calculations are supported.
     - All matrices are hermitized before writing and made C-contiguous; dtype
       is preserved.
@@ -1225,7 +1390,20 @@ def write_1e_eri(
         For complex data, non-Gamma PBC calculations, or unsupported MO layout.
     """
 
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_1e_eri."
+        )
+
     basis = basis.upper()
+    back_end = _trexio_backend_const(backend)
     if basis not in ('AO', 'MO'):
         raise ValueError("basis must be either 'AO' or 'MO'")
 
@@ -1251,6 +1429,14 @@ def write_1e_eri(
 
     def _hermitize(mat):
         return 0.5 * (mat + mat.T.conj())
+
+    def _reject_complex_1e(mat, label):
+        mat = np.asarray(mat)
+        if np.iscomplexobj(mat):
+            raise NotImplementedError(
+                f"Complex {label} is not supported in trexio.py write_1e_eri."
+            )
+        return mat
 
     is_pbc = hasattr(mf, 'cell')
 
@@ -1298,76 +1484,29 @@ def write_1e_eri(
             potential += ecp_mat
         core = kinetic + potential
 
-    overlap = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _hermitize(overlap),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
-    kinetic = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _hermitize(kinetic),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
-    potential = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _hermitize(potential),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
-    core = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _hermitize(core),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
+    overlap = np.ascontiguousarray(_reject_complex_1e(_hermitize(overlap), 'overlap'))
+    kinetic = np.ascontiguousarray(_reject_complex_1e(_hermitize(kinetic), 'kinetic'))
+    potential = np.ascontiguousarray(_reject_complex_1e(_hermitize(potential), 'potential'))
+    core = np.ascontiguousarray(_reject_complex_1e(_hermitize(core), 'core'))
     if ecp_mat is not None:
-        ecp_mat = np.ascontiguousarray(
-            _trexio_ensure_real(
-                _hermitize(ecp_mat),
-                what="Complex one-electron integrals encountered but the backend is real-only.",
-            )
-        )
+        ecp_mat = np.ascontiguousarray(_reject_complex_1e(_hermitize(ecp_mat), 'ecp'))
 
     if basis == 'AO':
         _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend, 'AO')
         if ecp_mat is not None:
-            with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+            with trexio.File(filename, "u", back_end=back_end) as tf:
                 trexio.write_ao_1e_int_ecp(tf, ecp_mat)
         return
 
-    def _get_rhf_coeff(mf_obj):
-        coeff = mf_obj.mo_coeff
-        if isinstance(coeff, np.ndarray):
-            if coeff.ndim == 2:
-                return coeff
-            if coeff.ndim == 3 and coeff.shape[0] == 1:
-                return coeff[0]
-        if isinstance(coeff, (list, tuple)) and len(coeff) == 1:
-            arr = np.asarray(coeff[0])
-            if arr.ndim == 2:
-                return arr
-        raise TypeError(
-            "Unsupported mo_coeff layout for RHF/RKS object in MO one-electron integrals"
-        )
-
-    if (
-        isinstance(mf.mo_coeff, (list, tuple)) and len(mf.mo_coeff) == 2
-    ) or (
-        isinstance(mf.mo_coeff, np.ndarray) and mf.mo_coeff.ndim >= 3 and mf.mo_coeff.shape[0] == 2
-    ):
-        Ca, Cb = _trexio_get_uks_coeff_pair(mf, expect_gamma=is_pbc)
+    if is_uhf_like:
+        Ca, Cb = _trexio_get_uks_coeff_matrices(mf, expect_gamma=is_pbc)
         C = _trexio_concat_spin_coeff(Ca, Cb)
+    elif is_rhf_like:
+        C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=is_pbc)
     else:
-        C = _get_rhf_coeff(mf)
-
-    if is_pbc and C.ndim == 3:
-        if C.shape[0] != 1:
-            raise NotImplementedError(
-                "MO one-electron integrals currently support single-k Gamma calculations only."
-            )
-        C = C[0]
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_1e_eri(MO)."
+        )
 
     if C.ndim != 2:
         raise ValueError(f"MO coefficient matrix must be 2D, got shape {C.shape}")
@@ -1375,45 +1514,21 @@ def write_1e_eri(
     def _ao_to_mo(mat, coeff):
         return _hermitize(coeff.conj().T @ mat @ coeff)
 
-    mo_overlap = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _ao_to_mo(overlap, C),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
-    mo_kinetic = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _ao_to_mo(kinetic, C),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
-    mo_potential = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _ao_to_mo(potential, C),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
-    mo_core = np.ascontiguousarray(
-        _trexio_ensure_real(
-            _ao_to_mo(core, C),
-            what="Complex one-electron integrals encountered but the backend is real-only.",
-        )
-    )
+    mo_overlap = np.ascontiguousarray(_reject_complex_1e(_ao_to_mo(overlap, C), 'mo_overlap'))
+    mo_kinetic = np.ascontiguousarray(_reject_complex_1e(_ao_to_mo(kinetic, C), 'mo_kinetic'))
+    mo_potential = np.ascontiguousarray(_reject_complex_1e(_ao_to_mo(potential, C), 'mo_potential'))
+    mo_core = np.ascontiguousarray(_reject_complex_1e(_ao_to_mo(core, C), 'mo_core'))
     mo_ecp = None
     if ecp_mat is not None:
-        mo_ecp = np.ascontiguousarray(
-            _trexio_ensure_real(
-                _ao_to_mo(ecp_mat, C),
-                what="Complex one-electron integrals encountered but the backend is real-only.",
-            )
-        )
+        mo_ecp = np.ascontiguousarray(_reject_complex_1e(_ao_to_mo(ecp_mat, C), 'mo_ecp'))
 
     _write_1e_int_eri(
         mo_overlap, mo_kinetic, mo_potential, mo_core, filename, backend, 'MO'
     )
     if mo_ecp is not None:
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             trexio.write_mo_1e_int_ecp(tf, mo_ecp)
+
 
 def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5', basis='AO'):
     basis = basis.upper()
@@ -1424,8 +1539,9 @@ def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5',
     kinetic = np.ascontiguousarray(kinetic)
     potential = np.ascontiguousarray(potential)
     core = np.ascontiguousarray(core)
+    back_end = _trexio_backend_const(backend)
 
-    with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+    with trexio.File(filename, "u", back_end=back_end) as tf:
         if basis == 'AO':
             ao_dim = overlap.shape[0]
             if not trexio.has_ao_num(tf):
@@ -1442,6 +1558,7 @@ def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5',
             trexio.write_mo_1e_int_kinetic(tf, kinetic)
             trexio.write_mo_1e_int_potential_n_e(tf, potential)
             trexio.write_mo_1e_int_core_hamiltonian(tf, core)
+
 
 def write_1b_rdm(mf, filename, backend='h5'):
     """Write a one-body reduced density matrix in MO basis to TREXIO.
@@ -1475,34 +1592,41 @@ def write_1b_rdm(mf, filename, backend='h5'):
         For complex densities or non-Gamma PBC calculations.
     """
 
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
 
-    is_uhf_like = isinstance(
-        mf,
-        (
-            scf.uhf.UHF,
-            dft.uks.UKS,
-            pbc.scf.uhf.UHF,
-            pbc.dft.uks.UKS,
-            pbc.scf.kuhf.KUHF,
-            pbc.dft.kuks.KUKS,
-        ),
-    )
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_1b_rdm."
+        )
 
     # MO-basis density is diagonal in canonical orbitals
-    if is_uhf_like and isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
-        occ_a, occ_b = mf.mo_occ
-        occ_a = np.asarray(occ_a)
-        occ_b = np.asarray(occ_b)
+    if is_uhf_like:
+        if isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
+            occ_a, occ_b = mf.mo_occ
+            occ_a = np.asarray(occ_a)
+            occ_b = np.asarray(occ_b)
+        else:
+            occ = np.asarray(mf.mo_occ)
+            if occ.ndim >= 2 and occ.shape[0] == 2:
+                occ_a, occ_b = occ[0], occ[1]
+            else:
+                raise ValueError(
+                    f"Unsupported UHF/UKS mo_occ layout for {mf.__class__}: shape {occ.shape}"
+                )
     else:
         occ = np.asarray(mf.mo_occ)
-        if is_uhf_like and occ.ndim == 2 and occ.shape[0] == 2:
-            occ_a, occ_b = occ[0], occ[1]
-        else:
-            occ_a = occ
-            occ_b = None
+        occ_a = occ
+        occ_b = None
 
     if is_pbc and isinstance(occ_a, np.ndarray) and occ_a.ndim == 2:
         if occ_a.shape[0] != 1:
@@ -1512,20 +1636,23 @@ def write_1b_rdm(mf, filename, backend='h5'):
         if occ_b is not None and occ_b.ndim == 2:
             occ_b = occ_b[0]
 
+    if occ_a.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for alpha/spin-summed branch, got shape {occ_a.shape}")
+    if occ_b is not None and occ_b.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for beta branch, got shape {occ_b.shape}")
+
     if occ_b is not None:
         dm_a = np.diag(occ_a)
         dm_b = np.diag(occ_b)
-        dm_a = _trexio_ensure_real(
-            np.asarray(dm_a),
-            what="Complex RDM encountered; real-only backend.",
-        )
-        dm_b = _trexio_ensure_real(
-            np.asarray(dm_b),
-            what="Complex RDM encountered; real-only backend.",
-        )
+        dm_a = np.asarray(dm_a)
+        if np.iscomplexobj(dm_a):
+            dm_a = np.real(dm_a)
+        dm_b = np.asarray(dm_b)
+        if np.iscomplexobj(dm_b):
+            dm_b = np.real(dm_b)
         dm_a = np.ascontiguousarray(dm_a)
         dm_b = np.ascontiguousarray(dm_b)
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             nmo_up = dm_a.shape[0]
             nmo_dn = dm_b.shape[0]
             if nmo_dn != nmo_up:
@@ -1541,16 +1668,16 @@ def write_1b_rdm(mf, filename, backend='h5'):
             trexio.write_rdm_1e(tf, dm_tot)
     else:
         dm = np.diag(occ_a)
-        dm = _trexio_ensure_real(
-            np.asarray(dm),
-            what="Complex RDM encountered; real-only backend.",
-        )
+        dm = np.asarray(dm)
+        if np.iscomplexobj(dm):
+            dm = np.real(dm)
         dm = np.ascontiguousarray(dm)
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             nmo = dm.shape[0]
             if not trexio.has_mo_num(tf):
                 trexio.write_mo_num(tf, nmo)
             trexio.write_rdm_1e(tf, dm)
+
 
 def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
     """Write a two-body reduced density matrix in MO basis to TREXIO.
@@ -1588,34 +1715,41 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         For non-Gamma PBC calculations.
     """
 
+    if _trexio_is_rohf_roks_mf(mf):
+        raise NotImplementedError(
+            "ROHF/ROKS support will be implemented in the next version."
+        )
+
+    back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
 
-    is_uhf_like = isinstance(
-        mf,
-        (
-            scf.uhf.UHF,
-            dft.uks.UKS,
-            pbc.scf.uhf.UHF,
-            pbc.dft.uks.UKS,
-            pbc.scf.kuhf.KUHF,
-            pbc.dft.kuks.KUKS,
-        ),
-    )
+    is_uhf_like = _trexio_is_uhf_uks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    if not (is_uhf_like or is_rhf_like):
+        raise NotImplementedError(
+            f"Conversion function for {mf.__class__} is not implemented in write_2b_rdm."
+        )
 
     # Spin-summed occupations or spin-separated for UHF/UKS
-    if is_uhf_like and isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
-        occ_a, occ_b = mf.mo_occ
-        occ_a = np.asarray(occ_a)
-        occ_b = np.asarray(occ_b)
+    if is_uhf_like:
+        if isinstance(mf.mo_occ, (tuple, list)) and len(mf.mo_occ) == 2:
+            occ_a, occ_b = mf.mo_occ
+            occ_a = np.asarray(occ_a)
+            occ_b = np.asarray(occ_b)
+        else:
+            occ = np.asarray(mf.mo_occ)
+            if occ.ndim >= 2 and occ.shape[0] == 2:
+                occ_a, occ_b = occ[0], occ[1]
+            else:
+                raise ValueError(
+                    f"Unsupported UHF/UKS mo_occ layout for {mf.__class__}: shape {occ.shape}"
+                )
     else:
         occ = np.asarray(mf.mo_occ)
-        if is_uhf_like and occ.ndim == 2 and occ.shape[0] == 2:
-            occ_a, occ_b = occ[0], occ[1]
-        else:
-            occ_a = occ
-            occ_b = None
+        occ_a = occ
+        occ_b = None
 
     if is_pbc and isinstance(occ_a, np.ndarray) and occ_a.ndim == 2:
         if occ_a.shape[0] != 1:
@@ -1625,17 +1759,20 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         if occ_b is not None and occ_b.ndim == 2:
             occ_b = occ_b[0]
 
+    if occ_a.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for alpha/spin-summed branch, got shape {occ_a.shape}")
+    if occ_b is not None and occ_b.ndim != 1:
+        raise ValueError(f"Expected 1D mo_occ for beta branch, got shape {occ_b.shape}")
+
     if occ_b is not None:
         dm_a = np.diag(occ_a)
         dm_b = np.diag(occ_b)
-        dm_a = _trexio_ensure_real(
-            np.asarray(dm_a),
-            what="Complex RDM encountered; real-only backend.",
-        )
-        dm_b = _trexio_ensure_real(
-            np.asarray(dm_b),
-            what="Complex RDM encountered; real-only backend.",
-        )
+        dm_a = np.asarray(dm_a)
+        if np.iscomplexobj(dm_a):
+            dm_a = np.real(dm_a)
+        dm_b = np.asarray(dm_b)
+        if np.iscomplexobj(dm_b):
+            dm_b = np.real(dm_b)
         dm_a = np.ascontiguousarray(dm_a)
         dm_b = np.ascontiguousarray(dm_b)
 
@@ -1661,7 +1798,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         flat_dd = g2_dd.reshape(-1)
         flat_ud = g2_ud.reshape(-1)
 
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if not trexio.has_mo_num(tf):
                 trexio.write_mo_num(tf, nmo)
 
@@ -1693,10 +1830,9 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
                 offset = end
     else:
         dm = np.diag(occ_a)
-        dm = _trexio_ensure_real(
-            np.asarray(dm),
-            what="Complex RDM encountered; real-only backend.",
-        )
+        dm = np.asarray(dm)
+        if np.iscomplexobj(dm):
+            dm = np.real(dm)
         dm = np.ascontiguousarray(dm)
 
         # Build dense spin-summed 2-RDM in MO basis
@@ -1710,7 +1846,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         idx = lib.cartesian_prod([np.arange(nmo, dtype=np.int32)] * 4)
         flat_g2 = g2.reshape(-1)
 
-        with trexio.File(filename, 'u', back_end=_mode(backend)) as tf:
+        with trexio.File(filename, "u", back_end=back_end) as tf:
             if not trexio.has_mo_num(tf):
                 trexio.write_mo_num(tf, nmo)
 
@@ -1727,6 +1863,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
                 )
                 offset = end
 
+
 def _order_ao_index(mol):
     if mol.cart:
         return np.arange(mol.nao)
@@ -1737,12 +1874,12 @@ def _order_ao_index(mol):
     # F 0, F+1, F-1, F+2, F-2, F+3, F-3
     # G 0, G+1, G-1, G+2, G-2, G+3, G-3, G+4, G-4
     # ...
-    lmax = mol._bas[:,gto.ANG_OF].max()
+    lmax = mol._bas[:, gto.ANG_OF].max()
     cache_by_l = [np.array([0]), np.array([2, 0, 1])]
     for l in range(2, lmax + 1):
-        idx = np.empty(l*2+1, dtype=int)
-        idx[ ::2] = l - np.arange(0, l+1)
-        idx[1::2] = np.arange(l+1, l+l+1)
+        idx = np.empty(l * 2 + 1, dtype=int)
+        idx[::2] = l - np.arange(0, l + 1)
+        idx[1::2] = np.arange(l + 1, l + l + 1)
         cache_by_l.append(idx)
 
     idx = []
@@ -1754,34 +1891,35 @@ def _order_ao_index(mol):
             off += l * 2 + 1
     return np.hstack(idx)
 
-def _mode(code):
-    if code == 'h5':
-        return 0
-    else: # trexio text
-        return 1
 
 def _group_by(a, keys):
-    '''keys must be sorted'''
+    """keys must be sorted"""
     assert all(a <= b for a, b in zip(keys, keys[1:]))
     idx = np.unique(keys, return_index=True)[1]
     return np.split(a, idx[1:])
 
-def _get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
-    ci_coeff = mcscf.ci
-    num_determinants = int(np.sum(np.abs(ci_coeff) > ci_threshold))
-    occslst = fci.cistring.gen_occslst(range(norb), nelec // 2)
-    selected_occslst = occslst[:num_determinants]
+
+def _get_occsa_and_occsb(mcscf_obj, norb, nelec, ci_threshold=0.0):
+    ci_coeff = mcscf_obj.ci
+    if isinstance(nelec, (tuple, list, np.ndarray)) and len(nelec) == 2:
+        neleca, nelecb = nelec
+    else:
+        neleca = nelecb = nelec // 2
+
+    occslst_a = fci.cistring.gen_occslst(range(norb), neleca)
+    occslst_b = fci.cistring.gen_occslst(range(norb), nelecb)
 
     occsa = []
     occsb = []
     ci_values = []
 
-    for i in range(min(len(selected_occslst), mcscf.ci.shape[0])):
-        for j in range(min(len(selected_occslst), mcscf.ci.shape[1])):
-            ci_coeff = mcscf.ci[i, j]
+    for i in range(min(len(occslst_a), mcscf_obj.ci.shape[0])):
+        for j in range(min(len(occslst_b), mcscf_obj.ci.shape[1])):
+            ci_coeff = mcscf_obj.ci[i, j]
+
             if np.abs(ci_coeff) > ci_threshold:  # Check if CI coefficient is significant compared to user defined value
-                occsa.append(selected_occslst[i])
-                occsb.append(selected_occslst[j])
+                occsa.append(occslst_a[i])
+                occsb.append(occslst_b[j])
                 ci_values.append(ci_coeff)
 
     # Sort by the absolute value of the CI coefficients in descending order
@@ -1789,22 +1927,40 @@ def _get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold=0.):
     occsa_sorted = [occsa[idx] for idx in sorted_indices]
     occsb_sorted = [occsb[idx] for idx in sorted_indices]
     ci_values_sorted = [ci_values[idx] for idx in sorted_indices]
+    num_determinants = len(ci_values_sorted)
 
     return occsa_sorted, occsb_sorted, ci_values_sorted, num_determinants
 
-def _det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=100000):
-    ncore = mcscf.ncore
-    int64_num = trexio.get_int64_num(trexio_file)
 
-    occsa, occsb, ci_values, num_determinants = _get_occsa_and_occsb(mcscf, norb, nelec, ci_threshold)
+def _det_to_trexio(
+    mcscf_obj, norb, nelec, trexio_file, ci_threshold=0.0, chunk_size=100000
+):
+    ncore = _trexio_ncore_scalar(mcscf_obj.ncore)
+    int64_num = trexio.get_int64_num(trexio_file)
+    orb_num = ncore + norb
+    calc_int64_num = (orb_num + 63) // 64
+    try:
+        int64_num = int(int64_num)
+    except (TypeError, ValueError):
+        int64_num = 0
+    if int64_num <= 0:
+        int64_num = calc_int64_num
+    else:
+        int64_num = max(int64_num, calc_int64_num)
+
+    occsa, occsb, ci_values, num_determinants = _get_occsa_and_occsb(
+        mcscf_obj, norb, nelec, ci_threshold
+    )
 
     det_list = []
     for a, b, coeff in zip(occsa, occsb, ci_values):
-        occsa_upshifted = [orb for orb in range(ncore)] + [orb+ncore for orb in a]
-        occsb_upshifted = [orb for orb in range(ncore)] + [orb+ncore for orb in b]
-        det_tmp = []
-        det_tmp += trexio.to_bitfield_list(int64_num, occsa_upshifted)
-        det_tmp += trexio.to_bitfield_list(int64_num, occsb_upshifted)
+        occsa_upshifted = [orb for orb in range(ncore)] + [orb + ncore for orb in a]
+        occsb_upshifted = [orb for orb in range(ncore)] + [orb + ncore for orb in b]
+        occsa_upshifted = [int(orb) for orb in occsa_upshifted]
+        occsb_upshifted = [int(orb) for orb in occsb_upshifted]
+        det_a = np.asarray(trexio.to_bitfield_list(int64_num, occsa_upshifted), dtype=np.int64)
+        det_b = np.asarray(trexio.to_bitfield_list(int64_num, occsb_upshifted), dtype=np.int64)
+        det_tmp = np.hstack([det_a, det_b]).astype(np.int64, copy=False)
         det_list.append(det_tmp)
 
     if num_determinants > chunk_size:
@@ -1822,22 +1978,17 @@ def _det_to_trexio(mcscf, norb, nelec, trexio_file, ci_threshold=0., chunk_size=
         current_chunk_size = end - start
 
         if current_chunk_size > 0:
-            trexio.write_determinant_list(trexio_file, offset_file, current_chunk_size, det_list[start:end])
-            trexio.write_determinant_coefficient(trexio_file, offset_file, current_chunk_size, ci_values[start:end])
+            trexio.write_determinant_list(
+                trexio_file, offset_file, current_chunk_size, det_list[start:end]
+            )
+            trexio.write_determinant_coefficient(
+                trexio_file, offset_file, current_chunk_size, ci_values[start:end]
+            )
             offset_file += current_chunk_size
 
-def read_det_trexio(filename):
-    with trexio.File(filename, 'r', back_end=trexio.TREXIO_AUTO) as tf:
-        offset_file = 0
-
-        num_det = trexio.read_determinant_num(tf)
-        coeff = trexio.read_determinant_coefficient(tf, offset_file, num_det)
-        det = trexio.read_determinant_list(tf, offset_file, num_det)
-        return num_det, coeff, det
 
 def _to_segment_contraction(mol):
-    '''transform generally contracted basis to segment contracted basis
-    '''
+    """transform generally contracted basis to segment contracted basis"""
     _bas = []
     for shell in mol._bas:
         nctr = shell[gto.NCTR_OF]
@@ -1848,8 +1999,8 @@ def _to_segment_contraction(mol):
         nprim = shell[gto.NPRIM_OF]
         pcoeff = shell[gto.PTR_COEFF]
         bs = np.repeat(shell[np.newaxis], nctr, axis=0)
-        bs[:,gto.NCTR_OF] = 1
-        bs[:,gto.PTR_COEFF] = np.arange(pcoeff, pcoeff+nprim*nctr, nprim)
+        bs[:, gto.NCTR_OF] = 1
+        bs[:, gto.PTR_COEFF] = np.arange(pcoeff, pcoeff + nprim * nctr, nprim)
         _bas.append(bs)
 
     pmol = mol.copy()
