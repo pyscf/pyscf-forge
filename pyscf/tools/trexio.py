@@ -296,13 +296,8 @@ def _scf_to_trexio(mf, trexio_file):
                 mo_spin[:num_mo_up] = 0
                 mo_spin[num_mo_up:] = 1
 
-            elif _trexio_is_rohf_roks_mf(mf):
-                raise NotImplementedError(
-                    "ROHF/ROKS support will be implemented in the next version."
-                )
-
-            elif _trexio_is_rhf_rks_mf(mf):
-                mo_type = "RHF"
+            elif _trexio_is_rohf_roks_mf(mf) or _trexio_is_rhf_rks_mf(mf):
+                mo_type = "ROHF" if _trexio_is_rohf_roks_mf(mf) else "RHF"
                 mo_energy = np.ravel(mf.mo_energy)
                 mo_num = mo_energy.size
                 mo = mf.mo_coeff
@@ -410,13 +405,8 @@ def _scf_to_trexio(mf, trexio_file):
                     mo_occ_pbc.append(mo_occ)
                     mo_spin_pbc.append(mo_spin)
 
-            elif _trexio_is_rohf_roks_mf(mf):
-                raise NotImplementedError(
-                    "ROHF/ROKS support will be implemented in the next version."
-                )
-
-            elif _trexio_is_rhf_rks_mf(mf):
-                mo_type = "RHF"
+            elif _trexio_is_rohf_roks_mf(mf) or _trexio_is_rhf_rks_mf(mf):
+                mo_type = "ROHF" if _trexio_is_rohf_roks_mf(mf) else "RHF"
                 for i_k, _ in enumerate(kpts):
                     mo_energy = mf.mo_energy[i_k]
                     mo = mf.mo_coeff[i_k]
@@ -483,12 +473,8 @@ def _scf_to_trexio(mf, trexio_file):
             mo_occ = np.ravel(mf.mo_occ)
             mo_spin = np.zeros(mo_energy.size, dtype=int)
             mo_spin[mf.mo_energy[0].size :] = 1
-        elif _trexio_is_rohf_roks_mf(mf):
-            raise NotImplementedError(
-                "ROHF/ROKS support will be implemented in the next version."
-            )
-        elif _trexio_is_rhf_rks_mf(mf):
-            mo_type = "RHF"
+        elif _trexio_is_rohf_roks_mf(mf) or _trexio_is_rhf_rks_mf(mf):
+            mo_type = "ROHF" if _trexio_is_rohf_roks_mf(mf) else "RHF"
             mo_energy = mf.mo_energy
             mo_num = mo_energy.size
             mo = mf.mo_coeff
@@ -609,13 +595,8 @@ def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
     ncore = _trexio_ncore_scalar(cas_obj.ncore)
     ncas = cas_obj.ncas
 
-    if _trexio_is_rohf_roks_mf(scf_obj):
-        raise NotImplementedError(
-            "ROHF/ROKS support will be implemented in the next version."
-        )
-
     is_uhf = _trexio_is_uhf_uks_mf(scf_obj)
-    is_rhf = _trexio_is_rhf_rks_mf(scf_obj)
+    is_rhf = _trexio_is_rhf_rks_mf(scf_obj) or _trexio_is_rohf_roks_mf(scf_obj)
     if not (is_uhf or is_rhf):
         raise NotImplementedError(f"Conversion function for {scf_obj.__class__}")
 
@@ -1062,13 +1043,8 @@ def write_2e_eri(
         For non-Gamma PBC data or unsupported symmetry in MO.
     """
 
-    if _trexio_is_rohf_roks_mf(mf):
-        raise NotImplementedError(
-            "ROHF/ROKS support will be implemented in the next version."
-        )
-
     is_uhf_like = _trexio_is_uhf_uks_mf(mf)
-    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
             f"Conversion function for {mf.__class__} is not implemented in write_2e_eri."
@@ -1390,13 +1366,8 @@ def write_1e_eri(
         For complex data, non-Gamma PBC calculations, or unsupported MO layout.
     """
 
-    if _trexio_is_rohf_roks_mf(mf):
-        raise NotImplementedError(
-            "ROHF/ROKS support will be implemented in the next version."
-        )
-
     is_uhf_like = _trexio_is_uhf_uks_mf(mf)
-    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
             f"Conversion function for {mf.__class__} is not implemented in write_1e_eri."
@@ -1592,18 +1563,13 @@ def write_1b_rdm(mf, filename, backend='h5'):
         For complex densities or non-Gamma PBC calculations.
     """
 
-    if _trexio_is_rohf_roks_mf(mf):
-        raise NotImplementedError(
-            "ROHF/ROKS support will be implemented in the next version."
-        )
-
     back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
 
     is_uhf_like = _trexio_is_uhf_uks_mf(mf)
-    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
             f"Conversion function for {mf.__class__} is not implemented in write_1b_rdm."
@@ -1715,18 +1681,13 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         For non-Gamma PBC calculations.
     """
 
-    if _trexio_is_rohf_roks_mf(mf):
-        raise NotImplementedError(
-            "ROHF/ROKS support will be implemented in the next version."
-        )
-
     back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
 
     is_uhf_like = _trexio_is_uhf_uks_mf(mf)
-    is_rhf_like = _trexio_is_rhf_rks_mf(mf)
+    is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
             f"Conversion function for {mf.__class__} is not implemented in write_2b_rdm."
@@ -1835,11 +1796,26 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
             dm = np.real(dm)
         dm = np.ascontiguousarray(dm)
 
-        # Build dense spin-summed 2-RDM in MO basis
-        g2 = (
-            np.einsum('pr,qs->pqrs', dm, dm)
-            - 0.5 * np.einsum('ps,qr->pqrs', dm, dm)
-        )
+        # Build dense spin-summed 2-RDM in MO basis.
+        # For ROHF, separate alpha (occ >=1) and beta (occ == 2) contributions
+        # so that the exchange part is treated correctly:
+        #   g2[pqrs] = D_tot[pr]*D_tot[qs] - D_a[ps]*D_a[qr] - D_b[ps]*D_b[qr]
+        # For RHF (D_a = D_b = D/2) this reduces to D*D - 0.5*D*D.
+        if _trexio_is_rohf_roks_mf(mf):
+            occ_a_spin = np.minimum(occ_a, 1.0)
+            occ_b_spin = occ_a - occ_a_spin
+            dm_a = np.ascontiguousarray(np.diag(occ_a_spin))
+            dm_b = np.ascontiguousarray(np.diag(occ_b_spin))
+            g2 = (
+                np.einsum('pr,qs->pqrs', dm, dm)
+                - np.einsum('ps,qr->pqrs', dm_a, dm_a)
+                - np.einsum('ps,qr->pqrs', dm_b, dm_b)
+            )
+        else:
+            g2 = (
+                np.einsum('pr,qs->pqrs', dm, dm)
+                - 0.5 * np.einsum('ps,qr->pqrs', dm, dm)
+            )
         g2 = np.ascontiguousarray(g2)
 
         nmo = dm.shape[0]
