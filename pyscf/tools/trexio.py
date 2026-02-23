@@ -11,8 +11,10 @@ Installation instruction:
     https://github.com/TREX-CoE/trexio/blob/master/python/README.md
 """
 
+import os
 import re
 import math
+import shutil
 import numpy as np
 from collections import defaultdict
 
@@ -26,10 +28,401 @@ from pyscf import mcscf
 from pyscf import fci
 from pyscf import ao2mo
 from pyscf.pbc import gto as pbcgto
+from pyscf.pbc import scf as pbcscf
+from pyscf.pbc import dft as pbcdft
 from pyscf.pbc import df as pbcdf, tools as pbctools
 from pyscf.mcscf import mc1step, mc2step, casci
 
 import trexio
+
+
+def to_trexio(
+    obj, filename, backend="h5",
+    write_ao_eri=False,
+    write_mo_eri=False,
+    eri_sym='s1',
+    write_mo_rdm=False,
+    write_mcscf_eri=True,
+    write_mcscf_rdm=True,
+    ci_threshold=None,
+    chunk_size=None,
+):
+    """Convert a PySCF object to a TREXIO file.
+
+    The function dispatches on the type of *obj* and writes the appropriate
+    quantities to *filename*.  Any file or directory already present at
+    *filename* is **deleted and recreated** before writing (i.e. the function
+    always produces a fresh file).
+
+    Dispatch summary
+    ----------------
+    ``Mole`` / ``Cell``
+        Nuclear geometry, basis set, ECP (if present), symmetry, and PBC
+        cell vectors.  No orbital or integral data.
+    ``SCF`` (RHF, UHF, ROHF, RKS, UKS, ROKS, and PBC counterparts)
+        All ``Mole``/``Cell`` data plus MO coefficients, energies, occupations,
+        and spin labels.  AO and/or MO integrals and density matrices are
+        written only when explicitly requested via *write_ao_eri*,
+        *write_mo_eri*, and *write_mo_rdm*.
+    ``CASCI`` / ``CASSCF`` / ``UCASCI`` / ``UCASSCF``
+        All ``Mole``/``Cell`` and SCF data plus CI determinants and natural
+        occupations.  By default the active-space effective Hamiltonian
+        (h1eff / h2eff) and the active-space reduced density matrices are
+        also written; each can be suppressed independently.
+
+    Parameters
+    ----------
+    obj : gto.Mole, pbc.gto.Cell, scf.hf.SCF, \
+          mcscf.casci.CASCI, mcscf.mc1step.CASSCF, \
+          mcscf.ucasci.UCASCI, or mcscf.umc1step.UCASSCF
+        PySCF object to export.
+    filename : str
+        Path to the output TREXIO file.  An existing file (HDF5 backend) or
+        directory (text backend) at this path is removed before writing.
+    backend : {'h5', 'hdf5', 'text', 'txt', 'auto'}, optional
+        TREXIO backend.  ``'h5'``/``'hdf5'`` produces a single HDF5 binary
+        file (default).  ``'text'``/``'txt'`` produces a directory of plain
+        text files.  ``'auto'`` lets TREXIO detect the format from *filename*.
+    write_ao_eri : bool, optional
+        *SCF only.*  When ``True``, write the AO-basis one-electron integrals
+        (overlap, kinetic, nuclear attraction, core Hamiltonian stored as
+        ``ao_1e_int_*``) **and** the AO-basis two-electron repulsion integrals
+        (``ao_2e_int_eri``) with the symmetry specified by *eri_sym*.
+        Default ``False``.
+    write_mo_eri : bool, optional
+        *SCF only.*  When ``True``, write the MO-basis one-electron integrals
+        (``mo_1e_int_*``) **and** the MO-basis two-electron repulsion integrals
+        (``mo_2e_int_eri``) with the symmetry specified by *eri_sym*.
+        For UHF/UKS the alpha and beta MO coefficient blocks are concatenated
+        so that all spin blocks of the ERI are covered.
+        Default ``False``.
+    eri_sym : {'s1', 's4', 's8'}, optional
+        Integral permutation symmetry applied to both AO and MO two-electron
+        integrals when *write_ao_eri* or *write_mo_eri* is ``True``.
+
+        * ``'s1'`` — no symmetry, all :math:`N^4` elements stored.
+        * ``'s4'`` — 4-fold symmetry :math:`(ij|kl)=(ji|kl)=(ij|lk)=(ji|lk)`,
+          roughly :math:`N^4/8` elements.
+        * ``'s8'`` — 8-fold symmetry (real AO integrals only),
+          roughly :math:`N^4/8` with the additional
+          :math:`(ij|kl)=(kl|ij)` relation; supported for AO basis only
+          (``write_ao_eri=True``).
+
+        ``write_mo_eri=True`` supports ``'s1'`` and ``'s4'`` only.
+        Default ``'s1'``.
+    write_mo_rdm : bool, optional
+        *SCF only.*  When ``True``, write the 1-body reduced density matrix
+        (``rdm_1e`` / ``rdm_1e_up`` + ``rdm_1e_dn`` for UHF) and the
+        2-body reduced density matrix (``rdm_2e`` / spin-block ``rdm_2e_*``
+        for UHF) in the MO basis.  Default ``False``.
+    write_mcscf_eri : bool, optional
+        *MCSCF only.*  When ``True`` (default), write the active-space
+        effective one-electron integrals (``mo_1e_int_core_hamiltonian``
+        containing h1eff) and the active-space two-electron effective
+        integrals (``mo_2e_int_eri`` containing h2eff) in the MO basis.
+        Set to ``False`` to skip these potentially large arrays.
+    write_mcscf_rdm : bool, optional
+        *MCSCF only.*  When ``True`` (default), write the active-space
+        1-RDM (``rdm_1e`` or spin-block ``rdm_1e_up``/``rdm_1e_dn``) and
+        2-RDM (``rdm_2e`` or spin-block ``rdm_2e_upup``/``rdm_2e_dndn``/
+        ``rdm_2e_updn``) in the MO basis.  Set to ``False`` to skip.
+    ci_threshold : float, optional
+        *MCSCF only.*  CI coefficient magnitude threshold below which
+        determinants are omitted from the TREXIO output.  ``0.0`` (default)
+        writes all determinants.
+    chunk_size : int, optional
+        *MCSCF only.*  Number of sparse ERI or determinant entries written
+        per TREXIO call.  Larger values reduce I/O round-trips at the cost
+        of memory.  Default ``100000``.
+
+    Raises
+    ------
+    NotImplementedError
+        When *obj* is not one of the supported PySCF types.
+
+    Notes
+    -----
+    * PBC calculations must be Gamma-point only.  k-point objects raise
+      ``NotImplementedError`` inside the underlying write routines.
+    * Complex-valued integrals are not supported; a ``ValueError`` or
+      ``NotImplementedError`` is raised if complex data is encountered.
+    * For MCSCF objects the SCF mean-field attributes are written before
+      the CASSCF/CASCI-specific data; the complete MO coefficient matrix
+      (core + active + virtual) is stored.
+    * *write_ao_eri* and *write_mo_eri* write to different TREXIO slots
+      (``ao_2e_int_eri`` vs ``mo_2e_int_eri``) and can both be ``True``
+      in the same call; the file will contain both AO and MO integrals.
+
+    Examples
+    --------
+    **1. Export only molecular geometry and basis (no SCF)**
+
+    >>> from pyscf import gto
+    >>> from pyscf.tools import trexio
+    >>> mol = gto.M(atom='H 0 0 0; F 0 0 1.8', basis='cc-pvdz', verbose=0)
+    >>> trexio.to_trexio(mol, 'hf_mol.h5')
+
+    **2. Export SCF results without integrals or density matrices**
+
+    >>> from pyscf import gto, scf
+    >>> from pyscf.tools import trexio
+    >>> mol = gto.M(atom='H 0 0 0; F 0 0 1.8', basis='cc-pvdz', verbose=0)
+    >>> mf = scf.RHF(mol).run()
+    >>> trexio.to_trexio(mf, 'hf_scf.h5',
+    ...     write_ao_eri=False, write_mo_eri=False, eri_sym='s1', write_mo_rdm=False)
+
+    **3. Export SCF results with MO integrals and density matrices**
+
+    >>> from pyscf import gto, scf
+    >>> from pyscf.tools import trexio
+    >>> mol = gto.M(atom='H 0 0 0; F 0 0 1.8', basis='cc-pvdz', verbose=0)
+    >>> mf = scf.RHF(mol).run()
+    >>> trexio.to_trexio(
+    ...     mf, 'hf_full.h5',
+    ...     write_ao_eri=False, write_mo_eri=True, eri_sym='s4',
+    ...     write_mo_rdm=True,
+    ... )
+
+    **4. Export CASSCF results with active-space integrals and density matrices**
+
+    >>> from pyscf import gto, scf, mcscf
+    >>> from pyscf.tools import trexio
+    >>> mol = gto.M(atom='H 0 0 0; F 0 0 1.8', basis='cc-pvdz', verbose=0)
+    >>> mf = scf.RHF(mol).run()
+    >>> mc = mcscf.CASSCF(mf, 6, 6).run()
+    >>> trexio.to_trexio(
+    ...     mc, 'cas.h5',
+    ...     write_mcscf_eri=True,
+    ...     write_mcscf_rdm=True,
+    ...     ci_threshold=1e-3,
+    ... )
+    """
+    if os.path.isfile(filename):
+        os.remove(filename)
+    elif os.path.isdir(filename):
+        shutil.rmtree(filename)
+    back_end = _trexio_backend_const(backend)
+    if isinstance(obj, gto.Mole) or isinstance(obj, pbcgto.Cell):
+        with trexio.File(filename, "u", back_end=back_end) as tf:
+            _mol_to_trexio(obj, tf)
+    elif isinstance(obj, scf.hf.SCF):
+        with trexio.File(filename, "u", back_end=back_end) as tf:
+            _scf_to_trexio(obj, tf)
+            if write_ao_eri:
+                _write_2e_eri(obj, tf, basis='AO', sym=eri_sym)
+                _write_1e_eri(obj, tf, basis='AO')
+            if write_mo_eri:
+                _write_2e_eri(obj, tf, basis='MO', sym=eri_sym)
+                _write_1e_eri(obj, tf, basis='MO')
+            if write_mo_rdm:
+                _write_1b_rdm(obj, tf)
+                _write_2b_rdm(obj, tf)
+    elif isinstance(obj, (casci.CASCI, mc1step.CASSCF, mcscf.ucasci.UCASCI, mcscf.umc1step.UCASSCF)):
+        ci_threshold = ci_threshold if ci_threshold is not None else 0.
+        chunk_size = chunk_size if chunk_size is not None else 100000
+        with trexio.File(filename, "u", back_end=back_end) as tf:
+            _mcscf_to_trexio(obj, tf, ci_threshold=ci_threshold, chunk_size=chunk_size,
+                              write_eri=write_mcscf_eri, write_rdm=write_mcscf_rdm)
+    else:
+        raise NotImplementedError(f"Conversion function for {obj.__class__}")
+
+
+def from_trexio(filename):
+    """Reconstruct a PySCF molecule or crystal object from a TREXIO file.
+
+    Reads nuclear geometry, basis set, spin, symmetry, ECP (if present), and
+    — for periodic systems — the lattice vectors from *filename*, and returns
+    a fully built :class:`pyscf.gto.Mole` or :class:`pyscf.pbc.gto.Cell`
+    object.  The basis shells are restored in the original ordering so that
+    the AO index convention matches the one used when the file was written.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the TREXIO file (HDF5 binary) or directory (text backend).
+        The backend is detected automatically from the file format.
+
+    Returns
+    -------
+    mol : gto.Mole or pbc.gto.Cell
+        A built PySCF object.  The unit is set to ``'Bohr'``, matching the
+        TREXIO convention.  For periodic systems the lattice vectors are read
+        from the ``cell_a/b/c`` fields and stored in ``mol.a``.
+
+    Raises
+    ------
+    AssertionError
+        If the ``basis_type`` stored in the file is not ``"Gaussian"``.
+    trexio.Error
+        If a required TREXIO field is missing or the file cannot be opened.
+
+    Notes
+    -----
+    * Coordinates are read in Bohr and stored with ``mol.unit = 'Bohr'``.
+    * Each nucleus is assigned a unique label of the form ``<symbol><index>``
+      (e.g. ``"H0"``, ``"H1"``, ``"O2"``) so that atoms of the same element
+      can carry different basis sets or ECPs.
+    * The function sets ``mol._basis`` directly and bypasses the standard
+      :meth:`~pyscf.gto.Mole.build` basis-sorting step, preserving the shell
+      ordering encoded in the TREXIO file.
+    * ECP data, if present, is decoded from the TREXIO storage convention
+      (``power``  = :math:`r`-exponent − 2, local channel encoded as
+      ``max_ang_mom_plus_1``) back to PySCF format.
+
+    Examples
+    --------
+    **1. Round-trip a molecular RHF calculation**
+
+    >>> from pyscf import gto, scf
+    >>> from pyscf.tools import trexio
+    >>> mol = gto.M(atom='H 0 0 0; F 0 0 1.8', basis='cc-pvdz', verbose=0)
+    >>> mf = scf.RHF(mol).run()
+    >>> trexio.to_trexio(mf, 'hf.h5')
+    >>> mol2 = trexio.from_trexio('hf.h5')
+    >>> mol2.natm
+    2
+
+    **2. Round-trip a periodic RHF calculation**
+
+    >>> import numpy as np
+    >>> from pyscf.pbc import gto as pbcgto, scf as pbcscf
+    >>> from pyscf.tools import trexio
+    >>> cell = pbcgto.Cell()
+    >>> cell.build(atom='H 0 0 0; H 0 0 1.4', basis='sto-3g',
+    ...            a=np.diag([3.0, 3.0, 5.0]), verbose=0)
+    >>> mf = pbcscf.RHF(cell).run()
+    >>> trexio.to_trexio(mf, 'cell.h5')
+    >>> cell2 = trexio.from_trexio('cell.h5')
+    >>> isinstance(cell2, pbcgto.Cell)
+    True
+    """
+    with trexio.File(filename, "r", back_end=trexio.TREXIO_AUTO) as tf:
+        assert trexio.read_basis_type(tf) == "Gaussian"
+        pbc_periodic = trexio.read_pbc_periodic(tf)
+        labels = trexio.read_nucleus_label(tf)
+        coords = trexio.read_nucleus_coord(tf)
+        elements = [s + str(i) for i, s in enumerate(labels)]
+
+        if pbc_periodic:
+            mol = pbcgto.Cell()
+            mol.unit = "Bohr"
+            a = np.asarray(trexio.read_cell_a(tf), dtype=float)
+            b = np.asarray(trexio.read_cell_b(tf), dtype=float)
+            c = np.asarray(trexio.read_cell_c(tf), dtype=float)
+            mol.a = np.vstack([a, b, c])
+        else:
+            mol = gto.Mole()
+            mol.unit = "Bohr"
+
+        mol.atom = list(zip(elements, coords))
+        up_num = trexio.read_electron_up_num(tf)
+        dn_num = trexio.read_electron_dn_num(tf)
+        spin = up_num - dn_num
+        mol.spin = spin
+
+        if trexio.has_ecp(tf):
+            # --- read TREXIO ECP arrays ---
+            z_core = trexio.read_ecp_z_core(tf)  # shape (natm,)
+            max_l1_arr = trexio.read_ecp_max_ang_mom_plus_1(tf)  # shape (natm,)
+            nuc_idx = trexio.read_ecp_nucleus_index(tf)  # shape (ecp_num,)
+            ang_mom_enc = trexio.read_ecp_ang_mom(tf)  # shape (ecp_num,)
+            coeff_arr = trexio.read_ecp_coefficient(tf)  # shape (ecp_num,)
+            exp_arr = trexio.read_ecp_exponent(tf)  # shape (ecp_num,)
+            power_arr = trexio.read_ecp_power(tf)  # shape (ecp_num,)
+
+            # --- aggregate primitives per (nucleus, l); decode local channel to l = -1 ---
+            per_atom = defaultdict(
+                lambda: defaultdict(list)
+            )  # per_atom[n][l] -> [(power, exp, coeff), ...]
+            for k in range(len(nuc_idx)):
+                n = int(nuc_idx[k])
+                l_e = int(ang_mom_enc[k])
+                # local channel was encoded as max_l1_arr[n]; decode to l = -1
+                l_d = -1 if l_e == int(max_l1_arr[n]) else l_e
+                p = int(power_arr[k])  # stored as r-2 on write
+                e = float(exp_arr[k])
+                c = float(coeff_arr[k])
+                per_atom[n][l_d].append((p, e, c))
+
+            def _is_dummy_ul_s(items):
+                # H/He dummy record injected at write time: (power=0, exp=1.0, coeff=0.0)
+                return (
+                    len(items) == 1
+                    and items[0][0] == 0
+                    and abs(items[0][1] - 1.0) < 1e-12
+                    and abs(items[0][2]) < 1e-300
+                )
+
+            ecp_dict = {}
+            for n, raw_sym in enumerate(labels):
+                # skip ghosts: ECP not applied to 'X-*' atoms
+                if re.match(r"X-.*", raw_sym):
+                    continue
+
+                zc = int(z_core[n]) if n < len(z_core) else 0
+                lmap = dict(per_atom.get(n, {}))
+
+                # drop intentional dummy ul-s for H/He if present
+                if 0 in lmap and _is_dummy_ul_s(lmap[0]):
+                    lmap.pop(0)
+
+                # nothing to assign if no channels and no core reduction
+                if not lmap and zc == 0:
+                    continue
+
+                # Build PySCF format for this atom:
+                # for each l, buckets[r] holds (exp, coeff), where r = power + 2
+                at_list = []
+                # ordering is not strictly required, but keep nonlocal (l>=0) then local (l=-1) last
+                for l in sorted(lmap.keys(), key=lambda x: (x == -1, x)):
+                    items = lmap[l]
+                    if not items:
+                        continue
+                    r_list = [p + 2 for p, _, _ in items]
+                    max_r = max(r_list)
+                    buckets = [[] for _ in range(max_r + 1)]  # r in [0..max_r]
+                    for (p, e, c), r in zip(items, r_list):
+                        if r < 0:
+                            # should not happen if power = r-2 and r>=0
+                            continue
+                        buckets[r].append((e, c))
+                    at_list.append([int(l), buckets])
+
+                # ★ Use the exact same per-atom label as in mol.atom / mol._basis
+                key = elements[n]
+                ecp_dict[key] = (zc, at_list)
+
+            if ecp_dict:
+                mol.ecp = ecp_dict
+
+        if trexio.has_ao_cartesian(tf):
+            mol.cart = trexio.read_ao_cartesian(tf) == 1
+
+        if trexio.has_nucleus_point_group(tf):
+            mol.symmetry = trexio.read_nucleus_point_group(tf)
+
+        nuc_idx = trexio.read_basis_nucleus_index(tf).tolist()
+        ls = trexio.read_basis_shell_ang_mom(tf).tolist()
+        prim2sh = trexio.read_basis_shell_index(tf).tolist()
+        exps = trexio.read_basis_exponent(tf).tolist()
+        coef = trexio.read_basis_coefficient(tf).tolist()
+
+        basis = {}
+        exps = _group_by(exps, prim2sh)
+        coef = _group_by(coef, prim2sh)
+        p1 = 0
+        for ia, at_ls in enumerate(_group_by(ls, nuc_idx)):
+            p0, p1 = p1, p1 + at_ls.size
+            at_basis = [
+                [l, *zip(e, c)] for l, e, c in zip(ls[p0:p1], exps[p0:p1], coef[p0:p1])
+            ]
+            basis[elements[ia]] = at_basis
+
+        # To avoid the mol.build() sort the basis, disable mol.basis and set the
+        # internal data _basis directly.
+        mol.basis = {}
+        mol._basis = basis
+        return mol.build()
 
 
 def _trexio_backend_const(backend='h5'):
@@ -44,22 +437,6 @@ def _trexio_backend_const(backend='h5'):
     if key == 'auto':
         return trexio.TREXIO_AUTO
     raise ValueError("backend must be one of 'h5', 'hdf5', 'text', 'txt', or 'auto'")
-
-
-
-def to_trexio(obj, filename, backend="h5", ci_threshold=None, chunk_size=None):
-    back_end = _trexio_backend_const(backend)
-    with trexio.File(filename, "u", back_end=back_end) as tf:
-        if isinstance(obj, gto.Mole) or isinstance(obj, pbcgto.Cell):
-            _mol_to_trexio(obj, tf)
-        elif isinstance(obj, scf.hf.SCF):
-            _scf_to_trexio(obj, tf)
-        elif isinstance(obj, (casci.CASCI, mc1step.CASSCF, mcscf.ucasci.UCASCI, mcscf.umc1step.UCASSCF)):
-            ci_threshold = ci_threshold if ci_threshold is not None else 0.
-            chunk_size = chunk_size if chunk_size is not None else 100000
-            _mcscf_to_trexio(obj, tf, ci_threshold=ci_threshold, chunk_size=chunk_size)
-        else:
-            raise NotImplementedError(f"Conversion function for {obj.__class__}")
 
 
 def _mol_to_trexio(mol, trexio_file):
@@ -583,7 +960,7 @@ def _trexio_ncore_scalar(ncore):
     return int(ncore)
 
 
-def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
+def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000, write_eri=True, write_rdm=True):
     mol = cas_obj.mol
     scf_obj = cas_obj._scf
     _mol_to_trexio(mol, trexio_file)
@@ -665,225 +1042,100 @@ def _mcscf_to_trexio(cas_obj, trexio_file, ci_threshold=0., chunk_size=100000):
     _det_to_trexio(cas_obj, ncas, nelec_cas, trexio_file, ci_threshold, chunk_size)
 
     if is_uhf:
-        dm1a, dm1b, dm2aa, dm2ab, dm2bb = _get_cas_rdm12s(cas_obj, ncas)
+        if write_rdm:
+            dm1a, dm1b, dm2aa, dm2ab, dm2bb = _get_cas_rdm12s(cas_obj, ncas)
 
-        rdm1_up = np.zeros((num_mo, num_mo))
-        rdm1_dn = np.zeros((num_mo, num_mo))
-        rdm1_up[ncore:ncore + ncas, ncore:ncore + ncas] = dm1a
-        beta_start = num_mo_up
-        rdm1_dn[beta_start + ncore:beta_start + ncore + ncas,
-                beta_start + ncore:beta_start + ncore + ncas] = dm1b
+            rdm1_up = np.zeros((num_mo, num_mo))
+            rdm1_dn = np.zeros((num_mo, num_mo))
+            rdm1_up[ncore:ncore + ncas, ncore:ncore + ncas] = dm1a
+            beta_start = num_mo_up
+            rdm1_dn[beta_start + ncore:beta_start + ncore + ncas,
+                    beta_start + ncore:beta_start + ncore + ncas] = dm1b
 
-        if trexio.has_rdm_1e_up(trexio_file):
-            trexio.delete_rdm_1e_up(trexio_file)
-        if trexio.has_rdm_1e_dn(trexio_file):
-            trexio.delete_rdm_1e_dn(trexio_file)
-        trexio.write_rdm_1e_up(trexio_file, rdm1_up)
-        trexio.write_rdm_1e_dn(trexio_file, rdm1_dn)
+            if trexio.has_rdm_1e_up(trexio_file):
+                trexio.delete_rdm_1e_up(trexio_file)
+            if trexio.has_rdm_1e_dn(trexio_file):
+                trexio.delete_rdm_1e_dn(trexio_file)
+            trexio.write_rdm_1e_up(trexio_file, rdm1_up)
+            trexio.write_rdm_1e_dn(trexio_file, rdm1_dn)
 
-        idx_uu_base = _ijkl_indices(ncas)
-        data_uu = _gather_4index(dm2aa, idx_uu_base)
-        idx_uu = idx_uu_base[:, [2, 3, 0, 1]] + ncore
-        _write_sparse_4index(
-            trexio_file,
-            trexio.write_rdm_2e_upup,
-            idx_uu,
-            data_uu,
-        )
+            idx_uu_base = _ijkl_indices(ncas)
+            data_uu = _gather_4index(dm2aa, idx_uu_base)
+            idx_uu = idx_uu_base[:, [2, 3, 0, 1]] + ncore
+            _write_sparse_4index(
+                trexio_file,
+                trexio.write_rdm_2e_upup,
+                idx_uu,
+                data_uu,
+            )
 
-        idx_dd_base = _ijkl_indices(ncas)
-        data_dd = _gather_4index(dm2bb, idx_dd_base)
-        idx_dd = idx_dd_base[:, [2, 3, 0, 1]] + beta_start + ncore
-        _write_sparse_4index(
-            trexio_file,
-            trexio.write_rdm_2e_dndn,
-            idx_dd,
-            data_dd,
-        )
+            idx_dd_base = _ijkl_indices(ncas)
+            data_dd = _gather_4index(dm2bb, idx_dd_base)
+            idx_dd = idx_dd_base[:, [2, 3, 0, 1]] + beta_start + ncore
+            _write_sparse_4index(
+                trexio_file,
+                trexio.write_rdm_2e_dndn,
+                idx_dd,
+                data_dd,
+            )
 
-        idx_ud_base = _ijkl_indices(ncas)
-        data_ud = _gather_4index(dm2ab, idx_ud_base)
-        idx_ud = idx_ud_base[:, [2, 3, 0, 1]].copy()
-        idx_ud[:, 0] += ncore
-        idx_ud[:, 1] += beta_start + ncore
-        idx_ud[:, 2] += ncore
-        idx_ud[:, 3] += beta_start + ncore
-        _write_sparse_4index(
-            trexio_file,
-            trexio.write_rdm_2e_updn,
-            idx_ud,
-            data_ud,
-        )
+            idx_ud_base = _ijkl_indices(ncas)
+            data_ud = _gather_4index(dm2ab, idx_ud_base)
+            idx_ud = idx_ud_base[:, [2, 3, 0, 1]].copy()
+            idx_ud[:, 0] += ncore
+            idx_ud[:, 1] += beta_start + ncore
+            idx_ud[:, 2] += ncore
+            idx_ud[:, 3] += beta_start + ncore
+            _write_sparse_4index(
+                trexio_file,
+                trexio.write_rdm_2e_updn,
+                idx_ud,
+                data_ud,
+            )
 
     else:
-        dm1_cas, dm2_cas = _get_cas_rdm12(cas_obj, ncas)
-        h1eff, _ = _get_cas_h1eff(cas_obj)
-        h2eff = _get_cas_h2eff(cas_obj, ncas)
+        if write_rdm or write_eri:
+            idx_base = _ijkl_indices(ncas)
+            idx = idx_base + ncore
+            idx_phys = idx[:, [2, 3, 0, 1]]
 
-        dm1_full = np.zeros((num_mo, num_mo))
-        dm1_full[ncore:ncore + ncas, ncore:ncore + ncas] = dm1_cas
+        if write_rdm:
+            dm1_cas, dm2_cas = _get_cas_rdm12(cas_obj, ncas)
 
-        h1_full = np.zeros((num_mo, num_mo))
-        h1_full[ncore:ncore + ncas, ncore:ncore + ncas] = h1eff
+            dm1_full = np.zeros((num_mo, num_mo))
+            dm1_full[ncore:ncore + ncas, ncore:ncore + ncas] = dm1_cas
 
-        if trexio.has_rdm_1e(trexio_file):
-            trexio.delete_rdm_1e(trexio_file)
-        trexio.write_rdm_1e(trexio_file, dm1_full)
+            if trexio.has_rdm_1e(trexio_file):
+                trexio.delete_rdm_1e(trexio_file)
+            trexio.write_rdm_1e(trexio_file, dm1_full)
 
-        if trexio.has_mo_1e_int_core_hamiltonian(trexio_file):
-            trexio.delete_mo_1e_int_core_hamiltonian(trexio_file)
-        trexio.write_mo_1e_int_core_hamiltonian(trexio_file, h1_full)
+            data_rdm2 = _gather_4index(dm2_cas, idx_base)
+            # Physicist notation: store as (k, l, i, j) to match rdm2 layout and UHF blocks.
+            _write_sparse_4index(
+                trexio_file,
+                trexio.write_rdm_2e,
+                idx_phys,
+                data_rdm2,
+            )
 
-        idx_base = _ijkl_indices(ncas)
-        data_rdm2 = _gather_4index(dm2_cas, idx_base)
-        data_h2 = _gather_4index(h2eff, idx_base)
-        idx = idx_base + ncore
-        # Physicist notation: store as (k, l, i, j) to match rdm2 layout and UHF blocks.
-        idx_rdm2 = idx[:, [2, 3, 0, 1]]
-        idx_phys = idx[:, [2, 3, 0, 1]]
-        _write_sparse_4index(
-            trexio_file,
-            trexio.write_rdm_2e,
-            idx_rdm2,
-            data_rdm2,
-        )
+        if write_eri:
+            h1eff, _ = _get_cas_h1eff(cas_obj)
+            h2eff = _get_cas_h2eff(cas_obj, ncas)
 
-        _write_sparse_4index(
-            trexio_file,
-            trexio.write_mo_2e_int_eri,
-            idx_phys,
-            data_h2,
-        )
+            h1_full = np.zeros((num_mo, num_mo))
+            h1_full[ncore:ncore + ncas, ncore:ncore + ncas] = h1eff
 
+            if trexio.has_mo_1e_int_core_hamiltonian(trexio_file):
+                trexio.delete_mo_1e_int_core_hamiltonian(trexio_file)
+            trexio.write_mo_1e_int_core_hamiltonian(trexio_file, h1_full)
 
-def mol_from_trexio(filename):
-    with trexio.File(filename, "r", back_end=trexio.TREXIO_AUTO) as tf:
-        assert trexio.read_basis_type(tf) == "Gaussian"
-        pbc_periodic = trexio.read_pbc_periodic(tf)
-        labels = trexio.read_nucleus_label(tf)
-        coords = trexio.read_nucleus_coord(tf)
-        elements = [s + str(i) for i, s in enumerate(labels)]
-
-        if pbc_periodic:
-            mol = pbcgto.Cell()
-            mol.unit = "Bohr"
-            a = np.asarray(trexio.read_cell_a(tf), dtype=float)
-            b = np.asarray(trexio.read_cell_b(tf), dtype=float)
-            c = np.asarray(trexio.read_cell_c(tf), dtype=float)
-            mol.a = np.vstack([a, b, c])
-        else:
-            mol = gto.Mole()
-            mol.unit = "Bohr"
-
-        mol.atom = list(zip(elements, coords))
-        up_num = trexio.read_electron_up_num(tf)
-        dn_num = trexio.read_electron_dn_num(tf)
-        spin = up_num - dn_num
-        mol.spin = spin
-
-        if trexio.has_ecp(tf):
-            # --- read TREXIO ECP arrays ---
-            z_core = trexio.read_ecp_z_core(tf)  # shape (natm,)
-            max_l1_arr = trexio.read_ecp_max_ang_mom_plus_1(tf)  # shape (natm,)
-            nuc_idx = trexio.read_ecp_nucleus_index(tf)  # shape (ecp_num,)
-            ang_mom_enc = trexio.read_ecp_ang_mom(tf)  # shape (ecp_num,)
-            coeff_arr = trexio.read_ecp_coefficient(tf)  # shape (ecp_num,)
-            exp_arr = trexio.read_ecp_exponent(tf)  # shape (ecp_num,)
-            power_arr = trexio.read_ecp_power(tf)  # shape (ecp_num,)
-
-            # --- aggregate primitives per (nucleus, l); decode local channel to l = -1 ---
-            per_atom = defaultdict(
-                lambda: defaultdict(list)
-            )  # per_atom[n][l] -> [(power, exp, coeff), ...]
-            for k in range(len(nuc_idx)):
-                n = int(nuc_idx[k])
-                l_e = int(ang_mom_enc[k])
-                # local channel was encoded as max_l1_arr[n]; decode to l = -1
-                l_d = -1 if l_e == int(max_l1_arr[n]) else l_e
-                p = int(power_arr[k])  # stored as r-2 on write
-                e = float(exp_arr[k])
-                c = float(coeff_arr[k])
-                per_atom[n][l_d].append((p, e, c))
-
-            def _is_dummy_ul_s(items):
-                # H/He dummy record injected at write time: (power=0, exp=1.0, coeff=0.0)
-                return (
-                    len(items) == 1
-                    and items[0][0] == 0
-                    and abs(items[0][1] - 1.0) < 1e-12
-                    and abs(items[0][2]) < 1e-300
-                )
-
-            ecp_dict = {}
-            for n, raw_sym in enumerate(labels):
-                # skip ghosts: ECP not applied to 'X-*' atoms
-                if re.match(r"X-.*", raw_sym):
-                    continue
-
-                zc = int(z_core[n]) if n < len(z_core) else 0
-                lmap = dict(per_atom.get(n, {}))
-
-                # drop intentional dummy ul-s for H/He if present
-                if 0 in lmap and _is_dummy_ul_s(lmap[0]):
-                    lmap.pop(0)
-
-                # nothing to assign if no channels and no core reduction
-                if not lmap and zc == 0:
-                    continue
-
-                # Build PySCF format for this atom:
-                # for each l, buckets[r] holds (exp, coeff), where r = power + 2
-                at_list = []
-                # ordering is not strictly required, but keep nonlocal (l>=0) then local (l=-1) last
-                for l in sorted(lmap.keys(), key=lambda x: (x == -1, x)):
-                    items = lmap[l]
-                    if not items:
-                        continue
-                    r_list = [p + 2 for p, _, _ in items]
-                    max_r = max(r_list)
-                    buckets = [[] for _ in range(max_r + 1)]  # r in [0..max_r]
-                    for (p, e, c), r in zip(items, r_list):
-                        if r < 0:
-                            # should not happen if power = r-2 and r>=0
-                            continue
-                        buckets[r].append((e, c))
-                    at_list.append([int(l), buckets])
-
-                # ★ Use the exact same per-atom label as in mol.atom / mol._basis
-                key = elements[n]
-                ecp_dict[key] = (zc, at_list)
-
-            if ecp_dict:
-                mol.ecp = ecp_dict
-
-        if trexio.has_ao_cartesian(tf):
-            mol.cart = trexio.read_ao_cartesian(tf) == 1
-
-        if trexio.has_nucleus_point_group(tf):
-            mol.symmetry = trexio.read_nucleus_point_group(tf)
-
-        nuc_idx = trexio.read_basis_nucleus_index(tf).tolist()
-        ls = trexio.read_basis_shell_ang_mom(tf).tolist()
-        prim2sh = trexio.read_basis_shell_index(tf).tolist()
-        exps = trexio.read_basis_exponent(tf).tolist()
-        coef = trexio.read_basis_coefficient(tf).tolist()
-
-        basis = {}
-        exps = _group_by(exps, prim2sh)
-        coef = _group_by(coef, prim2sh)
-        p1 = 0
-        for ia, at_ls in enumerate(_group_by(ls, nuc_idx)):
-            p0, p1 = p1, p1 + at_ls.size
-            at_basis = [
-                [l, *zip(e, c)] for l, e, c in zip(ls[p0:p1], exps[p0:p1], coef[p0:p1])
-            ]
-            basis[elements[ia]] = at_basis
-
-        # To avoid the mol.build() sort the basis, disable mol.basis and set the
-        # internal data _basis directly.
-        mol.basis = {}
-        mol._basis = basis
-        return mol.build()
+            data_h2 = _gather_4index(h2eff, idx_base)
+            _write_sparse_4index(
+                trexio_file,
+                trexio.write_mo_2e_int_eri,
+                idx_phys,
+                data_h2,
+            )
 
 
 def _trexio_is_gamma_single_k(obj) -> bool:
@@ -961,10 +1213,10 @@ def _trexio_is_rohf_roks_mf(mf_obj) -> bool:
         (
             scf.rohf.ROHF,
             dft.roks.ROKS,
-            pbc.scf.rohf.ROHF,
-            pbc.scf.krohf.KROHF,
-            pbc.dft.roks.ROKS,
-            pbc.dft.kroks.KROKS,
+            pbcscf.rohf.ROHF,
+            pbcscf.krohf.KROHF,
+            pbcdft.roks.ROKS,
+            pbcdft.kroks.KROKS,
         ),
     ) and not _trexio_is_uhf_uks_mf(mf_obj)
 
@@ -975,10 +1227,10 @@ def _trexio_is_uhf_uks_mf(mf_obj) -> bool:
         (
             scf.uhf.UHF,
             dft.uks.UKS,
-            pbc.scf.uhf.UHF,
-            pbc.dft.uks.UKS,
-            pbc.scf.kuhf.KUHF,
-            pbc.dft.kuks.KUKS,
+            pbcscf.uhf.UHF,
+            pbcdft.uks.UKS,
+            pbcscf.kuhf.KUHF,
+            pbcdft.kuks.KUKS,
         ),
     )
 
@@ -990,10 +1242,10 @@ def _trexio_is_rhf_rks_mf(mf_obj) -> bool:
             (
                 scf.hf.RHF,
                 dft.rks.RKS,
-                pbc.scf.rhf.RHF,
-                pbc.dft.rks.RKS,
-                pbc.scf.krhf.KRHF,
-                pbc.dft.krks.KRKS,
+                pbcscf.rhf.RHF,
+                pbcdft.rks.RKS,
+                pbcscf.krhf.KRHF,
+                pbcdft.krks.KRKS,
             ),
         )
         and not _trexio_is_uhf_uks_mf(mf_obj)
@@ -1001,8 +1253,8 @@ def _trexio_is_rhf_rks_mf(mf_obj) -> bool:
     )
 
 
-def write_2e_eri(
-    mf, filename, backend='h5', basis='mo', df_engine='MDF', sym='s1',
+def _write_2e_eri(
+    mf, trexio_file, basis='mo', df_engine='MDF', sym='s1',
 ):
     """Write two-electron repulsion integrals to a TREXIO file.
 
@@ -1011,10 +1263,8 @@ def write_2e_eri(
     mf : SCF/KSCF object
         Converged molecular or PBC mean-field object. PBC data must be
         Gamma-only.
-    filename : str
-        Path to the TREXIO file to create or update.
-    backend : {'h5', 'text'}, optional
-        TREXIO backend selector passed through to ``trexio.File``.
+    trexio_file : trexio.File
+        An open, writable TREXIO file object.
     basis : {'AO', 'MO'}, optional
         Basis in which integrals are written. AO is always spin-independent.
         MO concatenates alpha and beta MOs for UHF/UKS to include cross-spin
@@ -1047,7 +1297,7 @@ def write_2e_eri(
     is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
-            f"Conversion function for {mf.__class__} is not implemented in write_2e_eri."
+            f"Conversion function for {mf.__class__} is not implemented in _write_2e_eri."
         )
 
     basis = basis.upper()
@@ -1098,7 +1348,7 @@ def write_2e_eri(
                 if sym == 's1':
                     if eri_mo.ndim < 4:
                         eri_mo = ao2mo.restore(1, eri_mo, nmo)
-                _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+                _write_2e_int_eri(np.ascontiguousarray(eri_mo), trexio_file, 'MO', sym=sym)
             elif is_rhf_like:  # RHF/RKS
                 C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=False)
                 if getattr(mf, '_eri', None) is not None:
@@ -1110,10 +1360,10 @@ def write_2e_eri(
                 if sym == 's1':
                     if eri_mo.ndim < 4:
                         eri_mo = ao2mo.restore(1, eri_mo, nmo)
-                _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+                _write_2e_int_eri(np.ascontiguousarray(eri_mo), trexio_file, 'MO', sym=sym)
             else:
                 raise NotImplementedError(
-                    f"Conversion function for {mf.__class__} is not implemented in write_2e_eri(MO)."
+                    f"Conversion function for {mf.__class__} is not implemented in _write_2e_eri(MO)."
                 )
 
         # PBC (Gamma only)
@@ -1139,7 +1389,7 @@ def write_2e_eri(
                 elif sym == 's4':
                     if eri_mo.ndim == 4:
                         eri_mo = ao2mo.restore(4, eri_mo, nmo)
-                _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+                _write_2e_int_eri(np.ascontiguousarray(eri_mo), trexio_file, 'MO', sym=sym)
             elif is_rhf_like:  # RHF/RKS @ Gamma
                 C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=True)
                 eri_mo = dfobj.get_mo_eri((C, C, C, C))
@@ -1153,10 +1403,10 @@ def write_2e_eri(
                 elif sym == 's4':
                     if eri_mo.ndim == 4:
                         eri_mo = ao2mo.restore(4, eri_mo, nmo)
-                _write_2e_int_eri(np.ascontiguousarray(eri_mo), filename, backend, 'MO', sym=sym)
+                _write_2e_int_eri(np.ascontiguousarray(eri_mo), trexio_file, 'MO', sym=sym)
             else:
                 raise NotImplementedError(
-                    f"Conversion function for {mf.__class__} is not implemented in write_2e_eri(PBC-MO)."
+                    f"Conversion function for {mf.__class__} is not implemented in _write_2e_eri(PBC-MO)."
                 )
 
     # ---------------------
@@ -1178,7 +1428,7 @@ def write_2e_eri(
                 eri_ao = ao2mo.restore(4, eri_ao, nao)
             elif sym == 's8':
                 eri_ao = ao2mo.restore(8, eri_ao, nao)
-            _write_2e_int_eri(np.ascontiguousarray(eri_ao), filename, backend, 'AO', sym=sym)
+            _write_2e_int_eri(np.ascontiguousarray(eri_ao), trexio_file, 'AO', sym=sym)
         else:
             # Molecular AO
             eri_ao = None
@@ -1195,10 +1445,10 @@ def write_2e_eri(
             else:
                 eri_ao = mf.mol.intor('int2e', aosym=sym)
             eri_ao = _require_real_2e(eri_ao)
-            _write_2e_int_eri(np.ascontiguousarray(eri_ao), filename, backend, 'AO', sym=sym)
+            _write_2e_int_eri(np.ascontiguousarray(eri_ao), trexio_file, 'AO', sym=sym)
 
 
-def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
+def _write_2e_int_eri(eri, trexio_file, basis='MO', sym='s1'):
     basis = basis.upper()
     sym = sym.lower()
     if basis not in ['MO', 'AO']:
@@ -1210,7 +1460,7 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         i, j = np.tril_indices(n)
         return i.astype(np.int32), j.astype(np.int32)
 
-    back_end = _trexio_backend_const(backend)
+    tf = trexio_file
 
     if sym == 's1':
         if eri.ndim != 4:
@@ -1227,17 +1477,16 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         idx=idx.flatten()
 
         # write ERI
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            if basis == 'AO':
-                if not trexio.has_ao_num(tf):
-                    trexio.write_ao_num(tf, n)
-            else:
-                if not trexio.has_mo_num(tf):
-                    trexio.write_mo_num(tf, n)
-            if basis == 'MO':
-                trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
-            else:
-                trexio.write_ao_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
+        if basis == 'AO':
+            if not trexio.has_ao_num(tf):
+                trexio.write_ao_num(tf, n)
+        else:
+            if not trexio.has_mo_num(tf):
+                trexio.write_mo_num(tf, n)
+        if basis == 'MO':
+            trexio.write_mo_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
+        else:
+            trexio.write_ao_2e_int_eri(tf, 0, num_integrals, idx, eri.ravel())
         return
 
     if sym == 's4':
@@ -1252,34 +1501,33 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
         total = npair * npair
         chunk = 100000
 
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            if basis == 'AO':
-                if not trexio.has_ao_num(tf):
-                    trexio.write_ao_num(tf, n)
+        if basis == 'AO':
+            if not trexio.has_ao_num(tf):
+                trexio.write_ao_num(tf, n)
+        else:
+            if not trexio.has_mo_num(tf):
+                trexio.write_mo_num(tf, n)
+
+        offset = 0
+        while offset < total:
+            end = min(offset + chunk, total)
+            t = np.arange(offset, end, dtype=np.int64)
+            ij = t // npair
+            kl = t % npair
+
+            # Physicist notation
+            i = pair_i[ij]
+            j = pair_j[ij]
+            k = pair_i[kl]
+            l = pair_j[kl]
+            idx = np.stack([i, k, j, l], axis=1).astype(np.int32).ravel()
+            val = eri[ij, kl].ravel()
+
+            if basis == 'MO':
+                trexio.write_mo_2e_int_eri(tf, offset, end - offset, idx, val)
             else:
-                if not trexio.has_mo_num(tf):
-                    trexio.write_mo_num(tf, n)
-
-            offset = 0
-            while offset < total:
-                end = min(offset + chunk, total)
-                t = np.arange(offset, end, dtype=np.int64)
-                ij = t // npair
-                kl = t % npair
-
-                # Physicist notation
-                i = pair_i[ij]
-                j = pair_j[ij]
-                k = pair_i[kl]
-                l = pair_j[kl]
-                idx = np.stack([i, k, j, l], axis=1).astype(np.int32).ravel()
-                val = eri[ij, kl].ravel()
-
-                if basis == 'MO':
-                    trexio.write_mo_2e_int_eri(tf, offset, end - offset, idx, val)
-                else:
-                    trexio.write_ao_2e_int_eri(tf, offset, end - offset, idx, val)
-                offset = end
+                trexio.write_ao_2e_int_eri(tf, offset, end - offset, idx, val)
+            offset = end
         return
 
     # sym == 's8'
@@ -1297,37 +1545,36 @@ def _write_2e_int_eri(eri, filename, backend='h5', basis='MO', sym='s1'):
     tri_i, tri_j = np.tril_indices(npair)
     chunk = 100000
 
-    with trexio.File(filename, "u", back_end=back_end) as tf:
-        if basis == 'AO':
-            if not trexio.has_ao_num(tf):
-                trexio.write_ao_num(tf, n)
+    if basis == 'AO':
+        if not trexio.has_ao_num(tf):
+            trexio.write_ao_num(tf, n)
+    else:
+        if not trexio.has_mo_num(tf):
+            trexio.write_mo_num(tf, n)
+
+    offset = 0
+    while offset < total:
+        end = min(offset + chunk, total)
+        ij = tri_i[offset:end]
+        kl = tri_j[offset:end]
+
+        # Physicist notation
+        i = pair_i[ij]
+        j = pair_j[ij]
+        k = pair_i[kl]
+        l = pair_j[kl]
+        idx = np.stack([i, k, j, l], axis=1).astype(np.int32).ravel()
+        val = eri[offset:end]
+
+        if basis == 'MO':
+            trexio.write_mo_2e_int_eri(tf, offset, end - offset, idx, val)
         else:
-            if not trexio.has_mo_num(tf):
-                trexio.write_mo_num(tf, n)
-
-        offset = 0
-        while offset < total:
-            end = min(offset + chunk, total)
-            ij = tri_i[offset:end]
-            kl = tri_j[offset:end]
-
-            # Physicist notation
-            i = pair_i[ij]
-            j = pair_j[ij]
-            k = pair_i[kl]
-            l = pair_j[kl]
-            idx = np.stack([i, k, j, l], axis=1).astype(np.int32).ravel()
-            val = eri[offset:end]
-
-            if basis == 'MO':
-                trexio.write_mo_2e_int_eri(tf, offset, end - offset, idx, val)
-            else:
-                trexio.write_ao_2e_int_eri(tf, offset, end - offset, idx, val)
-            offset = end
+            trexio.write_ao_2e_int_eri(tf, offset, end - offset, idx, val)
+        offset = end
 
 
-def write_1e_eri(
-    mf, filename, backend='h5', basis='AO', df_engine='MDF',
+def _write_1e_eri(
+    mf, trexio_file, basis='AO', df_engine='MDF',
 ):
     """Write one-electron integrals to a TREXIO file.
 
@@ -1339,10 +1586,8 @@ def write_1e_eri(
     mf : SCF/KSCF object
         Converged molecular or PBC mean-field object. PBC data must be
         Gamma-only.
-    filename : str
-        Path to the TREXIO file to create or update.
-    backend : {'h5', 'text'}, optional
-        TREXIO backend selector passed through to ``trexio.File``.
+    trexio_file : trexio.File
+        An open, writable TREXIO file object.
     basis : {'AO', 'MO'}, optional
         Basis in which integrals are written. For MO + UHF/UKS, alpha and beta
         coefficients are concatenated column-wise to form a single block.
@@ -1370,11 +1615,10 @@ def write_1e_eri(
     is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
-            f"Conversion function for {mf.__class__} is not implemented in write_1e_eri."
+            f"Conversion function for {mf.__class__} is not implemented in _write_1e_eri."
         )
 
     basis = basis.upper()
-    back_end = _trexio_backend_const(backend)
     if basis not in ('AO', 'MO'):
         raise ValueError("basis must be either 'AO' or 'MO'")
 
@@ -1405,7 +1649,7 @@ def write_1e_eri(
         mat = np.asarray(mat)
         if np.iscomplexobj(mat):
             raise NotImplementedError(
-                f"Complex {label} is not supported in trexio.py write_1e_eri."
+                f"Complex {label} is not supported in trexio.py _write_1e_eri."
             )
         return mat
 
@@ -1463,10 +1707,9 @@ def write_1e_eri(
         ecp_mat = np.ascontiguousarray(_reject_complex_1e(_hermitize(ecp_mat), 'ecp'))
 
     if basis == 'AO':
-        _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend, 'AO')
+        _write_1e_int_eri(overlap, kinetic, potential, core, trexio_file, 'AO')
         if ecp_mat is not None:
-            with trexio.File(filename, "u", back_end=back_end) as tf:
-                trexio.write_ao_1e_int_ecp(tf, ecp_mat)
+            trexio.write_ao_1e_int_ecp(trexio_file, ecp_mat)
         return
 
     if is_uhf_like:
@@ -1476,7 +1719,7 @@ def write_1e_eri(
         C = _trexio_get_rhf_coeff_matrix(mf, expect_gamma=is_pbc)
     else:
         raise NotImplementedError(
-            f"Conversion function for {mf.__class__} is not implemented in write_1e_eri(MO)."
+            f"Conversion function for {mf.__class__} is not implemented in _write_1e_eri(MO)."
         )
 
     if C.ndim != 2:
@@ -1494,14 +1737,13 @@ def write_1e_eri(
         mo_ecp = np.ascontiguousarray(_reject_complex_1e(_ao_to_mo(ecp_mat, C), 'mo_ecp'))
 
     _write_1e_int_eri(
-        mo_overlap, mo_kinetic, mo_potential, mo_core, filename, backend, 'MO'
+        mo_overlap, mo_kinetic, mo_potential, mo_core, trexio_file, 'MO'
     )
     if mo_ecp is not None:
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            trexio.write_mo_1e_int_ecp(tf, mo_ecp)
+        trexio.write_mo_1e_int_ecp(trexio_file, mo_ecp)
 
 
-def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5', basis='AO'):
+def _write_1e_int_eri(overlap, kinetic, potential, core, trexio_file, basis='AO'):
     basis = basis.upper()
     if basis not in ('AO', 'MO'):
         raise ValueError("basis must be either 'AO' or 'MO'")
@@ -1510,28 +1752,27 @@ def _write_1e_int_eri(overlap, kinetic, potential, core, filename, backend='h5',
     kinetic = np.ascontiguousarray(kinetic)
     potential = np.ascontiguousarray(potential)
     core = np.ascontiguousarray(core)
-    back_end = _trexio_backend_const(backend)
+    tf = trexio_file
 
-    with trexio.File(filename, "u", back_end=back_end) as tf:
-        if basis == 'AO':
-            ao_dim = overlap.shape[0]
-            if not trexio.has_ao_num(tf):
-                trexio.write_ao_num(tf, ao_dim)
-            trexio.write_ao_1e_int_overlap(tf, overlap)
-            trexio.write_ao_1e_int_kinetic(tf, kinetic)
-            trexio.write_ao_1e_int_potential_n_e(tf, potential)
-            trexio.write_ao_1e_int_core_hamiltonian(tf, core)
-        else:
-            mo_dim = overlap.shape[0]
-            if not trexio.has_mo_num(tf):
-                trexio.write_mo_num(tf, mo_dim)
-            trexio.write_mo_1e_int_overlap(tf, overlap)
-            trexio.write_mo_1e_int_kinetic(tf, kinetic)
-            trexio.write_mo_1e_int_potential_n_e(tf, potential)
-            trexio.write_mo_1e_int_core_hamiltonian(tf, core)
+    if basis == 'AO':
+        ao_dim = overlap.shape[0]
+        if not trexio.has_ao_num(tf):
+            trexio.write_ao_num(tf, ao_dim)
+        trexio.write_ao_1e_int_overlap(tf, overlap)
+        trexio.write_ao_1e_int_kinetic(tf, kinetic)
+        trexio.write_ao_1e_int_potential_n_e(tf, potential)
+        trexio.write_ao_1e_int_core_hamiltonian(tf, core)
+    else:
+        mo_dim = overlap.shape[0]
+        if not trexio.has_mo_num(tf):
+            trexio.write_mo_num(tf, mo_dim)
+        trexio.write_mo_1e_int_overlap(tf, overlap)
+        trexio.write_mo_1e_int_kinetic(tf, kinetic)
+        trexio.write_mo_1e_int_potential_n_e(tf, potential)
+        trexio.write_mo_1e_int_core_hamiltonian(tf, core)
 
 
-def write_1b_rdm(mf, filename, backend='h5'):
+def _write_1b_rdm(mf, trexio_file):
     """Write a one-body reduced density matrix in MO basis to TREXIO.
 
     Parameters
@@ -1539,10 +1780,8 @@ def write_1b_rdm(mf, filename, backend='h5'):
     mf : SCF/KSCF object
         Converged molecular or PBC mean-field object. Uses ``mo_occ`` to
         build diagonal MO densities. PBC data must be Gamma-only.
-    filename : str
-        Path to the TREXIO file to create or update.
-    backend : {'h5', 'text'}, optional
-        TREXIO backend selector passed through to ``trexio.File``.
+    trexio_file : trexio.File
+        An open, writable TREXIO file object.
 
     Behavior
     --------
@@ -1563,7 +1802,6 @@ def write_1b_rdm(mf, filename, backend='h5'):
         For complex densities or non-Gamma PBC calculations.
     """
 
-    back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
@@ -1572,7 +1810,7 @@ def write_1b_rdm(mf, filename, backend='h5'):
     is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
-            f"Conversion function for {mf.__class__} is not implemented in write_1b_rdm."
+            f"Conversion function for {mf.__class__} is not implemented in _write_1b_rdm."
         )
 
     # MO-basis density is diagonal in canonical orbitals
@@ -1618,34 +1856,34 @@ def write_1b_rdm(mf, filename, backend='h5'):
             dm_b = np.real(dm_b)
         dm_a = np.ascontiguousarray(dm_a)
         dm_b = np.ascontiguousarray(dm_b)
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            nmo_up = dm_a.shape[0]
-            nmo_dn = dm_b.shape[0]
-            if nmo_dn != nmo_up:
-                raise ValueError("Alpha/beta MO sizes do not match for RDM write.")
-            nmo = nmo_up + nmo_dn
-            if not trexio.has_mo_num(tf):
-                trexio.write_mo_num(tf, nmo)
-            trexio.write_rdm_1e_up(tf, dm_a)
-            trexio.write_rdm_1e_dn(tf, dm_b)
-            dm_tot = np.zeros((nmo, nmo), dtype=dm_a.dtype)
-            dm_tot[:nmo_up, :nmo_up] = dm_a
-            dm_tot[nmo_up:, nmo_up:] = dm_b
-            trexio.write_rdm_1e(tf, dm_tot)
+        tf = trexio_file
+        nmo_up = dm_a.shape[0]
+        nmo_dn = dm_b.shape[0]
+        if nmo_dn != nmo_up:
+            raise ValueError("Alpha/beta MO sizes do not match for RDM write.")
+        nmo = nmo_up + nmo_dn
+        if not trexio.has_mo_num(tf):
+            trexio.write_mo_num(tf, nmo)
+        trexio.write_rdm_1e_up(tf, dm_a)
+        trexio.write_rdm_1e_dn(tf, dm_b)
+        dm_tot = np.zeros((nmo, nmo), dtype=dm_a.dtype)
+        dm_tot[:nmo_up, :nmo_up] = dm_a
+        dm_tot[nmo_up:, nmo_up:] = dm_b
+        trexio.write_rdm_1e(tf, dm_tot)
     else:
         dm = np.diag(occ_a)
         dm = np.asarray(dm)
         if np.iscomplexobj(dm):
             dm = np.real(dm)
         dm = np.ascontiguousarray(dm)
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            nmo = dm.shape[0]
-            if not trexio.has_mo_num(tf):
-                trexio.write_mo_num(tf, nmo)
-            trexio.write_rdm_1e(tf, dm)
+        tf = trexio_file
+        nmo = dm.shape[0]
+        if not trexio.has_mo_num(tf):
+            trexio.write_mo_num(tf, nmo)
+        trexio.write_rdm_1e(tf, dm)
 
 
-def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
+def _write_2b_rdm(mf, trexio_file, chunk_size=100000):
     """Write a two-body reduced density matrix in MO basis to TREXIO.
 
     Parameters
@@ -1653,10 +1891,8 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
     mf : SCF/KSCF object
         Converged molecular or PBC mean-field object. Uses ``mo_occ`` to
         build diagonal MO densities. PBC data must be Gamma-only.
-    filename : str
-        Path to the TREXIO file to create or update.
-    backend : {'h5', 'text'}, optional
-        TREXIO backend selector passed through to ``trexio.File``.
+    trexio_file : trexio.File
+        An open, writable TREXIO file object.
     chunk_size : int, optional
         Number of elements streamed per block when writing flattened ERIs.
 
@@ -1681,7 +1917,6 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         For non-Gamma PBC calculations.
     """
 
-    back_end = _trexio_backend_const(backend)
     is_pbc = hasattr(mf, 'cell')
     if is_pbc and not _trexio_is_gamma_single_k(mf):
         raise NotImplementedError("RDM write supports Gamma-point only for PBC.")
@@ -1690,7 +1925,7 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
     is_rhf_like = _trexio_is_rhf_rks_mf(mf) or _trexio_is_rohf_roks_mf(mf)
     if not (is_uhf_like or is_rhf_like):
         raise NotImplementedError(
-            f"Conversion function for {mf.__class__} is not implemented in write_2b_rdm."
+            f"Conversion function for {mf.__class__} is not implemented in _write_2b_rdm."
         )
 
     # Spin-summed occupations or spin-separated for UHF/UKS
@@ -1759,36 +1994,36 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         flat_dd = g2_dd.reshape(-1)
         flat_ud = g2_ud.reshape(-1)
 
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            if not trexio.has_mo_num(tf):
-                trexio.write_mo_num(tf, nmo)
+        tf = trexio_file
+        if not trexio.has_mo_num(tf):
+            trexio.write_mo_num(tf, nmo)
 
-            total = idx.shape[0]
-            offset = 0
-            while offset < total:
-                end = min(offset + chunk_size, total)
-                trexio.write_rdm_2e_upup(
-                    tf,
-                    offset,
-                    end - offset,
-                    idx[offset:end],
-                    flat_uu[offset:end],
-                )
-                trexio.write_rdm_2e_dndn(
-                    tf,
-                    offset,
-                    end - offset,
-                    idx[offset:end],
-                    flat_dd[offset:end],
-                )
-                trexio.write_rdm_2e_updn(
-                    tf,
-                    offset,
-                    end - offset,
-                    idx[offset:end],
-                    flat_ud[offset:end],
-                )
-                offset = end
+        total = idx.shape[0]
+        offset = 0
+        while offset < total:
+            end = min(offset + chunk_size, total)
+            trexio.write_rdm_2e_upup(
+                tf,
+                offset,
+                end - offset,
+                idx[offset:end],
+                flat_uu[offset:end],
+            )
+            trexio.write_rdm_2e_dndn(
+                tf,
+                offset,
+                end - offset,
+                idx[offset:end],
+                flat_dd[offset:end],
+            )
+            trexio.write_rdm_2e_updn(
+                tf,
+                offset,
+                end - offset,
+                idx[offset:end],
+                flat_ud[offset:end],
+            )
+            offset = end
     else:
         dm = np.diag(occ_a)
         dm = np.asarray(dm)
@@ -1822,22 +2057,22 @@ def write_2b_rdm(mf, filename, backend='h5', chunk_size=100000):
         idx = lib.cartesian_prod([np.arange(nmo, dtype=np.int32)] * 4)
         flat_g2 = g2.reshape(-1)
 
-        with trexio.File(filename, "u", back_end=back_end) as tf:
-            if not trexio.has_mo_num(tf):
-                trexio.write_mo_num(tf, nmo)
+        tf = trexio_file
+        if not trexio.has_mo_num(tf):
+            trexio.write_mo_num(tf, nmo)
 
-            total = idx.shape[0]
-            offset = 0
-            while offset < total:
-                end = min(offset + chunk_size, total)
-                trexio.write_rdm_2e(
-                    tf,
-                    offset,
-                    end - offset,
-                    idx[offset:end],
-                    flat_g2[offset:end],
-                )
-                offset = end
+        total = idx.shape[0]
+        offset = 0
+        while offset < total:
+            end = min(offset + chunk_size, total)
+            trexio.write_rdm_2e(
+                tf,
+                offset,
+                end - offset,
+                idx[offset:end],
+                flat_g2[offset:end],
+            )
+            offset = end
 
 
 def _order_ao_index(mol):

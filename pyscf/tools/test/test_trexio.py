@@ -50,7 +50,7 @@ def test_mol_ae_6_31g(cart):
         filename = os.path.join(d, "test.h5")
         mol0 = pyscf.M(atom="H 0 0 0; F 0 0 1", basis="6-31g**", cart=cart)
         trexio.to_trexio(mol0, filename)
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(mol0)
         s1, t1, v1 = _get_integrals(mol1)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -66,7 +66,7 @@ def test_mol_ae_6_31g_backend(backend, ext):
         filename = os.path.join(d, f"test.{ext}")
         mol0 = pyscf.M(atom="H 0 0 0; F 0 0 1", basis="6-31g**", cart=False)
         trexio.to_trexio(mol0, filename, backend=backend)
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(mol0)
         s1, t1, v1 = _get_integrals(mol1)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -79,7 +79,7 @@ def test_mol_ae_ccpv5z(cart):
         filename = os.path.join(d, "test.h5")
         mol0 = pyscf.M(atom="C", basis="ccpv5z", cart=cart)
         trexio.to_trexio(mol0, filename)
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(mol0)
         s1, t1, v1 = _get_integrals(mol1)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -92,7 +92,7 @@ def test_mol_ae_ano(cart):
         filename = os.path.join(d, "test.h5")
         mol0 = pyscf.M(atom="C", basis="ano", cart=cart)
         trexio.to_trexio(mol0, filename)
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(mol0)
         s1, t1, v1 = _get_integrals(mol1)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -107,7 +107,7 @@ def test_mol_ccecp_ccecp_ccpvqz(cart):
             atom="H 0 0 0; F 0 0 1", basis="ccecp-ccpvqz", ecp="ccecp", cart=cart
         )
         trexio.to_trexio(mol0, filename)
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(mol0)
         s1, t1, v1 = _get_integrals(mol1)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -125,7 +125,7 @@ def test_cell_k_gamma_ae_6_31g(cart):
             atom="H 0 0 0; H 0 0 1", basis="6-31g**", a=np.diag([3.0, 3.0, 5.0])
         )
         trexio.to_trexio(cell0, filename)
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(cell0, kpts=kpt)
         s1, t1, v1 = _get_integrals(cell1, kpts=kpt)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -143,7 +143,7 @@ def test_cell_k_grid_ae_6_31g(cart):
         )
         kpts0 = cell0.make_kpts(kmesh)
         trexio.to_trexio(cell0, filename)
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         s0, t0, v0 = _get_integrals(cell0, kpts=kpts0)
         s1, t1, v1 = _get_integrals(cell1, kpts=kpts0)
         _assert_s_t_v_roundtrip(s0, t0, v0, s1, t1, v1)
@@ -155,7 +155,7 @@ def test_cell_k_grid_ae_6_31g(cart):
 
 
 def _mo_coeff_from_trexio(filename):
-    mol = trexio.mol_from_trexio(filename)
+    mol = trexio.from_trexio(filename)
     with trexio_lib.File(filename, "r", back_end=trexio_lib.TREXIO_AUTO) as tf:
         pbc_mode = trexio_lib.read_pbc_periodic(tf)
 
@@ -642,7 +642,7 @@ def test_mol_scf_rhf_ae_6_31g(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.RHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -665,7 +665,7 @@ def test_cell_k_gamma_scf_rhf_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         mf1 = pyscf.pbc.scf.RKS(cell1).density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.xc = "LDA"
@@ -690,7 +690,7 @@ def test_cell_k_gamma_scf_uhf_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         mf1 = pyscf.pbc.scf.UKS(cell1).density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.xc = "LDA"
@@ -716,7 +716,7 @@ def test_cell_k_general_scf_rhf_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         kpt1 = cell1.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
         mf1 = pyscf.pbc.scf.RKS(cell1, kpt=kpt1).density_fit()
         mf1.with_df.auxbasis = auxbasis
@@ -744,7 +744,7 @@ def test_cell_k_general_scf_uhf_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         kpt1 = cell1.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
         mf1 = pyscf.pbc.scf.UKS(cell1, kpt=kpt1).density_fit()
         mf1.with_df.auxbasis = auxbasis
@@ -771,7 +771,7 @@ def test_cell_k_grid_scf_rhf_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         kpts1 = cell1.make_kpts(kmesh)
         mf1 = pyscf.pbc.scf.KRKS(cell1, kpts=kpts1).density_fit()
         mf1.with_df.auxbasis = auxbasis
@@ -793,7 +793,7 @@ def test_mol_scf_uhf_ae_6_31g(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.UHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -815,7 +815,7 @@ def test_mol_rhf_ccecp_ccpvqz(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.RHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -833,7 +833,7 @@ def test_mol_rhf_ccecp_ccpvqz(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.RHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -851,7 +851,7 @@ def test_mol_rhf_ccecp_ccpvqz(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.RHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -877,7 +877,7 @@ def test_mol_uhf_ccecp_ccpvqz(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.UHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -896,7 +896,8 @@ def _trexio_pack_eri(eri, basis, sym='s1'):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         filename = os.path.join(tmpdir, 'pack.h5')
-        _write_2e_int_eri(eri, filename, backend='h5', basis=basis, sym=sym)
+        with trexio_lib.File(filename, 'u', back_end=trexio_lib.TREXIO_HDF5) as tf:
+            _write_2e_int_eri(eri, tf, basis=basis, sym=sym)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             if basis == 'AO':
                 size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -957,45 +958,34 @@ def test_write_molecule_integrals_sym_s1_to_trexio_rhf_ae(cart):
         core = kinetic + potential
 
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
         coeff = mf0.mo_coeff
         mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
         mo_kinetic = _hermitize(coeff.conj().T @ kinetic @ coeff)
         mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
         mo_core = _hermitize(coeff.conj().T @ core @ coeff)
 
-        trexio.write_1e_eri(mf0, filename, basis='MO')
+        ao_eri = mol0.intor('int2e', aosym='s1')
+        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
+        mo_eri = ao2mo.kernel(mol0, coeff, compact=False)
+        nmo = coeff.shape[1]
+        mo_eri = mo_eri.reshape(nmo, nmo, nmo, nmo)
+        mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
-
-        ao_eri = mol0.intor('int2e', aosym='s1')
-        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
             assert n_read == size
             np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
             np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
-
-        mo_eri = ao2mo.kernel(mol0, coeff, compact=False)
-        nmo = coeff.shape[1]
-        mo_eri = mo_eri.reshape(nmo, nmo, nmo, nmo)
-        mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_mo_2e_int_eri(tf, 0, size)
@@ -1018,17 +1008,13 @@ def test_write_integrals_to_trexio_rhf_backend(backend, ext):
 
         overlap = _hermitize(mf0.get_ovlp())
 
-        trexio.to_trexio(mf0, filename, backend=backend)
-
-        trexio.write_1e_eri(mf0, filename, backend=backend, basis='AO')
+        ao_eri = mol0.intor('int2e', aosym='s1')
+        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
+        trexio.to_trexio(mf0, filename, backend=backend, write_ao_eri=True, write_mo_eri=False, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(
                 trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL
             )
-
-        ao_eri = mol0.intor('int2e', aosym='s1')
-        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
-        trexio.write_2e_eri(mf0, filename, backend=backend, basis='AO', sym='s1')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -1054,9 +1040,20 @@ def test_write_molecule_integrals_sym_s1_to_trexio_uhf_ae(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        coeff_alpha, coeff_beta = mf0.mo_coeff
+        coeff = np.concatenate([coeff_alpha, coeff_beta], axis=1)
+        mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
+        mo_kinetic = _hermitize(coeff.conj().T @ kinetic @ coeff)
+        mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
+        mo_core = _hermitize(coeff.conj().T @ core @ coeff)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
+        ao_eri = mol0.intor('int2e', aosym='s1')
+        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
+        mo_eri = ao2mo.kernel(mol0, coeff, compact=False)
+        nmo = coeff.shape[1]
+        mo_eri = mo_eri.reshape(nmo, nmo, nmo, nmo)
+        mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
@@ -1066,16 +1063,6 @@ def test_write_molecule_integrals_sym_s1_to_trexio_uhf_ae(cart):
             np.testing.assert_allclose(
                 trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL
             )
-
-        coeff_alpha, coeff_beta = mf0.mo_coeff
-        coeff = np.concatenate([coeff_alpha, coeff_beta], axis=1)
-        mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
-        mo_kinetic = _hermitize(coeff.conj().T @ kinetic @ coeff)
-        mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
-        mo_core = _hermitize(coeff.conj().T @ core @ coeff)
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(
@@ -1084,24 +1071,12 @@ def test_write_molecule_integrals_sym_s1_to_trexio_uhf_ae(cart):
             np.testing.assert_allclose(
                 trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL
             )
-
-        ao_eri = mol0.intor('int2e', aosym='s1')
-        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
             assert n_read == size
             np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
             np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
-
-        mo_eri = ao2mo.kernel(mol0, coeff, compact=False)
-        nmo = coeff.shape[1]
-        mo_eri = mo_eri.reshape(nmo, nmo, nmo, nmo)
-        mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_mo_2e_int_eri(tf, 0, size)
@@ -1118,11 +1093,9 @@ def test_write_molecule_integrals_sym_s4_to_trexio_rhf_ae(cart):
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g*', cart=cart)
         mf0 = mol0.RHF().run()
 
-        trexio.to_trexio(mf0, filename)
-
         ao_eri = mol0.intor('int2e', aosym='s4')
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO', sym='s4')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s4', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -1134,7 +1107,7 @@ def test_write_molecule_integrals_sym_s4_to_trexio_rhf_ae(cart):
         coeff = mf0.mo_coeff
         mo_eri = ao2mo.kernel(mol0, coeff, compact=True)
         mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO', sym='s4')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
+        trexio.to_trexio(mf0, filename, write_ao_eri=False, write_mo_eri=True, eri_sym='s4', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
@@ -1153,11 +1126,9 @@ def test_write_molecule_integrals_sym_s4_to_trexio_uhf_ae(cart):
         mf0 = mol0.UHF().run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-
         ao_eri = mol0.intor('int2e', aosym='s4')
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO', sym='s4')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s4', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -1170,7 +1141,7 @@ def test_write_molecule_integrals_sym_s4_to_trexio_uhf_ae(cart):
         coeff = np.concatenate([coeff_alpha, coeff_beta], axis=1)
         mo_eri = ao2mo.kernel(mol0, coeff, compact=True)
         mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO', sym='s4')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
+        trexio.to_trexio(mf0, filename, write_ao_eri=False, write_mo_eri=True, eri_sym='s4', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
@@ -1188,11 +1159,9 @@ def test_write_molecule_integrals_sym_s8_to_trexio_rhf_ae(cart):
         mol0 = pyscf.M(atom='H 0 0 0; F 0 0 1', basis='6-31g*', cart=cart)
         mf0 = mol0.RHF().run()
 
-        trexio.to_trexio(mf0, filename)
-
         ao_eri = mol0.intor('int2e', aosym='s8')
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO', sym='s8')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s8')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s8', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -1211,11 +1180,9 @@ def test_write_molecule_integrals_sym_s8_to_trexio_uhf_ae(cart):
         mf0 = mol0.UHF().run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-
         ao_eri = mol0.intor('int2e', aosym='s8')
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO', sym='s8')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s8')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s8', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -1251,15 +1218,6 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_rhf_ae(cart):
             potential += _hermitize(_take_gamma(ecp.ecp_int(cell0)))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
         coeff = mf0.mo_coeff
         coeff = _squeeze_k1(coeff) if getattr(coeff, 'ndim', 0) == 3 else coeff
         mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
@@ -1267,27 +1225,11 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_rhf_ae(cart):
         mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
         mo_core = _hermitize(coeff.conj().T @ core @ coeff)
 
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
-
         df_obj = pbc.df.MDF(cell0).build()
         eri_ao = pbc.df.df_ao2mo.get_eri(df_obj, compact=False)
         nao = cell0.nao_nr()
         eri_ao = eri_ao.reshape(nao, nao, nao, nao)
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(eri_ao, 'AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
-            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
-
         df_obj_mo = pbc.df.MDF(cell0).build()
         mo_eri = df_obj_mo.get_mo_eri((coeff, coeff, coeff, coeff))
         mo_eri = np.real_if_close(mo_eri)
@@ -1298,8 +1240,22 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_rhf_ae(cart):
         elif mo_eri.ndim < 4:
             mo_eri = ao2mo.restore(1, mo_eri, nmo)
         mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
+            assert trexio_lib.has_ao_2e_int_eri(tf)
+            size = trexio_lib.read_ao_2e_int_eri_size(tf)
+            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
+            assert n_read == size
+            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
+            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_mo_2e_int_eri(tf, 0, size)
@@ -1335,15 +1291,6 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_uhf_ae(cart):
             potential += _hermitize(_take_gamma(ecp.ecp_int(cell0)))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
         coeff_alpha, coeff_beta = mf0.mo_coeff
         coeff_alpha = _take_gamma(coeff_alpha)
         coeff_beta = _take_gamma(coeff_beta)
@@ -1353,27 +1300,11 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_uhf_ae(cart):
         mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
         mo_core = _hermitize(coeff.conj().T @ core @ coeff)
 
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
-
         df_obj = pbc.df.MDF(cell0).build()
         eri_ao = pbc.df.df_ao2mo.get_eri(df_obj, compact=False)
         nao = cell0.nao_nr()
         eri_ao = eri_ao.reshape(nao, nao, nao, nao)
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(eri_ao, 'AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
-            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
-
         df_obj_mo = pbc.df.MDF(cell0).build()
         mo_eri = df_obj_mo.get_mo_eri((coeff, coeff, coeff, coeff))
         mo_eri = np.real_if_close(mo_eri)
@@ -1383,8 +1314,22 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_uhf_ae(cart):
         elif mo_eri.ndim < 4:
             mo_eri = ao2mo.restore(1, mo_eri, nmo)
         mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
+            assert trexio_lib.has_ao_2e_int_eri(tf)
+            size = trexio_lib.read_ao_2e_int_eri_size(tf)
+            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
+            assert n_read == size
+            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
+            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_mo_2e_int_eri(tf, 0, size)
@@ -1408,26 +1353,13 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_rhf_ae(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -1528,13 +1460,7 @@ def test_energy_crystal_integrals_sym_s1_in_trexio_rhf_ae(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -1613,13 +1539,7 @@ def test_energy_crystal_integrals_sym_s1_in_trexio_uhf_ae(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -1751,13 +1671,7 @@ def test_energy_crystal_integrals_sym_s1_in_trexio_rhf_ccecp(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -1838,13 +1752,7 @@ def test_energy_crystal_integrals_sym_s1_in_trexio_uhf_ccecp(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -1974,13 +1882,7 @@ def test_energy_crystal_integrals_sym_s4_in_trexio_rhf_ae(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s4', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2050,13 +1952,7 @@ def test_energy_crystal_integrals_sym_s4_in_trexio_uhf_ae(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s4', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2174,26 +2070,13 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_uhf_ae(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            nao = trexio_lib.read_ao_num(tf)
-            assert size == nao ** 4
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2354,26 +2237,13 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_rhf_ecp(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2477,26 +2347,13 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_uhf_ecp(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            nao = trexio_lib.read_ao_num(tf)
-            assert size == nao ** 4
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2653,14 +2510,7 @@ def test_energy_molecule_integrals_sym_s4_in_trexio_rhf_ae(cart):
             potential += _hermitize(ecp.ecp_int(mol0))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s4', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2742,14 +2592,7 @@ def test_energy_molecule_integrals_sym_s4_in_trexio_uhf_ae(cart):
             potential += _hermitize(ecp.ecp_int(mol0))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s4', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -2888,10 +2731,7 @@ def test_energy_molecule_integrals_sym_s8_in_trexio_rhf_ae(cart):
             potential += _hermitize(ecp.ecp_int(mol0))
         #core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s8')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s8', write_mo_rdm=False)
 
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             e_nn = trexio_lib.read_nucleus_repulsion(tf)
@@ -2939,10 +2779,7 @@ def test_energy_molecule_integrals_sym_s8_in_trexio_uhf_ae(cart):
             potential += _hermitize(ecp.ecp_int(mol0))
         #core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s8')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s8', write_mo_rdm=False)
 
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             e_nn = trexio_lib.read_nucleus_repulsion(tf)
@@ -3168,7 +3005,7 @@ def test_cell_k_gamma_scf_roks_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         mf1 = pyscf.pbc.dft.ROKS(cell1).density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.xc = "LDA"
@@ -3195,7 +3032,7 @@ def test_cell_k_general_scf_roks_ae_6_31g(cart):
         mf0.xc = "LDA"
         mf0.run()
         e0 = mf0.e_tot
-        cell1 = trexio.mol_from_trexio(filename)
+        cell1 = trexio.from_trexio(filename)
         kpt1 = cell1.make_kpts([1, 1, 1], scaled_center=kfrac)[0]
         mf1 = pyscf.pbc.dft.ROKS(cell1, kpt=kpt1).density_fit()
         mf1.with_df.auxbasis = auxbasis
@@ -3217,7 +3054,7 @@ def test_mol_scf_rohf_ae_6_31g(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.ROHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -3239,7 +3076,7 @@ def test_mol_rohf_ccecp_ccpvqz(cart):
         mf0.with_df.auxbasis = auxbasis
         mf0.run()
         e0 = mf0.e_tot
-        mol1 = trexio.mol_from_trexio(filename)
+        mol1 = trexio.from_trexio(filename)
         mf1 = mol1.ROHF().density_fit()
         mf1.with_df.auxbasis = auxbasis
         mf1.run()
@@ -3264,45 +3101,34 @@ def test_write_molecule_integrals_sym_s1_to_trexio_rohf_ae(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
         coeff = mf0.mo_coeff
         mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
         mo_kinetic = _hermitize(coeff.conj().T @ kinetic @ coeff)
         mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
         mo_core = _hermitize(coeff.conj().T @ core @ coeff)
 
-        trexio.write_1e_eri(mf0, filename, basis='MO')
+        ao_eri = mol0.intor('int2e', aosym='s1')
+        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
+        mo_eri = ao2mo.kernel(mol0, coeff, compact=False)
+        nmo = coeff.shape[1]
+        mo_eri = mo_eri.reshape(nmo, nmo, nmo, nmo)
+        mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
-
-        ao_eri = mol0.intor('int2e', aosym='s1')
-        ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
             assert n_read == size
             np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
             np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
-
-        mo_eri = ao2mo.kernel(mol0, coeff, compact=False)
-        nmo = coeff.shape[1]
-        mo_eri = mo_eri.reshape(nmo, nmo, nmo, nmo)
-        mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_mo_2e_int_eri(tf, 0, size)
@@ -3321,11 +3147,9 @@ def test_write_molecule_integrals_sym_s4_to_trexio_rohf_ae(cart):
         mf0 = mol0.ROHF().run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-
         ao_eri = mol0.intor('int2e', aosym='s4')
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO', sym='s4')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s4', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -3337,7 +3161,7 @@ def test_write_molecule_integrals_sym_s4_to_trexio_rohf_ae(cart):
         coeff = mf0.mo_coeff
         mo_eri = ao2mo.kernel(mol0, coeff, compact=True)
         mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO', sym='s4')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
+        trexio.to_trexio(mf0, filename, write_ao_eri=False, write_mo_eri=True, eri_sym='s4', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
@@ -3357,11 +3181,9 @@ def test_write_molecule_integrals_sym_s8_to_trexio_rohf_ae(cart):
         mf0 = mol0.ROHF().run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-
         ao_eri = mol0.intor('int2e', aosym='s8')
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(ao_eri, 'AO', sym='s8')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s8')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s8', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             assert trexio_lib.has_ao_2e_int_eri(tf)
             size = trexio_lib.read_ao_2e_int_eri_size(tf)
@@ -3399,15 +3221,6 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_rohf_ae(cart):
             potential += _hermitize(_take_gamma(ecp.ecp_int(cell0)))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
         coeff = mf0.mo_coeff
         coeff = _squeeze_k1(coeff) if getattr(coeff, 'ndim', 0) == 3 else coeff
         mo_overlap = _hermitize(coeff.conj().T @ overlap @ coeff)
@@ -3415,27 +3228,11 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_rohf_ae(cart):
         mo_potential = _hermitize(coeff.conj().T @ potential @ coeff)
         mo_core = _hermitize(coeff.conj().T @ core @ coeff)
 
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
-            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
-
         df_obj = pbc.df.MDF(cell0).build()
         eri_ao = pbc.df.df_ao2mo.get_eri(df_obj, compact=False)
         nao = cell0.nao_nr()
         eri_ao = eri_ao.reshape(nao, nao, nao, nao)
         ao_idx_exp, ao_val_exp = _trexio_pack_eri(eri_ao, 'AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
-            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
-
         df_obj_mo = pbc.df.MDF(cell0).build()
         mo_eri = df_obj_mo.get_mo_eri((coeff, coeff, coeff, coeff))
         mo_eri = np.real_if_close(mo_eri)
@@ -3445,8 +3242,22 @@ def test_write_cell_gamma_integrals_sym_s1_to_trexio_rohf_ae(cart):
         elif mo_eri.ndim < 4:
             mo_eri = ao2mo.restore(1, mo_eri, nmo)
         mo_idx_exp, mo_val_exp = _trexio_pack_eri(mo_eri, 'MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=False)
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_overlap(tf), mo_overlap, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_kinetic(tf), mo_kinetic, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_potential_n_e(tf), mo_potential, atol=DIFF_TOL)
+            np.testing.assert_allclose(trexio_lib.read_mo_1e_int_core_hamiltonian(tf), mo_core, atol=DIFF_TOL)
+            assert trexio_lib.has_ao_2e_int_eri(tf)
+            size = trexio_lib.read_ao_2e_int_eri_size(tf)
+            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
+            assert n_read == size
+            np.testing.assert_array_equal(np.asarray(idx, dtype=np.int32).ravel(), ao_idx_exp)
+            np.testing.assert_allclose(np.asarray(val), ao_val_exp, atol=DIFF_TOL)
             assert trexio_lib.has_mo_2e_int_eri(tf)
             size = trexio_lib.read_mo_2e_int_eri_size(tf)
             idx, val, n_read, _ = trexio_lib.read_mo_2e_int_eri(tf, 0, size)
@@ -3476,13 +3287,7 @@ def test_energy_crystal_integrals_sym_s1_in_trexio_rohf_ae(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -3564,13 +3369,7 @@ def test_energy_crystal_integrals_sym_s1_in_trexio_rohf_ccecp(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -3650,13 +3449,7 @@ def test_energy_crystal_integrals_sym_s4_in_trexio_rohf_ae(cart):
         mf0.run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s4', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -3723,26 +3516,13 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_rohf_ae(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -3847,26 +3627,13 @@ def test_energy_molecule_integrals_sym_s1_in_trexio_rohf_ecp(cart):
             potential += _hermitize(mol0.intor('ECPscalar'))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s1', write_mo_rdm=True)
 
-        trexio.write_1e_eri(mf0, filename, basis='AO')
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_overlap(tf), overlap, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_kinetic(tf), kinetic, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_potential_n_e(tf), potential, atol=DIFF_TOL)
             np.testing.assert_allclose(trexio_lib.read_ao_1e_int_core_hamiltonian(tf), core, atol=DIFF_TOL)
-
-        trexio.write_2e_eri(mf0, filename, basis='AO')
-        with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
-            assert trexio_lib.has_ao_2e_int_eri(tf)
-            size = trexio_lib.read_ao_2e_int_eri_size(tf)
-            idx, val, n_read, _ = trexio_lib.read_ao_2e_int_eri(tf, 0, size)
-            assert n_read == size
-
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -3925,14 +3692,7 @@ def test_energy_molecule_integrals_sym_s4_in_trexio_rohf_ae(cart):
             potential += _hermitize(ecp.ecp_int(mol0))
         core = kinetic + potential
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s4')
-        trexio.write_1e_eri(mf0, filename, basis='MO')
-        trexio.write_2e_eri(mf0, filename, basis='MO', sym='s4')
-        trexio.write_1b_rdm(mf0, filename)
-        trexio.write_2b_rdm(mf0, filename)
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=True, eri_sym='s4', write_mo_rdm=True)
 
         BUFSIZE = 100000
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
@@ -4007,10 +3767,7 @@ def test_energy_molecule_integrals_sym_s8_in_trexio_rohf_ae(cart):
         mf0 = mol0.ROHF().run()
         assert mf0.converged
 
-        trexio.to_trexio(mf0, filename)
-
-        trexio.write_1e_eri(mf0, filename, basis='AO')
-        trexio.write_2e_eri(mf0, filename, basis='AO', sym='s8')
+        trexio.to_trexio(mf0, filename, write_ao_eri=True, write_mo_eri=False, eri_sym='s8', write_mo_rdm=False)
 
         with trexio_lib.File(filename, 'r', back_end=trexio_lib.TREXIO_AUTO) as tf:
             e_nn = trexio_lib.read_nucleus_repulsion(tf)
