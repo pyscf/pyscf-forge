@@ -72,7 +72,10 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         if (np.array(mesh) == eri_mesh).all():
             eri_mesh = None
         if (eri_mesh > mesh).any():
-            log.warn("eri_mesh larger than mesh, so eri_mesh is ignored.")
+            logger.warn(
+                cell,
+                "eri_mesh larger than mesh, so eri_mesh is ignored."
+            )
             eri_mesh = None
         if eri_mesh is not None:
             eri_inds = get_mesh_map(cell, None, None, mesh=mesh, mesh2=eri_mesh)

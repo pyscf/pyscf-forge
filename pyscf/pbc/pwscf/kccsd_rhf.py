@@ -48,7 +48,7 @@ def padded_mo_coeff(mp, mo_coeff):
     return result
 
 
-class PWKRCCSD:
+class PWKRCCSD(cc.kccsd_rhf.RCCSD):
     """
     Restricted CCSD in plane-wave basis.
 
@@ -60,58 +60,25 @@ class PWKRCCSD:
     after `kernel` is called.
     """
 
+    _keys = {'ecut_eri'}
+
     def __init__(self, mf, frozen=None):
         if not mf.converged:
             raise NotImplementedError("PW-CCSD with unconverged ground state.")
+        cc.kccsd_rhf.RCCSD.__init__(self, mf, frozen=frozen)
         self._scf = mf
         self.mo_occ = mf.mo_occ
         self.mo_energy = mf.mo_energy
-        self.frozen = frozen
-        self.kpts = mf.kpts
-        self.mcc = None
         self.ecut_eri = None
 
-        # not input options
-        self._nmo = None
-        self._nocc = None
-        self.nkpts = len(self.kpts)
-
-    def kernel(self, eris=None):
-        cput0 = (logger.process_clock(), logger.perf_counter())
-        if eris is None: eris = self.ao2mo()
-        cput0 = logger.timer(self._scf, 'CCSD init eri', *cput0)
-        self.mcc = cc.kccsd_rhf.RCCSD(self._scf)
-        self.mcc.kernel(eris=eris)
-
-        return self.mcc
-
-    def ao2mo(self):
+    def ao2mo(self, mo_coeff=None):
+        if mo_coeff is not None and mo_coeff is not self.mo_coeff:
+            raise ValueError("Unsupported mo_coeff input")
         return _ERIS(self)
 
     @property
-    def e_corr(self):
-        if self.mcc is None:
-            raise RuntimeError("kernel must be called first.")
-        return self.mcc.e_corr
-
-# mimic KMP2
-    @property
-    def nmo(self):
-        return self.get_nmo()
-    @nmo.setter
-    def nmo(self, n):
-        self._nmo = n
-
-    @property
-    def nocc(self):
-        return self.get_nocc()
-    @nocc.setter
-    def nocc(self, n):
-        self._nocc = n
-
-    get_nocc = get_nocc
-    get_nmo = get_nmo
-    get_frozen_mask = get_frozen_mask
+    def nkpts(self):
+        return len(self.kpts)
 
 
 class _ERIS:
@@ -126,19 +93,23 @@ class _ERIS:
         with h5py.File(mf.chkfile, "r") as f:
             mo_coeff = [get_kcomp(f["mo_coeff"], k) for k in range(nkpts)]
 
-# padding
+        # padding
         mo_coeff = padded_mo_coeff(cc, mo_coeff)
         mo_energy = padded_mo_energy(cc, mo_energy)
         mo_occ = padded_mo_energy(cc, mo_occ)
 
         self.e_hf = mf.e_tot
         self.mo_energy = np.asarray(mo_energy)
-# remove ewald correction
-        moe_noewald = np.zeros_like(self.mo_energy)
-        for k in range(nkpts):
-            moe = self.mo_energy[k].copy()
-            moe[mo_occ[k]>THR_OCC] += mf._madelung
-            moe_noewald[k] = moe
+
+        if False:#cc.keep_exxdiv:
+            moe_noewald = self.mo_energy
+        else:
+            # remove ewald correction
+            moe_noewald = np.zeros_like(self.mo_energy)
+            for k in range(nkpts):
+                moe = self.mo_energy[k].copy()
+                moe[mo_occ[k]>THR_OCC] += mf._madelung
+                moe_noewald[k] = moe
         self.fock = np.asarray(
             [np.diag(moe.astype(np.complex128)) for moe in moe_noewald]
         )
@@ -167,7 +138,7 @@ if __name__ == "__main__":
             [a0, 0., a0],
             [a0, a0, 0.]])
 
-    from pyscf.pbc import gto, scf, pwscf
+    from pyscf.pbc import gto, scf
     cell = gto.Cell(atom=atom, a=a, basis="gth-szv", pseudo="gth-pade",
                     ke_cutoff=50)
     cell.build()

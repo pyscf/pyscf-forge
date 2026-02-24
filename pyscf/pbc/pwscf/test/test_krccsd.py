@@ -27,12 +27,11 @@ class KnownValues(unittest.TestCase):
             a=a,
             basis="gth-szv",
             pseudo=pseudo,
-            ke_cutoff=ke_cutoff
+            ke_cutoff=ke_cutoff,
+            verbose=0,
         )
         cell.build()
-        cell.verbose = 0
         kpts = cell.make_kpts(kmesh)
-        nkpts = len(kpts)
 
         # GTO
         gmf = scf.KRHF(cell, kpts)
@@ -40,6 +39,9 @@ class KnownValues(unittest.TestCase):
         gmf.kernel()
         gcc = cc.KCCSD(gmf)
         gcc.kernel()
+        if test_scf:
+            etrip = gcc.ccsd_t()
+            ips_ref = gcc.ipccsd()
 
         # PW
         pmf = pw_helper.gtomf2pwmf(gmf)
@@ -48,10 +50,20 @@ class KnownValues(unittest.TestCase):
         pmf.update_k(pmf.mo_coeff, pmf.mo_occ)
         pcc = pwscf.PWKRCCSD(pmf)
         pcc.kernel()
-        assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-6)
+        if test_scf:
+            # Check CCSD(T)
+            pcc.ccsd_t()
+            assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-6)
         pcc.ecut_eri = 15
         pcc.kernel()
-        assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-4)
+        if test_scf:
+            # Check EOM-CCSD
+            etrip_test = pcc.ccsd_t()
+            ips_test = pcc.ipccsd()
+            assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-4)
+            assert(abs(etrip - etrip_test) < 1.e-5)
+            assert(np.max(np.abs(ips_ref[0] - ips_test[0])) < 3.e-5)
+            assert(np.max(np.abs(ips_ref[1] - ips_test[1])) < 1.e-3)
 
         if test_scf:
             pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
