@@ -17,6 +17,14 @@
 #
 
 """ Hartree-Fock in the Plane Wave Basis
+
+NOTE: PW coefficients C_ks use the index order [kpt-idx, mo-idx, grid-id]. 
+This is inconsistent with real-space orbitals, which place the AO indices
+(corresponding to the grid index in this case) at the last dimension. The
+current order for PW C_ks is chosen to avoid potential performance issue in
+common operationts such as C_k.copy(), which may impolicitly converts arrays
+from F-order to C-order. The design can be revisited when PW mode is promoted to
+pyscf main or if full PW-space diagonalization is implemented.
 """
 
 
