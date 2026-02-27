@@ -935,10 +935,8 @@ def example_ABBA_krylov_solver():
     # rhs_2 = np.random.rand(n_vec, A_size) * scaling
     rhs_2 = rhs_1
 
-    def matrix_vector_product(X, Y):
-        U1 = X.dot(A) + Y.dot(B)
-        U2 = Y.dot(A) + X.dot(B)
-        return U1, U2
+    def matrix_vector_product(XpY, XmY):
+        return XpY.dot(A+B), XmY.dot(A-B)
 
     hdiag = np.diag(A)
 
