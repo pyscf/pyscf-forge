@@ -143,42 +143,42 @@ def matrix_power(S,a, epsilon=None):
 
     return X
 
-def Gram_Schmidt_bvec(V, bvec):
-    '''orthonormalize vector b against all vectors in V
-       b = b - (V@b.T).T @ V
-       suppose V is orthonormalized
-       V maybe numpy array
-    '''
-    if V.shape[0] == 0:
-        return bvec
+# def Gram_Schmidt_bvec(V, bvec):
+#     '''orthonormalize vector b against all vectors in V
+#        b = b - (V@b.T).T @ V
+#        suppose V is orthonormalized
+#        V maybe numpy array
+#     '''
+#     if V.shape[0] == 0:
+#         return bvec
 
-    else:
-        # projections_coeff = einsum('ab,cb->ac', V, bvec)
-        # tmp = einsum('ac,ab->cb',projections_coeff, V)
-        # bvec -= tmp
-        # return bvec
-        n_old_vectors, A_size = V.shape
-        n_new_vectors, _      = bvec.shape
+#     else:
+#         # projections_coeff = einsum('ab,cb->ac', V, bvec)
+#         # tmp = einsum('ac,ab->cb',projections_coeff, V)
+#         # bvec -= tmp
+#         # return bvec
+#         n_old_vectors, A_size = V.shape
+#         n_new_vectors, _      = bvec.shape
 
-        estimated_chunk_size_bytes = (A_size + n_new_vectors) * bvec.itemsize
-        chunk_size = max(1, int(get_avail_cpumem() * 0.8 // estimated_chunk_size_bytes))
+#         estimated_chunk_size_bytes = (A_size + n_new_vectors) * bvec.itemsize
+#         chunk_size = max(1, int(get_avail_cpumem() * 0.8 // estimated_chunk_size_bytes))
 
-        for p0 in range(0, n_old_vectors, chunk_size):
-            p1 = min(p0 + chunk_size, n_old_vectors)
+#         for p0 in range(0, n_old_vectors, chunk_size):
+#             p1 = min(p0 + chunk_size, n_old_vectors)
 
-            V_chunk = V[p0:p1, :]  # (chunk_size, A_size)
+#             V_chunk = V[p0:p1, :]  # (chunk_size, A_size)
 
-            projections_coeff = einsum('ab,cb->ac', V_chunk, bvec)  # (chunk_size, n_new_vectors)
+#             projections_coeff = einsum('ab,cb->ac', V_chunk, bvec)  # (chunk_size, n_new_vectors)
 
-            # bvec = einsum('ac,ab->cb', projections_coeff, V_chunk, -1 , 1, out=bvec)  # (n_new_vectors, A_size)
-            tmp = einsum('ac,ab->cb', projections_coeff, V_chunk)
-            del V_chunk, projections_coeff
-            bvec -= tmp
-            del tmp, projections_coeff, V_chunk
+#             # bvec = einsum('ac,ab->cb', projections_coeff, V_chunk, -1 , 1, out=bvec)  # (n_new_vectors, A_size)
+#             tmp = einsum('ac,ab->cb', projections_coeff, V_chunk)
+#             del V_chunk, projections_coeff
+#             bvec -= tmp
+#             del tmp, projections_coeff, V_chunk
 
-            gc.collect()
+#             gc.collect()
 
-        return bvec
+#         return bvec
 
 
 
@@ -280,10 +280,6 @@ size_new    |------------------------------------------------|
                 |---------------|-----------------|-----------------|
     '''
 
-
-    # W_new = W_holder[size_old:size_new, :]
-
-    # sub_A_tmp = dot_product_Vchunk_W(V_holder, W_new, size_bound=size_new, factor=0.6)
     sub_A_tmp = einsum('mn,ln->ml', V_holder[:size_new,:],W_holder[size_old:size_new, :])
 
     sub_A_holder[:size_new, size_old:size_new] = sub_A_tmp
@@ -298,118 +294,11 @@ size_new    |------------------------------------------------|
             del sub_A_tmp
             gc.collect()
         else:
-            # sub_A_tmp = dot_product_Vchunk_W(W_holder, V_new, size_bound=size_old, factor=0.6).T
             sub_A_tmp = einsum('mn,ln->lm', W_holder[:size_old, :], V_holder[size_old:size_new,:])
             sub_A_holder[size_old:size_new, :size_old] = sub_A_tmp
             del sub_A_tmp
             gc.collect()
     return sub_A_holder
-
-
-
-# def dot_product_Vchunk_W(A, B, size_bound, factor=0.8):
-#     '''
-#     A: np.ndarray (m , n)
-#     B.T: np.ndarray (l, n)
-#     a = n_occ * n_vir
-#     return A.dot(B.T)
-#     '''
-#     _,n = A.shape
-#     l,n = B.shape
-
-#     m0 = get_avail_cpumem()
-
-#     AB = np.empty((size_bound, l), dtype=B.dtype)
-
-#     chunk_bytes_B = (n + l) * B.itemsize
-#     chunk_bytes_A = n * A.itemsize
-
-#     # Estimate the optimal chunk size based on available memory
-#     chunk_size_B = int((get_avail_cpumem() * factor ) // chunk_bytes_B)
-
-#     chunk_size_A = int((get_avail_cpumem() * factor ) // chunk_bytes_A)
-#     chunk_size = min(chunk_size_B, chunk_size_A, size_bound)
-
-#     for p0 in range(0, size_bound, chunk_size):
-#         p1 = min(p0 + chunk_size, size_bound)
-
-#         A_chunk = A[p0:p1, :]
-#         # AB_chunk = A_chunk.dot(B)
-#         AB_chunk = einsum('mn,ln->ml',A_chunk,B)
-
-#         AB[p0:p1,:] = AB_chunk
-#         # np.cuda.get_current_stream().synchronize()
-
-#         del  A_chunk, AB_chunk
-#         gc.collect()
-
-#     m1 = get_avail_cpumem()
-#     m_diff = m1 - m0
-#     if m_diff > 1e6:
-#         pass
-
-#     return AB
-
-
-# def dot_product_xchunk_V(A, B, factor=0.8, alpha=1, beta=1, out=None):
-
-#     '''
-#     A: np.ndarray (m,n)
-#     B: np.ndarray(n,l)
-#     n = size_bound
-#     return A.dot(B)
-
-#                 subspace_size                           A_size
-#             |-----------------||----------------------------------------------------------------|
-#     n_states|-----------------||----------------------------------------------------------------|
-#             |-----------------||----------------------------------------------------------------|
-#                                |----------------------------------------------------------------|
-#                                |----------------------------------------------------------------|
-#                                |----------------------------------------------------------------|
-#                                |----------------------------------------------------------------|
-#         -> (n_sttates, A_size)
-
-#     '''
-#     m,n = A.shape
-#     size_bound,l = B.shape
-#     assert n == size_bound
-#     m0 = get_avail_cpumem()
-#     # alpha = A.dtype.type(alpha)
-#     # beta = A.dtype.type(beta)
-#     if out is None:
-#         out = np.zeros((m, l), dtype=A.dtype)
-#     out *= beta
-#     chunk_bytes_A = (m+l) * A.itemsize
-#     chunk_bytes_B = l * B.itemsize
-
-#     # Estimate the optimal chunk size based on available memory
-#     chunk_size_A = int((get_avail_cpumem() * factor ) // chunk_bytes_A)
-#     chunk_size_B = int((get_avail_cpumem() * factor ) // chunk_bytes_B)
-
-
-#     chunk_size = min(chunk_size_B, chunk_size_A, size_bound)
-
-#     for p0 in range(0, size_bound, chunk_size):
-#         p1 = min(p0 + chunk_size, size_bound)
-
-#         A_chunk = A[:,p0:p1]
-#         B_chunk = B[p0:p1, :]
-
-#         # out = einsum('mn,nl->ml',A[:,p0:p1], B_chunk, alpha=alpha, beta=beta, out=out)
-#         # out += alpha*einsum('mn,nl->ml',A[:,p0:p1], B_chunk)
-#         tmp = einsum('mn,nl->ml',A_chunk, B_chunk)
-#         del A_chunk, B_chunk
-#         tmp *= alpha
-#         out += tmp
-#         del tmp
-
-#         gc.collect()
-
-#     m1 = get_avail_cpumem()
-#     m_diff = m1 - m0
-#     if m_diff > 1e6:
-#         pass
-#     return out
 
 
 def gen_VP(sub_rhs_holder, V_holder, rhs, size_old, size_new):
@@ -452,17 +341,8 @@ def gen_sub_ab(V_holder, W_holder, U1_holder, U2_holder,
     sigma = V V.T - W W.T
     pi = V W.T - V W.T.T
 
-
     '''
 
-    # VU1_holder = gen_VW(VU1_holder, V_holder, U1_holder, size_old, size_new, symmetry=False)
-    # VU2_holder = gen_VW(VU2_holder, V_holder, U2_holder, size_old, size_new, symmetry=False)
-    # WU1_holder = gen_VW(WU1_holder, W_holder, U1_holder, size_old, size_new, symmetry=False)
-    # WU2_holder = gen_VW(WU2_holder, W_holder, U2_holder, size_old, size_new, symmetry=False)
-
-    # VV_holder = gen_VW(VV_holder, V_holder, V_holder, size_old, size_new, symmetry=False)
-    # WW_holder = gen_VW(WW_holder, W_holder, W_holder, size_old, size_new, symmetry=False)
-    # VW_holder = gen_VW(VW_holder, V_holder, W_holder, size_old, size_new, symmetry=False)
     gen_VW(VU1_holder, V_holder, U1_holder, size_old, size_new, symmetry=False)
     gen_VW(VU2_holder, V_holder, U2_holder, size_old, size_new, symmetry=False)
     gen_VW(WU1_holder, W_holder, U1_holder, size_old, size_new, symmetry=False)
