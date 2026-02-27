@@ -300,6 +300,26 @@ size_new    |------------------------------------------------|
             gc.collect()
     return sub_A_holder
 
+def gen_VW_symmetry(sub_A_holder, V_holder, W_new, size_old, size_new):
+    '''
+    a symmetric version of gen_VW, W_new in GPU already. W_new is mvp
+    '''
+
+    sub_A_tmp = einsum('mn,ln->ml', V_holder[:size_new,:],W_new)
+
+    sub_A_holder[:size_new, size_old:size_new] = sub_A_tmp
+    del sub_A_tmp
+    gc.collect()
+
+    if size_old > 0:
+        sub_A_tmp = sub_A_holder[:size_old, size_old:size_new].T
+
+        sub_A_holder[size_old:size_new, :size_old] = sub_A_tmp
+        del sub_A_tmp
+        gc.collect()
+    return sub_A_holder
+
+
 
 def gen_VP(sub_rhs_holder, V_holder, rhs, size_old, size_new):
     '''
@@ -888,6 +908,90 @@ def TDDFT_subspace_linear_solver1(a, b, sigma, pi, p, q, omega):
     return x, y
 
 
+def TDDFT_subspace_eigen_solver4(a_p_b, a_m_b, sigma_p_pi, nroots):
+    ''' [ a b ] x - [ σ   π] x  Ω = 0 '''
+    ''' [ b a ] y   [-π  -σ] y    = 0
+
+    a, b, sigma, pi, nroots
+
+    no d_mh version of TDDFT_subspace_eigen_solver5
+
+    '''
+
+    # convert to float64 to avoid precision issues, very useful
+
+    original_dtype = a_p_b.dtype
+    if original_dtype != np.float64:
+        a_p_b = a_p_b.astype(np.float64)
+        a_m_b = a_m_b.astype(np.float64)
+        sigma_p_pi = sigma_p_pi.astype(np.float64)
+    sigma_m_pi = sigma_p_pi.T
+
+    # s_m_p = np.einsum('i,ij,j->ij', d_mh, sigma_m_pi, d_mh)
+    s_m_p = sigma_m_pi
+    '''LU = (σ − π) '''
+    ''' A = LU '''
+    L, U = scipy.linalg.lu(s_m_p, permute_l=True)
+    L_inv = np.linalg.inv(L)
+    U_inv = np.linalg.inv(U)
+
+    '''U^-T(a−b) U^-1 = GG^T '''
+    GGT = np.dot(U_inv.T, np.dot(a_m_b, U_inv))
+
+    G = np.linalg.cholesky(GGT)
+    if np.any(np.isnan(G)):
+        eig, eigv = np.linalg.eigh(GGT)
+        if eig[0] < -1e-4:
+            error_msg = (
+                "GGT matrix is not positive definite.\n"
+                "SCF not correctly converged is likely to cause this error.\n"
+                "For example, scf converged to the wrong state.\n"
+            )
+            raise RuntimeError(error_msg)
+
+    G_inv = np.linalg.inv(G)
+
+    ''' M = G^T L^−1 (a+b) L^−T G '''
+    M = np.dot(G.T, np.dot(L_inv, np.dot(a_p_b, np.dot(L_inv.T, G))))
+
+    omega2, Z = np.linalg.eigh(M)
+    if np.any(omega2 <= 0):
+        error_msg = (
+            "omega**2 is not positive.\n"
+            "SCF not correctly converged is likely to cause this error.\n"
+            f"Or the precision {original_dtype} is not enough."
+        )
+        raise RuntimeError(error_msg)
+    else:
+        omega2 = omega2[:nroots]
+        Z = Z[:,:nroots]
+    omega = omega2**0.5
+
+    ''' It requires Z^T Z = 1/Ω '''
+    ''' x+y = L^−T GZ Ω^-0.5 '''
+    ''' x−y = U^−1 G^−T Z Ω^0.5 '''
+    x_p_y = L_inv.T.dot(G.dot(Z)) * omega**-0.5
+    x_m_y = U_inv.dot(G_inv.T.dot(Z)) * omega**0.5
+
+    if original_dtype != np.float64:
+        omega = omega.astype(original_dtype)
+        x_p_y = x_p_y.astype(original_dtype)
+        x_m_y = x_m_y.astype(original_dtype)
+
+    # print('x_p_yT.shape', x_p_y.T.shape)
+    # print('x_m_yT.shape', x_m_y.T.shape)
+    if np.any(np.isnan(x_p_y)) or np.any(np.isnan(x_m_y)):
+        # print('x_p_y', x_p_y)
+        # print('x_m_y', x_m_y)
+        raise ValueError('x_p_y or x_m_y is nan')
+    if np.any(np.isinf(x_p_y)) or np.any(np.isinf(x_m_y)):
+        # print('x_p_y', x_p_y)
+        # print('x_m_y', x_m_y)
+        raise ValueError('x_p_y or x_m_y is inf')
+    return omega, x_p_y, x_m_y
+
+
+
 def XmY_2_XY(Z, AmB_sq, omega):
     '''given Z, (A-B)^2, omega
        return X, Y
@@ -910,73 +1014,6 @@ def XmY_2_XY(Z, AmB_sq, omega):
 
     return X, Y
 
-def gen_VW_f_order(sub_A_holder, V_holder, W_holder, size_old, size_new, symmetry = True, up_triangle = False):
-    '''
-    [ V_old.T ] [W_old, W_new] = [VW_old,        V_old.T W_new] = [VW_old, V_current.T W_new]
-    [ V_new.T ]                  [V_new.T W_old, V_new.T W_new]   [               '' ''     ]
-
-
-    V_holder or W_holder
-
-                size_old     size_new
-    |--------------|--------------|------------|
-    |              |              |            |
-    |   V_old      |    V_new     |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |        [ V_current ]        |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |              |              |            |
-    |--------------|--------------|------------|
-
-    sub_A_holder
-
-                            size_old            size_new
-                |---------------|-----------------|-----------------|
-                |               |                 |                 |
-                |    VW_old     |                 |                 |
-                |               |                 |                 |
-      size_old  |---------------|V_current.T W_new|-----------------|
-                | V_new.T W_old |                 |                 |
-                | or            |                 |                 |
-                | W_new.T V_old |                 |                 |
-      size_new  |---------------|-----------------|-----------------|
-                |               |                 |                 |
-                |               |                 |                 |
-                |               |                 |                 |
-                |---------------|-----------------|-----------------|
-    '''
-
-    V_current = V_holder[:,:size_new]
-    W_new = W_holder[:,size_old:size_new]
-    sub_A_holder[:size_new,size_old:size_new] = np.dot(V_current.T, W_new)
-
-    if symmetry:
-        sub_A_holder = block_symmetrize(sub_A_holder,size_old,size_new)
-    elif not symmetry:
-        if not up_triangle:
-            '''
-            also explicitly compute the lower triangle,
-            either equal upper triangle.T or recompute
-            '''
-            V_new = V_holder[:,size_old:size_new]
-            W_old = W_holder[:,:size_old]
-            sub_A_holder[size_old:size_new,:size_old] = np.dot(V_new.T, W_old)
-        elif up_triangle:
-            '''
-            otherwise juts let the lower triangle be zeros
-            '''
-            pass
-
-    return sub_A_holder
 
 class LinearDependencyError(RuntimeError):
     pass
