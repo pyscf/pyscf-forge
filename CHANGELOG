@@ -4,7 +4,6 @@ PySCF-Forge 1.1.0 (2026-02-20)
   - PBC with plane-wave basis functions
   - TDDFT-ris (TDDFT with minimal auxiliary basis)
   - FOMO-CASCI (Floating Occupation Molecular Orbital CASCI) and its nuclear gradients
-  - GHF based ppRPA and nuclear gradients
   - LNO-CCSD for molecules and PBC systems
   - MC-PDFT with translated meta-GGA functionals
   - MC-PDFT meta-GGA nuclear gradients
