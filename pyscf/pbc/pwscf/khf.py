@@ -18,7 +18,7 @@
 
 """ Hartree-Fock in the Plane Wave Basis
 
-NOTE: PW coefficients C_ks use the index order [kpt-idx, mo-idx, grid-id]. 
+NOTE: PW coefficients C_ks use the index order [kpt-idx, mo-idx, grid-id].
 This is inconsistent with real-space orbitals, which place the AO indices
 (corresponding to the grid index in this case) at the last dimension. The
 current order for PW C_ks is chosen to avoid potential performance issue in
