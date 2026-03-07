@@ -5,9 +5,6 @@ PySCF-Forge 1.1.0 (2026-02-20)
   - TDDFT-ris (TDDFT with minimal auxiliary basis)
   - FOMO-CASCI (Floating Occupation Molecular Orbital CASCI) and its nuclear gradients
   - LNO-CCSD for molecules and PBC systems
-  - MC-PDFT with translated meta-GGA functionals
-  - MC-PDFT meta-GGA nuclear gradients
-  - Hybrid MC-PDFT nuclear Gradients
   - Spin-flip TDDFT nuclear gradients
   - Spin-flip non-orthogonal configuration interaction
   - CSF-based FCI solver
