@@ -134,7 +134,7 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
                             ctypes.c_uint (norb), ctypes.c_size_t (nconf), ctypes.c_size_t (ndet))
         tlib += lib.logger.process_clock () - t1
         wlib += lib.logger.perf_counter () - w1
-        umat = get_spin_evecs (nspin, neleca, nelecb, smult)
+        umat = get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
         hdiag_conf = np.tensordot (hdiag_conf, umat, axes=1)
         hdiag_conf *= umat[np.newaxis,:,:]
         hdiag_csf[csf_offset:][:nconf*ncsf] = hdiag_conf.sum (1).ravel (order='C')
