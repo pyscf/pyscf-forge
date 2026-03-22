@@ -796,6 +796,17 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
     normality_error = np.linalg.norm( (np.dot(X_full, X_full.T) - np.dot(Y_full, Y_full.T)) - np.eye(n_states) )
     log.debug(f'check normality of X.TX - Y.TY - I = {normality_error:.2e}')
 
+    # Phase convention per state: make the largest-|X| coefficient positive.
+    # Keep X/Y phase consistent by flipping both rows together.
+    max_abs_idx = np.argmax(np.abs(X_full), axis=1)
+    row_idx = np.arange(X_full.shape[0])
+    flip_idx = np.where(X_full[row_idx, max_abs_idx] < 0)[0]
+    log.info(f'flip_idx: {flip_idx}')
+    if flip_idx.size > 0:
+        for i in flip_idx:
+            X_full[i, :] *= -1
+            Y_full[i, :] *= -1
+
     _time_add(log, t_total, cpu0)
 
     log.timer(f'{problem_type.capitalize()} ABBA Krylov Solver total cost', *cpu0)
