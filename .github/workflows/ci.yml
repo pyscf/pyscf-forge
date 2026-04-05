@@ -26,4 +26,21 @@ jobs:
       - name: Install
         run: ./.github/workflows/run_ci.sh
       - name: Test with pytest
-        run: ./.github/workflows/test.sh
+        run: |
+          cd ./pyscf
+          pytest -k 'not _slow' --ignore=afqmc/test
+  afqmc-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install
+        run: ./.github/workflows/run_ci.sh
+      - name: Install CPU JAX
+        run: pip install -U jax
+      - name: Test AFQMC with pytest
+        run: |
+          cd ./pyscf
+          pytest afqmc/test
