@@ -17,4 +17,5 @@ mf = scf.RHF(mol)
 mf.kernel()
 
 af = afqmc.AFQMC(mf)
+af.verbose = 4
 mean, err = af.kernel()

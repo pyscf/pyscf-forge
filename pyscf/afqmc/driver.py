@@ -10,6 +10,7 @@ import jax.numpy as jnp
 from jax import lax
 from jax.sharding import Mesh, NamedSharding
 from jax.sharding import PartitionSpec as P
+from pyscf.lib import logger
 
 from .core.ops import MeasOps, TrialOps
 from .core.system import System
@@ -25,8 +26,6 @@ from .stat_utils import (
 )
 from .walkers import stochastic_reconfiguration
 from .meas.pt2ccsd import get_init_pt2trial_energy
-
-print = partial(print, flush=True)
 
 
 class QmcResult(NamedTuple):
@@ -51,6 +50,13 @@ class MixedQmcResult(NamedTuple):
     trial_block_t2s: jax.Array
     trial_block_e0s: jax.Array
     trial_block_e1s: jax.Array
+
+
+def _emit_note(log: Any | None, text: str) -> None:
+    if log is None:
+        print(text, flush=True)
+    else:
+        log.note("%s", text)
 
 
 def _weighted_block_mean(values: jax.Array, weights: jax.Array) -> jax.Array:
@@ -181,6 +187,7 @@ def run_qmc(
     target_error: float | None = None,
     mesh: Mesh | None = None,
     observable_names: tuple[str, ...] = (),
+    log: Any | None = None,
 ) -> QmcResult:
     """
     equilibration blocks then sampling blocks.
@@ -233,9 +240,10 @@ def run_qmc(
     block_obs_eq = {name: [] for name in observable_names}
     block_e_eq.append(state.e_estimate)
     block_w_eq.append(jnp.sum(state.weights))
-    print("\nEquilibration:\n")
+    _emit_note(log, "\nEquilibration:\n")
     if print_every:
-        print(
+        _emit_note(
+            log,
             f"{'':4s}"
             f"{'block':>9s}  "
             f"{'E_blk':>14s}  "
@@ -243,7 +251,8 @@ def run_qmc(
             f"{'nodes':>10s}  "
             f"{'t[s]':>8s}"
         )
-    print(
+    _emit_note(
+        log,
         f"[eql {0:4d}/{params.n_eql_blocks}]  "
         f"{float(state.e_estimate):14.10f}  "
         f"{float(jnp.sum(state.weights)):12.6e}  "
@@ -270,7 +279,8 @@ def run_qmc(
         w_chunk_avg = jnp.mean(w_chunk)
         e_chunk_avg = jnp.mean(e_chunk * w_chunk) / w_chunk_avg
         elapsed = time.perf_counter() - t0
-        print(
+        _emit_note(
+            log,
             f"[eql {start + n:4d}/{params.n_eql_blocks}]  "
             f"{float(e_chunk_avg):14.10f}  "
             f"{float(w_chunk_avg):12.6e}  "
@@ -285,7 +295,7 @@ def run_qmc(
     }
 
     # sampling
-    print("\nSampling:\n")
+    _emit_note(log, "\nSampling:\n")
     if target_error is None:
         target_error = 0.0
     print_every = params.n_blocks // 10 if params.n_blocks >= 10 else 0
@@ -293,7 +303,8 @@ def run_qmc(
     block_w_s = []
     block_obs_s = {name: [] for name in observable_names}
     if print_every:
-        print(
+        _emit_note(
+            log,
             f"{'':4s}{'block':>9s}  {'E_avg':>14s}  {'E_err':>10s}  {'E_block':>14s}  "
             f"{'W':>12s}    {'nodes':>10s}  {'dt[s/bl]':>10s}  {'t[s]':>7s}"
         )
@@ -326,7 +337,8 @@ def run_qmc(
         mu = stats["mu"]
         se = stats["se_star"]
         nodes = int(state.node_encounters)
-        print(
+        _emit_note(
+            log,
             f"[blk {start + n:4d}/{params.n_blocks}]  "
             f"{mu:14.10f}  "
             f"{(f'{se:10.3e}' if se is not None else ' ' * 10)}  "
@@ -337,7 +349,7 @@ def run_qmc(
             f"{elapsed:8.1f}"
         )
         if se is not None and se <= target_error and target_error > 0.0:
-            print(f"\nTarget error {target_error:.3e} reached at block {start + n}.")
+            _emit_note(log, f"\nTarget error {target_error:.3e} reached at block {start + n}.")
             break
     block_e_s = jnp.asarray(block_e_s)
     block_w_s = jnp.asarray(block_w_s)
@@ -347,15 +359,15 @@ def run_qmc(
     }
 
     data_clean, keep_mask = reject_outliers(jnp.column_stack((block_e_s, block_w_s)), obs=0)
-    print(f"\nRejected {block_e_s.shape[0] - data_clean.shape[0]} outlier blocks.")
+    _emit_note(log, f"\nRejected {block_e_s.shape[0] - data_clean.shape[0]} outlier blocks.")
     block_e_s = jnp.asarray(data_clean[:, 0])
     block_w_s = jnp.asarray(data_clean[:, 1])
     keep_mask = jnp.asarray(keep_mask)
     block_obs_s = {
         name: (arr[keep_mask] if arr is not None else None) for name, arr in block_obs_s.items()
     }
-    print("\nFinal blocking analysis:")
-    stats = blocking_analysis_ratio(block_e_s, block_w_s, print_q=True)
+    _emit_note(log, "\nFinal blocking analysis:")
+    stats = blocking_analysis_ratio(block_e_s, block_w_s, print_q=True, log=log)
     mean, err = stats["mu"], stats["se_star"]
 
     block_e_all = jnp.concatenate([block_e_eq, block_e_s])
@@ -783,6 +795,7 @@ def run_qmc_energy(
     prop_ctx: Any | None = None,
     target_error: float | None = None,
     mesh: Mesh | None = None,
+    log: Any | None = None,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     out = run_qmc(
         sys=sys,
@@ -799,6 +812,7 @@ def run_qmc_energy(
         target_error=target_error,
         mesh=mesh,
         observable_names=(),
+        log=log,
     )
     return out.mean_energy, out.stderr_energy, out.block_energies, out.block_weights
 
@@ -818,6 +832,7 @@ def run_qmc_fp(
     prop_ctx: Any | None = None,
     target_error: float | None = None,
     mesh: Mesh | None = None,
+    log: Any | None = None,
 ) -> QmcResult:
     """
     Returns:
@@ -852,7 +867,7 @@ def run_qmc_fp(
     t0 = time.perf_counter()
 
     # sampling
-    print("\nSampling:\n")
+    _emit_note(log, "\nSampling:\n")
     # print_every = params.n_blocks // 10 if params.n_blocks >= 10 else 1
     print_every = 1
     block_e_all = jnp.zeros((params.n_traj, params.n_blocks + 1)) + 0.0j
@@ -865,8 +880,8 @@ def run_qmc_fp(
     )
     chunk = print_every
     for i in range(params.n_traj):
-        print("Trajectory count", i + 1)
-        print(f"{'tau':^12s}    " f"{'E_avg':^14s}  " f"{'E_err':^13s}  " f"{'sign':>6s}")
+        _emit_note(log, f"Trajectory count {i + 1}")
+        _emit_note(log, f"{'tau':^12s}    " f"{'E_avg':^14s}  " f"{'E_err':^13s}  " f"{'sign':>6s}")
         if i > 0:
             params = dataclasses.replace(params, seed=params.seed + i)
             state = prop_ops.init_prop_state(
@@ -909,7 +924,8 @@ def run_qmc_fp(
 
         timer = params.dt * params.n_prop_steps * jnp.arange(params.n_blocks + 1)
         for j in range(0, params.n_blocks + 1, chunk):
-            print(
+            _emit_note(
+                log,
                 f"{(timer[j]):12.4f}    "
                 f"{(mean[j].real):14.10f}  "
                 f"{(err[j].real):13.7e}  "
@@ -923,7 +939,7 @@ def run_qmc_fp(
 
         elapsed = time.perf_counter() - t0
 
-        print(f"Wall time :{elapsed:12.1f} s\n")
+        _emit_note(log, f"Wall time :{elapsed:12.1f} s\n")
 
     return QmcResult(
         mean_energy=mean,
@@ -951,6 +967,7 @@ def run_qmc_energy_fp(
     prop_ctx: Any | None = None,
     target_error: float | None = None,
     mesh: Mesh | None = None,
+    log: Any | None = None,
 ) -> tuple[jax.Array, jax.Array, jax.Array, jax.Array]:
     out = run_qmc_fp(
         sys=sys,
@@ -965,5 +982,6 @@ def run_qmc_energy_fp(
         meas_ctx=meas_ctx,
         prop_ctx=prop_ctx,
         target_error=target_error,
+        log=log,
     )
     return out.mean_energy, out.stderr_energy, out.block_energies, out.block_weights

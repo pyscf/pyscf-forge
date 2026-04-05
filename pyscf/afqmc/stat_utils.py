@@ -57,6 +57,7 @@ def blocking_analysis_ratio(
     print_q: bool = True,
     plot_q: bool = False,
     exact: float | None = None,
+    log: Any | None = None,
 ) -> Dict[str, Any]:
     """Blocking analysis for mu = sum(wt*ene)/sum(wt)"""
     ene = np.asarray(ene, float).ravel()
@@ -161,19 +162,20 @@ def blocking_analysis_ratio(
     }
 
     if print_q:
-        print(f"mu: {out['mu']:.16g}  SE*: {out['se_star']:.16g}  95% CI: {out['ci95_star']}")
+        emit = (lambda text: log.note("%s", text)) if log is not None else print
+        emit(f"mu: {out['mu']:.16g}  SE*: {out['se_star']:.16g}  95% CI: {out['ci95_star']}")
         if out["z_score"] is not None:
-            print(f"bias: {out['bias']:.16g}  z: {out['z_score']:.6g}")
+            emit(f"bias: {out['bias']:.16g}  z: {out['z_score']:.6g}")
 
         # table: block size vs SE, mark chosen B*
         se0 = float(SEs[0]) if SEs.size else float("nan")
-        print("\nBlocking SE curve (ratio LOO):")
-        print(f"{'':1s}{'B':>6s} {'G':>6s} {'SE':>14s} {'SE/SE(B=1)':>12s}")
+        emit("\nBlocking SE curve (ratio LOO):")
+        emit(f"{'':1s}{'B':>6s} {'G':>6s} {'SE':>14s} {'SE/SE(B=1)':>12s}")
         for B, G, se in zip(Bs, Gs, SEs):
             mark = "*" if int(B) == int(B_star) else " "
             rel = (float(se) / se0) if (se0 > 0 and np.isfinite(se0)) else float("nan")
-            print(f"{mark}{int(B):6d} {int(G):6d} {float(se):14.6e} {rel:12.3f}")
-        print("")  # trailing newline
+            emit(f"{mark}{int(B):6d} {int(G):6d} {float(se):14.6e} {rel:12.3f}")
+        emit("")
 
     if plot_q:
         import matplotlib.pyplot as plt

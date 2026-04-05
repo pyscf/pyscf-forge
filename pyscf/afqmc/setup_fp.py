@@ -99,6 +99,7 @@ def setup_fp(
     cache: Union[str, Path] | None = None,
     overwrite: bool = False,
     verbose: bool = False,
+    log: Any | None = None,
     # system/prop options
     walker_kind: WalkerKind | None = None,
     mesh: Mesh | None = None,
@@ -140,6 +141,7 @@ def setup_fp(
             cache=cache,
             overwrite=overwrite,
             verbose=verbose,
+            log=log,
             walker_kind=walker_kind,
             mesh=mesh,
             mixed_precision=mixed_precision,

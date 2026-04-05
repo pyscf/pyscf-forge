@@ -28,4 +28,5 @@ af.n_walkers = 100
 af.n_eql_blocks = 10
 af.n_blocks = 100
 af.seed = 548280
+af.verbose = 4
 mean, err = af.kernel()

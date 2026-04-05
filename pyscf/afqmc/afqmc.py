@@ -6,29 +6,26 @@ configure_once()
 
 import copy
 import dataclasses
-from functools import partial
+import sys
 from pathlib import Path
 from typing import Any, Callable, Union, cast
 
 import numpy as np
+from jax.sharding import Mesh
 from numpy.typing import ArrayLike, NDArray
 
-print = partial(print, flush=True)
-
-from jax.sharding import Mesh
+from pyscf import lib
+from pyscf.lib import logger
 
 from . import staging
 from .core.system import WalkerKind
 from .driver import QmcResult
 from .prop.types import QmcParams, QmcParamsBase, QmcParamsFp, QmcParamsLno
-from .runtime_provenance import print_runtime_provenance
+from .runtime_provenance import dump_runtime_provenance
 from .setup import Job
 from .setup import setup as setup_job
 from .setup_fp import JobFp
 from .setup_fp import setup_fp as setup_job_fp
-
-# from .setup_lno import setup_lno as setup_job_lno
-# from . import setup_lno
 from .staging import StagedInputs, _is_cc_like
 from .staging import dump as dump_staged
 from .staging import load as load_staged
@@ -62,7 +59,21 @@ def _frozen_cache_key(frozen: int | ArrayLike | None) -> int | tuple[int, ...] |
     raise TypeError(f"Unsupported frozen type for cache key: {type(frozen)}")
 
 
-class Afqmc:
+def _default_stream_config(obj: Any) -> tuple[int, Any]:
+    if obj is not None:
+        mol = getattr(obj, "mol", None)
+        if mol is not None:
+            return int(getattr(mol, "verbose", logger.NOTE)), getattr(
+                mol, "stdout", sys.stdout
+            )
+        if hasattr(obj, "verbose") or hasattr(obj, "stdout"):
+            return int(getattr(obj, "verbose", logger.NOTE)), getattr(
+                obj, "stdout", sys.stdout
+            )
+    return logger.NOTE, sys.stdout
+
+
+class Afqmc(lib.StreamObject):
     """
     AFQMC driver object.
 
@@ -135,7 +146,10 @@ class Afqmc:
         self.chol_cut = float(chol_cut)
         self.cache = Path(cache).expanduser().resolve() if cache is not None else None
         self.overwrite_cache = False
-        self.verbose = False
+        self.verbose, self.stdout = _default_stream_config(self._scf)
+        self.max_memory = (
+            getattr(self._scf, "max_memory", 0) if self._scf is not None else 0
+        )
 
         self.walker_kind: WalkerKind | None = None  # resolved in kernel
         self.mixed_precision = True
@@ -148,7 +162,9 @@ class Afqmc:
         self.seed = defaults.seed if seed is None else seed
         self.n_chunks = defaults.n_chunks if n_chunks is None else n_chunks
         if hasattr(defaults, "n_eql_blocks"):
-            self.n_eql_blocks = defaults.n_eql_blocks if n_eql_blocks is None else n_eql_blocks
+            self.n_eql_blocks = (
+                defaults.n_eql_blocks if n_eql_blocks is None else n_eql_blocks
+            )
 
         self._staged: StagedInputs | None = None
         self._job: Job | None = None
@@ -167,13 +183,15 @@ class Afqmc:
     def job(self) -> Job | None:
         return self._job
 
-    def _dump_params(self, params: QmcParamsBase) -> None:
+    def _debug_prints_enabled(self) -> bool:
+        return self.verbose >= logger.DEBUG
+
+    def _dump_params(self, params: QmcParamsBase, log: Any) -> None:
         fields = dataclasses.fields(params)
         width = len(max(fields, key=lambda f: len(f.name)).name)
-        print(f" {type(params).__name__}:")
+        log.info(" %s:", type(params).__name__)
         for field in fields:
-            print(f"  {field.name:<{width}} = {getattr(params, field.name)}")
-        print("")
+            log.info("  %s = %s", f"{field.name:<{width}}", getattr(params, field.name))
 
     def _resolve_meas_cfg(self, job: Job) -> object | None:
         from .meas.cisd import get_cisd_meas_cfg
@@ -185,12 +203,12 @@ class Afqmc:
                 return cfg
         return None
 
-    def _dump_cfg(self, name: str, cfg: object) -> None:
+    def _dump_cfg(self, name: str, cfg: object, log: Any) -> None:
         if not dataclasses.is_dataclass(cfg):
-            print(f" {name:<15} = {cfg}")
+            log.info(" %s = %s", f"{name:<15}", cfg)
             return
 
-        print(f" {name:<15} = {type(cfg).__name__}")
+        log.info(" %s = %s", f"{name:<15}", type(cfg).__name__)
         fields = dataclasses.fields(cfg)
         width = len(max(fields, key=lambda f: len(f.name)).name)
         for field in fields:
@@ -199,12 +217,12 @@ class Afqmc:
                 value_str = value.__name__
             else:
                 value_str = str(value)
-            print(f"  {field.name:<{width}} = {value_str}")
+            log.info("  %s = %s", f"{field.name:<{width}}", value_str)
 
-    def dump_flags(self, job: Job) -> None:
-        self._dump_flags_helper(job)
+    def dump_flags(self, job: Job, verbose: int | None = None) -> None:
+        self._dump_flags_helper(job, logger.new_logger(self, verbose))
 
-    def _dump_flags_helper(self, job: Job) -> None:
+    def _dump_flags_helper(self, job: Job, log: Any) -> None:
         meta = job.staged.meta
         src = meta["source_kind"]
         chol_cut = meta["chol_cut"]
@@ -212,22 +230,24 @@ class Afqmc:
         nchol = job.ham_data.nchol
         params = job.params
         trial = job.staged.trial
-        print("\n******** AFQMC ********")
-        print(f" norb            = {sys.norb}")
-        print(f" nelec_up        = {sys.nelec[0]}")
-        print(f" nelec_dn        = {sys.nelec[1]}")
-        print(f" nchol           = {nchol}")
-        print(f" source_kind     = {src}")
-        print(f" trial_kind      = {trial.kind}")
-        print(f" chol_cut        = {chol_cut:g}")
-        print(f" cache           = {str(self.cache) if self.cache else None}")
-        print(f" walker_kind     = {sys.walker_kind}")
-        print(f" mixed_precision = {self.mixed_precision}\n")
+        log.info("")
+        log.info("******** AFQMC ********")
+        log.info(" norb            = %s", sys.norb)
+        log.info(" nelec_up        = %s", sys.nelec[0])
+        log.info(" nelec_dn        = %s", sys.nelec[1])
+        log.info(" nchol           = %s", nchol)
+        log.info(" source_kind     = %s", src)
+        log.info(" trial_kind      = %s", trial.kind)
+        log.info(" chol_cut        = %g", chol_cut)
+        log.info(" cache           = %s", str(self.cache) if self.cache else None)
+        log.info(" walker_kind     = %s", sys.walker_kind)
+        log.info(" mixed_precision = %s", self.mixed_precision)
         meas_cfg = self._resolve_meas_cfg(job)
         if meas_cfg is not None:
-            self._dump_cfg("meas_cfg", meas_cfg)
-            print("")
-        self._dump_params(params)
+            log.info("")
+            self._dump_cfg("meas_cfg", meas_cfg, log)
+        log.info("")
+        self._dump_params(params, log)
 
     def _key(self) -> tuple:
         """Key for determining whether staged/job caches are still valid."""
@@ -243,7 +263,7 @@ class Afqmc:
             cache_mtime,
         )
 
-    def stage(self, *, force: bool = False) -> StagedInputs:
+    def stage(self, *, force: bool = False, log: Any | None = None) -> StagedInputs:
         """
         Compute or load HamInput/TrialInput.
         If cache is set and exists, loads unless overwrite_cache=True.
@@ -261,12 +281,15 @@ class Afqmc:
         staged = stage_inputs(
             self._obj,
             norb_frozen_core=(
-                int(self.norb_frozen_core) if self.norb_frozen_core is not None else None
+                int(self.norb_frozen_core)
+                if self.norb_frozen_core is not None
+                else None
             ),
             chol_cut=self.chol_cut,
             cache=self.cache,
             overwrite=self.overwrite_cache if self.cache is not None else False,
-            verbose=self.verbose,
+            verbose=self._debug_prints_enabled(),
+            log=log,
         )
         self._staged = staged
         self._cache_key = key
@@ -324,14 +347,19 @@ class Afqmc:
         block_fn: Callable[..., Any] | None = None,
         prop_kwargs: dict[str, Any] | None = None,
         mesh: Mesh | None = None,
+        log: Any | None = None,
     ) -> Job:
         """
         Assemble a runnable Job from current settings and staged inputs.
         """
-        if self._job is not None and not force and (mesh is None or self._job.mesh is mesh):
+        if (
+            self._job is not None
+            and not force
+            and (mesh is None or self._job.mesh is mesh)
+        ):
             return self._job
 
-        staged = self.stage()
+        staged = self.stage(log=log)
         qmc_params = self._make_params()
         self.params = qmc_params
 
@@ -347,6 +375,8 @@ class Afqmc:
             prop_ops=prop_ops,
             block_fn=block_fn,
             prop_kwargs=prop_kwargs,
+            verbose=self._debug_prints_enabled(),
+            log=log,
         )
         self._job = job
         return job
@@ -358,13 +388,14 @@ class Afqmc:
         """
         Runs AFQMC, returns (e_tot, e_err), and stores samples.
         """
-        print(banner_afqmc())
-        print_runtime_provenance()
+        log = logger.new_logger(self)
+        log.info("%s", banner_afqmc().rstrip())
+        dump_runtime_provenance(log)
         mesh = driver_kwargs.get("mesh")
-        job = self.build_job(mesh=mesh)
-        self.dump_flags(job)
+        job = self.build_job(mesh=mesh, log=log)
+        self.dump_flags(job, verbose=log.verbose)
 
-        qmc_result = job.kernel(**driver_kwargs)
+        qmc_result = job.kernel(log=log, **driver_kwargs)
 
         e_tot = float(qmc_result.mean_energy)
         e_err = (
@@ -468,7 +499,9 @@ class AfqmcFp(Afqmc):
             n_chunks=n_chunks,
         )
         defaults = self.params_cls()
-        self.n_prop_steps = defaults.n_prop_steps if n_prop_steps is None else n_prop_steps
+        self.n_prop_steps = (
+            defaults.n_prop_steps if n_prop_steps is None else n_prop_steps
+        )
         self.n_traj = defaults.n_traj if n_traj is None else n_traj
         self.ene0 = ene0
 
@@ -487,13 +520,14 @@ class AfqmcFp(Afqmc):
         """
         Runs AFQMC, returns (e_tot, e_err), and stores samples.
         """
-        print(banner_afqmc())
-        print_runtime_provenance()
+        log = logger.new_logger(self)
+        log.info("%s", banner_afqmc().rstrip())
+        dump_runtime_provenance(log)
         mesh = driver_kwargs.get("mesh")
-        job = self.build_job(mesh=mesh)
-        self.dump_flags(job)
+        job = self.build_job(mesh=mesh, log=log)
+        self.dump_flags(job, verbose=log.verbose)
 
-        qmc_result = job.kernel(**driver_kwargs)
+        qmc_result = job.kernel(log=log, **driver_kwargs)
 
         e_tot = qmc_result.mean_energy
         e_err = qmc_result.stderr_energy
@@ -576,7 +610,7 @@ class AfqmcLnoFrag(Afqmc):
         self.prjlo = prjlo
         self.frozen_orbitals = frozen_orbitals
 
-    def stage(self, *, force: bool = False) -> StagedInputs:
+    def stage(self, *, force: bool = False, log: Any | None = None) -> StagedInputs:
         """
         Compute or load HamInput/TrialInput.
         If cache is set and exists, loads unless overwrite_cache=True.
@@ -601,7 +635,8 @@ class AfqmcLnoFrag(Afqmc):
             chol_cut=self.chol_cut,
             cache=self.cache,
             overwrite=self.overwrite_cache if self.cache is not None else False,
-            verbose=self.verbose,
+            verbose=self._debug_prints_enabled(),
+            log=log,
             ham=ham,
             trial=None,
         )
@@ -661,6 +696,7 @@ class AfqmcLnoFrag(Afqmc):
         prop_ops: Any = None,
         block_fn: Callable[..., Any] | None = None,
         prop_kwargs: dict[str, Any] | None = None,
+        log: Any | None = None,
     ) -> Job:
         """
         Assemble a runnable Job from current settings and staged inputs.
@@ -674,7 +710,7 @@ class AfqmcLnoFrag(Afqmc):
         if meas_ops is not None:
             raise ValueError("meas_ops must be None as we overwrite it.")
 
-        staged = self.stage()
+        staged = self.stage(log=log)
         params = self._make_params()
         assert isinstance(params, QmcParamsLno)
         self.params = params
@@ -695,6 +731,8 @@ class AfqmcLnoFrag(Afqmc):
             prop_ops=prop_ops,
             block_fn=block_fn,
             prop_kwargs=prop_kwargs,
+            verbose=self._debug_prints_enabled(),
+            log=log,
         )
         self._job = job
         return job
@@ -703,15 +741,16 @@ class AfqmcLnoFrag(Afqmc):
         """
         Runs AFQMC, returns (e_tot, e_err), and stores samples.
         """
-        print(banner_afqmc())
-        job = self.build_job()
-        self.dump_flags(job)
+        log = logger.new_logger(self)
+        log.info("%s", banner_afqmc().rstrip())
+        job = self.build_job(log=log)
+        self.dump_flags(job, verbose=log.verbose)
 
         obs = driver_kwargs.get("observable_names", ())
         if "orb_corr" not in obs:
             driver_kwargs["observable_names"] = obs + ("orb_corr",)
 
-        qmc_result = job.kernel(**driver_kwargs)
+        qmc_result = job.kernel(log=log, **driver_kwargs)
 
         if not isinstance(qmc_result, QmcResult):
             raise TypeError(

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from functools import partial
 from typing import Any, ClassVar, Protocol
 
 import jax
@@ -22,19 +21,30 @@ from .staging import HamInput, StagedInputs
 from .trial.cisd import CisdTrial
 from .trial.rhf import RhfTrial
 
-print = partial(print, flush=True)
-
 _HOST_CHOL_BLOCK_SIZE = 16
 
 
-def _setup_begin(message: str) -> float:
-    print(f"[setup] {message}...")
+def _setup_begin(message: str, *, log: Any | None = None) -> float:
+    if log is None:
+        print(f"[setup] {message}...", flush=True)
+    else:
+        log.info("[setup] %s...", message)
     return time.time()
 
 
-def _setup_end(start: float, message: str, *, details: str | None = None) -> None:
+def _setup_end(
+    start: float,
+    message: str,
+    *,
+    details: str | None = None,
+    log: Any | None = None,
+) -> None:
     suffix = f" | {details}" if details else ""
-    print(f"[setup] {message} in {time.time() - start:.2f}s{suffix}")
+    text = f"[setup] {message} in {time.time() - start:.2f}s{suffix}"
+    if log is None:
+        print(text, flush=True)
+    else:
+        log.info("%s", text)
 
 
 @dataclass(frozen=True)
@@ -59,7 +69,13 @@ class RuntimeJob(Protocol):
 
 
 class RuntimeLayout(Protocol):
-    def make_initial_ham_data(self, ham: HamInput | HamChol, mesh: Mesh | None) -> HamChol: ...
+    def make_initial_ham_data(
+        self,
+        ham: HamInput | HamChol,
+        mesh: Mesh | None,
+        *,
+        log: Any | None = None,
+    ) -> HamChol: ...
 
     def prepare(
         self,
@@ -68,6 +84,7 @@ class RuntimeLayout(Protocol):
         state: PropState | None = None,
         meas_ctx: object | None = None,
         prop_ctx: object | None = None,
+        log: Any | None = None,
     ) -> PreparedRuntime: ...
 
 
@@ -86,18 +103,27 @@ def _padded_model_length(length: int, mesh: Mesh | None) -> int:
     return length + (n_model - remainder)
 
 
-def _make_ham_data(ham: HamInput | HamChol, mesh: Mesh | None, *, compact_chol: bool) -> HamChol:
+def _make_ham_data(
+    ham: HamInput | HamChol,
+    mesh: Mesh | None,
+    *,
+    compact_chol: bool,
+    log: Any | None = None,
+) -> HamChol:
     chol = ham.chol
     runtime_n_chol = _padded_model_length(int(chol.shape[0]), mesh)
     if compact_chol:
         n_chol = int(chol.shape[0])
         if runtime_n_chol != n_chol:
             assert mesh is not None
-            print(
+            text = (
                 f"[shard] padding chol from {n_chol} to {runtime_n_chol} "
-                f"to shard evenly over n_model={_model_axis_size(mesh)}.",
-                flush=True,
+                f"to shard evenly over n_model={_model_axis_size(mesh)}."
             )
+            if log is None:
+                print(text, flush=True)
+            else:
+                log.info("%s", text)
         chol = np.zeros((0, 0, 0), dtype=np.asarray(chol).dtype)
 
     if mesh is not None and mesh.size > 1 and has_model_axis(mesh):
@@ -361,8 +387,14 @@ def _compact_ham_data_for_runtime(ham_data: Any, meas_ctx: Any) -> Any:
 
 @dataclass(frozen=True)
 class DefaultRuntimeLayout:
-    def make_initial_ham_data(self, ham: HamInput | HamChol, mesh: Mesh | None) -> HamChol:
-        return _make_ham_data(ham, mesh, compact_chol=False)
+    def make_initial_ham_data(
+        self,
+        ham: HamInput | HamChol,
+        mesh: Mesh | None,
+        *,
+        log: Any | None = None,
+    ) -> HamChol:
+        return _make_ham_data(ham, mesh, compact_chol=False, log=log)
 
     def prepare(
         self,
@@ -371,24 +403,25 @@ class DefaultRuntimeLayout:
         state: PropState | None = None,
         meas_ctx: object | None = None,
         prop_ctx: object | None = None,
+        log: Any | None = None,
     ) -> PreparedRuntime:
         ham_data_runtime = job.ham_data
 
         if prop_ctx is None:
-            t_prop = _setup_begin("building propagation context")
+            t_prop = _setup_begin("building propagation context", log=log)
             prop_ctx = job.prop_ops.build_prop_ctx(
                 ham_data_runtime,
                 job.trial_ops.get_rdm1(job.trial_data),
                 job.params,
             )
-            _setup_end(t_prop, "propagation context ready")
+            _setup_end(t_prop, "propagation context ready", log=log)
         if meas_ctx is None:
-            t_meas = _setup_begin("building measurement context")
+            t_meas = _setup_begin("building measurement context", log=log)
             meas_ctx = job.meas_ops.build_meas_ctx(ham_data_runtime, job.trial_data)
-            _setup_end(t_meas, "measurement context ready")
+            _setup_end(t_meas, "measurement context ready", log=log)
 
         if state is None:
-            t_state = _setup_begin("initializing propagation state")
+            t_state = _setup_begin("initializing propagation state", log=log)
             state = job.prop_ops.init_prop_state(
                 sys=job.sys,
                 ham_data=ham_data_runtime,
@@ -398,7 +431,7 @@ class DefaultRuntimeLayout:
                 params=job.params,
                 mesh=job.mesh,
             )
-            _setup_end(t_state, "propagation state ready")
+            _setup_end(t_state, "propagation state ready", log=log)
 
         if job.params_cls is QmcParams:
             ham_data_runtime = _compact_ham_data_for_runtime(ham_data_runtime, meas_ctx)
@@ -416,8 +449,14 @@ class RhfHostRuntimeLayout:
     mixed_precision: bool = True
     rhf_meas_cfg: RhfMeasCfg = RhfMeasCfg()
 
-    def make_initial_ham_data(self, ham: HamInput | HamChol, mesh: Mesh | None) -> HamChol:
-        return _make_ham_data(ham, mesh, compact_chol=True)
+    def make_initial_ham_data(
+        self,
+        ham: HamInput | HamChol,
+        mesh: Mesh | None,
+        *,
+        log: Any | None = None,
+    ) -> HamChol:
+        return _make_ham_data(ham, mesh, compact_chol=True, log=log)
 
     def prepare(
         self,
@@ -426,6 +465,7 @@ class RhfHostRuntimeLayout:
         state: PropState | None = None,
         meas_ctx: object | None = None,
         prop_ctx: object | None = None,
+        log: Any | None = None,
     ) -> PreparedRuntime:
         from .trial.rhf import RhfTrial
 
@@ -435,7 +475,7 @@ class RhfHostRuntimeLayout:
         trial_rdm1 = job.trial_ops.get_rdm1(trial_data)
 
         if prop_ctx is None:
-            t_prop = _setup_begin("building propagation context")
+            t_prop = _setup_begin("building propagation context", log=log)
             prop_ctx = _build_restricted_prop_ctx_from_host(
                 job.staged,
                 trial_rdm1=trial_rdm1,
@@ -443,19 +483,19 @@ class RhfHostRuntimeLayout:
                 mixed_precision=self.mixed_precision,
                 mesh=job.mesh,
             )
-            _setup_end(t_prop, "propagation context ready")
+            _setup_end(t_prop, "propagation context ready", log=log)
         if meas_ctx is None:
-            t_meas = _setup_begin("building measurement context")
+            t_meas = _setup_begin("building measurement context", log=log)
             meas_ctx = _build_rhf_meas_ctx_from_host(
                 job.staged,
                 trial_data,
                 cfg=self.rhf_meas_cfg,
                 mesh=job.mesh,
             )
-            _setup_end(t_meas, "measurement context ready")
+            _setup_end(t_meas, "measurement context ready", log=log)
 
         if state is None:
-            t_state = _setup_begin("initializing propagation state")
+            t_state = _setup_begin("initializing propagation state", log=log)
             state = _init_state_from_prebuilt_ctx(
                 job,
                 trial_data=trial_data,
@@ -463,7 +503,7 @@ class RhfHostRuntimeLayout:
                 ham_data_runtime=ham_data_runtime,
                 meas_ctx=meas_ctx,
             )
-            _setup_end(t_state, "propagation state ready")
+            _setup_end(t_state, "propagation state ready", log=log)
 
         return PreparedRuntime(
             ham_data=ham_data_runtime,
@@ -477,8 +517,14 @@ class RhfHostRuntimeLayout:
 class CisdHostRuntimeLayout:
     mixed_precision: bool = True
 
-    def make_initial_ham_data(self, ham: HamInput | HamChol, mesh: Mesh | None) -> HamChol:
-        return _make_ham_data(ham, mesh, compact_chol=False)
+    def make_initial_ham_data(
+        self,
+        ham: HamInput | HamChol,
+        mesh: Mesh | None,
+        *,
+        log: Any | None = None,
+    ) -> HamChol:
+        return _make_ham_data(ham, mesh, compact_chol=False, log=log)
 
     def prepare(
         self,
@@ -487,6 +533,7 @@ class CisdHostRuntimeLayout:
         state: PropState | None = None,
         meas_ctx: object | None = None,
         prop_ctx: object | None = None,
+        log: Any | None = None,
     ) -> PreparedRuntime:
         ham_data_runtime = job.ham_data
         trial_data = job.trial_data
@@ -494,7 +541,7 @@ class CisdHostRuntimeLayout:
         trial_rdm1 = job.trial_ops.get_rdm1(trial_data)
 
         if prop_ctx is None:
-            t_prop = _setup_begin("building propagation context")
+            t_prop = _setup_begin("building propagation context", log=log)
             prop_ctx = _build_restricted_prop_ctx_from_host(
                 job.staged,
                 trial_rdm1=trial_rdm1,
@@ -502,9 +549,9 @@ class CisdHostRuntimeLayout:
                 mixed_precision=self.mixed_precision,
                 mesh=job.mesh,
             )
-            _setup_end(t_prop, "propagation context ready")
+            _setup_end(t_prop, "propagation context ready", log=log)
         if meas_ctx is None:
-            t_meas = _setup_begin("building measurement context")
+            t_meas = _setup_begin("building measurement context", log=log)
             cfg = get_cisd_meas_cfg(job.meas_ops)
             if cfg is None:
                 raise TypeError("CISD host runtime layout requires CisdMeasCfg-aware MeasOps.")
@@ -514,10 +561,10 @@ class CisdHostRuntimeLayout:
                 cfg=cfg,
                 mesh=job.mesh,
             )
-            _setup_end(t_meas, "measurement context ready")
+            _setup_end(t_meas, "measurement context ready", log=log)
 
         if state is None:
-            t_state = _setup_begin("initializing propagation state")
+            t_state = _setup_begin("initializing propagation state", log=log)
             state = _init_state_from_prebuilt_ctx(
                 job,
                 trial_data=trial_data,
@@ -525,7 +572,7 @@ class CisdHostRuntimeLayout:
                 ham_data_runtime=ham_data_runtime,
                 meas_ctx=meas_ctx,
             )
-            _setup_end(t_state, "propagation state ready")
+            _setup_end(t_state, "propagation state ready", log=log)
 
         return PreparedRuntime(
             ham_data=ham_data_runtime,

@@ -8,12 +8,9 @@ import textwrap
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
-from functools import partial
 from importlib import metadata
 from pathlib import Path
 from typing import Any
-
-print = partial(print, flush=True)
 
 _FIELD_NAME_WIDTH = 15
 _FIELD_CONTINUATION_PREFIX = f" {'':<{_FIELD_NAME_WIDTH}s}   "
@@ -279,3 +276,9 @@ def print_runtime_provenance(repo_root: Path | None = None) -> None:
     info = collect_runtime_provenance(repo_root)
     for line in format_runtime_provenance(info):
         print(line)
+
+
+def dump_runtime_provenance(log: Any, repo_root: Path | None = None) -> None:
+    info = collect_runtime_provenance(repo_root)
+    for line in format_runtime_provenance(info):
+        log.info("%s", line)

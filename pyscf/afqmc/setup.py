@@ -3,14 +3,11 @@ from __future__ import annotations
 import inspect
 import time
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
 from typing import Any, Callable, ClassVar, Union, cast
 
 import numpy as np
 from jax.sharding import Mesh
-
-print = partial(print, flush=True)
 
 from . import driver
 from .driver import QmcResult
@@ -24,14 +21,27 @@ from .runtime_layout import RuntimeLayout, make_runtime_layout
 from .staging import StagedInputs, _resolve_stage_frozen_arg, load, stage
 
 
-def _setup_begin(message: str) -> float:
-    print(f"[setup] {message}...")
+def _setup_begin(message: str, *, log: Any | None = None) -> float:
+    if log is None:
+        print(f"[setup] {message}...", flush=True)
+    else:
+        log.info("[setup] %s...", message)
     return time.time()
 
 
-def _setup_end(start: float, message: str, *, details: str | None = None) -> None:
+def _setup_end(
+    start: float,
+    message: str,
+    *,
+    details: str | None = None,
+    log: Any | None = None,
+) -> None:
     suffix = f" | {details}" if details else ""
-    print(f"[setup] {message} in {time.time() - start:.2f}s{suffix}")
+    text = f"[setup] {message} in {time.time() - start:.2f}s{suffix}"
+    if log is None:
+        print(text, flush=True)
+    else:
+        log.info("%s", text)
 
 
 def _filter_kwargs_for(callable_obj: Any, kwargs: dict[str, Any]) -> dict[str, Any]:
@@ -120,6 +130,7 @@ def _resolve_staged(
     cache: Union[str, Path] | None,
     overwrite: bool,
     verbose: bool,
+    log: Any | None,
 ) -> StagedInputs:
     staged: StagedInputs
     if isinstance(obj_or_staged, StagedInputs):
@@ -132,7 +143,7 @@ def _resolve_staged(
         else None
     )
     if p is not None and p.exists():
-        staged = load(p)
+        staged = load(p, log=log)
         return staged
 
     staged = stage(
@@ -142,12 +153,17 @@ def _resolve_staged(
         cache=cache,
         overwrite=overwrite,
         verbose=verbose,
+        log=log,
     )
     return staged
 
 
 def _make_trial_bundle(
-    sys: System, staged: StagedInputs, mixed_precision: bool
+    sys: System,
+    staged: StagedInputs,
+    mixed_precision: bool,
+    *,
+    log: Any | None = None,
 ) -> tuple[Any, Any, Any]:
     """
     Return (trial_data, trial_ops, meas_ops)
@@ -156,7 +172,7 @@ def _make_trial_bundle(
     data = tr.data
 
     kind = tr.kind.lower()
-    t_bundle = _setup_begin(f"building trial bundle ({kind})")
+    t_bundle = _setup_begin(f"building trial bundle ({kind})", log=log)
 
     if kind == "rhf":
         from .meas.rhf import make_rhf_meas_ops
@@ -165,7 +181,7 @@ def _make_trial_bundle(
         trial_data = make_rhf_trial_data(data, sys)
         trial_ops = make_rhf_trial_ops(sys=sys)
         meas_ops = make_rhf_meas_ops(sys=sys)
-        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}")
+        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}", log=log)
         return trial_data, trial_ops, meas_ops
 
     if kind == "uhf":
@@ -175,7 +191,7 @@ def _make_trial_bundle(
         trial_data = make_uhf_trial_data(data, sys)
         trial_ops = make_uhf_trial_ops(sys=sys)
         meas_ops = make_uhf_meas_ops(sys=sys)
-        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}")
+        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}", log=log)
         return trial_data, trial_ops, meas_ops
 
     if kind == "ghf":
@@ -185,7 +201,7 @@ def _make_trial_bundle(
         trial_data = make_ghf_trial_data(data, sys=sys)
         trial_ops = make_ghf_trial_ops(sys=sys)
         meas_ops = make_ghf_meas_ops_chol(sys=sys)
-        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}")
+        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}", log=log)
         return trial_data, trial_ops, meas_ops
 
     if kind == "cisd":
@@ -195,7 +211,7 @@ def _make_trial_bundle(
         trial_data = make_cisd_trial_data(data, sys)
         trial_ops = make_cisd_trial_ops(sys=sys)
         meas_ops = make_cisd_meas_ops(sys=sys, mixed_precision=mixed_precision)
-        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}")
+        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}", log=log)
         return trial_data, trial_ops, meas_ops
 
     if kind == "ucisd":
@@ -205,7 +221,7 @@ def _make_trial_bundle(
         trial_data = make_ucisd_trial_data(data, sys)
         trial_ops = make_ucisd_trial_ops(sys=sys)
         meas_ops = make_ucisd_meas_ops(sys=sys, mixed_precision=mixed_precision)
-        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}")
+        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}", log=log)
         return trial_data, trial_ops, meas_ops
 
     if kind == "gcisd":
@@ -215,7 +231,7 @@ def _make_trial_bundle(
         trial_data = make_gcisd_trial_data(data, sys)
         trial_ops = make_gcisd_trial_ops(sys=sys)
         meas_ops = make_gcisd_meas_ops(sys=sys)
-        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}")
+        _setup_end(t_bundle, "trial bundle ready", details=f"kind={kind}", log=log)
         return trial_data, trial_ops, meas_ops
 
     raise ValueError(f"Unsupported TrialInput.kind: {tr.kind!r}")
@@ -257,6 +273,7 @@ class Job:
         state: PropState | None = None,
         meas_ctx: object | None = None,
         prop_ctx: object | None = None,
+        log: Any | None = None,
     ) -> tuple[PropState, object, object]:
         if prop_ctx is None:
             prop_ctx = self._runtime_prop_ctx
@@ -273,6 +290,7 @@ class Job:
             state=state,
             meas_ctx=meas_ctx,
             prop_ctx=prop_ctx,
+            log=log,
         )
         self.ham_data = prepared.ham_data
 
@@ -291,6 +309,7 @@ class Job:
             state=driver_kwargs.get("state"),
             meas_ctx=driver_kwargs.get("meas_ctx"),
             prop_ctx=driver_kwargs.get("prop_ctx"),
+            log=driver_kwargs.get("log"),
         )
         driver_kwargs["state"] = state
         driver_kwargs["meas_ctx"] = meas_ctx
@@ -319,6 +338,7 @@ def _assemble_job(
     cache: Union[str, Path] | None = None,
     overwrite: bool = False,
     verbose: bool = False,
+    log: Any | None = None,
     walker_kind: WalkerKind | None = None,
     mesh: Mesh | None = None,
     mixed_precision: bool = True,
@@ -353,6 +373,7 @@ def _assemble_job(
         cache=cache,
         overwrite=overwrite,
         verbose=verbose,
+        log=log,
     )
     ham = staged.ham
 
@@ -362,7 +383,7 @@ def _assemble_job(
     qmc_params = params_builder(params=params, **(params_kwargs or {}))
 
     if trial_data is None or trial_ops is None or meas_ops is None:
-        td, to, mo = _make_trial_bundle(sys, staged, mixed_precision)
+        td, to, mo = _make_trial_bundle(sys, staged, mixed_precision, log=log)
         trial_data = td if trial_data is None else trial_data
         trial_ops = to if trial_ops is None else trial_ops
         meas_ops = mo if meas_ops is None else meas_ops
@@ -376,9 +397,9 @@ def _assemble_job(
         prop_ops_override=prop_ops_override,
         mixed_precision=mixed_precision,
     )
-    t_ham_runtime = _setup_begin("preparing runtime Hamiltonian")
-    ham_data = runtime_layout.make_initial_ham_data(ham, mesh)
-    _setup_end(t_ham_runtime, "runtime Hamiltonian ready")
+    t_ham_runtime = _setup_begin("preparing runtime Hamiltonian", log=log)
+    ham_data = runtime_layout.make_initial_ham_data(ham, mesh, log=log)
+    _setup_end(t_ham_runtime, "runtime Hamiltonian ready", log=log)
 
     if prop_ops is None:
         prop_ops = prop_builder(
@@ -417,6 +438,7 @@ def setup(
     cache: Union[str, Path] | None = None,
     overwrite: bool = False,
     verbose: bool = False,
+    log: Any | None = None,
     # system/prop options
     walker_kind: WalkerKind | None = None,
     mesh: Mesh | None = None,
@@ -456,6 +478,7 @@ def setup(
         cache=cache,
         overwrite=overwrite,
         verbose=verbose,
+        log=log,
         walker_kind=walker_kind,
         mesh=mesh,
         mixed_precision=mixed_precision,

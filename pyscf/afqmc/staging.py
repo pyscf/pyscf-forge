@@ -26,14 +26,27 @@ Array: TypeAlias = NDArray[Any]
 STAGE_FORMAT_VERSION = 1
 
 
-def _stage_begin(message: str) -> float:
-    print(f"[stage] {message}...")
+def _stage_begin(message: str, *, log: Any | None = None) -> float:
+    if log is None:
+        print(f"[stage] {message}...")
+    else:
+        log.info("[stage] %s...", message)
     return time.time()
 
 
-def _stage_end(start: float, message: str, *, details: str | None = None) -> None:
+def _stage_end(
+    start: float,
+    message: str,
+    *,
+    details: str | None = None,
+    log: Any | None = None,
+) -> None:
     suffix = f" | {details}" if details else ""
-    print(f"[stage] {message} in {time.time() - start:.2f}s{suffix}")
+    text = f"[stage] {message} in {time.time() - start:.2f}s{suffix}"
+    if log is None:
+        print(text)
+    else:
+        log.info("%s", text)
 
 
 def _normalize_frozen_list(frozen: Any, *, nmo: int) -> NDArray:
@@ -677,6 +690,7 @@ def stage(
     cache: Union[str, Path] | None = None,
     overwrite: bool = False,
     verbose: bool = False,
+    log: Any | None = None,
     ham: HamInput | None = None,
     trial: TrialInput | None = None,
 ) -> StagedInputs:
@@ -718,7 +732,7 @@ def stage(
     """
     cache_path = Path(cache).expanduser().resolve() if cache is not None else None
     if cache_path is not None and cache_path.exists() and not overwrite:
-        return load(cache_path)
+        return load(cache_path, log=log)
 
     t0 = time.time()
 
@@ -727,22 +741,24 @@ def stage(
     mol = obj.mol
 
     if ham is None:
-        t_ham = _stage_begin("building Hamiltonian")
+        t_ham = _stage_begin("building Hamiltonian", log=log)
         ham = _stage_ham_input(
             obj,
             chol_cut=chol_cut,
             verbose=verbose,
+            log=log,
         )
         _stage_end(
             t_ham,
             "Hamiltonian ready",
             details=f"norb={ham.norb} nchol={ham.chol.shape[0]}",
+            log=log,
         )
 
     if trial is None:
-        t_trial = _stage_begin("building trial input")
+        t_trial = _stage_begin("building trial input", log=log)
         trial = _stage_trial_input(obj)
-        _stage_end(t_trial, "trial input ready", details=f"kind={trial.kind}")
+        _stage_end(t_trial, "trial input ready", details=f"kind={trial.kind}", log=log)
 
     meta: Dict[str, Any] = {
         "format_version": STAGE_FORMAT_VERSION,
@@ -762,16 +778,20 @@ def stage(
     staged = StagedInputs(ham=ham, trial=trial, meta=meta)
 
     if cache_path is not None:
-        dump(staged, cache_path)
+        dump(staged, cache_path, log=log)
 
     if verbose:
         dt = time.time() - t0
-        print(f"[stage] done in {dt:.2f}s | norb={ham.norb} nchol={ham.chol.shape[0]}")
+        text = f"[stage] done in {dt:.2f}s | norb={ham.norb} nchol={ham.chol.shape[0]}"
+        if log is None:
+            print(text)
+        else:
+            log.debug("%s", text)
 
     return staged
 
 
-def dump(staged: StagedInputs, path: Union[str, Path]) -> None:
+def dump(staged: StagedInputs, path: Union[str, Path], *, log: Any | None = None) -> None:
     """
     Save staged inputs to a single h5 file.
 
@@ -780,12 +800,12 @@ def dump(staged: StagedInputs, path: Union[str, Path]) -> None:
         path: output file path
     """
     p = Path(path).expanduser().resolve()
-    t_dump = _stage_begin(f"writing staged inputs to {p}")
+    t_dump = _stage_begin(f"writing staged inputs to {p}", log=log)
     _dump_h5(staged, p)
-    _stage_end(t_dump, "staged inputs written")
+    _stage_end(t_dump, "staged inputs written", log=log)
 
 
-def load(path: Union[str, Path]) -> StagedInputs:
+def load(path: Union[str, Path], *, log: Any | None = None) -> StagedInputs:
     """
     Load staged inputs from a single file written by dump().
 
@@ -796,12 +816,13 @@ def load(path: Union[str, Path]) -> StagedInputs:
         StagedInputs
     """
     p = Path(path).expanduser().resolve()
-    t_load = _stage_begin(f"loading staged inputs from {p}")
+    t_load = _stage_begin(f"loading staged inputs from {p}", log=log)
     staged = _load_h5(p)
     _stage_end(
         t_load,
         "staged inputs loaded",
         details=f"norb={staged.ham.norb} nchol={staged.ham.chol.shape[0]} trial={staged.trial.kind}",
+        log=log,
     )
     return staged
 
@@ -810,7 +831,13 @@ def _is_cc_like(obj: Any) -> bool:
     return hasattr(obj, "t1") and hasattr(obj, "t2")
 
 
-def _stage_ham_input(obj: StagedMfOrCc, *, chol_cut: float, verbose: bool) -> HamInput:
+def _stage_ham_input(
+    obj: StagedMfOrCc,
+    *,
+    chol_cut: float,
+    verbose: bool,
+    log: Any | None = None,
+) -> HamInput:
     """
     Produce h0/h1/chol in a single orthonormal basis.
     For UHF, we use the alpha MO basis for integrals.
@@ -846,7 +873,11 @@ def _stage_ham_input(obj: StagedMfOrCc, *, chol_cut: float, verbose: bool) -> Ha
     t0 = time.time()
     chol_vec = chunked_cholesky(mol, max_error=chol_cut, verbose=verbose)
     if verbose:
-        print(f"[stage] AO cholesky: nchol={chol_vec.shape[0]} in {time.time() - t0:.2f}s")
+        text = f"[stage] AO cholesky: nchol={chol_vec.shape[0]} in {time.time() - t0:.2f}s"
+        if log is None:
+            print(text)
+        else:
+            log.debug("%s", text)
 
     # full space electron count
     nelec: Tuple[int, int] = (int(mol.nelec[0]), int(mol.nelec[1]))
