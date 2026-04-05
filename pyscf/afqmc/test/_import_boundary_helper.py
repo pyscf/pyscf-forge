@@ -19,8 +19,12 @@ def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
 
 builtins.__import__ = fake_import
 
+from pyscf import lno
+
+print(lno.LNO.__name__)
+
 try:
-    from pyscf import afqmc  # noqa: F401
+    from pyscf.afqmc import lnoafqmc  # noqa: F401
 except ImportError as err:
     print(type(err).__name__)
     print(err)

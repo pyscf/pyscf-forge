@@ -25,10 +25,15 @@ class KnownValues(unittest.TestCase):
         output = result.stdout + result.stderr
         self.assertEqual(result.returncode, 0, output)
         self.assertIn("Mole", output)
-        self.assertIn("requires a separate JAX installation", output)
-        self.assertIn("pip install -U jax", output)
-        self.assertIn('pip install -U "jax[cuda12]"', output)
-        self.assertIn('pip install -U "jax[cuda13]"', output)
+        self.assertIn("LNO", output)
+        if sys.version_info[:2] < (3, 10):
+            self.assertIn("Python 3.10 or newer", output)
+            self.assertNotIn("requires a separate JAX installation", output)
+        else:
+            self.assertIn("requires a separate JAX installation", output)
+            self.assertIn("pip install -U jax", output)
+            self.assertIn('pip install -U "jax[cuda12]"', output)
+            self.assertIn('pip install -U "jax[cuda13]"', output)
 
 
 if __name__ == "__main__":

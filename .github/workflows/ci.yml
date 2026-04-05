@@ -26,9 +26,7 @@ jobs:
       - name: Install
         run: ./.github/workflows/run_ci.sh
       - name: Test with pytest
-        run: |
-          cd ./pyscf
-          pytest -k 'not _slow' --ignore=afqmc/test
+        run: ./.github/workflows/test.sh          
   afqmc-linux:
     runs-on: ubuntu-latest
     steps:
