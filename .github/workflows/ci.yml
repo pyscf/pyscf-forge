@@ -25,20 +25,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: ./.github/workflows/run_ci.sh
-      - name: Test with pytest
-        run: ./.github/workflows/test.sh          
-  afqmc-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-      - name: Install
-        run: ./.github/workflows/run_ci.sh
       - name: Install CPU JAX
+        if: matrix.python-version == '3.12'
         run: pip install -U jax
-      - name: Test AFQMC with pytest
-        run: |
-          cd ./pyscf
-          pytest afqmc/test
+      - name: Test with pytest
+        run: ./.github/workflows/test.sh
