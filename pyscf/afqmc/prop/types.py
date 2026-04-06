@@ -62,7 +62,6 @@ class QmcParamsFp(QmcParamsBase):
 
 
 class StepKernel(Protocol):
-
     def __call__(
         self,
         state: PropState,
@@ -74,11 +73,11 @@ class StepKernel(Protocol):
         meas_ops: MeasOps,
         meas_ctx: Any,
         prop_ctx: Any,
-    ) -> PropState: ...
+    ) -> PropState:
+        ...
 
 
 class InitPropState(Protocol):
-
     def __call__(
         self,
         *,
@@ -92,7 +91,8 @@ class InitPropState(Protocol):
         initial_e_estimate: jax.Array | None = None,
         rdm1: jax.Array | None = None,
         mesh: Mesh | None = None,
-    ) -> PropState: ...
+    ) -> PropState:
+        ...
 
 
 @dataclass(frozen=True)

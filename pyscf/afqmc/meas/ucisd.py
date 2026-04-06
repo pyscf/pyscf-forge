@@ -1025,14 +1025,20 @@ def energy_kernel_gw_rh(
 
     e2_1 += e2_1aa + e2_1bb
 
-    # e2_1 += jnp.einsum( "gpr,gqs,ia,pr,ia,qs->", chol[:, :nocc, :], chol[:, :nocc, :], ci1.conj(), green, green_occ, green)
+    # e2_1 += jnp.einsum(
+    #     "gpr,gqs,ia,pr,ia,qs->",
+    #     chol[:, :nocc, :], chol[:, :nocc, :], ci1.conj(), green, green_occ, green,
+    # )
     # e2_1 += jnp.einsum(
     #    "gpr,gqs,ia,pr,ia,qs->", rot_chol, rot_chol, ci1, green, green_occ, green
     # )
 
     e2_1 += GoC1 * jnp.einsum("g,g->", GRC_g, GRC_g, optimize="optimal")
 
-    # e2_1 -= jnp.einsum( "gpr,gqs,ia,qr,ia,ps->", chol[:, :nocc, :], chol[:, :nocc, :], ci1.conj(), green, green_occ, green)
+    # e2_1 -= jnp.einsum(
+    #     "gpr,gqs,ia,qr,ia,ps->",
+    #     chol[:, :nocc, :], chol[:, :nocc, :], ci1.conj(), green, green_occ, green,
+    # )
     # e2_1 -= jnp.einsum(
     #    "gpr,gqs,ia,qr,ia,ps->", rot_chol, rot_chol, ci1, green, green_occ, green
     # )
@@ -1109,7 +1115,10 @@ def energy_kernel_gw_rh(
 
     e2_2 = 2.0 * jnp.einsum("js,js->", E, green, optimize="optimal")
 
-    # e2_2 -= 2.0 * jnp.einsum("gpr,gqs,iajb,ir,ps,ja,qb->", chol[:, :nocc, :], chol, ci2.conj(), green, green, green_occ, greenp)
+    # e2_2 -= 2.0 * jnp.einsum(
+    #     "gpr,gqs,iajb,ir,ps,ja,qb->",
+    #     chol[:, :nocc, :], chol, ci2.conj(), green, green, green_occ, greenp,
+    # )
     # e2_2 -= 2.0 * jnp.einsum(
     #    "gpr,gqs,iajb,ir,ps,ja,qb->",
     #    rot_chol,
@@ -1123,7 +1132,10 @@ def energy_kernel_gw_rh(
 
     e2_2 -= 2.0 * jnp.einsum("igp,pgq,ib,qb->", GRC, GC, CGo, greenp, optimize="optimal")
 
-    # e2_2 += 2.0 * jnp.einsum("gpr,gqs,iajb,ir,qs,ja,pb->", chol, chol[:, :nocc, :], ci2.conj(), green, green, green_occ, greenp)
+    # e2_2 += 2.0 * jnp.einsum(
+    #     "gpr,gqs,iajb,ir,qs,ja,pb->",
+    #     chol, chol[:, :nocc, :], ci2.conj(), green, green, green_occ, greenp,
+    # )
     # e2_2 += 2.0 * jnp.einsum(
     #    "gpr,gqs,iajb,ir,qs,ja,pb->",
     #    chol,
@@ -1147,7 +1159,10 @@ def energy_kernel_gw_rh(
     ## P_ij
     e2_2 *= 2.0
 
-    # e2_2 += 4.0 * jnp.einsum("gpr,gqs,iajb,pr,is,ja,qb->", chol[:, :nocc, :], chol, ci2.conj(), green, green, green_occ, greenp)
+    # e2_2 += 4.0 * jnp.einsum(
+    #     "gpr,gqs,iajb,pr,is,ja,qb->",
+    #     chol[:, :nocc, :], chol, ci2.conj(), green, green, green_occ, greenp,
+    # )
     # e2_2 += 4.0 * jnp.einsum(
     #    "gpr,gqs,iajb,pr,is,ja,qb->",
     #    rot_chol,
@@ -1166,7 +1181,10 @@ def energy_kernel_gw_rh(
         optimize="optimal",
     )
 
-    # e2_2 += 2.0 * jnp.einsum("gpr,gqs,iajb,pr,qs,ia,jb->", chol[:, :nocc, :], chol[:, :nocc, :], ci2.conj(), green, green, green_occ, green_occ)
+    # e2_2 += 2.0 * jnp.einsum(
+    #     "gpr,gqs,iajb,pr,qs,ia,jb->",
+    #     chol[:, :nocc, :], chol[:, :nocc, :], ci2.conj(), green, green, green_occ, green_occ,
+    # )
     # e2_2 += 2.0 * jnp.einsum(
     #    "gpr,gqs,iajb,pr,qs,ia,jb->",
     #    rot_chol,
@@ -1188,7 +1206,10 @@ def energy_kernel_gw_rh(
     )
 
     ## P_pq
-    # e2_2 -= 4.0 * jnp.einsum("gpr,gqs,iajb,qr,is,ja,pb->", chol, chol[:, :nocc, :], ci2.conj(), green, green, green_occ, greenp)
+    # e2_2 -= 4.0 * jnp.einsum(
+    #     "gpr,gqs,iajb,qr,is,ja,pb->",
+    #     chol, chol[:, :nocc, :], ci2.conj(), green, green, green_occ, greenp,
+    # )
     # e2_2 -= 4.0 * jnp.einsum(
     #    "gpr,gqs,iajb,qr,is,ja,pb->",
     #    chol,
@@ -1208,7 +1229,10 @@ def energy_kernel_gw_rh(
         optimize="optimal",
     )
 
-    # e2_2 -= 2.0 * jnp.einsum("gpr,gqs,iajb,qr,ps,ia,jb->", chol[:, :nocc, :], chol[:, :nocc, :], ci2.conj(), green, green, green_occ, green_occ)
+    # e2_2 -= 2.0 * jnp.einsum(
+    #     "gpr,gqs,iajb,qr,ps,ia,jb->",
+    #     chol[:, :nocc, :], chol[:, :nocc, :], ci2.conj(), green, green, green_occ, green_occ,
+    # )
     # e2_2 -= 2.0 * jnp.einsum(
     #    "gpr,gqs,iajb,qr,ps,ia,jb->",
     #    rot_chol,

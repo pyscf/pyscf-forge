@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Protocol
 
 import jax
 import jax.numpy as jnp
@@ -197,14 +197,15 @@ def multiply_constants(w: walkers, constants: jax.Array, walker_kind: str) -> wa
     raise ValueError(f"multiply_constants does not handle '{walker_kind}' walkers")
 
 
-def SrFn(Protocol):
+class SrFn(Protocol):
     def __call__(
         self,
         w: walkers,
         weights: jax.Array,
         zeta: jax.Array | float,
         walker_kind: str,
-    ) -> tuple[walkers, jax.Array]: ...
+    ) -> tuple[walkers, jax.Array]:
+        ...
 
 
 def no_sr(

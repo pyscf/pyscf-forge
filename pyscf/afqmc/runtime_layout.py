@@ -75,7 +75,8 @@ class RuntimeLayout(Protocol):
         mesh: Mesh | None,
         *,
         log: Any | None = None,
-    ) -> HamChol: ...
+    ) -> HamChol:
+        ...
 
     def prepare(
         self,
@@ -85,7 +86,8 @@ class RuntimeLayout(Protocol):
         meas_ctx: object | None = None,
         prop_ctx: object | None = None,
         log: Any | None = None,
-    ) -> PreparedRuntime: ...
+    ) -> PreparedRuntime:
+        ...
 
 
 def _model_axis_size(mesh: Mesh) -> int:
