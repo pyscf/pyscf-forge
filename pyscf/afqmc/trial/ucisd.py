@@ -94,8 +94,9 @@ def get_rdm1(trial_data: UcisdTrial) -> jax.Array:
 
 
 def overlap_r(walker: jax.Array, trial_data: UcisdTrial) -> jax.Array:
-    assert trial_data.nocc[0] == trial_data.nocc[1]
-    return overlap_u((walker, walker), trial_data)
+    n_elec_0 = trial_data.nocc[0]
+    n_elec_1 = trial_data.nocc[1]
+    return overlap_u((walker[:, :n_elec_0], walker[:, :n_elec_1]), trial_data)
 
 
 def overlap_u(walker: tuple[jax.Array, jax.Array], trial_data: UcisdTrial) -> jax.Array:

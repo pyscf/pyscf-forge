@@ -20,10 +20,6 @@ class System:
     walker_kind: WalkerKind
 
     def __post_init__(self):
-        if self.walker_kind == "restricted" and self.nup != self.ndn:
-            raise ValueError(
-                f"Number of alpha ({self.nup}) and beta ({self.ndn}) electrons must be the same to use 'restricted' walker_kind."
-            )
         object.__setattr__(self, "walker_kind", self.walker_kind.lower())
 
     @property
