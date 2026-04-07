@@ -25,10 +25,5 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install
         run: ./.github/workflows/run_ci.sh
-      - name: Install CPU JAX
-        if: matrix.python-version == '3.12'
-        run: pip install -U jax
       - name: Test with pytest
-        env:
-          PYTEST_ADDOPTS: ${{ matrix.python-version != '3.12' && '--ignore=afqmc/test' || '' }}
         run: ./.github/workflows/test.sh
