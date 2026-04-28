@@ -941,7 +941,7 @@ def get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=param.MAX_MEMORY):
     elif mem_rem < 0:
         warnings.warn ("Negative available memory ({} - {} = {} MB)".format (
             mem_current, max_memory, mem_rem), RuntimeWarning)
-    if mem_reqd > mem_rem:
+    elif mem_reqd > mem_rem:
         memstr = ('CSF unitary matrix for {} unpaired of {} total electrons w/ s={:.1f} is too big'
                   " ({} MB req'd of {} MB remaining; {} MB total available)").format (
             nspin, neleca+nelecb, s, mem_reqd, mem_rem, max_memory)
