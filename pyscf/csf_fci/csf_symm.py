@@ -1,6 +1,6 @@
 import numpy as np
 import scipy
-from pyscf import symm, __config__
+from pyscf import symm, __config__, lib
 from pyscf.lib import logger, davidson1
 from pyscf.fci import direct_spin1_symm, cistring, direct_uhf
 from pyscf.lib.numpy_helper import tag_array
