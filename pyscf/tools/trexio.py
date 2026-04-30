@@ -726,8 +726,7 @@ def _scf_to_trexio(mf, trexio_file):
             if _trexio_is_uhf_uks_mf(mf):
                 mo_type = "UHF"
                 # Check for split structure (common in KUKS/KDF): ([up...], [dn...])
-                # FIXME: this is now an ndarray rather than a tuple in PySCF 2.13.0
-                is_split_spin = isinstance(mf.mo_coeff, tuple) and len(mf.mo_coeff) == 2
+                is_split_spin = (mf.mo_coeff.ndim==4) and (mf.mo_coeff.shape[0]==2)
 
                 for i_k, _ in enumerate(kpts):
                     if is_split_spin:
