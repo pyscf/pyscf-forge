@@ -34,6 +34,10 @@ class FCISolver (CSFFCISolver, direct_spin1_symm.FCISolver):
         ''' Over the top of the existing kernel, I just need to set the parameters and cache values related to spin.
 
         ...and electron configuration point group '''
+
+        # Assume we are passed "remaining memory" if max_memory is a kwarg
+        if 'max_memory' in kwargs:
+            kwargs['max_memory'] += lib.current_memory ()[0]
         log = logger.new_logger (self, self.verbose)
         gpname = getattr (self.mol, 'groupname', None)
         if gpname in ('Dooh', 'Coov'):

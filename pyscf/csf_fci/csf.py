@@ -566,6 +566,9 @@ class FCISolver (CSFFCISolver, direct_spin1.FCISolver):
         return get_init_guess (norb, nelec, nroots, hdiag_csf, self.transformer)
 
     def kernel(self, h1e, eri, norb, nelec, ci0=None, **kwargs):
+        # Assume we are passed "remaining memory" if max_memory is a kwarg
+        if 'max_memory' in kwargs:
+            kwargs['max_memory'] += lib.current_memory ()[0]
         self.norb = norb
         self.nelec = nelec
         if 'smult' in kwargs:
