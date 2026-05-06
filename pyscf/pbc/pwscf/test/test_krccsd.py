@@ -20,7 +20,7 @@ import unittest
 
 class KnownValues(unittest.TestCase):
     def _run_test(self, atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv,
-                  test_scf=True):
+                  test_scf=True, keep_exxdiv=False):
         # cell
         cell = gto.Cell(
             atom=atom,
@@ -37,33 +37,39 @@ class KnownValues(unittest.TestCase):
         gmf = scf.KRHF(cell, kpts)
         gmf.exxdiv = exxdiv
         gmf.kernel()
+        assert gmf.converged
         gcc = cc.KCCSD(gmf)
+        gcc.keep_exxdiv = keep_exxdiv
         gcc.kernel()
-        if test_scf:
-            etrip = gcc.ccsd_t()
-            ips_ref = gcc.ipccsd()
+        assert gcc.converged
+        etrip = gcc.ccsd_t()
+        ips_ref = gcc.ipccsd()
 
         # PW
         pmf = pw_helper.gtomf2pwmf(gmf)
         pmf.build()
         pmf.update_pp(pmf.mo_coeff)
         pmf.update_k(pmf.mo_coeff, pmf.mo_occ)
+        assert pmf.converged
         pcc = pwscf.PWKRCCSD(pmf)
+        pcc.keep_exxdiv = keep_exxdiv
         pcc.kernel()
-        if test_scf:
-            # Check CCSD(T)
-            pcc.ccsd_t()
-            assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-6)
-        pcc.ecut_eri = 15
+        assert pcc.converged
+        etrip_test = pcc.ccsd_t()
+        # Check CCSD(T)
+        assert_allclose(gcc.e_corr, pcc.e_corr, atol=1.e-6, rtol=0)
+        assert_allclose(etrip, etrip_test, atol=1.e-5, rtol=0)
+
+        pcc.ecut_eri = 25
         pcc.kernel()
-        if test_scf:
-            # Check EOM-CCSD
-            etrip_test = pcc.ccsd_t()
-            ips_test = pcc.ipccsd()
-            assert(abs(gcc.e_corr - pcc.e_corr) < 1.e-4)
-            assert(abs(etrip - etrip_test) < 1.e-5)
-            assert(np.max(np.abs(ips_ref[0] - ips_test[0])) < 3.e-5)
-            assert(np.max(np.abs(ips_ref[1] - ips_test[1])) < 1.e-3)
+        assert pcc.converged
+        # Check EOM-CCSD
+        etrip_test = pcc.ccsd_t()
+        ips_test = pcc.ipccsd()
+        assert_allclose(gcc.e_corr, pcc.e_corr, atol=1.e-4, rtol=0)
+        assert_allclose(etrip, etrip_test, atol=1.e-5, rtol=0)
+        assert_allclose(ips_ref[0], ips_test[0], atol=3.e-5, rtol=0)
+        assert_allclose(ips_ref[1], ips_test[1], atol=1.e-3, rtol=0)
 
         if test_scf:
             pwmf = pwscf.KRHF(cell, kpts, ecut_wf=20)
@@ -75,8 +81,10 @@ class KnownValues(unittest.TestCase):
             # pwmf.damp_type = "simple"
             pwmf.damp_factor = 0.0
             pwmf.kernel()
+            assert pwmf.converged
             pwcc = pwscf.PWKRCCSD(pwmf)
             pwcc.kernel()
+            assert pwcc.converged
             # Just to make sure the code stays consistent
             assert_allclose(pwcc.e_corr, -0.03234330656841895, atol=1.e-4, rtol=0)
             pwcc.ecut_eri = 15
@@ -93,10 +101,18 @@ class KnownValues(unittest.TestCase):
 
         # same occ per kpt
         kmesh = [2,1,1]
-        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv)
+        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, "ewald")
+        kmesh = [3,1,1]
+        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, "ewald",
+                       test_scf=False, keep_exxdiv=True)
+        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, None,
+                       test_scf=False, keep_exxdiv=True)
+        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, None,
+                       test_scf=False)
+
         # diff occ per kpt (i.e., needs padding)
         kmesh = [2,2,1]
-        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, exxdiv,
+        self._run_test(atom, a, basis, pseudo, ke_cutoff, kmesh, "ewald",
                        test_scf=False)
 
 

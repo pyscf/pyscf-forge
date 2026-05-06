@@ -105,6 +105,22 @@ def get_basis_data(cell, kpts, ecut_wf, ecut_rho=None, wf_mesh=None,
     return np.array(wf_mesh), np.array(xc_mesh), wf2xc, basis_data
 
 
+def ewald_correction(moe_ks, mocc_ks, madelung):
+    if isinstance(moe_ks[0][0], float): # RHF
+        nkpts = len(moe_ks)
+        moe_ks_new = [None] * nkpts
+        for k in range(nkpts):
+            moe_ks_new[k] = moe_ks[k].copy()
+            moe_ks_new[k][:] -= 0.5 * mocc_ks[k] * madelung
+    else:                               # UHF
+        ncomp = len(moe_ks)
+        moe_ks_new = [None] * ncomp
+        for comp in range(ncomp):
+            moe_ks_new[comp] = ewald_correction(moe_ks[comp], mocc_ks[comp],
+                                                ncomp * madelung)
+    return moe_ks_new
+
+
 def wf_fft(C_k_R, mesh, basis=None):
     """
     Fourier transform a wave function from real to reciprocal space.
@@ -468,9 +484,20 @@ def gto2cpw(cell, basis, kpts, amin=None, amax=None, ke_or_mesh=None, out=None):
     return out
 
 
+def _reduce_fock_to_moe(fockao, mo_coeff):
+    return [np.einsum("ai,ai->i", mo.conj(), fockao[k].dot(mo)).real
+            for k, mo in enumerate(mo_coeff)]
+
+
 def gtomf2pwmf(mf, chkfile=None):
     """
+    Create a PW HF calculation from a GTO HF calculation.
+    If mf.exxdiv is "ewald", the returned PW HF object
+    has exxdiv="ewald", otherwise exxdiv=None.
+
     Args:
+        mf:
+            GTO HF calculation
         chkfile (str):
             A hdf5 file to store chk variables (mo_energy, mo_occ, etc.).
             If not provided, a temporary file is generated.
@@ -484,44 +511,77 @@ def gtomf2pwmf(mf, chkfile=None):
     nkpts = len(kpts)
 # transform GTO MO coeff to PW MO coeff
     Cgto_ks = mf.mo_coeff
+
+    exxdiv = "ewald" if mf.exxdiv == "ewald" else None
+    if mf.exxdiv is not None:
+        dm = mf.make_rdm1(mf.mo_coeff, mf.mo_occ)
+        with lib.temporary_env(mf, exxdiv=None):
+            # Calculate veff without the exxdiv
+            vhf = mf.get_veff(cell, dm)
+        fockao = mf.get_hcore() + vhf
+
     if isinstance(mf, scf.khf.KRHF):
-        pwmf = pwscf.KRHF(cell, kpts)
+        pwmf = pwscf.KRHF(cell, kpts, exxdiv=exxdiv)
         nmo_ks = [Cgto_ks[k].shape[1] for k in range(nkpts)]
         pwmf.mo_coeff = C_ks = get_C_ks_G(cell, kpts, Cgto_ks, nmo_ks)
-        pwmf.mo_energy = moe_ks = mf.mo_energy
+        if mf.exxdiv is None:
+            pwmf.mo_energy = moe_ks = mf.mo_energy
+        else:
+            pwmf.mo_energy = moe_ks = _reduce_fock_to_moe(fockao, mf.mo_coeff)
         pwmf.mo_occ = mocc_ks = mf.mo_occ
         pwmf.e_tot = mf.e_tot
     elif isinstance(mf, scf.kuhf.KUHF):
-        pwmf = pwscf.KUHF(cell, kpts)
+        pwmf = pwscf.KUHF(cell, kpts, exxdiv=exxdiv)
         C_ks = [None] * 2
         for s in [0,1]:
             nmo_ks = [Cgto_ks[s][k].shape[1] for k in range(nkpts)]
             C_ks[s] = get_C_ks_G(cell, kpts, Cgto_ks[s], nmo_ks)
         pwmf.mo_coeff = C_ks
-        pwmf.mo_energy = moe_ks = mf.mo_energy
+        if mf.exxdiv is None:
+            pwmf.mo_energy = moe_ks = mf.mo_energy
+        else:
+            pwmf.mo_energy = moe_ks = [
+                _reduce_fock_to_moe(fockao[0], mf.mo_coeff[0]),
+                _reduce_fock_to_moe(fockao[1], mf.mo_coeff[1]),
+            ]
         pwmf.mo_occ = mocc_ks = mf.mo_occ
         pwmf.e_tot = mf.e_tot
     elif isinstance(mf, scf.hf.RHF):
-        pwmf = pwscf.KRHF(cell, kpts)
+        pwmf = pwscf.KRHF(cell, kpts, exxdiv=exxdiv)
         nmo_ks = [Cgto_ks.shape[1]]
         C_ks = get_C_ks_G(cell, kpts, [Cgto_ks], nmo_ks)
         pwmf.mo_coeff = C_ks
-        pwmf.mo_energy = moe_ks = [mf.mo_energy]
+        if mf.exxdiv is None:
+            pwmf.mo_energy = moe_ks = [mf.mo_energy]
+        else:
+            pwmf.mo_energy = moe_ks = _reduce_fock_to_moe(
+                [fockao], [mf.mo_coeff]
+            )
         pwmf.mo_occ = mocc_ks = [mf.mo_occ]
         pwmf.e_tot = mf.e_tot
     elif isinstance(mf, scf.uhf.UHF):
-        pwmf = pwscf.KUHF(cell, kpts)
+        pwmf = pwscf.KUHF(cell, kpts, exxdiv=exxdiv)
         C_ks = [None] * 2
         for s in [0,1]:
             nmo_ks = [Cgto_ks[s].shape[1]]
             C_ks[s] = get_C_ks_G(cell, kpts, [Cgto_ks[s]], nmo_ks)
         pwmf.mo_coeff = C_ks
-        pwmf.mo_energy = moe_ks = [[mf.mo_energy[s]] for s in [0,1]]
+        if mf.exxdiv is None:
+            pwmf.mo_energy = moe_ks = [[mf.mo_energy[s]] for s in [0,1]]
+        else:
+            pwmf.mo_energy = moe_ks = [
+                _reduce_fock_to_moe([fockao[0]], [mf.mo_coeff[0]]),
+                _reduce_fock_to_moe([fockao[1]], [mf.mo_coeff[1]]),
+            ]
         pwmf.mo_occ = mocc_ks = [[mf.mo_occ[s]] for s in [0,1]]
         pwmf.e_tot = mf.e_tot
     else:
         raise TypeError
-# update chkfile
+
+    if exxdiv == "ewald":
+        pwmf.mo_energy = ewald_correction(pwmf.mo_energy, pwmf.mo_occ, pwmf.madelung)
+
+    # update chkfile
     if chkfile is None:
         swapfile = tempfile.NamedTemporaryFile(dir=lib.param.TMPDIR)
         chkfile = swapfile.name
