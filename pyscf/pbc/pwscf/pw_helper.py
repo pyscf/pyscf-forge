@@ -579,7 +579,9 @@ def gtomf2pwmf(mf, chkfile=None):
         raise TypeError
 
     if exxdiv == "ewald":
-        pwmf.mo_energy = ewald_correction(pwmf.mo_energy, pwmf.mo_occ, pwmf.madelung)
+        pwmf.mo_energy = moe_ks = ewald_correction(
+            pwmf.mo_energy, pwmf.mo_occ, pwmf.madelung
+        )
 
     # update chkfile
     if chkfile is None:

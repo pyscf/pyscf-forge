@@ -95,7 +95,6 @@ class KnownValues(unittest.TestCase):
         ke_cutoff = 50
         basis = "gth-szv"
         pseudo = "gth-pade"
-        exxdiv = "ewald"
         atom = "Li 0 0 0; Li 1.75 1.75 1.75"
         a = np.eye(3) * 3.5
 
