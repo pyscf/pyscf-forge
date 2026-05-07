@@ -387,6 +387,10 @@ def kernel_dx_(cell, kpts, chkfile_name, summary, nvir=None, nvir_lst=None,
 class PWKUMP2(kmp2.PWKRMP2):
     """
     Spin-unrestriced MP2 in a plane-wave basis.
+
+    `ecut_eri` can be set to use a sparser grid for ERI evaluation,
+    reducing computational cost. NOTE that setting `ecut_eri` too
+    small can cause numerical issues.
     """
     def __init__(self, mf, nvir=None):
         kmp2.PWKRMP2.__init__(self, mf, nvir=nvir)

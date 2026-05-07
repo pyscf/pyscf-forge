@@ -71,7 +71,7 @@ def get_molint_from_C(cell, C_ks, kpts, mo_slices=None, exxdiv=None,
         eri_mesh = cell.cutoff_to_mesh(ecut_eri)
         if (np.array(mesh) == eri_mesh).all():
             eri_mesh = None
-        if (eri_mesh > mesh).any():
+        elif (eri_mesh > mesh).any():
             logger.warn(
                 cell,
                 "eri_mesh larger than mesh, so eri_mesh is ignored."
