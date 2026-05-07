@@ -19,8 +19,7 @@ import unittest
 
 
 class KnownValues(unittest.TestCase):
-    def test_krmp2(self):
-        kmesh = [2,1,1]
+    def _check_krmp2(self, kmesh):
         ke_cutoff = 100
         pseudo = "gth-pade"
         exxdiv = "ewald"
@@ -40,17 +39,28 @@ class KnownValues(unittest.TestCase):
         kpts = cell.make_kpts(kmesh)
 
         # GTO
-        gmf = scf.KRHF(cell, kpts)
-        gmf.exxdiv = exxdiv
-        gmf.kernel()
-        gmp = mp.KMP2(gmf)
-        gmp.kernel()
+        if (np.array(kmesh) == 1).all():
+            gmf = scf.RHF(cell)
+            gmf.exxdiv = exxdiv
+            gmf.kernel()
+            gmp = mp.MP2(gmf)
+            gmp.kernel()
+        else:
+            gmf = scf.KRHF(cell, kpts)
+            gmf.exxdiv = exxdiv
+            gmf.kernel()
+            gmp = mp.KMP2(gmf)
+            gmp.kernel()
 
         # PW
         pmf = pw_helper.gtomf2pwmf(gmf)
         pmp = kmp2.PWKRMP2(pmf)
         pmp.kernel()
         assert(abs(gmp.e_corr - pmp.e_corr) < 1.e-6)
+
+    def test_kump2(self):
+        self._check_krmp2([1, 1, 1])
+        self._check_krmp2([2, 1, 1])
 
 
 if __name__ == "__main__":
