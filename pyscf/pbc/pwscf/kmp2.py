@@ -426,6 +426,10 @@ def PWKRMP2_from_gtomf(mf, chkfile=None):
 class PWKRMP2:
     """
     Restriced MP2 perturbation theory in a plane-wave basis.
+
+    `ecut_eri` can be set to use a sparser grid for ERI evaluation,
+    reducing computational cost. NOTE that setting `ecut_eri` too
+    small can cause numerical issues.
     """
     def __init__(self, mf, nvir=None, frozen=None):
         self.cell = self.mol = mf.cell

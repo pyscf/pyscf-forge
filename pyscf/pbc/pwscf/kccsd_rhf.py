@@ -58,6 +58,10 @@ class PWKRCCSD(cc.kccsd_rhf.RCCSD):
     Other CCSD results can be accessed from the underlaying
     `mcc` (Periodic RCCSD, which contains e_tot, t-amplitudes, etc.)
     after `kernel` is called.
+
+    `ecut_eri` can be set to use a sparser grid for ERI evaluation,
+    reducing computational cost. NOTE that setting `ecut_eri` too
+    small can cause numerical issues.
     """
 
     _keys = {'ecut_eri'}
@@ -101,15 +105,28 @@ class _ERIS:
         self.e_hf = mf.e_tot
         self.mo_energy = np.asarray(mo_energy)
 
-        if False:#cc.keep_exxdiv:
-            moe_noewald = self.mo_energy
-        else:
-            # remove ewald correction
+        if cc._scf.exxdiv == "ewald" and not cc.keep_exxdiv:
+            # remove ewald correction form mo_energy to make self.fock
             moe_noewald = np.zeros_like(self.mo_energy)
             for k in range(nkpts):
                 moe = self.mo_energy[k].copy()
                 moe[mo_occ[k]>THR_OCC] += mf._madelung
                 moe_noewald[k] = moe
+        else:
+            moe_noewald = self.mo_energy
+            if not cc.keep_exxdiv:
+                # To match the GTO implementation, we add Madelung correction
+                # to the mo_energy even if exxdiv=None.
+                # TODO is this actually the best practice? One might expect
+                # exxdiv to not be used anywhere if it is explicitly
+                # set to None by the user. For now, we match the
+                # behavior of the equivalent GTO CCSD calculation.
+                # This choice affects initial amplitude guess as well
+                # as the perturbative triples energy.
+                from pyscf.pbc.cc.ccsd import _adjust_occ
+                mf._set_madelung()
+                self.mo_energy = [_adjust_occ(mo_e, cc.nocc, -mf._madelung)
+                                  for k, mo_e in enumerate(self.mo_energy)]
         self.fock = np.asarray(
             [np.diag(moe.astype(np.complex128)) for moe in moe_noewald]
         )

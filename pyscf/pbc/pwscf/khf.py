@@ -44,7 +44,7 @@ from pyscf.scf import chkfile as mol_chkfile
 from pyscf.pbc.pwscf import chkfile
 from pyscf.pbc import gto, scf, tools
 from pyscf.pbc.pwscf import pw_helper
-from pyscf.pbc.pwscf.pw_helper import get_kcomp, set_kcomp
+from pyscf.pbc.pwscf.pw_helper import get_kcomp, set_kcomp, ewald_correction
 from pyscf.pbc.pwscf import pseudo as pw_pseudo
 from pyscf.pbc.pwscf import jk as pw_jk
 from pyscf.lib import logger
@@ -1157,22 +1157,6 @@ def apply_Fock_kpt(mf, C_k, kpt, mocc_ks, mesh, Gv, vj_R, exxdiv,
     else:
         Cbar_k = res_1e + res_2e
         return Cbar_k
-
-
-def ewald_correction(moe_ks, mocc_ks, madelung):
-    if isinstance(moe_ks[0][0], float): # RHF
-        nkpts = len(moe_ks)
-        moe_ks_new = [None] * nkpts
-        for k in range(nkpts):
-            moe_ks_new[k] = moe_ks[k].copy()
-            moe_ks_new[k][:] -= 0.5 * mocc_ks[k] * madelung
-    else:                               # UHF
-        ncomp = len(moe_ks)
-        moe_ks_new = [None] * ncomp
-        for comp in range(ncomp):
-            moe_ks_new[comp] = ewald_correction(moe_ks[comp], mocc_ks[comp],
-                                                ncomp * madelung)
-    return moe_ks_new
 
 
 def get_mo_energy(mf, C_ks, mocc_ks, mesh=None, Gv=None, exxdiv=None,
