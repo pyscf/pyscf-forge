@@ -27,7 +27,6 @@ from pyscf.data import nist
 from pyscf.sftda import uks_sf
 from pyscf.tdscf._lr_eig import eigh as lr_eigh
 
-# import function
 from pyscf.sftda.scf_genrep_sftd import gen_uhf_response_sf
 from pyscf.sftda.numint2c_sftd import cache_xc_kernel_sf
 
@@ -270,7 +269,7 @@ def analyze(tdobj, verbose=None):
                 for o, v in zip(* np.where(abs(x) > 0.1)):
                     log.info('    %4da -> %4db %12.5f', o+MO_BASE, v+MO_BASE+nocc_b, x[o,v])
 
-def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None, collinear_samples=200):
+def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None, collinear_samples=20):
     r'''A and B matrices for TDDFT response function.
 
     A[i,a,j,b] = \delta_{ab}\delta_{ij}(E_a - E_i) + (ia||bj)
@@ -499,16 +498,16 @@ def get_ab_sf(mf, mo_energy=None, mo_coeff=None, mo_occ=None, collinear_samples=
 
 @lib.with_doc(rhf.TDA.__doc__)
 class TDA_SF(TDBase):
-    extype = getattr(__config__, 'tdscf_uhf_sf_SF-TDA_extype', 0)
-    collinear_samples = getattr(__config__, 'tdscf_uhf_sf_SF-TDA_collinear_samples', 200)
+    extype = getattr(__config__, 'tdscf_uhf_sf_SF-TDA_extype', 1)
+    collinear_samples = getattr(__config__, 'tdscf_uhf_sf_SF-TDA_collinear_samples', 20)
 
     _keys = {'extype','collinear_samples'}
 
-    def __init__(self,mf,extype=0,collinear_samples=200):
+    def __init__(self, mf, extype=1, collinear_samples=20):
         TDBase.__init__(self,mf)
         # extype is used to determine which spin flip excitation will be calculated.
         # spin flip up: exytpe=0, spin flip down: exytpe=1.
-        self.extype=extype
+        self.extype = extype
         # collinear_samples controls the 1d spin sample points in TDDFT/TDA.
         self.collinear_samples = collinear_samples
 

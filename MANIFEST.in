@@ -11,4 +11,4 @@ include pyscf/lib/*.dylib
 
 # source code
 prune pyscf/lib/build
-recursive-include pyscf/lib *.c *.h CMakeLists.txt
+recursive-include pyscf *.c *.h CMakeLists.txt
