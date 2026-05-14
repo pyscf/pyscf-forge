@@ -229,15 +229,17 @@ class OCCRI(pyscf.pbc.df.fft.FFTDF):
         dm_shape = dm.shape
         nk = self.kpts.shape[0]
         nao = cell.nao
+        ndm = dm.reshape (-1, nk, nao, nao).shape[0]
         if with_k:
             if self.scf_iter == 0:
                 dm = numpy.asarray(dm)
             if getattr(dm, 'mo_coeff', None) is None:
                 dm = self.make_natural_orbitals(dm.reshape(-1, nk, nao, nao))
             else:
-                mo_coeff = numpy.asarray(dm.mo_coeff).reshape(-1, nk, nao, nao)
-                mo_occ = numpy.asarray(dm.mo_occ).reshape(-1, nk, nao)
-                dm = lib.tag_array(dm.reshape(-1, nk, nao, nao), mo_coeff=mo_coeff, mo_occ=mo_occ)
+                mo_occ = numpy.asarray(dm.mo_occ).reshape(ndm, nk, -1)
+                nmo = mo_occ.shape[2]
+                mo_coeff = numpy.asarray(dm.mo_coeff).reshape(ndm, nk, nao, nmo)
+                dm = lib.tag_array(dm.reshape(ndm, nk, nao, nao), mo_coeff=mo_coeff, mo_occ=mo_occ)
 
         if with_j:
             vj = self.get_j(self, dm, kpts=self.kpts)

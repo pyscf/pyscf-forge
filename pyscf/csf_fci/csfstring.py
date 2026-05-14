@@ -1,6 +1,7 @@
 import numpy as np
 import sys, os, time
 import ctypes
+import warnings
 from pyscf.csf_fci import csdstring
 from pyscf.fci import cistring
 from pyscf.fci.spin_op import spin_square0
@@ -935,7 +936,9 @@ def get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=param.MAX_MEMORY):
     mem_current = lib.current_memory ()[0]
     mem_rem = max_memory - mem_current
     mem_reqd = ndet * ncsf * np.dtype (np.float64).itemsize / 1e6
-    if mem_reqd > mem_rem:
+    if max_memory < 0:
+        warnings.warn ("Negative max_memory ({} MB)".format (max_memory), RuntimeWarning)
+    elif mem_reqd > mem_rem:
         memstr = ('CSF unitary matrix for {} unpaired of {} total electrons w/ s={:.1f} is too big'
                   " ({} MB req'd of {} MB remaining; {} MB total available)").format (
             nspin, neleca+nelecb, s, mem_reqd, mem_rem, max_memory)

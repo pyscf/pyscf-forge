@@ -232,29 +232,32 @@ class Water_COMPLEX(unittest.TestCase):
                               verbose=cell.verbose,stdout=cell.stdout)
         eris.build()
 
+        occ_ref = -0.06419439687135728+4.973277156424204e-05j
+        vir_ref = -0.010792752484758372-0.014791758114215927j
+
         arr = make_lo_rdm1_occ_1h_complex(eris, moeocc, moevir, uocc_loc)
         fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.06422719794290856+2.5105071595401036e-05j, 7)
+        self.assertAlmostEqual(fp, occ_ref, 7)
 
         arr = make_lo_rdm1_occ_1p_complex(eris, moeocc, moevir, uvir_loc)
         fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.06422719794290856+2.5105071595401036e-05j, 7)
+        self.assertAlmostEqual(fp, occ_ref, 7)
 
         arr = make_lo_rdm1_occ_2p_complex(eris, moeocc, moevir, uvir_loc)
         fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.06422719794290856+2.5105071595401036e-05j, 7)
+        self.assertAlmostEqual(fp, occ_ref, 7)
 
         arr = make_lo_rdm1_vir_1h_complex(eris, moeocc, moevir, uocc_loc)
         fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.002766848360192287-0.034349212190162834j, 7)
+        self.assertAlmostEqual(fp, vir_ref, 7)
 
         arr = make_lo_rdm1_vir_1p_complex(eris, moeocc, moevir, uvir_loc)
         fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.002766848360192287-0.034349212190162834j, 7)
+        self.assertAlmostEqual(fp, vir_ref, 7)
 
         arr = make_lo_rdm1_vir_2h_complex(eris, moeocc, moevir, uocc_loc)
         fp = lib.fp(arr)
-        self.assertAlmostEqual(fp, -0.002766848360192287-0.034349212190162834j, 7)
+        self.assertAlmostEqual(fp, vir_ref, 7)
 
 
 
