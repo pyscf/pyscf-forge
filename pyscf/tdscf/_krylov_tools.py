@@ -775,7 +775,8 @@ def krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 _time_add(log, t_fill_holder, t0)
 
     if ii == max_iter - 1 and max_norm >= conv_tol:
-        log.info(f'=== {problem_type.capitalize()} Krylov Solver not converged below {conv_tol:.2e} due to max iteration limit ! ===')
+        log.info(f'=== {problem_type.capitalize()} Krylov Solver not converged below '
+                 f'{conv_tol:.2e} due to max iteration limit ! ===')
         log.info(f'Current residual norms: {r_norms.tolist()}')
         log.info(f'max residual norms {np.max(r_norms)}')
 

@@ -421,7 +421,8 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
         _converged, _energies, init_guess_XpY, init_guess_XmY = initguess_fn(n_states=size_new, hdiag=hdiag)
 
     elif problem_type =='shifted_linear':
-        _converged, init_guess_XpY, init_guess_XmY = initguess_fn(hdiag=hdiag, rhs_1=rhs_1, rhs_2=rhs_2, omega_shift=omega_shift)
+        _converged, init_guess_XpY, init_guess_XmY = initguess_fn(
+            hdiag=hdiag, rhs_1=rhs_1, rhs_2=rhs_2, omega_shift=omega_shift)
     log.timer(f' {problem_type.capitalize()} initguess_fn cost', *cpu0)
 
     cpu0 = (logger.process_clock(), logger.perf_counter())
@@ -756,8 +757,10 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 gc.collect()
 
                 # if gram_schmidt:
-                #     log.debug(f'V_p_W_holder orthonormality: {math_helper.check_orthonormal(V_p_W_holder[:size_new, :])}')
-                #     log.debug(f'V_m_W_holder orthonormality: {math_helper.check_orthonormal(V_m_W_holder[:size_new, :])}')
+                #     log.debug(f'V_p_W_holder orthonormality: '
+                #              f'{math_helper.check_orthonormal(V_p_W_holder[:size_new, :])}')
+                #     log.debug(f'V_m_W_holder orthonormality: '
+                #              f'{math_helper.check_orthonormal(V_m_W_holder[:size_new, :])}')
 
                 log.info(get_mem_info('     after fill holder'))
                 if size_new == size_old:
@@ -767,7 +770,8 @@ def ABBA_krylov_solver(matrix_vector_product, hdiag, problem_type='eigenvalue',
                 log.timer('  fill holder  cost', *t0)
 
     if ii == (max_iter -1) and max_norm >= conv_tol:
-        log.warn(f'=== {problem_type.capitalize()} ABBA Krylov Solver eigen solver not converged below {conv_tol:.2e} due to max iteration limit ! ===')
+        log.warn(f'=== {problem_type.capitalize()} ABBA Krylov Solver eigen solver '
+                 f'not converged below {conv_tol:.2e} due to max iteration limit ! ===')
         log.warn(f'Current residual norms: {r_norms.tolist()}')
         log.warn(f'max residual norms {np.max(r_norms)}')
 
