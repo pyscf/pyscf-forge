@@ -2376,7 +2376,7 @@ class TDDFT(RisBase):
             (A-B)(x-y) =   [ (A-B)αα Vα ] = [ AmB_XmY_α ]
                            [ (A-B)ββ Vβ ]   [ AmB_XmY_β ]
             '''
-            nstates = X.shape[0]
+            nstates = XpY.shape[0]
 
             XpY_a = XpY[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
             XpY_b = XpY[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
