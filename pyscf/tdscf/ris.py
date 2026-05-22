@@ -112,30 +112,29 @@ def get_auxmol(mol, theta=0.2, fitting_basis='s', excludeHs=False):
     # --- Previous implementation (full Mole.build on auxmol); keep for easy rollback.
     #     parse_arg=False turns off PySCF built-in parsing of sys.argv.
     #
-    #     auxmol = mol.copy()
-    #     auxmol.verbose = 0
-    #     auxmol_basis_keys = mol._basis.keys()
-    #     auxmol.basis = get_minimal_auxbasis(
-    #         auxmol_basis_keys, theta, fitting_basis, excludeHs=excludeHs)
-    #     auxmol.build(dump_input=False, parse_arg=False)
-    #     return auxmol
-    # ---
-
-    auxmol = mol.copy(deep=False)
+    auxmol = mol.copy()
     auxmol.verbose = 0
     auxmol_basis_keys = mol._basis.keys()
-    aux_basis = get_minimal_auxbasis(
-        auxmol_basis_keys, theta, fitting_basis, excludeHs=excludeHs)
-    auxmol.basis = aux_basis
-    auxmol._basis = auxmol.format_basis(aux_basis)
-
-    pre_env = np.asarray(mol._env[:gto.PTR_ENV_START], dtype=np.float64)
-    auxmol._atm, auxmol._bas, auxmol._env = auxmol.make_env(
-        mol._atom, auxmol._basis, pre_env, mol.nucmod, mol.nucprop)
-
-    auxmol._ecpbas = np.zeros((0, gto.mole.BAS_SLOTS), dtype=np.int32)
-    auxmol._built = True
+    auxmol.basis = get_minimal_auxbasis(auxmol_basis_keys, theta, fitting_basis, excludeHs=excludeHs)
+    auxmol.build(dump_input=False, parse_arg=False)
     return auxmol
+    # ---
+
+    # auxmol = mol.copy(deep=False)
+    # auxmol.verbose = 0
+    # auxmol_basis_keys = mol._basis.keys()
+    # aux_basis = get_minimal_auxbasis(
+    #     auxmol_basis_keys, theta, fitting_basis, excludeHs=excludeHs)
+    # auxmol.basis = aux_basis
+    # auxmol._basis = auxmol.format_basis(aux_basis)
+
+    # pre_env = np.asarray(mol._env[:gto.PTR_ENV_START], dtype=np.float64)
+    # auxmol._atm, auxmol._bas, auxmol._env = auxmol.make_env(
+    #     mol._atom, auxmol._basis, pre_env, mol.nucmod, mol.nucprop)
+
+    # auxmol._ecpbas = np.zeros((0, gto.mole.BAS_SLOTS), dtype=np.int32)
+    # auxmol._built = True
+    # return auxmol
 
 
 '''
