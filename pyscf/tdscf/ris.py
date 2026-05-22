@@ -2133,7 +2133,8 @@ class TDA(RisBase):
 
         converged, energies, X = _krylov_tools.krylov_solver(matrix_vector_product=TDA_MVP,hdiag=hdiag,
                                             n_states=self.nstates, problem_type='eigenvalue',
-                                            conv_tol=self.conv_tol, conv_tol_scaling=self.conv_tol_scaling, max_iter=self.max_iter,
+                                            conv_tol=self.conv_tol, conv_tol_scaling=self.conv_tol_scaling,
+                                            max_iter=self.max_iter,
                                             extra_init=self.extra_init, restart_subspace=self.restart_subspace,
                                             gs_initial=False, gram_schmidt=self.gram_schmidt,
                                             single=self.single,  verbose=log)
