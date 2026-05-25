@@ -34,7 +34,7 @@ def setUpModule():
     cell.basis = "gth-szv"
     cell.pseudo = "gth-pbe"
     cell.a = numpy.eye(3) * 3.5607
-    cell.mesh = [17] * 3
+    cell.mesh = [21] * 3
     cell.build()
 
     # Setup proper k-point mesh
