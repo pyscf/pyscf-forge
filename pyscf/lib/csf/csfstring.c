@@ -10,6 +10,30 @@
 //#include "vhf/fblas.h"
 //#include "fci.h"
 
+#if defined __cplusplus
+extern "C" {
+#endif
+
+void dsbmv_(const char *uplo,
+            const int *n,
+            const int *k,
+            const double *alpha,
+            const double *a,
+            const int *lda,
+            const double *x,
+            const int *incx,
+            const double *beta,
+            double *y,
+            const int *incy);
+
+#if defined __cplusplus
+} // end extern "C"
+#endif
+
+#ifndef MAX_PARTICLE
+#define MAX_PARTICLE = 64
+#endif
+
 void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, size_t nstr, int norb, int neleca, int nelecb)
 {
 
@@ -360,4 +384,123 @@ void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * a
 
 }
 }
+
+unsigned int _get_occ (unsigned int i, uint64_t dconfstr)
+{
+    if ((1ULL << i) & dconfstr){ return 2; }
+    unsigned int j = i;
+    for (unsigned int k = 0; k < i; k++){
+        if ((1ULL << k) & dconfstr){ j--; }
+    }
+    if ((1ULL << j) & sconfstr){ return 1; }
+    else { return 0; }
+}
+
+unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
+{
+    unsigned int j = i;
+    for (unsigned int k = 0; k < i; k++){
+        if ((1ULL << k) & dconfstr){ j--; }
+    }
+    i = j;
+    j = 0;
+    for (unsigned int k = 0; k < MAX_PARTICLE; k++){
+        if ((1ULL << k) & sconfstr){ j++; }
+        if (j == i){ break; }
+    }
+    return j
+}
+
+unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int twoS)
+{
+    assert (nspin - i >= 0);
+    // unset all bits i or more places from the left edge
+    coupstr = coupstr & (1ULL << nspin-i) - 1;
+    // Subtract 1/2 from S for every remaining set bit
+    while (coupstr){
+        n &= (n - 1);
+        twoS--;
+    }
+    return twoS;
+}
+
+double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
+{
+    // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
+    // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
+    // They have S0 = S and SN = 0
+    i = nspin - i;
+    j = nspin - j;
+    // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
+    // through nspin inclusively.
+
+    // I don't want to pass twoS
+    unsigned int twoS = 0;
+    for (unsigned int p = 0; p < nspin ; p++){
+        if ((1ULL << p) & coupstr){ twoS++; }
+    }
+
+}
+
+void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
+                     uint64_t * dconfstrs, uint64_t * sconfstrs,
+                     uint64_t * coupstrs, uint64_t * detstrs, 
+                     size_t nconf, size_t ncoup, size_t ndet,
+                     unsigned int norb, unsigned int npair, unsigned int nspin,
+                     unsigned int twoS, int twoMS, double * wrk)
+{
+    const size_t izero = 0;
+    const size_t ione = 1;
+    const double done = 1.0;
+#pragma omp parallel default(shared)
+{
+
+    size_t iconf, icoup, iconfcoup;
+    size_t last_icoup = ncoup;
+    unsigned int nthreads = omp_get_num_threads ();
+    unsigned int ithread = omp_get_thread_num ();
+    double cgbuf0 = wrk + (ithread * (2*ndet + nspin*nspin));
+    double cgbuf1 = cgbuf0 + ndet;
+    double kbuf = cgbuf1 + ndet;
+    double vcc;
+    unsigned int ni, nj;
+
+#pragma omp for schedule(static)
+    for (iconfcoup = 0; iconfcoup < nconf * ncoup; idetconf++){
+        icoup = iconfcoup / nconf;
+        iconf = iconfcoup % nconf;
+        if (last_icoup != icoup){
+            FCICSFmakecsf (cgbuf0, detstrs, coupstrs+icoup, &nspin, &ndet, &ione, &twoS, &twoMS);
+        }
+        dsbmv_("L", &ndet, &izero, 
+               &done, hcoul_det, &ione, // hcoul_det ...
+               cgbuf0, &ione, // ... * cgbuf0 ...
+               &dzero, cgbuf1, &ione); // ... -> cgbuf1
+        hdiag_csf[iconfcoup] = ddot_(&ndet, cgbuf0, &ione, cgbuf1, &ione);
+        for (unsigned int i = 0; i < norb; i++){
+            ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
+            if (ni == 0){ continue; }
+            // diagonal
+            hdiag_csf[iconfcoup] -= .5 * ni * keri[i*norb + i];
+            for (unsigned int j = 0; j < i; j++){
+                nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
+                // There's almost certainly a sign I need to add here
+                vcc = 1.0;
+                if (ni + nj == 2){
+                    vcc = _get_vcc (
+                        coupstrs[icoup],
+                        _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]),
+                        _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]),
+                        nspin
+                    );
+                }
+                hdiag_csf[iconfcoup] -= (ni+nj-2) * vcc * keri[i*norb + j];
+            }
+        }
+
+    }
+}
+}
+
+
 
