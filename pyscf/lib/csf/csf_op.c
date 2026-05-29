@@ -193,20 +193,21 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     */
     double vcc = 0.5;
     double g2 = 1.0;
+    unsigned int k;
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
     i = nspin - i;
     j = nspin - j;
+    assert (j>=i);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
 
-    double rat;
-
     // i
-    unsigned int twoS1 = _get_twoS0_running (coupstr, i-1, nspin);
-    unsigned int twoS0 = _get_twoS0_running (coupstr, i, nspin);
+    unsigned int twoS1 = _get_twoS_running (coupstr, i-1, nspin);
+    unsigned int twoS0 = _get_twoS_running (coupstr, i, nspin);
     unsigned int twoS;
+    double rat = 1;
 
     int parity = twoS0 + twoS1 - 1; // graph signs
     parity += (2*twoS0 + 2); // Wigner 6j sign; the exponent is multiplied by 2
@@ -217,12 +218,13 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     } else { // S(i-1) = S(i) - 1/2
         rat = ((double) (twoS0+2)) / (twoS0 * (twoS0+1) * 6);
     }
+    rat *= twoS0+1; // normalization
     g2 *= sqrt (rat);
 
     // i+1, i+2, ... j-2, j-1
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
-        twoS0 = _get_twoS0_running (coupstr, k, nspin);
+        twoS0 = _get_twoS_running (coupstr, k, nspin);
         twoS = MAX (twoS0, twoS1);
 
         parity += twoS0 + twoS1 - 1; // graph signs
@@ -230,12 +232,13 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
         parity = parity % 4;
 
         rat = ((double) ((twoS+2) * (twoS-1))) / (twoS0 * (twoS0+1));
+        rat *= twoS0+1; // normalization
         g2 *= sqrt (rat);
     }
     
     // j
     twoS1 = twoS0;
-    twoS0 = _get_twoS0_running (coupstr, j, nspin);
+    twoS0 = _get_twoS_running (coupstr, j, nspin);
 
     parity += twoS0 + twoS1 - 1; // graph signs
     parity += (2*twoS1 + 2); // Wigner 6j signs
@@ -246,6 +249,7 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     } else { // S(i-1) = S(i) - 1/2
         rat = ((double) (twoS1)) / ((twoS1+1) * (twoS1+2) * 6);
     }
+    rat *= twoS0+1; // normalization
     g2 *= sqrt (rat);
 
     // Final sign computation
@@ -263,6 +267,33 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
                      unsigned int norb, unsigned int npair, unsigned int nspin,
                      unsigned int twoS, int twoMS, double * wrk)
 {
+/* 
+    Output:
+        hdiag_csf : array of shape (ncoup,nconf)
+
+    Input:
+        hcoul_det : array of shape (nconf,ndet)
+            1-electron + Coulomb energies of the determinants (i.e., excluding exchange)
+        keri : array of shape (norb,norb)
+            (ij|ij) two-electron integrals
+        dconfstrs : array of shape (nconf,)
+            Strings for doubly-occupied orbitals
+        sconfstrs : array of shape (nconf,)
+            Strings for singly-occupied orbitals in the non-doubly-occupied subspace
+        coupstrs : array of shape (ncoup,)
+            Strings for S coupling in CSFs
+        detstrs : array of shape (ndet,)
+            Strings for M state in determinants
+
+    Buffer:
+        wrk : array of shape (nthreads,2,ndet)
+
+    Other params:
+        nspin : number of singly-occupied orbitals in this sector
+        twoS : 2*S(total)
+        twoM : 2*M(total) = Na - Nb
+
+*/
     const int izero = 0;
     const int ione = 1;
     const double dzero = 0.0;
@@ -288,7 +319,7 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
         }
         narg = (int) ndet;
         dsbmv_("L", &narg, &izero, 
-               &done, hcoul_det, &ione, // hcoul_det ...
+               &done, hcoul_det+(iconf*ndet), &ione, // hcoul_det ...
                cgbuf0, &ione, // ... * cgbuf0 ...
                &dzero, cgbuf1, &ione); // ... -> cgbuf1
         hdiag_csf[iconfcoup] = ddot_(&narg, cgbuf0, &ione, cgbuf1, &ione);
