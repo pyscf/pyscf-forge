@@ -27,14 +27,14 @@ void dsbmv_(const char *uplo,
 #endif
 
 #ifndef MAX_PARTICLE
-#define MAX_PARTICLE = 64
+#define MAX_PARTICLE 64
 #endif
 
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS);
 void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * astrs, uint64_t * bstrs, unsigned int norb, size_t nconf, size_t ndet);
-unsigned int _get_occ (unsigned int i, uint64_t dconfstr);
+unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
-unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int twoS);
+unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
 void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
                      uint64_t * dconfstrs, uint64_t * sconfstrs,

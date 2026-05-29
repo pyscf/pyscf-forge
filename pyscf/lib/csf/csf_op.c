@@ -5,6 +5,7 @@
 #include <math.h>
 #include <stdbool.h>
 #include <omp.h>
+#include "vhf/fblas.h"
 #include "csf.h"
 
 #if defined __cplusplus
@@ -132,7 +133,7 @@ void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * a
 }
 }
 
-unsigned int _get_occ (unsigned int i, uint64_t dconfstr)
+unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
 {
     if ((1ULL << i) & dconfstr){ return 2; }
     unsigned int j = i;
@@ -155,16 +156,23 @@ unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfst
         if ((1ULL << k) & sconfstr){ j++; }
         if (j == i){ break; }
     }
-    return j
+    return j;
 }
 
-unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int twoS)
+unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin)
 {
     assert (nspin - i >= 0);
+    unsigned int n = coupstr;
+    unsigned int twoS = 0;
+    // First determine twoS
+    while (n){
+        n &= (n - 1);
+        twoS++;
+    }
     // unset all bits i or more places from the left edge
-    coupstr = coupstr & (1ULL << nspin-i) - 1;
+    n = (coupstr & (1ULL << (nspin-i))) - 1;
     // Subtract 1/2 from S for every remaining set bit
-    while (coupstr){
+    while (n){
         n &= (n - 1);
         twoS--;
     }
@@ -197,34 +205,35 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
                      unsigned int norb, unsigned int npair, unsigned int nspin,
                      unsigned int twoS, int twoMS, double * wrk)
 {
-    const size_t izero = 0;
-    const size_t ione = 1;
+    const int izero = 0;
+    const int ione = 1;
+    const double dzero = 0.0;
     const double done = 1.0;
 #pragma omp parallel default(shared)
 {
 
     size_t iconf, icoup, iconfcoup;
     size_t last_icoup = ncoup;
-    unsigned int nthreads = omp_get_num_threads ();
     unsigned int ithread = omp_get_thread_num ();
-    double cgbuf0 = wrk + (ithread * (2*ndet + nspin*nspin));
-    double cgbuf1 = cgbuf0 + ndet;
-    double kbuf = cgbuf1 + ndet;
+    double * cgbuf0 = wrk + (ithread * (2*ndet));
+    double * cgbuf1 = cgbuf0 + ndet;
     double vcc;
     unsigned int ni, nj;
+    int narg;
 
 #pragma omp for schedule(static)
-    for (iconfcoup = 0; iconfcoup < nconf * ncoup; idetconf++){
+    for (iconfcoup = 0; iconfcoup < nconf * ncoup; iconfcoup++){
         icoup = iconfcoup / nconf;
         iconf = iconfcoup % nconf;
         if (last_icoup != icoup){
-            FCICSFmakecsf (cgbuf0, detstrs, coupstrs+icoup, &nspin, &ndet, &ione, &twoS, &twoMS);
+            FCICSFmakecsf (cgbuf0, detstrs, coupstrs+icoup, nspin, ndet, ione, twoS, twoMS);
         }
-        dsbmv_("L", &ndet, &izero, 
+        narg = (int) ndet;
+        dsbmv_("L", &narg, &izero, 
                &done, hcoul_det, &ione, // hcoul_det ...
                cgbuf0, &ione, // ... * cgbuf0 ...
                &dzero, cgbuf1, &ione); // ... -> cgbuf1
-        hdiag_csf[iconfcoup] = ddot_(&ndet, cgbuf0, &ione, cgbuf1, &ione);
+        hdiag_csf[iconfcoup] = ddot_(&narg, cgbuf0, &ione, cgbuf1, &ione);
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
             if (ni == 0){ continue; }
