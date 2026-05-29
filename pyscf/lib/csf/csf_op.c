@@ -32,6 +32,11 @@ void dsbmv_(const char *uplo,
 #define MAX_PARTICLE = 64
 #endif
 
+#ifndef MAX
+#define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
+#define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
+#endif
+
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
 {
 
@@ -181,6 +186,13 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
 
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
 {
+    /* Compute
+        1 + <CSF | Eij Eji | CSF> = 0.5 + "G2"
+       where i > j (although see below) using
+       Drake & Schlesinger, PRA 15 1990 (1977) (DOI:10.1103/PhysRevA.15.1990)
+    */
+    double vcc = 0.5;
+    double g2 = 1.0;
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
@@ -189,13 +201,59 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
 
-    // I don't want to pass twoS
-    unsigned int twoS = 0;
-    for (unsigned int p = 0; p < nspin ; p++){
-        if ((1ULL << p) & coupstr){ twoS++; }
-    }
+    double rat;
 
-    return 1.0;
+    // i
+    unsigned int twoS1 = _get_twoS0_running (coupstr, i-1, nspin);
+    unsigned int twoS0 = _get_twoS0_running (coupstr, i, nspin);
+    unsigned int twoS;
+
+    int parity = twoS0 + twoS1 - 1; // graph signs
+    parity += (2*twoS0 + 2); // Wigner 6j sign; the exponent is multiplied by 2
+    parity = parity % 4; // remember everything is *2 until the very end
+
+    if (twoS1 > twoS0){ // S(i-1) = S(i) + 1/2
+        rat = ((double) (twoS0)) / ((twoS0+1) * (twoS0+2) * 6);
+    } else { // S(i-1) = S(i) - 1/2
+        rat = ((double) (twoS0+2)) / (twoS0 * (twoS0+1) * 6);
+    }
+    g2 *= sqrt (rat);
+
+    // i+1, i+2, ... j-2, j-1
+    for (k=i+1; k < j; k++){
+        twoS1 = twoS0;
+        twoS0 = _get_twoS0_running (coupstr, k, nspin);
+        twoS = MAX (twoS0, twoS1);
+
+        parity += twoS0 + twoS1 - 1; // graph signs
+        parity += (2*twoS + 2); // Wigner 6j sign
+        parity = parity % 4;
+
+        rat = ((double) ((twoS+2) * (twoS-1))) / (twoS0 * (twoS0+1));
+        g2 *= sqrt (rat);
+    }
+    
+    // j
+    twoS1 = twoS0;
+    twoS0 = _get_twoS0_running (coupstr, j, nspin);
+
+    parity += twoS0 + twoS1 - 1; // graph signs
+    parity += (2*twoS1 + 2); // Wigner 6j signs
+    parity = parity % 4;
+
+    if (twoS1 > twoS0){ // S(i-1) = S(i) + 1/2
+        rat = ((double) (twoS1+2)) / (twoS1 * (twoS1+1) * 6);
+    } else { // S(i-1) = S(i) - 1/2
+        rat = ((double) (twoS1)) / ((twoS1+1) * (twoS1+2) * 6);
+    }
+    g2 *= sqrt (rat);
+
+    // Final sign computation
+    assert ((parity % 2)==0);
+    parity = parity / 2;
+    if ((parity % 2) == 1){ g2 = -g2; }
+
+    return vcc+g2;
 }
 
 void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
@@ -217,7 +275,7 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
     unsigned int ithread = omp_get_thread_num ();
     double * cgbuf0 = wrk + (ithread * (2*ndet));
     double * cgbuf1 = cgbuf0 + ndet;
-    double vcc;
+    double fac;
     unsigned int ni, nj;
     int narg;
 
@@ -244,16 +302,17 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
                 // There's almost certainly a sign I need to add here
                 // On the other hand, maybe not, since this is hDIAG and the bra and the ket
                 // would have the same sign
-                vcc = 1.0;
                 if (ni + nj == 2){
-                    vcc = _get_vcc (
+                    fac = _get_vcc (
                         coupstrs[icoup],
                         _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]),
                         _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]),
                         nspin
                     );
+                } else {
+                    fac = (double) (ni+nj-2);
                 }
-                hdiag_csf[iconfcoup] -= (ni+nj-2) * vcc * keri[i*norb + j];
+                hdiag_csf[iconfcoup] -= fac * keri[i*norb + j];
             }
         }
 
