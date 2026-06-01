@@ -149,6 +149,15 @@ unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
     else { return 0; }
 }
 
+unsigned int _get_spin (unsigned int i, uint64_t dconfstr, uint64_t sconfstr, uint64_t detstr)
+{
+    unsigned int ni = _get_occ (i, dconfstr, sconfstr);
+    if (ni != 1){ return 0; }
+    ni = _get_spinindex (i, dconfstr, sconfstr);
+    ni = (detstr & (1ULL << ni)) >> ni;
+    return ni;
+}
+
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
 {
     unsigned int j = i;
@@ -260,7 +269,7 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     return vcc+g2;
 }
 
-void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
+void FCICSFhdiag_o1 (double * hdiag_csf, double * hdiag_det, double * keri,
                      uint64_t * dconfstrs, uint64_t * sconfstrs,
                      uint64_t * coupstrs, uint64_t * detstrs, 
                      size_t nconf, size_t ncoup, size_t ndet,
@@ -269,10 +278,10 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
 {
 /* 
     Output:
-        hdiag_csf : array of shape (ncoup,nconf)
+        hdiag_csf : array of shape (nconf,ncoup)
 
     Input:
-        hcoul_det : array of shape (nconf,ndet)
+        hdiag_det : array of shape (nconf,ndet)
             1-electron + Coulomb energies of the determinants (i.e., excluding exchange)
         keri : array of shape (norb,norb)
             (ij|ij) two-electron integrals
@@ -301,49 +310,48 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hcoul_det, double * keri,
 #pragma omp parallel default(shared)
 {
 
-    size_t iconf, icoup, iconfcoup;
-    size_t last_icoup = ncoup;
+    size_t iconf, icoup, icoupconf;
+    size_t last_iconf = nconf;
     unsigned int ithread = omp_get_thread_num ();
     double * cgbuf0 = wrk + (ithread * (2*ndet));
     double * cgbuf1 = cgbuf0 + ndet;
+    double hcoul;
     double fac;
-    unsigned int ni, nj;
+    unsigned int ni, nj, si, sj;
     int narg;
 
 #pragma omp for schedule(static)
-    for (iconfcoup = 0; iconfcoup < nconf * ncoup; iconfcoup++){
-        icoup = iconfcoup / nconf;
-        iconf = iconfcoup % nconf;
-        if (last_icoup != icoup){
-            FCICSFmakecsf (cgbuf0, detstrs, coupstrs+icoup, nspin, ndet, ione, twoS, twoMS);
+    for (icoupconf = 0; icoupconf < nconf * ncoup; icoupconf++){
+        iconf = icoupconf / ncoup;
+        icoup = icoupconf % ncoup;
+        if (last_iconf != iconf){
+            hcoul = hdiag_det[iconf*ndet];
+            // Subtract SOMO exchange terms
+            for (unsigned int i = 1; i < norb; i++){
+                ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
+                if (ni != 1){ continue ; }
+                si = _get_spin (i, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
+                for (unsigned int j = 0; j < i; j++){
+                    nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
+                    if (nj != 1){ continue ; }
+                    sj = _get_spin (j, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
+                    if (si==sj){
+                        hcoul += keri[i*norb + j];
+                    }
+                }
+            } // All the other exchange terms should be identical for all determinants
         }
-        narg = (int) ndet;
-        dsbmv_("L", &narg, &izero, 
-               &done, hcoul_det+(iconf*ndet), &ione, // hcoul_det ...
-               cgbuf0, &ione, // ... * cgbuf0 ...
-               &dzero, cgbuf1, &ione); // ... -> cgbuf1
-        hdiag_csf[iconfcoup] = ddot_(&narg, cgbuf0, &ione, cgbuf1, &ione);
+        hdiag_csf[icoupconf] = hcoul;
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
-            if (ni == 0){ continue; }
-            // diagonal
-            hdiag_csf[iconfcoup] -= .5 * ni * keri[i*norb + i];
+            if (ni != 1){ continue; }
+            si = _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]);
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
-                // There's almost certainly a sign I need to add here
-                // On the other hand, maybe not, since this is hDIAG and the bra and the ket
-                // would have the same sign
-                if (ni + nj == 2){
-                    fac = _get_vcc (
-                        coupstrs[icoup],
-                        _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]),
-                        _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]),
-                        nspin
-                    );
-                } else {
-                    fac = (double) (ni+nj-2);
-                }
-                hdiag_csf[iconfcoup] -= fac * keri[i*norb + j];
+                if (nj != 1){ continue; }
+                sj = _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]);
+                fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
+                hdiag_csf[icoupconf] -= fac * keri[i*norb + j];
             }
         }
 
