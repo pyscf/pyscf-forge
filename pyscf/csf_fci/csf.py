@@ -6,6 +6,7 @@ from pyscf import lib, ao2mo, __config__
 from pyscf.fci import direct_spin1, cistring, direct_uhf
 from pyscf.fci.direct_spin1 import _unpack, _unpack_nelec, _get_init_guess, kernel_ms1
 from pyscf.lib.numpy_helper import tag_array
+from pyscf.csf_fci import csfstring
 from pyscf.csf_fci.csdstring import get_csdaddrs_shape
 from pyscf.csf_fci.csfstring import count_all_csfs, get_spin_evecs
 from pyscf.csf_fci.csfstring import get_csfvec_shape
@@ -47,6 +48,8 @@ def unpack_1RDM_cs (dm):
     dma, dmb = unpack_1RDM_ab (dm)
     return dma + dmb, dma - dmb
 
+def c_arr (arr):
+    return arr.ctypes.data_as (ctypes.c_void_p)
 
 def get_init_guess(norb, nelec, nroots, hdiag_csf, transformer):
     ''' The existing _get_init_guess function will work in the csf basis if I pass it with na, nb = ncsf, 1.
@@ -73,7 +76,6 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
     if hdiag_det is None:
         hdiag_det = make_hdiag_det (None, h1e, eri, norb, nelec)
     eri = ao2mo.restore(1, eri, norb)
-    tlib = wlib = 0
     neleca, nelecb = _unpack_nelec (nelec)
     min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (
         norb, neleca, nelecb)
@@ -81,149 +83,40 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
     npair_econf_size = npair_dconf_size * npair_sconf_size
     max_npair = min (neleca, nelecb)
     ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
-    #ndeta_all = cistring.num_strings(norb, neleca)
-    ndetb_all = cistring.num_strings(norb, nelecb)
     hdiag_csf = np.ascontiguousarray (np.zeros (ncsf_all, dtype=np.float64))
     hdiag_csf_check = np.ones (ncsf_all, dtype=np.bool_)
     for npair in range (min_npair, max_npair+1):
         ipair = npair - min_npair
+        nspin = neleca + nelecb - 2*npair
+        ndconf = int (npair_dconf_size[ipair])
+        nsconf = int (npair_sconf_size[ipair])
         nconf = int (npair_econf_size[ipair])
         ndet = int (npair_sdet_size[ipair])
         ncsf = int (npair_csf_size[ipair])
         if ncsf == 0:
             continue
+        csf_offset = npair_csf_offset[ipair]
         csd_offset = npair_csd_offset[ipair]
         det_addr = transformer.csd_mask[csd_offset:][:nconf*ndet]
-        # mem safety
-        deltam = lib.current_memory ()[0] - m0
-        mem_remaining = max_memory - deltam
-        safety_factor = 1.2
-        nfloats = float(nconf)*ndet*ndet + float(det_addr.size)
-        mem_floats = nfloats * np.dtype (float).itemsize / 1e6
-        mem_ints = det_addr.dtype.itemsize * det_addr.size * 3 / 1e6
-        mem = safety_factor * (mem_floats + mem_ints)
-        memstr = ("hdiag_csf of {} orbitals, ({},{}) electrons and smult={} with {} "
-                  "doubly-occupied orbitals ({} configurations and {} determinants) requires {} "
-                  "MB > {} MB remaining of {} MB max").format (
-            norb, neleca, nelecb, smult, npair, nconf, ndet, mem, mem_remaining, max_memory)
-        if mem > mem_remaining:
-            raise MemoryError (memstr)
-        # end mem safety
-        nspin = neleca + nelecb - 2*npair
-        csf_offset = npair_csf_offset[ipair]
-        hdiag_conf = np.ascontiguousarray (np.zeros ((nconf, ndet, ndet), dtype=np.float64))
-        if ndet == 1:
-            # Closed-shell singlets
-            assert (ncsf == 1)
-            hdiag_csf[csf_offset:][:nconf] = hdiag_det[det_addr.flat]
-            hdiag_csf_check[csf_offset:][:nconf] = False
-            continue
-        det_addra, det_addrb = divmod (det_addr, ndetb_all)
-        det_stra = np.ascontiguousarray (cistring.addrs2str (norb, neleca, det_addra).reshape (nconf, ndet, order='C'))
-        det_strb = np.ascontiguousarray (cistring.addrs2str (norb, nelecb, det_addrb).reshape (nconf, ndet, order='C'))
-        det_addr = det_addr.reshape (nconf, ndet, order='C')
-        hdiag_conf = np.ascontiguousarray (np.zeros ((nconf, ndet, ndet), dtype=np.float64))
-        hdiag_conf_det = np.ascontiguousarray (hdiag_det[det_addr], dtype=np.float64)
-        t1 = lib.logger.process_clock ()
-        w1 = lib.logger.perf_counter ()
-        libcsf.FCICSFhdiag (hdiag_conf.ctypes.data_as (ctypes.c_void_p),
-                            hdiag_conf_det.ctypes.data_as (ctypes.c_void_p),
-                            eri.ctypes.data_as (ctypes.c_void_p),
-                            det_stra.ctypes.data_as (ctypes.c_void_p),
-                            det_strb.ctypes.data_as (ctypes.c_void_p),
-                            ctypes.c_uint (norb), ctypes.c_size_t (nconf), ctypes.c_size_t (ndet))
-        tlib += lib.logger.process_clock () - t1
-        wlib += lib.logger.perf_counter () - w1
-        umat = get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
-        hdiag_conf = np.tensordot (hdiag_conf, umat, axes=1)
-        hdiag_conf *= umat[np.newaxis,:,:]
-        hdiag_csf[csf_offset:][:nconf*ncsf] = hdiag_conf.sum (1).ravel (order='C')
+        wrk = np.empty (nconf, dtype=hdiag_csf.dtype)
+        dconfstrs = cistring.addrs2str (norb, npair, list (range (ndconf)))
+        sconfstrs = cistring.addrs2str (norb-npair, nspin, list (range (nsconf)))
+        detstrs = cistring.addrs2str (nspin, neleca-npair, list (range (ndet)))
+        coupstrs = csfstring.addrs2str (nspin, smult, list (range (ncsf))) 
+        libcsf.FCICSFhdiag (c_arr (hdiag_csf[csf_offset:]),
+                            c_arr (hdiag_det[det_addr.flat]),
+                            c_arr (eri),
+                            c_arr (dconfstrs),
+                            c_arr (sconfstrs),
+                            c_arr (coupstrs),
+                            c_arr (detstrs),
+                            c_arr (wrk),
+                            ctypes.c_size_t (nconf),
+                            ctypes.c_size_t (ncsf),
+                            ctypes.c_size_t (ndet),
+                            ctypes.c_uint (norb))
         hdiag_csf_check[csf_offset:][:nconf*ncsf] = False
     assert (np.count_nonzero (hdiag_csf_check) == 0), np.count_nonzero (hdiag_csf_check)
-    #print ("Time in hdiag_csf library: {}, {}".format (tlib, wlib))
-    return hdiag_csf
-
-
-def make_hdiag_csf_slower (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memory=None):
-    ''' This is tricky because I need the diagonal blocks for each configuration in order to get
-    the correct csf hdiag values, not just the diagonal elements for each determinant. '''
-    smult = transformer.smult
-    #t0, w0 = lib.logger.process_clock (), lib.logger.perf_counter ()
-    #tstr = tlib = tloop = wstr = wlib = wloop = 0
-    if hdiag_det is None:
-        hdiag_det = make_hdiag_det (None, h1e, eri, norb, nelec)
-    eri = ao2mo.restore(1, eri, norb)
-    neleca, nelecb = _unpack_nelec (nelec)
-    min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (
-        norb, neleca, nelecb)
-    _, npair_csf_offset, _, _, npair_csf_size = get_csfvec_shape (norb, neleca, nelecb, smult)
-    npair_econf_size = npair_dconf_size * npair_sconf_size
-    max_npair = min (neleca, nelecb)
-    ncsf_all = count_all_csfs (norb, neleca, nelecb, smult)
-    #ndeta_all = cistring.num_strings(norb, neleca)
-    ndetb_all = cistring.num_strings(norb, nelecb)
-    hdiag_csf = np.ascontiguousarray (np.zeros (ncsf_all, dtype=np.float64))
-    hdiag_csf_check = np.ones (ncsf_all, dtype=np.bool_)
-    for npair in range (min_npair, max_npair+1):
-        ipair = npair - min_npair
-        nconf = npair_econf_size[ipair]
-        ndet = npair_sdet_size[ipair]
-        ncsf = npair_csf_size[ipair]
-        if ncsf == 0:
-            continue
-        nspin = neleca + nelecb - 2*npair
-        csd_offset = npair_csd_offset[ipair]
-        csf_offset = npair_csf_offset[ipair]
-        hdiag_conf = np.ascontiguousarray (np.zeros ((nconf, ndet, ndet), dtype=np.float64))
-        det_addr = transformer.csd_mask[csd_offset:][:nconf*ndet]
-        if ndet == 1:
-            # Closed-shell singlets
-            assert (ncsf == 1)
-            hdiag_csf[csf_offset:][:nconf] = hdiag_det[det_addr.flat]
-            hdiag_csf_check[csf_offset:][:nconf] = False
-            continue
-        umat = get_spin_evecs (nspin, neleca, nelecb, smult)
-        det_addra, det_addrb = divmod (det_addr, ndetb_all)
-        #t1, w1 = lib.logger.process_clock (), lib.logger.perf_counter ()
-        det_stra = cistring.addrs2str (norb, neleca, det_addra).reshape (nconf, ndet, order='C')
-        det_strb = cistring.addrs2str (norb, nelecb, det_addrb).reshape (nconf, ndet, order='C')
-        #tstr += lib.logger.process_clock () - t1
-        #wstr += lib.logger.perf_counter () - w1
-        det_addr = det_addr.reshape (nconf, ndet, order='C')
-        diag_idx = np.diag_indices (ndet)
-        # It looks like the library call below is, itself, usually responsible for about 50% of the
-        # clock and wall time that this function consumes.
-        #t1, w1 = lib.logger.process_clock (), lib.logger.perf_counter ()
-        for iconf in range (nconf):
-            addr = det_addr[iconf]
-            assert (len (addr) == ndet)
-            stra = det_stra[iconf]
-            strb = det_strb[iconf]
-            #t2, w2 = lib.logger.process_clock (), lib.logger.perf_counter ()
-            libfci.FCIpspace_h0tril(hdiag_conf[iconf].ctypes.data_as(ctypes.c_void_p),
-                h1e.ctypes.data_as(ctypes.c_void_p),
-                eri.ctypes.data_as(ctypes.c_void_p),
-                stra.ctypes.data_as(ctypes.c_void_p),
-                strb.ctypes.data_as(ctypes.c_void_p),
-                ctypes.c_int(norb), ctypes.c_int(ndet))
-            #tlib += lib.logger.process_clock () - t2
-            #wlib += lib.logger.perf_counter () - w2
-            #hdiag_conf[iconf][diag_idx] = hdiag_det[addr]
-            #hdiag_conf[iconf] = lib.hermi_triu(hdiag_conf[iconf])
-        for iconf in range (nconf): hdiag_conf[iconf] = lib.hermi_triu (hdiag_conf[iconf])
-        for iconf in range (nconf): hdiag_conf[iconf][diag_idx] = hdiag_det[det_addr[iconf]]
-        #tloop += lib.logger.process_clock () - t1
-        #wloop += lib.logger.perf_counter () - w1
-
-        hdiag_conf = np.tensordot (hdiag_conf, umat, axes=1)
-        hdiag_conf = (hdiag_conf * umat[np.newaxis,:,:]).sum (1)
-        hdiag_csf[csf_offset:][:nconf*ncsf] = hdiag_conf.ravel (order='C')
-        hdiag_csf_check[csf_offset:][:nconf*ncsf] = False
-    assert (np.count_nonzero (hdiag_csf_check) == 0), np.count_nonzero (hdiag_csf_check)
-    #print ("Total time in hdiag_csf: {}, {}".format (lib.logger.process_clock ()-t0, lib.logger.perf_counter ()-w0))
-    #print ("    Loop: {}, {}".format (tloop, wloop))
-    #print ("    Library: {}, {}".format (tlib, wlib))
-    #print ("    Cistring: {}, {}".format (tstr, wstr))
     return hdiag_csf
 
 # Exploring g2e nan bug; remove later?

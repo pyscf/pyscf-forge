@@ -8,26 +8,6 @@
 #include "vhf/fblas.h"
 #include "csf.h"
 
-#if defined __cplusplus
-extern "C" {
-#endif
-
-void dsbmv_(const char *uplo,
-            const int *n,
-            const int *k,
-            const double *alpha,
-            const double *a,
-            const int *lda,
-            const double *x,
-            const int *incx,
-            const double *beta,
-            double *y,
-            const int *incy);
-
-#if defined __cplusplus
-} // end extern "C"
-#endif
-
 #ifndef MAX_PARTICLE
 #define MAX_PARTICLE = 64
 #endif
@@ -69,73 +49,14 @@ void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin,
 
 }
 
-void FCICSFhdiag (double * hdiag, double * hdiag_det, double * eri, uint64_t * astrs, uint64_t * bstrs, unsigned int norb, size_t nconf, size_t ndet)
+unsigned int _count_set_bits (uint64_t str)
 {
-
-    size_t ndet_lt = ndet * (ndet+1) / 2;
-
-#pragma omp parallel default(shared)
-{
-
-    size_t iconf, idetx, idety, idetconf;
-    unsigned int iorb, nexc;
-    uint64_t exc_str, somo_str, big_idx1, big_idx2, hdiag_idx_lt, hdiag_idx_ut;
-    unsigned int exc[2];
-    int sgn, esgn;
-
-#pragma omp for schedule(static) 
-
-    for (idetconf = 0; idetconf < nconf * ndet_lt; idetconf++){
-        iconf = idetconf / ndet_lt;
-        idety = idetconf % ndet_lt;
-        for (idetx = 0; idetx < ndet; idetx++){
-            if (idetx < idety){ idety -= idetx + 1; }
-            else { break; }
-        }
-        // Careful with possible integer overflow
-        hdiag_idx_lt = ndet;
-        hdiag_idx_lt *= ndet;
-        hdiag_idx_lt *= iconf;
-        hdiag_idx_ut = hdiag_idx_lt;
-        big_idx1 = ndet;
-        big_idx1 *= idety;
-        big_idx2 = ndet;
-        big_idx2 *= idetx;
-        hdiag_idx_lt += big_idx1;
-        hdiag_idx_ut += big_idx2;
-        hdiag_idx_lt += idetx;
-        hdiag_idx_ut += idety;
-        if (idetx == idety){ 
-            hdiag[hdiag_idx_lt] = hdiag_det[(iconf*ndet)+idetx];
-            continue;
-        }
-        // Fear of integer overflow is only reasonable for off-diagonal elements of a Hamiltonian matrix
-        // It's not reasonable for anything else
-        big_idx1 = (ndet*iconf) + idetx;
-        big_idx2 = (ndet*iconf) + idety;
-        exc_str  = astrs[big_idx1] ^ astrs[big_idx2];
-        somo_str = astrs[big_idx1] ^ bstrs[big_idx1];
-        nexc = 0; esgn = 1; sgn = -1;
-        for (iorb = 0; iorb < norb; iorb++){
-            if (somo_str & 1ULL << iorb){ esgn *= -1; }
-            if (exc_str & 1ULL << iorb){
-                if (nexc < 2){ exc[nexc] = iorb; }
-                nexc++;
-                if (nexc > 2){ break; }
-                sgn *= esgn;
-            }
-        } 
-        if (nexc > 2){ continue; }
-        assert (nexc == 2);
-
-        // Fear of integer overflow is only reasonable for off-diagonal elements of a Hamiltonian matrix
-        // It's not reasonable for anything else
-        big_idx1 = exc[0]*norb*norb*norb + exc[1]*norb*norb + exc[1]*norb + exc[0];
-        hdiag[hdiag_idx_lt] = sgn * eri[big_idx1];
-        hdiag[hdiag_idx_ut] = hdiag[hdiag_idx_lt];
+    unsigned int n = 0;
+    while (str){
+        str &= (str - 1);
+        n++;
     }
-
-}
+    return n;
 }
 
 unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
@@ -176,20 +97,12 @@ unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfst
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin)
 {
     assert (nspin - i >= 0);
-    unsigned int n = coupstr;
-    unsigned int twoS = 0;
-    // First determine twoS
-    while (n){
-        n &= (n - 1);
-        twoS++;
-    }
+    uint64_t n = coupstr;
+    unsigned int twoS = _count_set_bits (coupstr);
     // unset all bits i or more places from the left edge
     n = (coupstr & (1ULL << (nspin-i))) - 1;
     // Subtract 1/2 from S for every remaining set bit
-    while (n){
-        n &= (n - 1);
-        twoS--;
-    }
+    twoS -= _count_set_bits (n);
     return twoS;
 }
 
@@ -269,12 +182,12 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     return vcc+g2;
 }
 
-void FCICSFhdiag_o1 (double * hdiag_csf, double * hdiag_det, double * keri,
-                     uint64_t * dconfstrs, uint64_t * sconfstrs,
-                     uint64_t * coupstrs, uint64_t * detstrs, 
-                     size_t nconf, size_t ncoup, size_t ndet,
-                     unsigned int norb, unsigned int npair, unsigned int nspin,
-                     unsigned int twoS, int twoMS, double * wrk)
+void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
+                  uint64_t * dconfstrs, uint64_t * sconfstrs,
+                  uint64_t * coupstrs, uint64_t * detstrs,
+                  double * wrk, 
+                  size_t nconf, size_t ncoup, size_t ndet,
+                  unsigned int norb)
 {
 /* 
     Output:
@@ -283,8 +196,8 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hdiag_det, double * keri,
     Input:
         hdiag_det : array of shape (nconf,ndet)
             1-electron + Coulomb energies of the determinants (i.e., excluding exchange)
-        keri : array of shape (norb,norb)
-            (ij|ij) two-electron integrals
+        eri : array of shape (norb,norb,norb,norb)
+            (ij|kl) two-electron integrals
         dconfstrs : array of shape (nconf,)
             Strings for doubly-occupied orbitals
         sconfstrs : array of shape (nconf,)
@@ -295,66 +208,57 @@ void FCICSFhdiag_o1 (double * hdiag_csf, double * hdiag_det, double * keri,
             Strings for M state in determinants
 
     Buffer:
-        wrk : array of shape (nthreads,2,ndet)
-
-    Other params:
-        nspin : number of singly-occupied orbitals in this sector
-        twoS : 2*S(total)
-        twoM : 2*M(total) = Na - Nb
-
+        wrk : array of shape (nconf)
 */
-    const int izero = 0;
-    const int ione = 1;
-    const double dzero = 0.0;
-    const double done = 1.0;
 #pragma omp parallel default(shared)
 {
 
     size_t iconf, icoup, icoupconf;
-    size_t last_iconf = nconf;
-    unsigned int ithread = omp_get_thread_num ();
-    double * cgbuf0 = wrk + (ithread * (2*ndet));
-    double * cgbuf1 = cgbuf0 + ndet;
-    double hcoul;
     double fac;
-    unsigned int ni, nj, si, sj;
-    int narg;
+    unsigned int ni, nj, si, sj, idx;
+    unsigned int nspin;
+
+// Subtract SOMO exchange terms from hdiag_det
+#pragma omp for schedule(static)
+    for (iconf = 0; iconf < nconf; iconf++){
+        wrk[iconf] = hdiag_det[iconf*ndet];
+        for (unsigned int i = 1; i < norb; i++){
+            ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
+            if (ni != 1){ continue ; }
+            si = _get_spin (i, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
+            idx = i*norb*norb*norb + i;
+            for (unsigned int j = 0; j < i; j++){
+                nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
+                if (nj != 1){ continue ; }
+                sj = _get_spin (j, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
+                idx += j*norb*(norb+1);
+                if (si==sj){
+                    wrk[iconf] += eri[idx];
+                }
+            }
+        } // All the other exchange terms should be identical for all determinants
+    }
 
 #pragma omp for schedule(static)
     for (icoupconf = 0; icoupconf < nconf * ncoup; icoupconf++){
         iconf = icoupconf / ncoup;
         icoup = icoupconf % ncoup;
-        if (last_iconf != iconf){
-            hcoul = hdiag_det[iconf*ndet];
-            // Subtract SOMO exchange terms
-            for (unsigned int i = 1; i < norb; i++){
-                ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
-                if (ni != 1){ continue ; }
-                si = _get_spin (i, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
-                for (unsigned int j = 0; j < i; j++){
-                    nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
-                    if (nj != 1){ continue ; }
-                    sj = _get_spin (j, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
-                    if (si==sj){
-                        hcoul += keri[i*norb + j];
-                    }
-                }
-            } // All the other exchange terms should be identical for all determinants
-        }
-        hdiag_csf[icoupconf] = hcoul;
+        hdiag_csf[icoupconf] = wrk[iconf];
+        nspin = _count_set_bits (sconfstrs[iconf]);
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
             if (ni != 1){ continue; }
             si = _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]);
+            idx = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
                 if (nj != 1){ continue; }
                 sj = _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]);
                 fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
-                hdiag_csf[icoupconf] -= fac * keri[i*norb + j];
+                idx += j*norb*(norb+1);
+                hdiag_csf[icoupconf] -= fac * eri[idx];
             }
         }
-
     }
 }
 }
