@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <omp.h>
 #include "vhf/fblas.h"
 #include "csf.h"
@@ -81,7 +82,7 @@ unsigned int _get_spin (unsigned int i, uint64_t dconfstr, uint64_t sconfstr, ui
 
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
 {
-    printf ("i = %d, dconfstr = %d, sconfstr = %d\n", i, dconfstr, sconfstr);
+    printf ("i = %d, dconfstr = %ld, sconfstr = %ld\n", i, dconfstr, sconfstr);
     unsigned int j = i;
     for (unsigned int k = 0; k < i; k++){
         if ((1ULL << k) & dconfstr){ j--; }
@@ -97,11 +98,11 @@ unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfst
 
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin)
 {
-    printf ("nspin = %d, i = %d, coupstr = %d\n", nspin, i, coupstr);
+    printf ("nspin = %d, i = %d, coupstr = %ld\n", nspin, i, coupstr);
     assert (nspin - i >= 0);
     uint64_t n = coupstr;
     unsigned int twoS = _count_set_bits (coupstr);
-    printf ("twoS = %d\n", twoS);
+    // printf ("twoS = %d\n", twoS);
     assert (nspin >= twoS); // S >= 0
     twoS = (2*twoS) - nspin;
     // in range 0 < j <= i;
@@ -111,7 +112,7 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     // unset all bits i or more places from the edge
     n = coupstr ^ (coupstr & ((1ULL << (nspin-i)) - 1));
     n = _count_set_bits (n);
-    printf ("set bits in range = %d\n", n);
+    // printf ("set bits in range = %ld\n", n);
     assert (n <= i);
     twoS -= 2 * n;
     return twoS;
@@ -120,9 +121,13 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
 {
     /* Compute
-        1 + <CSF | Eij Eji | CSF> = 0.5 + "G2"
+        -<Eijji>
+        = <Eii> - <Eij Eji>
+        = 1 - (3g2 - 1/2)
+        = 3/2 - 3g2
        where i > j (although see below) using
        Drake & Schlesinger, PRA 15 1990 (1977) (DOI:10.1103/PhysRevA.15.1990)
+       "g2" is the irreducible graph
     */
     double vcc = 0.5;
     double g2 = 1.0;
@@ -130,7 +135,7 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
-    printf ("coupstr = %d\n", coupstr);
+    printf ("coupstr = %ld\n", coupstr);
     printf ("i = %d, j = %d, nspin = %d\n", i, j, nspin);
     assert (i < nspin);
     assert (j < nspin);
@@ -158,7 +163,7 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     } else { // S(i-1) = S(i) - 1/2
         rat = ((double) (twoS0+2)) / (twoS0 * (twoS0+1) * 6);
     }
-    rat *= twoS0+1; // normalization
+    rat *= twoS0 + 1; // normalization
     g2 *= sqrt (rat);
     printf ("g2 = %f\n", g2);
 
@@ -166,16 +171,19 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
         twoS0 = _get_twoS_running (coupstr, k, nspin);
-        //printf ("2S(%d) = %d\n", k, twoS0);
-        twoS = MAX (twoS0, twoS1);
+        printf ("2S(%d) = %d\n", k, twoS0);
+        twoS = MIN (twoS0, twoS1);
 
         parity += twoS0 + twoS1 - 1; // graph signs
-        parity += (2*twoS + 2); // Wigner 6j sign
+        parity += 2*twoS; // Wigner 6j sign
         parity = parity % 4;
 
-        rat = ((double) ((twoS+2) * (twoS-1))) / (twoS0 * (twoS0+1));
+        rat = ((double) ((twoS+3) * twoS));
         rat *= twoS0+1; // normalization
-        g2 *= sqrt (rat);
+        rat *= twoS1+1; // normalization
+        rat = sqrt (rat);
+        rat /= ((twoS+1)*(twoS+2));
+        g2 *= rat;
         printf ("g2 = %f\n", g2);
     }
     
@@ -193,7 +201,7 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     } else { // S(i-1) = S(i) - 1/2
         rat = ((double) (twoS1)) / ((twoS1+1) * (twoS1+2) * 6);
     }
-    rat *= twoS0+1; // normalization
+    rat *= twoS1+1; // normalization
     g2 *= sqrt (rat);
     printf ("g2 = %f\n", g2);
 
@@ -204,28 +212,29 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     if ((parity % 2) == 1){ g2 = -g2; }
 
     //abort();
-    return vcc+g2;
+    return vcc-(3*g2);
 }
 
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
                   uint64_t * dconfstrs, uint64_t * sconfstrs,
                   uint64_t * coupstrs, uint64_t * detstrs,
                   double * wrk, 
-                  size_t nconf, size_t ncoup, size_t ndet,
+                  size_t ndoub, size_t nsing,
+                  size_t ncoup, size_t ndet,
                   unsigned int norb)
 {
 /* 
     Output:
-        hdiag_csf : array of shape (nconf,ncoup)
+        hdiag_csf : array of shape (ndoub,nsing,ncoup)
 
     Input:
-        hdiag_det : array of shape (nconf,ndet)
+        hdiag_det : array of shape (ndoub,nsing,ndet)
             1-electron + Coulomb energies of the determinants (i.e., excluding exchange)
         eri : array of shape (norb,norb,norb,norb)
             (ij|kl) two-electron integrals
-        dconfstrs : array of shape (nconf,)
+        dconfstrs : array of shape (ndoub,)
             Strings for doubly-occupied orbitals
-        sconfstrs : array of shape (nconf,)
+        sconfstrs : array of shape (nsing,)
             Strings for singly-occupied orbitals in the non-doubly-occupied subspace
         coupstrs : array of shape (ncoup,)
             Strings for S coupling in CSFs
@@ -233,30 +242,36 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
             Strings for M state in determinants
 
     Buffer:
-        wrk : array of shape (nconf)
+        wrk : array of shape (ndoub,nsing)
 */
+const size_t nconf = ndoub * nsing;
 #pragma omp parallel default(shared)
 {
 
-    size_t iconf, icoup, icoupconf;
+    size_t iconf, idoub, ising, icoup, icoupconf;
     double fac;
-    unsigned int ni, nj, si, sj, idx;
+    unsigned int ni, nj, si, sj, idxi, idx;
     unsigned int nspin;
+    uint64_t dconfstr, sconfstr;
 
 // Subtract SOMO exchange terms from hdiag_det
 #pragma omp for schedule(static)
     for (iconf = 0; iconf < nconf; iconf++){
+        idoub = iconf / nsing;
+        ising = iconf % nsing;
+        dconfstr = dconfstrs[idoub];
+        sconfstr = sconfstrs[ising];
         wrk[iconf] = hdiag_det[iconf*ndet];
         for (unsigned int i = 1; i < norb; i++){
-            ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
+            ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue ; }
-            si = _get_spin (i, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
-            idx = i*norb*norb*norb + i;
+            si = _get_spin (i, dconfstr, sconfstr, detstrs[0]);
+            idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
-                nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
+                nj = _get_occ (j, dconfstr, sconfstr);
                 if (nj != 1){ continue ; }
-                sj = _get_spin (j, dconfstrs[iconf], sconfstrs[iconf], detstrs[0]);
-                idx += j*norb*(norb+1);
+                sj = _get_spin (j, dconfstr, sconfstr, detstrs[0]);
+                idx = idxi + j*norb*(norb+1);
                 if (si==sj){
                     wrk[iconf] += eri[idx];
                 }
@@ -265,25 +280,30 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
     }
 
 #pragma omp for schedule(static)
-    for (icoupconf = 0; icoupconf < nconf * ncoup; icoupconf++){
+    for (icoupconf = 0; icoupconf < nconf*ncoup; icoupconf++){
         iconf = icoupconf / ncoup;
         icoup = icoupconf % ncoup;
+        idoub = iconf / nsing;
+        ising = iconf % nsing;
+        dconfstr = dconfstrs[idoub];
+        sconfstr = sconfstrs[ising];
         hdiag_csf[icoupconf] = wrk[iconf];
-        nspin = _count_set_bits (sconfstrs[iconf]);
-        for (unsigned int i = 0; i < norb; i++){
-            ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
+        nspin = _count_set_bits (sconfstr);
+        for (unsigned int i = 1; i < norb; i++){
+            ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue; }
             printf ("----- i = %d -----\n", i);
-            si = _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]);
-            idx = i*norb*norb*norb + i;
+            si = _get_spinindex (i, dconfstr, sconfstr);
+            idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
-                nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
+                nj = _get_occ (j, dconfstr, sconfstr);
                 if (nj != 1){ continue; }
                 printf ("----- j = %d -----\n", j);
-                sj = _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]);
+                sj = _get_spinindex (j, dconfstr, sconfstr);
                 printf ("i = %d, j = %d, si = %d, sj = %d\n",i,j,si,sj);
                 fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
-                idx += j*norb*(norb+1);
+                printf ("fac(%d,%d) = %f\n", i, j, fac);
+                idx = idxi + j*norb*(norb+1);
                 hdiag_csf[icoupconf] -= fac * eri[idx];
             }
         }

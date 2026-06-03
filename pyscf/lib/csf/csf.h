@@ -36,11 +36,12 @@ unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
-void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * keri,
+void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
                   uint64_t * dconfstrs, uint64_t * sconfstrs,
                   uint64_t * coupstrs, uint64_t * detstrs,
                   double * wrk,
-                  size_t nconf, size_t ncoup, size_t ndet,
+                  size_t ndoub, size_t nsing,
+                  size_t ncoup, size_t ndet,
                   unsigned int norb);
 
 void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, size_t nstr, int norb, int neleca, int nelecb);

@@ -91,6 +91,7 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
         ndconf = int (npair_dconf_size[ipair])
         nsconf = int (npair_sconf_size[ipair])
         nconf = int (npair_econf_size[ipair])
+        assert (nconf == ndconf*nsconf)
         ndet = int (npair_sdet_size[ipair])
         ncsf = int (npair_csf_size[ipair])
         if ncsf == 0:
@@ -102,7 +103,7 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
         dconfstrs = cistring.addrs2str (norb, npair, list (range (ndconf)))
         sconfstrs = cistring.addrs2str (norb-npair, nspin, list (range (nsconf)))
         detstrs = cistring.addrs2str (nspin, neleca-npair, list (range (ndet)))
-        coupstrs = csfstring.addrs2str (nspin, smult, list (range (ncsf))) 
+        coupstrs = csfstring.addrs2str (nspin, smult, list (range (ncsf)))
         libcsf.FCICSFhdiag (c_arr (hdiag_csf[csf_offset:]),
                             c_arr (hdiag_det[det_addr.flat]),
                             c_arr (eri),
@@ -111,7 +112,8 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
                             c_arr (coupstrs),
                             c_arr (detstrs),
                             c_arr (wrk),
-                            ctypes.c_size_t (nconf),
+                            ctypes.c_size_t (ndconf),
+                            ctypes.c_size_t (nsconf),
                             ctypes.c_size_t (ncsf),
                             ctypes.c_size_t (ndet),
                             ctypes.c_uint (norb))
