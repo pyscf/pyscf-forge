@@ -82,23 +82,23 @@ unsigned int _get_spin (unsigned int i, uint64_t dconfstr, uint64_t sconfstr, ui
 
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
 {
-    printf ("i = %d, dconfstr = %ld, sconfstr = %ld\n", i, dconfstr, sconfstr);
+    //printf ("i = %d, dconfstr = %ld, sconfstr = %ld\n", i, dconfstr, sconfstr);
     unsigned int j = i;
     for (unsigned int k = 0; k < i; k++){
         if ((1ULL << k) & dconfstr){ j--; }
     }
-    printf ("j = %d\n", j);
+    //printf ("j = %d\n", j);
     i = j;
     for (unsigned int k = 0; k < i; k++){
         if (((1ULL << k) & sconfstr) == 0){ j--; }
     }
-    printf ("j = %d\n", j);
+    //printf ("j = %d\n", j);
     return j;
 }
 
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin)
 {
-    printf ("nspin = %d, i = %d, coupstr = %ld\n", nspin, i, coupstr);
+    //printf ("nspin = %d, i = %d, coupstr = %ld\n", nspin, i, coupstr);
     assert (nspin - i >= 0);
     uint64_t n = coupstr;
     unsigned int twoS = _count_set_bits (coupstr);
@@ -135,22 +135,22 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
-    printf ("coupstr = %ld\n", coupstr);
-    printf ("i = %d, j = %d, nspin = %d\n", i, j, nspin);
+    //printf ("coupstr = %ld\n", coupstr);
+    //printf ("i = %d, j = %d, nspin = %d\n", i, j, nspin);
     assert (i < nspin);
     assert (j < nspin);
     i = nspin - i;
     j = nspin - j;
-    printf ("redefined as i = %d, j = %d\n", i, j);
+    //printf ("redefined as i = %d, j = %d\n", i, j);
     assert (j>=i);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
 
     // i
     unsigned int twoS1 = _get_twoS_running (coupstr, i-1, nspin);
-    printf ("2S(%d) = %d\n", i-1, twoS1);
+    //printf ("2S(%d) = %d\n", i-1, twoS1);
     unsigned int twoS0 = _get_twoS_running (coupstr, i, nspin);
-    printf ("2S(%d) = %d\n", i, twoS0);
+    //printf ("2S(%d) = %d\n", i, twoS0);
     unsigned int twoS;
     double rat = 1;
 
@@ -165,13 +165,13 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     }
     rat *= twoS0 + 1; // normalization
     g2 *= sqrt (rat);
-    printf ("g2 = %f\n", g2);
+    //printf ("g2 = %f\n", g2);
 
     // i+1, i+2, ... j-2, j-1
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
         twoS0 = _get_twoS_running (coupstr, k, nspin);
-        printf ("2S(%d) = %d\n", k, twoS0);
+        //printf ("2S(%d) = %d\n", k, twoS0);
         twoS = MIN (twoS0, twoS1);
 
         parity += twoS0 + twoS1 - 1; // graph signs
@@ -184,13 +184,13 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
         rat = sqrt (rat);
         rat /= ((twoS+1)*(twoS+2));
         g2 *= rat;
-        printf ("g2 = %f\n", g2);
+        //printf ("g2 = %f\n", g2);
     }
     
     // j
     twoS1 = twoS0;
     twoS0 = _get_twoS_running (coupstr, j, nspin);
-    printf ("2S(%d) = %d\n", j, twoS0);
+    //printf ("2S(%d) = %d\n", j, twoS0);
 
     parity += twoS0 + twoS1 - 1; // graph signs
     parity += (2*twoS1 + 2); // Wigner 6j signs
@@ -203,10 +203,10 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     }
     rat *= twoS1+1; // normalization
     g2 *= sqrt (rat);
-    printf ("g2 = %f\n", g2);
+    //printf ("g2 = %f\n", g2);
 
     // Final sign computation
-    printf ("parity = %d\n", parity);
+    //printf ("parity = %d\n", parity);
     assert ((parity % 2)==0);
     parity = parity / 2;
     if ((parity % 2) == 1){ g2 = -g2; }
@@ -292,17 +292,17 @@ const size_t nconf = ndoub * nsing;
         for (unsigned int i = 1; i < norb; i++){
             ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue; }
-            printf ("----- i = %d -----\n", i);
+            //printf ("----- i = %d -----\n", i);
             si = _get_spinindex (i, dconfstr, sconfstr);
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstr, sconfstr);
                 if (nj != 1){ continue; }
-                printf ("----- j = %d -----\n", j);
+                //printf ("----- j = %d -----\n", j);
                 sj = _get_spinindex (j, dconfstr, sconfstr);
-                printf ("i = %d, j = %d, si = %d, sj = %d\n",i,j,si,sj);
+                //printf ("i = %d, j = %d, si = %d, sj = %d\n",i,j,si,sj);
                 fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
-                printf ("fac(%d,%d) = %f\n", i, j, fac);
+                //printf ("fac(%d,%d) = %f\n", i, j, fac);
                 idx = idxi + j*norb*(norb+1);
                 hdiag_csf[icoupconf] -= fac * eri[idx];
             }
