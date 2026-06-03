@@ -97,7 +97,7 @@ unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfst
 
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin)
 {
-    printf ("nspin = %d, i = %d\n", nspin, i);
+    printf ("nspin = %d, i = %d, coupstr = %d\n", nspin, i, coupstr);
     assert (nspin - i >= 0);
     uint64_t n = coupstr;
     unsigned int twoS = _count_set_bits (coupstr);
@@ -273,11 +273,13 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstrs[iconf], sconfstrs[iconf]);
             if (ni != 1){ continue; }
+            printf ("----- i = %d -----\n", i);
             si = _get_spinindex (i, dconfstrs[iconf], sconfstrs[iconf]);
             idx = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstrs[iconf], sconfstrs[iconf]);
                 if (nj != 1){ continue; }
+                printf ("----- j = %d -----\n", j);
                 sj = _get_spinindex (j, dconfstrs[iconf], sconfstrs[iconf]);
                 printf ("i = %d, j = %d, si = %d, sj = %d\n",i,j,si,sj);
                 fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
