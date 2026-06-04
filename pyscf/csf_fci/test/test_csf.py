@@ -30,7 +30,8 @@ from pyscf.csf_fci.csfstring import CSFTransformer
 
 def setUpModule():
     global mol, m, h1e, g2e, sol, h2mat
-    global norb, nelec, neleci
+    global norb, nelec, neleci, rng
+    rng = np.random.default_rng (1)
     mol = gto.Mole()
     mol.verbose = 0
     mol.output = None#"out_h2o"
@@ -53,6 +54,9 @@ def setUpModule():
     norb = m.mo_coeff.shape[1]
     nelec = (mol.nelectron//2, mol.nelectron//2)
     h1e = reduce(np.dot, (m.mo_coeff.T, m.get_hcore(), m.mo_coeff))
+    h1e_s = (2 * rng.random (h1e.shape)) - 1
+    h1e_s += h1e_s.conj ().T
+    h1e = np.stack ([h1e+h1e_s, h1e-h1e_s], axis=0)
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
     neleci = (mol.nelectron//2, mol.nelectron//2-1)
     sol = csf_solver (mol, smult=1)
@@ -87,15 +91,15 @@ def setUpModule():
     h2mat = h2mat_csf
 
 def tearDownModule():
-    global mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci
-    del mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci
+    global mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci, rng
+    del mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci, rng
 
 class KnownValues(unittest.TestCase):
 
     def test_kernel(self):
         nel = (neleci, nelec)
-        refs = [-8.934702919292933, -8.749825398177125, -8.879204010931936,
-                -8.407383592974286, -8.566577456561983, -7.8124466621492505,
+        refs = [-8.934702919292933, -12.578019902416628, -8.879204010931936,
+                -10.273273133118241, -8.566577456561983, -8.600167849055723,
                 -7.484341852449313]
         for smult in range (1,8):
             with self.subTest (smult=smult):
