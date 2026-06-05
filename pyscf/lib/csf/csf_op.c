@@ -96,13 +96,22 @@ unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfst
     return j;
 }
 
+int _get_twoM (uint64_t sconfstr, uint64_t detstr)
+{
+    int nspin = _count_set_bits (sconfstr);
+    int twoM = _count_set_bits (detstr);
+    assert (twoM <= nspin);
+    twoM = nspin - 2*twoM;
+    return -twoM;
+}
+
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin)
 {
-    //printf ("nspin = %d, i = %d, coupstr = %ld\n", nspin, i, coupstr);
+    if (nspin == 0){ return 0; }
     assert (nspin - i >= 0);
     uint64_t n = coupstr;
     unsigned int twoS = _count_set_bits (coupstr);
-    // printf ("twoS = %d\n", twoS);
+    // printf ("twoS = %d, %d\n", nspin, twoS);
     assert (nspin >= twoS); // S >= 0
     twoS = (2*twoS) - nspin;
     // in range 0 < j <= i;
@@ -123,21 +132,41 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     /* Compute
         -<Eijji>
         = <Eii> - <Eij Eji>
-        = 1 - (3g2 - 1/2)
-        = 3/2 - 3g2
+        = 1 - (3xdiag - 1/2)
+        = 1/2 - 3xdiag
        where i > j (although see below) using
        Drake & Schlesinger, PRA 15 1990 (1977) (DOI:10.1103/PhysRevA.15.1990)
-       "g2" is the irreducible graph
+       "xdiag" is the irreducible graph
     */
-    double vcc = 0.5;
-    double g2 = 1.0;
+    return 0.5 - 3*_get_xdiag (coupstr, i, j, nspin);
+}
+
+double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM)
+{
+    unsigned int twoS = _get_twoS_running (coupstr, 0, nspin);
+    double szfac = _get_xdiag (coupstr, nspin, i, nspin);
+    //szfac *= sqrt (1.5);
+    // printf ("%d %d %f\n", twoM, twoS, szfac);
+    szfac *= twoM * .5;
+    if (twoS > 0){
+        szfac /= sqrt (twoS*(twoS+2)*.25);
+    }
+    return szfac;
+}
+
+double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
+{
+    double xdiag = 1.0;
+    unsigned int twoS1, twoS0, twoS;
+    double rat;
+    int parity = 0;
     unsigned int k;
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
     //printf ("coupstr = %ld\n", coupstr);
     //printf ("i = %d, j = %d, nspin = %d\n", i, j, nspin);
-    assert (i < nspin);
+    assert (i <= nspin);
     assert (j < nspin);
     i = nspin - i;
     j = nspin - j;
@@ -147,25 +176,29 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
     // through nspin inclusively.
 
     // i
-    unsigned int twoS1 = _get_twoS_running (coupstr, i-1, nspin);
-    //printf ("2S(%d) = %d\n", i-1, twoS1);
-    unsigned int twoS0 = _get_twoS_running (coupstr, i, nspin);
+    // We just skip this diagram when we are doing Sz, which corresponds to i == 0
+    twoS0 = _get_twoS_running (coupstr, i, nspin);
     //printf ("2S(%d) = %d\n", i, twoS0);
-    unsigned int twoS;
-    double rat = 1;
+    if (i>0){
+        twoS1 = _get_twoS_running (coupstr, i-1, nspin);
+        //printf ("2S(%d) = %d\n", i-1, twoS1);
 
-    int parity = twoS0 + twoS1 - 1; // graph signs
-    parity += (2*twoS0 + 2); // Wigner 6j sign; the exponent is multiplied by 2
-    parity = parity % 4; // remember everything is *2 until the very end
+        parity += twoS0 + twoS1 - 1; // graph signs
+        parity += (2*twoS0 + 2); // Wigner 6j sign; the exponent is multiplied by 2
+        parity = parity % 4; // remember everything is *2 until the very end
 
-    if (twoS1 > twoS0){ // S(i-1) = S(i) + 1/2
-        rat = ((double) (twoS0)) / ((twoS0+1) * (twoS0+2) * 6);
-    } else { // S(i-1) = S(i) - 1/2
-        rat = ((double) (twoS0+2)) / (twoS0 * (twoS0+1) * 6);
+        if (twoS1 > twoS0){ // S(i-1) = S(i) + 1/2
+            rat = ((double) (twoS0)) / ((twoS0+1) * (twoS0+2) * 6);
+        } else { // S(i-1) = S(i) - 1/2
+            rat = ((double) (twoS0+2)) / (twoS0 * (twoS0+1) * 6);
+        }
+        rat *= twoS0 + 1; // normalization
+        xdiag *= sqrt (rat);
+        //printf ("xdiag = %f\n", xdiag);
+    } else {
+        // (I think you still need this normalization factor but I could be wrong
+        xdiag *= sqrt ((double) (twoS0 + 1));
     }
-    rat *= twoS0 + 1; // normalization
-    g2 *= sqrt (rat);
-    //printf ("g2 = %f\n", g2);
 
     // i+1, i+2, ... j-2, j-1
     for (k=i+1; k < j; k++){
@@ -183,8 +216,8 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
         rat *= twoS1+1; // normalization
         rat = sqrt (rat);
         rat /= ((twoS+1)*(twoS+2));
-        g2 *= rat;
-        //printf ("g2 = %f\n", g2);
+        xdiag *= rat;
+        //printf ("xdiag = %f\n", xdiag);
     }
     
     // j
@@ -202,20 +235,21 @@ double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int 
         rat = ((double) (twoS1)) / ((twoS1+1) * (twoS1+2) * 6);
     }
     rat *= twoS1+1; // normalization
-    g2 *= sqrt (rat);
-    //printf ("g2 = %f\n", g2);
+    xdiag *= sqrt (rat);
+    // printf ("xdiag = %f\n", xdiag);
 
     // Final sign computation
     //printf ("parity = %d\n", parity);
     assert ((parity % 2)==0);
     parity = parity / 2;
-    if ((parity % 2) == 1){ g2 = -g2; }
+    if ((parity % 2) == 1){ xdiag = -xdiag; }
 
     //abort();
-    return vcc-(3*g2);
+    return xdiag;
 }
 
-void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
+void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
+                  double * h1e_s, double * eri,
                   uint64_t * dconfstrs, uint64_t * sconfstrs,
                   uint64_t * coupstrs, uint64_t * detstrs,
                   double * wrk, 
@@ -230,6 +264,8 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
     Input:
         hdiag_det : array of shape (ndoub,nsing,ndet)
             1-electron + Coulomb energies of the determinants (i.e., excluding exchange)
+        h1e_s : array of shape (norb)
+            Diagonal elements of spin potential
         eri : array of shape (norb,norb,norb,norb)
             (ij|kl) two-electron integrals
         dconfstrs : array of shape (ndoub,)
@@ -245,6 +281,10 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
         wrk : array of shape (ndoub,nsing)
 */
 const size_t nconf = ndoub * nsing;
+int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
+printf ("twoS, norb, twoM, nspin: %d, %d, %d, %d\n",
+        ncoup>0 ? _get_twoS_running (coupstrs[0], 0, _count_set_bits (sconfstrs[0])) : 0,
+        norb, twoM, _count_set_bits (sconfstrs[0]));
 #pragma omp parallel default(shared)
 {
 
@@ -262,10 +302,11 @@ const size_t nconf = ndoub * nsing;
         dconfstr = dconfstrs[idoub];
         sconfstr = sconfstrs[ising];
         wrk[iconf] = hdiag_det[iconf*ndet];
-        for (unsigned int i = 1; i < norb; i++){
+        for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue ; }
             si = _get_spin (i, dconfstr, sconfstr, detstrs[0]);
+            wrk[iconf] -= si ? h1e_s[i] : -h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstr, sconfstr);
@@ -289,11 +330,14 @@ const size_t nconf = ndoub * nsing;
         sconfstr = sconfstrs[ising];
         hdiag_csf[icoupconf] = wrk[iconf];
         nspin = _count_set_bits (sconfstr);
-        for (unsigned int i = 1; i < norb; i++){
+        for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue; }
-            //printf ("----- i = %d -----\n", i);
+            printf ("----- i = %d -----\n", i);
             si = _get_spinindex (i, dconfstr, sconfstr);
+            fac = _get_szfac (coupstrs[icoup], si, nspin, twoM);
+            printf ("szfac = %f\n", fac);
+            hdiag_csf[icoupconf] += fac * h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstr, sconfstr);

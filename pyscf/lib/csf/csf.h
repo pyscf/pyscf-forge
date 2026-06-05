@@ -34,9 +34,13 @@ void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin,
 unsigned int _count_set_bits (uint64_t str);
 unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
+int _get_twoM (uint64_t sconfstr, uint64_t detstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
-void FCICSFhdiag (double * hdiag_csf, double * hdiag_det, double * eri,
+double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
+double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM);
+void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
+                  double * h1e_s, double * eri,
                   uint64_t * dconfstrs, uint64_t * sconfstrs,
                   uint64_t * coupstrs, uint64_t * detstrs,
                   double * wrk,

@@ -75,6 +75,7 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
     smult = transformer.smult
     if hdiag_det is None:
         hdiag_det = make_hdiag_det (None, h1e, eri, norb, nelec)
+    h1e_s = np.ascontiguousarray (unpack_h1e_cs (h1e)[1].diagonal ())
     eri = ao2mo.restore(1, eri, norb)
     neleca, nelecb = _unpack_nelec (nelec)
     min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = get_csdaddrs_shape (
@@ -106,6 +107,7 @@ def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memo
         coupstrs = csfstring.addrs2str (nspin, smult, list (range (ncsf)))
         libcsf.FCICSFhdiag (c_arr (hdiag_csf[csf_offset:]),
                             c_arr (hdiag_det[det_addr.flat]),
+                            c_arr (h1e_s),
                             c_arr (eri),
                             c_arr (dconfstrs),
                             c_arr (sconfstrs),
