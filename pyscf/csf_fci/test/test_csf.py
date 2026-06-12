@@ -125,6 +125,10 @@ class KnownValues(unittest.TestCase):
                 ne = nel[smult % 2]
                 hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
                 hdiag_ref = h2mat[smult-1].diagonal ()
+                t = sol.transformer
+                print ("smult:", smult, flush=True)
+                for i in range (len (hdiag)):
+                    print (i, t.printable_csfstring (i), hdiag[i], hdiag_ref[i], hdiag[i]-hdiag_ref[i], flush=True)
                 self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
     @unittest.skip('debug')
