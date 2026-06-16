@@ -1,0 +1,241 @@
+# Copyright 2024 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Zehao Zhou  zehaozhoucase@gmail.com
+
+
+
+import numpy as np
+import sys
+from pyscf.data.nist import HARTREE2EV, HARTREE2WAVENUMBER
+from pyscf.lib import logger, einsum
+
+
+
+'''
+    This file prints spectral data in Multiwfn format
+    also prints transition coefficient in Gaussian16 format
+
+    standard TDDFT can also use this module.
+
+    actually, pyscf already has a similar function to print transition coefficient
+    pyscf/pyscf/tdscf/rhf.py
+        def analyze(tdobj, verbose=None):
+
+    ECD rotatory strength is in length representation
+    unit cgs (10**-40 erg-esu-cm/Gauss)
+    ECD_SCALING_FACTOR is to match Gaussian16 results
+'''
+ECD_SCALING_FACTOR = 500
+
+def get_g16style_trasn_coeff(state, coeff_vec, sybmol, n_occ, n_vir, print_threshold):
+
+    abs_coeff = np.abs(coeff_vec[state, :, :])
+    mask = abs_coeff >= print_threshold
+
+    occ_indices, vir_indices = np.where(mask)
+
+    if len(occ_indices) == 0:
+        return []
+
+    coeff_values = coeff_vec[state, occ_indices, vir_indices]
+
+    occ_indices += 1  # Convert to 1-based index
+    vir_indices += 1 + n_occ  # Convert to 1-based index and offset for vir_indices
+
+    format_str = np.vectorize(lambda occ, vir, coeff: f"{occ:>15d} {sybmol} {vir:<8d} {coeff:>15.5f}")
+    trasn_coeff = format_str(occ_indices, vir_indices, coeff_values).tolist()
+    # format_str = np.vectorize(lambda occ, vir, coeff: "{:>15d} {} {:<8d} {:>15.5f}".format(occ, sybmol, vir, coeff))
+    # trasn_coeff = format_str(occ_indices, vir_indices, coeff_values).tolist()
+
+    return trasn_coeff
+
+def get_spectra(energies, P, X, Y, name, RKS, n_occ_a, n_vir_a,
+                n_occ_b=None, n_vir_b=None, spectra=True, print_threshold=0.001,
+                mdpol=None, verbose=logger.NOTE):
+    '''
+    E = hν
+    c = λ·ν
+    E = hc/λ = hck   k in cm-1
+
+    energy in unit eV
+    1240.7011/ xyz eV = xyz nm
+
+    oscilator strength f = 2/3 E u
+
+
+    in general transition dipole moment u =  [Pα]^T [Xα] = Pα^T Xα + Pβ^TXβ + Qα^TYα + Qβ^T Yβ
+                                             [Pβ]   [Xβ]
+                                             [Qα]   [Yα]
+                                             [Qβ]   [Yβ]
+    P = Q
+
+    TDA:
+        u =  [Pα]^T [Xα]
+             [Pβ]   [Xβ]
+
+        RKS: u = 2 P^T X
+        UKS: u = Pα^T Xα + Pβ^TXβ = P^T X (P = [Pα]  X = [Xα])
+                                               [Pβ]      [Xβ]
+    TDDFT:
+        RKS: u = 2 P^T X + 2 P^T Y = 2 P^T(X+Y)
+        UKS: u = Pα^T Xα + Pβ^TXβ + Qα^TYα + Qβ^T Yβ =  P^T(X+Y)  (P = [Pα]  X = [Xα] )
+                                                                       [Pβ]      [Xβ]
+                                                                       [Qα]      [Yα]
+                                                                       [Qβ]      [Yβ]
+
+    for TDA,   f = 2/3 E 2*|<P|X>|**2
+    for TDDFT, f = 2/3 E 2*|<P|X+Y>|**2
+    P is transition dipole
+    TDA:   transition_vector is X*2**0.5
+    TDDFT: transition_vector is (X*2**0.5 + Y*2**0.5)
+
+    energies are in Hartree
+    '''
+
+    if RKS:
+        n_occ = n_occ_a
+        n_vir = n_vir_a
+
+
+    if isinstance(verbose, logger.Logger):
+        log = verbose
+    else:
+        log = logger.Logger(sys.stdout, verbose)
+
+
+    energies = energies.reshape(-1,)
+
+    eV = energies * HARTREE2EV
+
+    cm_1 = energies * HARTREE2WAVENUMBER
+    nm = 1e7/cm_1
+
+    if isinstance(Y, np.ndarray):
+        trans_dipole_moment = -einsum('ma,na->mn', (X + Y), P)
+    else:
+        trans_dipole_moment = -einsum('ma,na->mn', X, P)
+
+    fosc = 1/3 * energies * np.sum(2 * trans_dipole_moment**2, axis=1)
+    if RKS:
+        ''' 2* because alpha and beta spin '''
+        fosc *=2
+
+    if isinstance(Y, np.ndarray):
+        trans_magnetic_moment = -einsum('ma,na->mn', (X - Y), mdpol)
+    else:
+        trans_magnetic_moment = -einsum('ma,na->mn', X, mdpol)
+
+    rotatory_strength = ECD_SCALING_FACTOR * np.sum(trans_dipole_moment * trans_magnetic_moment, axis=1)/2
+
+    if RKS:
+        ''' 2* because alpha and beta spin  '''
+        rotatory_strength *=2
+
+    entry = [eV, nm, cm_1, fosc, rotatory_strength]
+    data = np.zeros((eV.shape[0],len(entry)))
+    for i in range(len(entry)):
+        data[:,i] = entry[i]
+    log.info('================================================')
+    log.info('#eV       nm      cm^-1    fosc            R')
+    for row in range(data.shape[0]):
+        log.info(f'{data[row,0]:<8.3f} {data[row,1]:<8.0f} {data[row,2]:<8.0f} {data[row,3]:<15.8f} {data[row,4]:8.8f}')
+
+    if spectra:
+        filename = name + '_eV_os_Multiwfn.txt'
+        with open(filename, 'w') as f:
+            np.savetxt(f, data[:,(0,3)], fmt='%.5f', header=f'{len(energies)} 1', comments='')
+        log.info(f'eV Oscillator strength spectra data written to {filename}')
+
+        filename = name + '_eV_rs_Multiwfn.txt'
+        with open(filename, 'w') as f:
+            new_rs_data = np.hstack((data[:,0].reshape(-1,1), rotatory_strength.reshape(-1,1)))
+            np.savetxt(f, new_rs_data, fmt='%.5f', header=f'{len(energies)} 1', comments='')
+        log.info(f'eV Rotatory strength spectra data written to {filename}')
+
+
+        if RKS:
+            log.info(f"print RKS transition coefficients larger than {print_threshold:.2e}")
+            log.info(f'index of HOMO: {n_occ}')
+            log.info(f'index of LUMO: {n_occ+1}')
+            n_state = X.shape[0]
+            X = X.reshape(n_state, n_occ, n_vir)
+            if isinstance(Y, np.ndarray):
+                Y = Y.reshape(n_state, n_occ, n_vir)
+
+            filename = name + '_coeff_Multiwfn.txt'
+
+            with open(filename, 'w') as f:
+
+                for state in range(n_state):
+                    line = f" Excited State{state+1:4d}:      Singlet-A      {eV[state]:>.4f} eV  {nm[state]:>.2f} nm"
+                    line += f"  f={fosc[state]:>.4f}   <S**2>=0.000"
+                    log.info(line)
+                    f.write(f" Excited State{state+1:4d}   1    {eV[state]:>.4f} \n")
+                    trasn_coeff = get_g16style_trasn_coeff(state, X, '->', n_occ=n_occ, n_vir=n_vir,
+                                                                    print_threshold=print_threshold)
+
+                    if isinstance(Y, np.ndarray):
+                        trasn_coeff += get_g16style_trasn_coeff(state, Y, '<-', n_occ=n_occ, n_vir=n_vir,
+                                                                    print_threshold=print_threshold)
+
+                    results = '\n'.join(trasn_coeff) + '\n\n'
+                    log.info(results)
+                    f.write(results)
+            log.info(f'transition coefficient data written to {filename}')
+        else:
+            log.warn('printing UKS transition coefficient may not normalized correctly')
+            log.warn('welcome to contribute to this part ( <S**2> ; print format)')
+            log.info(f"print RKS transition coefficients larger than {print_threshold:.2e}")
+            log.info(f'index of alpha HOMO: {n_occ_a}')
+            log.info(f'index of alpha LUMO: {n_occ_a+1}')
+            log.info(f'index of beta HOMO: {n_occ_b}')
+            log.info(f'index of beta LUMO: {n_occ_b+1}')
+            n_state = X.shape[0]
+            A_aa_size = n_occ_a * n_vir_a
+            # A_bb_size = n_occ_b * n_vir_b
+            Xa = X[:,:A_aa_size].reshape(n_state, n_occ_a, n_vir_a)
+            Xb = X[:,A_aa_size:].reshape(n_state, n_occ_b, n_vir_b)
+            if isinstance(Y, np.ndarray):
+                Ya = Y[:,:A_aa_size].reshape(n_state, n_occ_a, n_vir_a)
+                Yb = X[:,A_aa_size:].reshape(n_state, n_occ_b, n_vir_b)
+
+            filename = name + '_coeff_Multiwfn.txt'
+
+            with open(filename, 'w') as f:
+
+                for state in range(n_state):
+                    line = f" Excited State{state+1:4d}:      Singlet-A      {eV[state]:>.4f} eV  {nm[state]:>.2f} nm"
+                    line += f"  f={fosc[state]:>.4f}   <S**2>=?"
+                    log.info(line)
+                    f.write(f" Excited State{state+1:4d}   1    {eV[state]:>.4f} \n")
+                    trasn_coeff_a = get_g16style_trasn_coeff(state, Xa, '->', n_occ=n_occ_a, n_vir=n_vir_a,
+                                                            print_threshold=print_threshold)
+                    trasn_coeff_b = get_g16style_trasn_coeff(state, Xb, '->', n_occ=n_occ_b, n_vir=n_vir_b,
+                                                            print_threshold=print_threshold)
+
+                    if isinstance(Y, np.ndarray):
+                        trasn_coeff_a += get_g16style_trasn_coeff(state, Ya, '<-', n_occ=n_occ_a, n_vir=n_vir_a,
+                                                            print_threshold=print_threshold)
+                        trasn_coeff_b += get_g16style_trasn_coeff(state, Yb, '<-', n_occ=n_occ_b, n_vir=n_vir_b,
+                                                            print_threshold=print_threshold)
+
+                    results = ' alpha \n' + '\n'.join(trasn_coeff_a) + ' \n beta \n' +'\n'.join(trasn_coeff_b) + '\n\n'
+                    log.info(results)
+                    f.write(results)
+            log.info(f'transition coefficient data written to {filename}')
+
+    return fosc, rotatory_strength
+
+
