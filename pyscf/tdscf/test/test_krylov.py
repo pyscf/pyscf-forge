@@ -14,7 +14,7 @@
 
 import unittest
 import numpy as np
-from pyscf.tdscf._krylov_tools import krylov_solver 
+from pyscf.tdscf._krylov_tools import krylov_solver
 
 
 class KnownValues(unittest.TestCase):
@@ -108,12 +108,14 @@ class KnownValues(unittest.TestCase):
 
         # single precision
         self.assertAlmostEqual(
-            float(np.linalg.norm(eigenvalues_single - np.asarray(self.ref_eigenvalues, dtype=np.float32))), .0, places=self.places_single ,
+            float(np.linalg.norm(eigenvalues_single - np.asarray(self.ref_eigenvalues, dtype=np.float32))),
+            .0, places=self.places_single ,
             msg="Single precision Eigenvalues do not match reference within tolerance"
         )
 
         self.assertAlmostEqual(
-            float(np.linalg.norm(np.abs(eigenvectors_single) - np.abs(np.asarray(self.ref_eigenvectors, dtype=np.float32)))), .0, places=self.places_single - 2,
+            float(np.linalg.norm(np.abs(eigenvectors_single) - np.abs(np.asarray(self.ref_eigenvectors,
+            dtype=np.float32)))), .0, places=self.places_single - 2,
             msg="Single precision Eigenvectors do not match reference within tolerance"
         )
 
@@ -190,12 +192,14 @@ class KnownValues(unittest.TestCase):
 
         # Compare solutions
         self.assertAlmostEqual(
-            float(np.linalg.norm(solution_vectors_shifted - self.ref_solution_vectors_shifted)), .0, places=self.places_double,
+            float(np.linalg.norm(solution_vectors_shifted - self.ref_solution_vectors_shifted)),
+            .0, places=self.places_double,
             msg="Double precision Shifted linear system solutions do not match reference within tolerance"
         )
 
         self.assertAlmostEqual(
-            float(np.linalg.norm(solution_vectors_shifted_single - self.ref_solution_vectors_shifted)), .0, places=self.places_single ,
+            float(np.linalg.norm(solution_vectors_shifted_single - self.ref_solution_vectors_shifted)),
+            .0, places=self.places_single ,
             msg="Single precision Shifted linear system solutions do not match reference within tolerance"
         )
 
