@@ -71,7 +71,6 @@ def make_hdiag_det (fci, h1e, eri, norb, nelec):
     return direct_uhf.make_hdiag (unpack_h1e_ab (h1e), [eri, eri, eri], norb, nelec)
 
 def make_hdiag_csf (h1e, eri, norb, nelec, transformer, hdiag_det=None, max_memory=None):
-    m0 = lib.current_memory ()[0]
     smult = transformer.smult
     if hdiag_det is None:
         hdiag_det = make_hdiag_det (None, h1e, eri, norb, nelec)

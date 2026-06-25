@@ -54,10 +54,13 @@ def setUpModule():
     norb = m.mo_coeff.shape[1]
     nelec = (mol.nelectron//2, mol.nelectron//2)
     h1e = reduce(np.dot, (m.mo_coeff.T, m.get_hcore(), m.mo_coeff))
+    #h1e[:] = 0
     h1e_s = (2 * rng.random (h1e.shape)) - 1
     h1e_s += h1e_s.conj ().T
+    #h1e_s[:] = 1
     h1e = np.stack ([h1e+h1e_s, h1e-h1e_s], axis=0)
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
+    #g2e[:] = 0
     neleci = (mol.nelectron//2, mol.nelectron//2-1)
     sol = csf_solver (mol, smult=1)
 
@@ -96,7 +99,7 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_kernel(self):
         nel = (neleci, nelec)
         refs = [-8.934702919292933, -12.578019902416628, -8.879204010931936,
@@ -126,12 +129,12 @@ class KnownValues(unittest.TestCase):
                 hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
                 hdiag_ref = h2mat[smult-1].diagonal ()
                 t = sol.transformer
-                print ("smult:", smult, flush=True)
-                for i in range (len (hdiag)):
-                    print (i, t.printable_csfstring (i), hdiag[i], hdiag_ref[i], hdiag[i]-hdiag_ref[i], flush=True)
+                #print ("smult:", smult, flush=True)
+                #for i in range (len (hdiag)):
+                #    print (i, t.printable_csfstring (i), hdiag[i], hdiag_ref[i], hdiag[i]-hdiag_ref[i], flush=True)
                 self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,8):

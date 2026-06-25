@@ -145,9 +145,9 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
 {
     unsigned int twoS = _get_twoS_running (coupstr, 0, nspin);
     double szfac = _get_xdiag (coupstr, nspin, i, nspin);
-    //szfac *= sqrt (1.5);
+    szfac *= sqrt (1.5);
     // printf ("%d %d %f\n", twoM, twoS, szfac);
-    szfac *= twoM * .5;
+    szfac *= twoM; // WHY? UNCLEAR FACTOR OF 2 * .5;
     if (twoS > 0){
         szfac /= sqrt (twoS*(twoS+2)*.25);
     }
@@ -197,7 +197,7 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
         //printf ("xdiag = %f\n", xdiag);
     } else {
         // (I think you still need this normalization factor but I could be wrong
-        xdiag *= sqrt ((double) (twoS0 + 1));
+        // xdiag *= sqrt ((double) (twoS0 + 1));
     }
 
     // i+1, i+2, ... j-2, j-1
@@ -282,9 +282,9 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
 */
 const size_t nconf = ndoub * nsing;
 int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
-printf ("twoS, norb, twoM, nspin: %d, %d, %d, %d\n",
-        ncoup>0 ? _get_twoS_running (coupstrs[0], 0, _count_set_bits (sconfstrs[0])) : 0,
-        norb, twoM, _count_set_bits (sconfstrs[0]));
+//printf ("twoS, norb, twoM, nspin: %d, %d, %d, %d\n",
+//        ncoup>0 ? _get_twoS_running (coupstrs[0], 0, _count_set_bits (sconfstrs[0])) : 0,
+//        norb, twoM, _count_set_bits (sconfstrs[0]));
 #pragma omp parallel default(shared)
 {
 
@@ -333,10 +333,10 @@ printf ("twoS, norb, twoM, nspin: %d, %d, %d, %d\n",
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue; }
-            printf ("----- i = %d -----\n", i);
+            // printf ("----- i = %d -----\n", i);
             si = _get_spinindex (i, dconfstr, sconfstr);
             fac = _get_szfac (coupstrs[icoup], si, nspin, twoM);
-            printf ("szfac = %f\n", fac);
+            // printf ("szfac = %f\n", fac);
             hdiag_csf[icoupconf] += fac * h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
