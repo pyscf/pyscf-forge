@@ -122,6 +122,37 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     return twoS;
 }
 
+double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, unsigned int j5, unsigned int j6)
+{
+    /* Get Wigner 6j symbols where j4 is always 1/2
+       i.e., eqs 19 and 20 of Drake & Schlesinger
+       On input all js are multiplied by 2 */
+    unsigned int j;
+    int fac;
+    double num = 0.0;
+    unsigned int denom = 1;
+    // Switch around j5 = j3 + 1/2 case
+    if ((j5 == (j3+1)) && (j6 == (j2-1))){
+        j = j2;
+        j2 = j3;
+        j3 = j;
+        j = j5;
+        j5 = j6;
+        j6 = j;
+    }
+    fac = (j1+j2+j3 % 4 == 0) ? 1 : -1;
+    if (j5 != (j3-1)){ fac = 0; }
+    if (j6 == (j2+1)){
+        num = (double) ((j1+j3-j2) * (j1+j2-j3+2)) / 2;
+        denom = (j2+1) * (j2+2) * j3 * (j3+1);
+    } else if (j6 == (j2-1)){
+        num = (double) ((j1+j2+j3+2) * (j2+j3-j1)) / 2;
+        denom = j2 * (j2+1) * j3 * (j3+1);
+    }
+    num = fac * num / denom;
+    return num;
+}
+
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
 {
     /* Compute
