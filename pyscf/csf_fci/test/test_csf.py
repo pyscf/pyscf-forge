@@ -35,6 +35,8 @@ def setUpModule():
     mol = gto.Mole()
     mol.verbose = 0
     mol.output = None#"out_h2o"
+    # To test different norb, comment out lines below and uncomment
+    # the line skipping the kernel test
     mol.atom = [
         ['H', ( 1.,-1.    , 0.   )],
         ['H', ( 0.,-1.    ,-1.   )],
@@ -43,7 +45,8 @@ def setUpModule():
         ['H', ( 1.,-0.5   , 0.   )],
         ['H', ( 0., 1.    , 1.   )],
     ]
-    smult_lim = mol.natm+2
+    mol.spin = len (mol.atom) % 2
+    smult_lim = len (mol.atom) + 2
 
     mol.basis = {'H': 'sto-3g'}
     mol.build()
@@ -52,8 +55,10 @@ def setUpModule():
     m.conv_tol = 1e-15
     ehf = m.scf()
 
+    neleca = (mol.nelectron+1)//2 # round up
+
     norb = m.mo_coeff.shape[1]
-    nelec = (mol.nelectron//2, mol.nelectron//2)
+    nelec = (neleca, neleca)
     h1e = reduce(np.dot, (m.mo_coeff.T, m.get_hcore(), m.mo_coeff))
     #h1e[:] = 0
     h1e_s = (2 * rng.random (h1e.shape)) - 1
@@ -62,7 +67,7 @@ def setUpModule():
     h1e = np.stack ([h1e+h1e_s, h1e-h1e_s], axis=0)
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
     #g2e[:] = 0
-    neleci = (mol.nelectron//2, mol.nelectron//2-1)
+    neleci = (neleca, neleca-1)
     sol = csf_solver (mol, smult=1)
     nel = (neleci, nelec)
 
