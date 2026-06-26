@@ -128,7 +128,7 @@ class KnownValues(unittest.TestCase):
                     hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
                     hdiag_ref = get_h2mat_ref (ne, smult).diagonal ()
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
-                
+
 
     #@unittest.skip('debug')
     def test_pspace(self):
