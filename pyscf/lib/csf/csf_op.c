@@ -224,12 +224,12 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
 
     // i+1, i+2, ... j-2, j-1
     //
-    //     -1**[S(k) + S'(k+1) - 1/2]
+    //     -1**[S(k) + S'(k-1) - 1/2]
     //     *
-    //     sqrt[(2S(k) + 1)(2S'(k+1) + 1)]
+    //     sqrt[(2S(k) + 1)(2S'(k-1) + 1)]
     //     *
     //     { 1    S'(k)   S(k)    }
-    //     { 1/2  S(k+1)  S'(k+1) }
+    //     { 1/2  S(k-1)  S'(k-1) }
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
         twoS0 = _get_twoS_running (coupstr, k, nspin);
