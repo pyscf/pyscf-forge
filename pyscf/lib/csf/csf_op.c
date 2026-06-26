@@ -149,7 +149,7 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
         num = (double) ((j1+j2+j3+2) * (j2+j3-j1)) / 2;
         denom = j2 * (j2+1) * j3 * (j3+1);
     }
-    num = fac * num / denom;
+    num = fac * sqrt (num / denom);
     return num;
 }
 
