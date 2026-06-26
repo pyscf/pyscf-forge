@@ -82,17 +82,14 @@ unsigned int _get_spin (unsigned int i, uint64_t dconfstr, uint64_t sconfstr, ui
 
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
 {
-    //printf ("i = %d, dconfstr = %ld, sconfstr = %ld\n", i, dconfstr, sconfstr);
     unsigned int j = i;
     for (unsigned int k = 0; k < i; k++){
         if ((1ULL << k) & dconfstr){ j--; }
     }
-    //printf ("j = %d\n", j);
     i = j;
     for (unsigned int k = 0; k < i; k++){
         if (((1ULL << k) & sconfstr) == 0){ j--; }
     }
-    //printf ("j = %d\n", j);
     return j;
 }
 
@@ -111,7 +108,6 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     assert (nspin - i >= 0);
     uint64_t n = coupstr;
     unsigned int twoS = _count_set_bits (coupstr);
-    // printf ("twoS = %d, %d\n", nspin, twoS);
     assert (nspin >= twoS); // S >= 0
     twoS = (2*twoS) - nspin;
     // in range 0 < j <= i;
@@ -121,7 +117,6 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     // unset all bits i or more places from the edge
     n = coupstr ^ (coupstr & ((1ULL << (nspin-i)) - 1));
     n = _count_set_bits (n);
-    // printf ("set bits in range = %ld\n", n);
     assert (n <= i);
     twoS -= 2 * n;
     return twoS;
@@ -146,7 +141,6 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
     unsigned int twoS = _get_twoS_running (coupstr, 0, nspin);
     double szfac = _get_xdiag (coupstr, nspin, i, nspin);
     szfac *= sqrt (1.5);
-    // printf ("%d %d %f\n", twoM, twoS, szfac);
     szfac *= twoM; // WHY? UNCLEAR FACTOR OF 2 * .5;
     if (twoS > 0){
         szfac /= sqrt (twoS*(twoS+2)*.25);
@@ -164,13 +158,10 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
-    //printf ("coupstr = %ld\n", coupstr);
-    //printf ("i = %d, j = %d, nspin = %d\n", i, j, nspin);
     assert (i <= nspin);
     assert (j < nspin);
     i = nspin - i;
     j = nspin - j;
-    //printf ("redefined as i = %d, j = %d\n", i, j);
     assert (j>=i);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
@@ -178,10 +169,8 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     // i
     // We just skip this diagram when we are doing Sz, which corresponds to i == 0
     twoS0 = _get_twoS_running (coupstr, i, nspin);
-    //printf ("2S(%d) = %d\n", i, twoS0);
     if (i>0){
         twoS1 = _get_twoS_running (coupstr, i-1, nspin);
-        //printf ("2S(%d) = %d\n", i-1, twoS1);
 
         parity += twoS0 + twoS1 - 1; // graph signs
         parity += (2*twoS0 + 2); // Wigner 6j sign; the exponent is multiplied by 2
@@ -194,17 +183,12 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
         }
         rat *= twoS0 + 1; // normalization
         xdiag *= sqrt (rat);
-        //printf ("xdiag = %f\n", xdiag);
-    } else {
-        // (I think you still need this normalization factor but I could be wrong
-        // xdiag *= sqrt ((double) (twoS0 + 1));
     }
 
     // i+1, i+2, ... j-2, j-1
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
         twoS0 = _get_twoS_running (coupstr, k, nspin);
-        //printf ("2S(%d) = %d\n", k, twoS0);
         twoS = MIN (twoS0, twoS1);
 
         parity += twoS0 + twoS1 - 1; // graph signs
@@ -217,13 +201,11 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
         rat = sqrt (rat);
         rat /= ((twoS+1)*(twoS+2));
         xdiag *= rat;
-        //printf ("xdiag = %f\n", xdiag);
     }
     
     // j
     twoS1 = twoS0;
     twoS0 = _get_twoS_running (coupstr, j, nspin);
-    //printf ("2S(%d) = %d\n", j, twoS0);
 
     parity += twoS0 + twoS1 - 1; // graph signs
     parity += (2*twoS1 + 2); // Wigner 6j signs
@@ -236,15 +218,12 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     }
     rat *= twoS1+1; // normalization
     xdiag *= sqrt (rat);
-    // printf ("xdiag = %f\n", xdiag);
 
     // Final sign computation
-    //printf ("parity = %d\n", parity);
     assert ((parity % 2)==0);
     parity = parity / 2;
     if ((parity % 2) == 1){ xdiag = -xdiag; }
 
-    //abort();
     return xdiag;
 }
 
@@ -282,9 +261,6 @@ void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
 */
 const size_t nconf = ndoub * nsing;
 int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
-//printf ("twoS, norb, twoM, nspin: %d, %d, %d, %d\n",
-//        ncoup>0 ? _get_twoS_running (coupstrs[0], 0, _count_set_bits (sconfstrs[0])) : 0,
-//        norb, twoM, _count_set_bits (sconfstrs[0]));
 #pragma omp parallel default(shared)
 {
 
@@ -333,20 +309,15 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue; }
-            // printf ("----- i = %d -----\n", i);
             si = _get_spinindex (i, dconfstr, sconfstr);
             fac = _get_szfac (coupstrs[icoup], si, nspin, twoM);
-            // printf ("szfac = %f\n", fac);
             hdiag_csf[icoupconf] += fac * h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstr, sconfstr);
                 if (nj != 1){ continue; }
-                //printf ("----- j = %d -----\n", j);
                 sj = _get_spinindex (j, dconfstr, sconfstr);
-                //printf ("i = %d, j = %d, si = %d, sj = %d\n",i,j,si,sj);
                 fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
-                //printf ("fac(%d,%d) = %f\n", i, j, fac);
                 idx = idxi + j*norb*(norb+1);
                 hdiag_csf[icoupconf] -= fac * eri[idx];
             }
