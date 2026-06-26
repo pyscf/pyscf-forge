@@ -29,8 +29,8 @@ from pyscf.csf_fci import csf_solver
 from pyscf.csf_fci.csfstring import CSFTransformer
 
 def setUpModule():
-    global mol, m, h1e, g2e, sol, h2mat
-    global norb, nelec, neleci, rng
+    global mol, m, h1e, g2e, sol
+    global norb, nelec, neleci, rng, smult_lim
     rng = np.random.default_rng (1)
     mol = gto.Mole()
     mol.verbose = 0
@@ -43,6 +43,7 @@ def setUpModule():
         ['H', ( 1.,-0.5   , 0.   )],
         ['H', ( 0., 1.    , 1.   )],
     ]
+    smult_lim = mol.natm+2
 
     mol.basis = {'H': 'sto-3g'}
     mol.build()
@@ -63,39 +64,29 @@ def setUpModule():
     #g2e[:] = 0
     neleci = (mol.nelectron//2, mol.nelectron//2-1)
     sol = csf_solver (mol, smult=1)
-
-    h2eff = sol.absorb_h1e (h1e, g2e, norb, nelec, .5)
-    h2mat = np.zeros ((400,400))
-    for i in range (400):
-        c = np.zeros (400)
-        c[i] = 1.0
-        c = c.reshape (20,20)
-        h2mat[i,:] = sol.contract_2e (h2eff, c, norb, nelec).ravel ()
-    h2effi = sol.absorb_h1e (h1e, g2e, norb, neleci, .5)
-    h2mati = np.zeros ((300,300))
-    for i in range (300):
-        c = np.zeros (300)
-        c[i] = 1.0
-        c = c.reshape (20,15)
-        h2mati[i,:] = sol.contract_2e (h2effi, c, norb, neleci).ravel ()
-    h2mat = [h2mati, h2mat]
     nel = (neleci, nelec)
-    h2mat_csf = []
-    for smult in range (1,8):
-        h2mat_det = h2mat[smult % 2]
-        ne = nel[smult % 2]
-        t = CSFTransformer (norb, ne[0], ne[1], smult)
-        mat = np.zeros ((h2mat_det.shape[0], t.ncsf))
-        for i in range (h2mat_det.shape[0]):
-            mat[i,:] = t.vec_det2csf (h2mat_det[i,:], normalize=False)
-        h2mat_csf.append (np.zeros ((t.ncsf,t.ncsf)))
-        for i in range (t.ncsf):
-            h2mat_csf[-1][:,i] = t.vec_det2csf (mat[:,i], normalize=False)
-    h2mat = h2mat_csf
+
+def get_h2mat_ref (ne, smult):
+    t = CSFTransformer (norb, ne[0], ne[1], smult)
+    h2eff = sol.absorb_h1e (h1e, g2e, norb, ne, .5)
+    ndet = t.ndeta*t.ndetb
+    h2mat_det = np.zeros ((ndet, ndet))
+    for i in range (ndet):
+        c = np.zeros (ndet)
+        c[i] = 1.0
+        c = c.reshape (t.ndeta,t.ndetb)
+        h2mat_det[i,:] = sol.contract_2e (h2eff, c, norb, ne).ravel ()
+    mat = np.zeros ((h2mat_det.shape[0], t.ncsf))
+    for i in range (h2mat_det.shape[0]):
+        mat[i,:] = t.vec_det2csf (h2mat_det[i,:], normalize=False)
+    h2mat_csf = np.zeros ((t.ncsf,t.ncsf))
+    for i in range (t.ncsf):
+        h2mat_csf[:,i] = t.vec_det2csf (mat[:,i], normalize=False)
+    return h2mat_csf
 
 def tearDownModule():
-    global mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci, rng
-    del mol, m, h1e, g2e, sol, h2mat, norb, nelec, neleci, rng
+    global mol, m, h1e, g2e, sol, norb, nelec, neleci, rng, smult_lim
+    del mol, m, h1e, g2e, sol, norb, nelec, neleci, rng, smult_lim
 
 class KnownValues(unittest.TestCase):
 
@@ -113,7 +104,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
         sol.davidson_only = True
-        for smult in range (1,8):
+        for smult in range (1,smult_lim):
             with self.subTest ("davidson only", smult=smult):
                 ne = nel[smult % 2]
                 e, ci = sol.kernel (h1e, g2e, norb, ne, smult=smult)
@@ -123,29 +114,25 @@ class KnownValues(unittest.TestCase):
 
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
-        for smult in range (1,8):
+        for smult in range (1,smult_lim):
             n = sum (nel[smult % 2])
             s2 = smult - 1
             for m in range (-s2, s2+1, 2):
                 ne = [(n+m) // 2, (n-m) // 2]
                 with self.subTest (smult=smult, m=m):
                     hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
-                    hdiag_ref = h2mat[smult-1].diagonal ()
-                    #t = sol.transformer
-                    #print ("smult:", smult, flush=True)
-                    #for i in range (len (hdiag)):
-                    #    print (i, t.printable_csfstring (i), hdiag[i], hdiag_ref[i], hdiag[i]-hdiag_ref[i], flush=True)
+                    hdiag_ref = get_h2mat_ref (ne, smult).diagonal ()
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
                 
 
     #@unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
-        for smult in range (1,8):
+        for smult in range (1,smult_lim):
             with self.subTest (smult=smult):
                 ne = nel[smult % 2]
                 addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
-                h0_ref = h2mat[smult-1][addr,:][:,addr]
+                h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
