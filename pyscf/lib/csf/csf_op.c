@@ -167,6 +167,12 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     // through nspin inclusively.
 
     // i
+    //     -1**[S(i) + S'(i-1) - 1/2]
+    //     *
+    //     sqrt[2S'(i) + 1]
+    //     *
+    //     { S'(i)  S(i)  1      }
+    //     { 1/2    1/2   S(i-1) }
     // We just skip this diagram when we are doing Sz, which corresponds to i == 0
     twoS0 = _get_twoS_running (coupstr, i, nspin);
     if (i>0){
@@ -186,6 +192,13 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     }
 
     // i+1, i+2, ... j-2, j-1
+    //
+    //     -1**[S(k) + S'(k+1) - 1/2]
+    //     *
+    //     sqrt[(2S(k) + 1)(2S'(k+1) + 1)]
+    //     *
+    //     { 1    S'(k)   S(k)    }
+    //     { 1/2  S(k+1)  S'(k+1) }
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
         twoS0 = _get_twoS_running (coupstr, k, nspin);
@@ -204,6 +217,13 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     }
     
     // j
+    //
+    //     -1**[S'(j-1) + S(j) - 1/2]
+    //     *
+    //     sqrt[2S(j-1) + 1]
+    //     *
+    //     { S'(j-1)  S(j-1)  1    }
+    //     { 1/2      1/2     S(j) }
     twoS1 = twoS0;
     twoS0 = _get_twoS_running (coupstr, j, nspin);
 
