@@ -124,15 +124,19 @@ class KnownValues(unittest.TestCase):
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,8):
-            with self.subTest (smult=smult):
-                ne = nel[smult % 2]
-                hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
-                hdiag_ref = h2mat[smult-1].diagonal ()
-                t = sol.transformer
-                #print ("smult:", smult, flush=True)
-                #for i in range (len (hdiag)):
-                #    print (i, t.printable_csfstring (i), hdiag[i], hdiag_ref[i], hdiag[i]-hdiag_ref[i], flush=True)
-                self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
+            n = sum (nel[smult % 2])
+            s2 = smult - 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
+                    hdiag_ref = h2mat[smult-1].diagonal ()
+                    #t = sol.transformer
+                    #print ("smult:", smult, flush=True)
+                    #for i in range (len (hdiag)):
+                    #    print (i, t.printable_csfstring (i), hdiag[i], hdiag_ref[i], hdiag[i]-hdiag_ref[i], flush=True)
+                    self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
+                
 
     #@unittest.skip('debug')
     def test_pspace(self):
