@@ -197,77 +197,88 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
     return szfac;
 }
 
-double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
+double _get_xdiag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned int nspin)
+{
+    return _get_x (coupstr, coupstr, t, p, nspin);
+}
+
+double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int p, unsigned int nspin)
 {
     double xdiag = 1.0;
-    unsigned int twoS1, twoS0;
+    unsigned int twoS1k, twoS0k, twoS1b, twoS0b;
     int parity = 0;
-    unsigned int k;
+    unsigned int i;
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
-    assert (i <= nspin);
-    assert (j < nspin);
-    i = nspin - i;
-    j = nspin - j;
-    assert (j>=i);
+    assert (t <= nspin);
+    assert (p < nspin);
+    t = nspin - t;
+    p = nspin - p;
+    assert (p>=t);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
 
-    // i
-    //     -1**[S(i) + S'(i-1) - 1/2]
+    // t
+    //     -1**[S(t) + S'(t-1) - 1/2]
     //     *
-    //     sqrt[2S'(i) + 1]
+    //     sqrt[2S'(t) + 1]
     //     *
-    //     { S'(i)  S(i)  1      }
-    //     { 1/2    1/2   S(i-1) }
+    //     { S'(t)  S(t)  1      }
+    //     { 1/2    1/2   S(t-1) }
     // We just skip this diagram when we are doing Sz, which corresponds to i == 0
-    twoS0 = _get_twoS_running (coupstr, i, nspin);
-    if (i>0){
-        twoS1 = _get_twoS_running (coupstr, i-1, nspin);
+    twoS0k = _get_twoS_running (ketstr, t, nspin);
+    twoS0b = _get_twoS_running (brastr, t, nspin);
+    if (t>0){
+        twoS1k = _get_twoS_running (ketstr, t-1, nspin);
+        twoS1b = _get_twoS_running (brastr, t-1, nspin);
 
-        parity += twoS0 + twoS1 - 1; // graph signs
+        parity += twoS0k + twoS1b - 1; // graph signs
         parity = parity % 4; // remember everything is *2 until the very end
 
-        xdiag *= _get_wigner_6j_j41h (twoS0, twoS0, 2, 1, twoS1);
-        xdiag *= sqrt ((double) (twoS0 + 1)); // normalization
+        xdiag *= _get_wigner_6j_j41h (twoS0b, twoS0k, 2, 1, twoS1k);
+        xdiag *= sqrt ((double) (twoS0b + 1)); // normalization
     }
 
-    // i+1, i+2, ... j-2, j-1
+    // t+1, t+2, ... p-2, p-1
     //
-    //     -1**[S(k) + S'(k-1) - 1/2]
+    //     -1**[S(i) + S'(i-1) - 1/2]
     //     *
-    //     sqrt[(2S(k) + 1)(2S'(k-1) + 1)]
+    //     sqrt[(2S(i) + 1)(2S'(i-1) + 1)]
     //     *
-    //     { 1    S'(k)   S(k)    }
-    //     { 1/2  S(k-1)  S'(k-1) }
-    for (k=i+1; k < j; k++){
-        twoS1 = twoS0;
-        twoS0 = _get_twoS_running (coupstr, k, nspin);
+    //     { 1    S'(i)   S(i)    }
+    //     { 1/2  S(i-1)  S'(i-1) }
+    for (i=t+1; i < p; i++){
+        twoS1b = twoS0b;
+        twoS1k = twoS0k;
+        twoS0b = _get_twoS_running (brastr, i, nspin);
+        twoS0k = _get_twoS_running (ketstr, i, nspin);
 
-        parity += twoS0 + twoS1 - 1; // graph signs
+        parity += twoS0k + twoS1b - 1; // graph signs
         parity = parity % 4;
 
-        xdiag *= _get_wigner_6j_j41h (2, twoS0, twoS0, twoS1, twoS1);
-        xdiag *= sqrt ((double) ((twoS0+1)*(twoS1+1))); // normalization
+        xdiag *= _get_wigner_6j_j41h (2, twoS0b, twoS0k, twoS1k, twoS1b);
+        xdiag *= sqrt ((double) ((twoS0k+1)*(twoS1b+1))); // normalization
     }
     
-    // j
+    // p
     //
-    //     -1**[S'(j-1) + S(j) - 1/2]
+    //     -1**[S'(p-1) + S(p) - 1/2]
     //     *
-    //     sqrt[2S(j-1) + 1]
+    //     sqrt[2S(p-1) + 1]
     //     *
-    //     { S'(j-1)  S(j-1)  1    }
-    //     { 1/2      1/2     S(j) }
-    twoS1 = twoS0;
-    twoS0 = _get_twoS_running (coupstr, j, nspin);
+    //     { S'(p-1)  S(p-1)  1    }
+    //     { 1/2      1/2     S(p) }
+    twoS1b = twoS0b;
+    twoS1k = twoS0k;
+    twoS0b = _get_twoS_running (brastr, p, nspin);
+    twoS0k = _get_twoS_running (ketstr, p, nspin);
 
-    parity += twoS0 + twoS1 - 1; // graph signs
+    parity += twoS0k + twoS1b - 1; // graph signs
     parity = parity % 4;
 
-    xdiag *= _get_wigner_6j_j41h (twoS1, twoS1, 2, 1, twoS0);
-    xdiag *= sqrt ((double) (twoS1+1)); // normalization
+    xdiag *= _get_wigner_6j_j41h (twoS1b, twoS1k, 2, 1, twoS0k);
+    xdiag *= sqrt ((double) (twoS1k+1)); // normalization
 
     // Final sign computation
     assert ((parity % 2)==0);
