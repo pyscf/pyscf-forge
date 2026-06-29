@@ -156,7 +156,7 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
         j2 = j;
     }
     if (((j5+1) != j3) || (abs (j2-j6) != 1)){
-        return 0.0
+        return 0.0;
     }
     fac = (j1+j2+j3 % 4 == 0) ? 1 : -1;
     if (j5 != (j3-1)){ fac = 0; }
@@ -200,7 +200,7 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
 double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
 {
     double xdiag = 1.0;
-    unsigned int twoS1, twoS0, twoS;
+    unsigned int twoS1, twoS0;
     int parity = 0;
     unsigned int k;
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
