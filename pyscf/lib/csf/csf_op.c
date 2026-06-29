@@ -201,7 +201,6 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
 {
     double xdiag = 1.0;
     unsigned int twoS1, twoS0, twoS;
-    double rat;
     int parity = 0;
     unsigned int k;
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
@@ -228,16 +227,10 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
         twoS1 = _get_twoS_running (coupstr, i-1, nspin);
 
         parity += twoS0 + twoS1 - 1; // graph signs
-        parity += (2*twoS0 + 2); // Wigner 6j sign; the exponent is multiplied by 2
         parity = parity % 4; // remember everything is *2 until the very end
 
-        if (twoS1 > twoS0){ // S(i-1) = S(i) + 1/2
-            rat = ((double) (twoS0)) / ((twoS0+1) * (twoS0+2) * 6);
-        } else { // S(i-1) = S(i) - 1/2
-            rat = ((double) (twoS0+2)) / (twoS0 * (twoS0+1) * 6);
-        }
-        rat *= twoS0 + 1; // normalization
-        xdiag *= sqrt (rat);
+        xdiag *= _get_wigner_6j_j41h (twoS0, twoS0, 2, 1, twoS1);
+        xdiag *= sqrt ((double) (twoS0 + 1)); // normalization
     }
 
     // i+1, i+2, ... j-2, j-1
@@ -251,18 +244,12 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     for (k=i+1; k < j; k++){
         twoS1 = twoS0;
         twoS0 = _get_twoS_running (coupstr, k, nspin);
-        twoS = MIN (twoS0, twoS1);
 
         parity += twoS0 + twoS1 - 1; // graph signs
-        parity += 2*twoS; // Wigner 6j sign
         parity = parity % 4;
 
-        rat = ((double) ((twoS+3) * twoS));
-        rat *= twoS0+1; // normalization
-        rat *= twoS1+1; // normalization
-        rat = sqrt (rat);
-        rat /= ((twoS+1)*(twoS+2));
-        xdiag *= rat;
+        xdiag *= _get_wigner_6j_j41h (2, twoS0, twoS0, twoS1, twoS1);
+        xdiag *= sqrt ((double) ((twoS0+1)*(twoS1+1))); // normalization
     }
     
     // j
@@ -277,16 +264,10 @@ double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned in
     twoS0 = _get_twoS_running (coupstr, j, nspin);
 
     parity += twoS0 + twoS1 - 1; // graph signs
-    parity += (2*twoS1 + 2); // Wigner 6j signs
     parity = parity % 4;
 
-    if (twoS1 > twoS0){ // S(i-1) = S(i) + 1/2
-        rat = ((double) (twoS1+2)) / (twoS1 * (twoS1+1) * 6);
-    } else { // S(i-1) = S(i) - 1/2
-        rat = ((double) (twoS1)) / ((twoS1+1) * (twoS1+2) * 6);
-    }
-    rat *= twoS1+1; // normalization
-    xdiag *= sqrt (rat);
+    xdiag *= _get_wigner_6j_j41h (twoS1, twoS1, 2, 1, twoS0);
+    xdiag *= sqrt ((double) (twoS1+1)); // normalization
 
     // Final sign computation
     assert ((parity % 2)==0);
