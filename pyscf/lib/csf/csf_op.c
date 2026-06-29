@@ -131,14 +131,32 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
     int fac;
     double num = 0.0;
     unsigned int denom = 1;
-    // Switch around j5 = j3 + 1/2 case
-    if ((j5 == (j3+1)) && (j6 == (j2-1))){
-        j = j2;
-        j2 = j3;
+    // Permute 3rd column if necessary
+    if ((abs (j2-j6) != 1) || (abs (j3-j5) != 1)){
+        j = j6;
+        j6 = j3;
         j3 = j;
+    }
+    // Swap second and 3rd columns if necessary
+    if (((j5+1) != j3) && ((j6+1) == j2)){
+        j = j2;
+        j3 = j2;
+        j2 = j;
         j = j5;
         j5 = j6;
         j6 = j;
+    }
+    // Last try: permute 2nd and 3rd columns. I need to keep track of j5 and j6 for the final check.
+    if (((j5+1) != j3)){
+        j = j6;
+        j6 = j3;
+        j3 = j;
+        j = j5;
+        j5 = j2;
+        j2 = j;
+    }
+    if (((j5+1) != j3) || (abs (j2-j6) != 1)){
+        return 0.0
     }
     fac = (j1+j2+j3 % 4 == 0) ? 1 : -1;
     if (j5 != (j3-1)){ fac = 0; }
