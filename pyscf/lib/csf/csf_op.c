@@ -199,10 +199,11 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
 
 double _get_xdiag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned int nspin)
 {
-    return _get_x (coupstr, coupstr, t, p, nspin);
+    return _get_x (coupstr, coupstr, t, t, p, p, nspin);
 }
 
-double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int p, unsigned int nspin)
+double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q, unsigned int r,
+               unsigned int p, unsigned int nspin)
 {
     double xdiag = 1.0;
     unsigned int twoS1k, twoS0k, twoS1b, twoS0b;
@@ -212,12 +213,21 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int p,
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
     assert (t <= nspin);
+    assert (q <= nspin);
+    assert (r < nspin);
     assert (p < nspin);
     t = nspin - t;
+    q = nspin - q;
+    r = nspin - r;
     p = nspin - p;
-    assert (p>=t);
+    assert (p>=r);
+    assert (r>=q);
+    assert (q>=t);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
+
+    // TEMPORARY: t != q not yet implemented
+    assert (q==t);
 
     // t
     //     -1**[S(t) + S'(t-1) - 1/2]
@@ -248,7 +258,7 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int p,
     //     *
     //     { 1    S'(i)   S(i)    }
     //     { 1/2  S(i-1)  S'(i-1) }
-    for (i=t+1; i < p; i++){
+    for (i=q+1; i < r; i++){
         twoS1b = twoS0b;
         twoS1k = twoS0k;
         twoS0b = _get_twoS_running (brastr, i, nspin);
@@ -260,6 +270,9 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int p,
         xdiag *= _get_wigner_6j_j41h (2, twoS0b, twoS0k, twoS1k, twoS1b);
         xdiag *= sqrt ((double) ((twoS0k+1)*(twoS1b+1))); // normalization
     }
+
+    // TEMPORARY: p != r not yet implemented
+    assert (p==r);
     
     // p
     //
