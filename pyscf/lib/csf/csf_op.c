@@ -140,8 +140,8 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
     // Swap second and 3rd columns if necessary
     if (((j5+1) != j3) && ((j6+1) == j2)){
         j = j2;
-        j3 = j2;
-        j2 = j;
+        j2 = j3;
+        j3 = j;
         j = j5;
         j5 = j6;
         j6 = j;
@@ -158,13 +158,13 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
     if (((j5+1) != j3) || (abs (j2-j6) != 1)){
         return 0.0;
     }
-    fac = (j1+j2+j3 % 4 == 0) ? 1 : -1;
-    if (j5 != (j3-1)){ fac = 0; }
+    assert ((j1+j2+j3) % 2 == 0);
+    fac = ((j1+j2+j3) % 4 == 0) ? 1 : -1;
     if (j6 == (j2+1)){
-        num = (double) ((j1+j3-j2) * (j1+j2-j3+2)) / 2;
+        num = ((double) ((j1+j3-j2) * (j1+j2-j3+2))) * .25;
         denom = (j2+1) * (j2+2) * j3 * (j3+1);
-    } else if (j6 == (j2-1)){
-        num = (double) ((j1+j2+j3+2) * (j2+j3-j1)) / 2;
+    } else if ((j6+1) == j2){
+        num = ((double) ((j1+j2+j3+2) * (j2+j3-j1))) * .25;
         denom = j2 * (j2+1) * j3 * (j3+1);
     }
     num = fac * sqrt (num / denom);
