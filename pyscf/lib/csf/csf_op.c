@@ -189,7 +189,16 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
 {
     unsigned int twoS = _get_twoS_running (coupstr, 0, nspin);
     double szfac = _get_xdiag (coupstr, nspin, i, nspin);
+    // Sigma_z = ( 1/2  1  1/2 ) * S_z
+    //           ( m    0   -m )
+    //         = sqrt (2/3) * S_z
+    // S_z = sqrt (3/2) * Sigma_z
     szfac *= sqrt (1.5);
+
+    //     -1**[S-M]
+    //     *
+    //     ( S  1  S )
+    //     ( M  0 -M )
     szfac *= twoM; // WHY? UNCLEAR FACTOR OF 2 * .5;
     if (twoS > 0){
         szfac /= sqrt (twoS*(twoS+2)*.25);
