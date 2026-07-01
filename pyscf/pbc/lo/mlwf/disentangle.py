@@ -25,9 +25,9 @@ eigenvectors. (Souza, Marzari & Vanderbilt, PRB 65, 035109 (2001).)
 
 import numpy
 
-from pyscf.pbc.lo.projection import lowdin_orthonormalize
-from pyscf.pbc.lo.spread import spread_decomposition
-from pyscf.pbc.lo.wannierise import rotate_mmn
+from pyscf.pbc.lo.mlwf.projection import lowdin_orthonormalize
+from pyscf.pbc.lo.mlwf.spread import spread_decomposition
+from pyscf.pbc.lo.mlwf.wannierise import rotate_mmn
 
 
 def disentangle(M_raw, A, bvectors, *,

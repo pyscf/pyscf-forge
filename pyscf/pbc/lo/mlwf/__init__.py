@@ -14,9 +14,12 @@
 # limitations under the License.
 
 '''
-Periodic localization routines.
+Maximally localized Wannier functions for periodic systems.
+
+MV 1997 + SMV 2001 disentanglement, built natively on top of PySCF
+k-point mean-field objects.
 '''
 
-from pyscf.pbc.lo import mlwf
+from pyscf.pbc.lo.mlwf.driver import kernel
 
-__all__ = ['mlwf']
+__all__ = ['kernel']

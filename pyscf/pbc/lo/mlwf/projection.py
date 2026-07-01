@@ -60,7 +60,7 @@ def compute_amn(kmf, proj_guess, *, spin=0, band_indices=None,
         A : (nk, n_bands, n_wann) complex128, A[k, m, n] = <psi_mk | g_n>.
     '''
     from pyscf.pbc.dft import numint as pbc_numint
-    from pyscf.pbc.lo.overlap import _mo_for_spin
+    from pyscf.pbc.lo.mlwf.overlap import _mo_for_spin
 
     cell = kmf.cell
     kpts = numpy.asarray(kmf.kpts)

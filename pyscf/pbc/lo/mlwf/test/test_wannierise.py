@@ -18,11 +18,11 @@ import pytest
 from scipy.linalg import expm
 
 from pyscf.pbc import gto, scf
-from pyscf.pbc.lo.bvectors import find_bvectors
-from pyscf.pbc.lo.overlap import compute_mmn
-from pyscf.pbc.lo.projection import compute_amn, lowdin_orthonormalize
-from pyscf.pbc.lo.spread import spread_decomposition
-from pyscf.pbc.lo.wannierise import (
+from pyscf.pbc.lo.mlwf.bvectors import find_bvectors
+from pyscf.pbc.lo.mlwf.overlap import compute_mmn
+from pyscf.pbc.lo.mlwf.projection import compute_amn, lowdin_orthonormalize
+from pyscf.pbc.lo.mlwf.spread import spread_decomposition
+from pyscf.pbc.lo.mlwf.wannierise import (
     wannierise, rotate_mmn, _spread_gradient, _step_unitary,
 )
 
@@ -185,7 +185,7 @@ def test_wannierise_preserves_omega_i_on_rectangular_U(kmf_h2):
     gauge (Omega_D + Omega_OD). Omega_I is determined by the chosen subspace
     and must stay constant across iterations.
     '''
-    from pyscf.pbc.lo.spread import spread_decomposition
+    from pyscf.pbc.lo.mlwf.spread import spread_decomposition
     bv = find_bvectors(kmf_h2.cell, kmf_h2.kpts)
     _bvecs, _weights, kpb_idx, _kpb_g = bv
     M = compute_mmn(kmf_h2, bv)

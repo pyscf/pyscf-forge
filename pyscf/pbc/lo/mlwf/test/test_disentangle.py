@@ -17,11 +17,11 @@ import numpy
 import pytest
 
 from pyscf.pbc import gto, scf
-from pyscf.pbc.lo.bvectors import find_bvectors
-from pyscf.pbc.lo.overlap import compute_mmn
-from pyscf.pbc.lo.projection import compute_amn, lowdin_orthonormalize
-from pyscf.pbc.lo.disentangle import disentangle
-from pyscf.pbc.lo.wannierise import wannierise
+from pyscf.pbc.lo.mlwf.bvectors import find_bvectors
+from pyscf.pbc.lo.mlwf.overlap import compute_mmn
+from pyscf.pbc.lo.mlwf.projection import compute_amn, lowdin_orthonormalize
+from pyscf.pbc.lo.mlwf.disentangle import disentangle
+from pyscf.pbc.lo.mlwf.wannierise import wannierise
 
 
 @pytest.fixture(scope='module')

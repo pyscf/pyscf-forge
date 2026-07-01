@@ -19,7 +19,7 @@ import pytest
 from pyscf import dft
 from pyscf.pbc import gto, scf
 from pyscf.pbc.dft import numint as pbc_numint
-from pyscf.pbc.lo.projection import (
+from pyscf.pbc.lo.mlwf.projection import (
     compute_amn,
     lowdin_orthonormalize,
     _evaluate_trial,

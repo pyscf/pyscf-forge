@@ -17,7 +17,7 @@ import numpy
 import pytest
 
 from pyscf.pbc import gto
-from pyscf.pbc.lo.bvectors import find_bvectors
+from pyscf.pbc.lo.mlwf.bvectors import find_bvectors
 
 
 def _cubic_cell(a_bohr=4.0):

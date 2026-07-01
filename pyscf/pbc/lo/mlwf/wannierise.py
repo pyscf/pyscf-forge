@@ -25,7 +25,7 @@ Omega_OD within that subspace.
 import numpy
 from scipy.linalg import expm
 
-from pyscf.pbc.lo.spread import spread_decomposition
+from pyscf.pbc.lo.mlwf.spread import spread_decomposition
 
 
 def wannierise(M_raw, U_init, bvectors, *,

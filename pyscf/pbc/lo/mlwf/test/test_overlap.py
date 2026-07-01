@@ -18,8 +18,8 @@ import pytest
 
 from pyscf.pbc import gto, scf
 from pyscf.pbc.df import ft_ao
-from pyscf.pbc.lo.bvectors import find_bvectors
-from pyscf.pbc.lo.overlap import compute_mmn
+from pyscf.pbc.lo.mlwf.bvectors import find_bvectors
+from pyscf.pbc.lo.mlwf.overlap import compute_mmn
 
 
 @pytest.fixture(scope='module')

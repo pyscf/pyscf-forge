@@ -17,7 +17,16 @@ import numpy
 import pytest
 
 from pyscf.pbc import gto, scf
-from pyscf.pbc.lo import kernel
+from pyscf.pbc.lo import mlwf
+
+
+def _assert_mo_orthonormal(kmf, mo_coeff):
+    s_kpts = kmf.get_ovlp()
+    for ki, coeff in enumerate(mo_coeff):
+        s = numpy.asarray(s_kpts[ki])
+        gram = coeff.conj().T @ s @ coeff
+        numpy.testing.assert_allclose(
+            gram, numpy.eye(coeff.shape[1]), atol=1e-10)
 
 
 @pytest.fixture(scope='module')
@@ -55,14 +64,12 @@ def kmf_h2():
 def test_kernel_isolated_single_band(kmf_he):
     '''He / sto-3g: n_bands = n_wann = 1, trivial isolated-band case.'''
     proj = [{'center': (0.0, 0.0, 0.0), 'l': 0, 'm': 0, 'zeta': 1.5}]
-    U, centers, spreads, oi, od, ood, converged = kernel(
+    mo_coeff, centers, spreads, oi, od, ood, converged = mlwf.kernel(
         kmf_he, proj, conv_tol=1e-12)
-    assert U.shape == (len(kmf_he.kpts), 1, 1)
+    assert mo_coeff.shape == (len(kmf_he.kpts), kmf_he.cell.nao_nr(), 1)
     assert centers.shape == (1, 3)
     assert spreads.shape == (1,)
-    for ki in range(U.shape[0]):
-        gram = U[ki].conj().T @ U[ki]
-        numpy.testing.assert_allclose(gram, numpy.eye(1), atol=1e-10)
+    _assert_mo_orthonormal(kmf_he, mo_coeff)
     numpy.testing.assert_allclose(oi + od + ood, spreads.sum(), atol=1e-9)
     assert converged
 
@@ -73,14 +80,12 @@ def test_kernel_isolated_two_bands(kmf_h2):
         {'center': (0.0, 0.0, 0.0), 'l': 0, 'm': 0, 'zeta': 1.0},
         {'center': (0.0, 0.0, 1.5), 'l': 0, 'm': 0, 'zeta': 1.0},
     ]
-    U, centers, spreads, oi, od, ood, _ = kernel(
+    mo_coeff, centers, spreads, oi, od, ood, _ = mlwf.kernel(
         kmf_h2, proj, max_iter=80, conv_tol=1e-12)
-    assert U.shape == (len(kmf_h2.kpts), 2, 2)
+    assert mo_coeff.shape == (len(kmf_h2.kpts), kmf_h2.cell.nao_nr(), 2)
     assert centers.shape == (2, 3)
     assert spreads.shape == (2,)
-    for ki in range(U.shape[0]):
-        gram = U[ki].conj().T @ U[ki]
-        numpy.testing.assert_allclose(gram, numpy.eye(2), atol=1e-10)
+    _assert_mo_orthonormal(kmf_h2, mo_coeff)
     numpy.testing.assert_allclose(oi + od + ood, spreads.sum(), atol=1e-9)
 
 
@@ -88,25 +93,23 @@ def test_kernel_entangled_with_dis_win(kmf_h2):
     '''H2 sto-3g with dis_win covering both bands -> disentangle 2 -> 1.'''
     proj = [{'center': (0.0, 0.0, 0.75), 'l': 0, 'm': 0, 'zeta': 1.0}]
     # Generous outer window that includes both H2 MOs at every k.
-    U, _c, _s, _oi, _od, _ood, _ = kernel(
+    mo_coeff, _c, _s, _oi, _od, _ood, _ = mlwf.kernel(
         kmf_h2, proj, dis_win=(-5.0, 5.0),
         dis_max_iter=300, conv_tol=1e-12)
-    assert U.shape == (len(kmf_h2.kpts), 2, 1)
-    for ki in range(U.shape[0]):
-        gram = U[ki].conj().T @ U[ki]
-        numpy.testing.assert_allclose(gram, numpy.eye(1), atol=1e-10)
+    assert mo_coeff.shape == (len(kmf_h2.kpts), kmf_h2.cell.nao_nr(), 1)
+    _assert_mo_orthonormal(kmf_h2, mo_coeff)
 
 
 def test_kernel_requires_matching_n_bands_without_dis_win(kmf_h2):
     '''Passing fewer projections than bands without dis_win is an error.'''
     proj = [{'center': (0.0, 0.0, 0.75), 'l': 0, 'm': 0, 'zeta': 1.0}]
     with pytest.raises(ValueError, match='dis_win=None'):
-        kernel(kmf_h2, proj)
+        mlwf.kernel(kmf_h2, proj)
 
 
 def test_kernel_rejects_empty_proj(kmf_he):
     with pytest.raises(ValueError, match='empty'):
-        kernel(kmf_he, [])
+        mlwf.kernel(kmf_he, [])
 
 
 def test_kernel_rejects_single_kpoint():
@@ -123,19 +126,19 @@ def test_kernel_rejects_single_kpoint():
     mf.kernel()
     proj = [{'center': (0.0, 0.0, 0.0), 'l': 0, 'm': 0, 'zeta': 1.5}]
     with pytest.raises(ValueError, match='at least 2 k-points'):
-        kernel(mf, proj)
+        mlwf.kernel(mf, proj)
 
 
 def test_kernel_dis_froz_not_implemented(kmf_h2):
     proj = [{'center': (0.0, 0.0, 0.75), 'l': 0, 'm': 0, 'zeta': 1.0}]
     with pytest.raises(NotImplementedError, match='dis_froz'):
-        kernel(kmf_h2, proj, dis_win=(-5.0, 5.0), dis_froz=(-2.0, 2.0))
+        mlwf.kernel(kmf_h2, proj, dis_win=(-5.0, 5.0), dis_froz=(-2.0, 2.0))
 
 
 def test_kernel_empty_dis_win(kmf_h2):
     proj = [{'center': (0.0, 0.0, 0.75), 'l': 0, 'm': 0, 'zeta': 1.0}]
     with pytest.raises(ValueError, match='empty'):
-        kernel(kmf_h2, proj, dis_win=(2.0, 1.0))
+        mlwf.kernel(kmf_h2, proj, dis_win=(2.0, 1.0))
 
 
 def test_kernel_dis_win_without_enough_bands(kmf_he):
@@ -146,4 +149,4 @@ def test_kernel_dis_win_without_enough_bands(kmf_he):
         {'center': (0.0, 0.0, 0.0), 'l': 0, 'm': 0, 'zeta': 1.5},
     ]
     with pytest.raises(ValueError, match='selects only'):
-        kernel(kmf_he, proj, dis_win=(-5.0, 5.0))
+        mlwf.kernel(kmf_he, proj, dis_win=(-5.0, 5.0))

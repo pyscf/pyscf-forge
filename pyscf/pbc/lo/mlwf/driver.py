@@ -51,16 +51,17 @@ def kernel(kmf, proj_guess, *, spin=0,
             on the total spread change between iterations, in Bohr**2.
         verbose : currently unused. Reserved for future logger hookup.
 
-    Returns (U, centers, spreads, omega_i, omega_d, omega_od, converged).
+    Returns (mo_coeff, centers, spreads, omega_i, omega_d, omega_od, converged).
     The converged flag is the AND of the disentangle and wannierise
-    convergence flags. U is (nk, n_bands, n_wann); centers in Bohr,
-    spreads in Bohr**2.
+    convergence flags. mo_coeff is the localized coefficient array for the
+    selected spin channel, with shape (nk, nao, n_wann). Centers are in Bohr
+    and spreads are in Bohr**2.
     '''
-    from pyscf.pbc.lo.bvectors import find_bvectors
-    from pyscf.pbc.lo.overlap import compute_mmn, _mo_for_spin
-    from pyscf.pbc.lo.projection import compute_amn
-    from pyscf.pbc.lo.disentangle import disentangle
-    from pyscf.pbc.lo.wannierise import wannierise
+    from pyscf.pbc.lo.mlwf.bvectors import find_bvectors
+    from pyscf.pbc.lo.mlwf.overlap import compute_mmn, _mo_for_spin
+    from pyscf.pbc.lo.mlwf.projection import compute_amn
+    from pyscf.pbc.lo.mlwf.disentangle import disentangle
+    from pyscf.pbc.lo.mlwf.wannierise import wannierise
 
     if dis_froz is not None:
         raise NotImplementedError(
@@ -100,7 +101,22 @@ def kernel(kmf, proj_guess, *, spin=0,
         M_raw, U_dis, bv, max_iter=max_iter, conv_tol=conv_tol)
 
     converged = bool(dis_converged and wan_converged)
-    return U, centers, spreads, omega_i, omega_d, omega_od, converged
+    mo_coeff_loc = _rotate_mo_coeff(mo_coeff, U, band_indices)
+    return mo_coeff_loc, centers, spreads, omega_i, omega_d, omega_od, converged
+
+
+def _rotate_mo_coeff(mo_coeff, U, band_indices):
+    '''Rotate Bloch MO coefficients into the localized Wannier gauge.'''
+    if band_indices is None:
+        band_slice = slice(None)
+    else:
+        band_slice = numpy.asarray(band_indices)
+
+    mo_coeff_loc = []
+    for ki in range(U.shape[0]):
+        coeff = numpy.asarray(mo_coeff[ki])[:, band_slice]
+        mo_coeff_loc.append(coeff @ U[ki])
+    return numpy.asarray(mo_coeff_loc)
 
 
 def _resolve_outer_window(kmf, spin, nk, dis_win, n_wann):
@@ -110,7 +126,7 @@ def _resolve_outer_window(kmf, spin, nk, dis_win, n_wann):
     from one k to another — that's the entangled-metallic case we don't
     handle in Tier A (it would need ragged per-k arrays everywhere).
     '''
-    from pyscf.pbc.lo.overlap import _mo_energy_for_spin
+    from pyscf.pbc.lo.mlwf.overlap import _mo_energy_for_spin
     e_min, e_max = dis_win
     if e_max <= e_min:
         raise ValueError(f'dis_win is empty: e_min={e_min} >= e_max={e_max}')
