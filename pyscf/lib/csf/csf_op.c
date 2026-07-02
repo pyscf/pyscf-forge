@@ -263,7 +263,7 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
     //
     //     -1**[S(i) + S'(i-1) - 1/2]
     //     *
-    //     sqrt[(2S(i) + 1)(2S'(i-1) + 1)]
+    //     sqrt[(2S'(i) + 1)(2S(i-1) + 1)]
     //     *
     //     { 1    S'(i)   S(i)    }
     //     { 1/2  S(i-1)  S'(i-1) }
@@ -277,7 +277,7 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
         parity = parity % 4;
 
         xdiag *= _get_wigner_6j_j41h (2, twoS0b, twoS0k, twoS1k, twoS1b);
-        xdiag *= sqrt ((double) ((twoS0k+1)*(twoS1b+1))); // normalization
+        xdiag *= sqrt ((double) ((twoS0b+1)*(twoS1k+1))); // normalization
     }
 
     // TEMPORARY: p != r not yet implemented
