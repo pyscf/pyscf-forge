@@ -20,11 +20,13 @@ import numpy as np
 import gc, sys, os, h5py, scipy
 
 from pyscf import gto, lib, scf
-from pyscf.tdscf import parameter, math_helper, spectralib, _krylov_tools
+from pyscf.tdscf import parameter, math_helper, spectralib, _krylov_tools, _krylov_tools_casida
 from pyscf.tdscf.math_helper import get_avail_cpumem, get_mem_info
 from pyscf.data.nist import HARTREE2EV
 from pyscf.lib import logger, einsum
 
+logger.TIMER_LEVEL = 4
+# einsum = np.einsum
 CITATION_INFO = """
 Please cite the TDDFT-ris method:
 
@@ -94,6 +96,11 @@ def get_auxmol(mol, theta=0.2, fitting_basis='s', excludeHs=False):
     """
     Assigns a minimal auxiliary basis set to the molecule.
 
+    For ECP/pseudopotential runs, follow :func:`pyscf.df.addons.make_auxmol`:
+    rebuild ``_atm``, ``_bas``, ``_env`` from the minimal aux basis and
+    ``mol._env[:PTR_ENV_START]`` without calling :meth:`Mole.build`, so
+    ``make_ecp_env`` is not applied to the aux centers (same convention as DF).
+
     Args:
         mol: The input molecule object.
         theta: The scaling factor for the exponents.
@@ -103,15 +110,10 @@ def get_auxmol(mol, theta=0.2, fitting_basis='s', excludeHs=False):
         auxmol: The molecule object with assigned auxiliary basis.
     """
 
-
-    '''
-    parse_arg = False
-    turns off PySCF built-in parsing function
-    '''
     auxmol = mol.copy()
-    auxmol.verbose=0
+    auxmol.verbose = 0
     auxmol_basis_keys = mol._basis.keys()
-    auxmol.basis = get_minimal_auxbasis(auxmol_basis_keys, theta, fitting_basis,excludeHs=excludeHs)
+    auxmol.basis = get_minimal_auxbasis(auxmol_basis_keys, theta, fitting_basis, excludeHs=excludeHs)
     auxmol.build(dump_input=False, parse_arg=False)
     return auxmol
 
@@ -137,6 +139,7 @@ def get_PuvCupCvq_to_Ppq(eri3c: np.ndarray, C_p: np.ndarray, C_q: np.ndarray, in
     C_p and C_q:  C[:, :n_occ] or C[:, n_occ:], can be both
 
     Ppq = einsum("Puv,up,vq->Ppq", eri3c, Cp, C_q)
+    note: only true if uv symmetry
     '''
     P, u, v = eri3c.shape
     eri3c = eri3c.reshape(P * v, u)
@@ -145,6 +148,18 @@ def get_PuvCupCvq_to_Ppq(eri3c: np.ndarray, C_p: np.ndarray, C_q: np.ndarray, in
     Ppq = einsum('Pvp,vq->Ppq', tmp, C_q)
     del tmp
     return Ppq
+
+def get_inter_contract_C(int_tensor, C_occ, C_vir):
+
+    ''' 3 for xyz three directions.
+        reshape is helpful when calculating oscillator strength and polarizability.
+    '''
+    tmp = einsum('Puv,up->Ppv', int_tensor, C_occ)
+    Pia = einsum('Ppv,vq->Ppq', tmp, C_vir)
+    del tmp
+    Pia = Pia.reshape(3,-1)
+    return Pia
+
 
 def get_uvPCupCvq_to_Ppq(eri3c: np.ndarray, C_pT: np.ndarray, C_q: np.ndarray):
     '''
@@ -178,8 +193,6 @@ def einsum2dot(a, b):
 
     del ab
     gc.collect()
-
-    # result = einsum('PQ,Qpq->Ppq', a, b)
 
     return result
 
@@ -217,184 +230,6 @@ def calculate_batches_by_basis_count(mol, max_nbf_per_batch):
         batches.append((current_batch_start, nbas))
 
     return batches
-
-
-# def get_Tpq1(mol, auxmol, lower_inv_eri2c, C_p, C_q,
-#            calc='JK',omega=None, alpha=None, beta=None,
-#            log=None, in_ram=True, single=True):
-#     """
-#     (3c2e_{Puv}, C_{up}, C_{vq} -> Ppq)。
-
-#     Parameters:
-#         mol: pyscf.gto.Mole
-#         auxmol: pyscf.gto.Mole
-#         C_p: np.ndarray (nao, p)
-#         C_q: np.ndarray  (nao, q)
-
-#         lower_inv_eri2c is the inverse of the lower part of the 2-center Coulomb integral
-#         in the case of RSH, lower_inv_eri2c already includes the RSH factor when parsed into this function
-#         thus lower_inv_eri2c do not need specific processing
-
-#     Returns:
-#         Tpq: np.ndarray (naux, nao, nao)
-#     """
-
-#     nao = mol.nao
-#     naux = auxmol.nao
-
-#     pmol = mol + auxmol
-#     pmol.cart = mol.cart
-
-#     tag = '_cart' if mol.cart else '_sph'
-
-#     siz_p = C_p.shape[1]
-#     siz_q = C_q.shape[1]
-
-#     int3c_dtype = np.dtype(np.float32 if single else np.float64)
-#     log.info(f'int3c_dtype: {int3c_dtype}')
-
-#     if 'J' in calc:
-#         Pia = np.empty((naux, siz_p, siz_q), dtype=int3c_dtype)
-
-#     if 'K' in calc:
-#         '''only store lower triangle of Tij and Tab'''
-#         n_tri_p = (siz_p * (siz_p + 1)) // 2
-#         n_tri_q = (siz_q * (siz_q + 1)) // 2
-#         Pij = np.empty((naux, n_tri_p), dtype=int3c_dtype)
-#         Pab = np.empty((naux, n_tri_q), dtype=int3c_dtype)
-
-#         tril_indices_p = np.tril_indices(siz_p)
-#         tril_indices_q = np.tril_indices(siz_q)
-
-#     byte_eri3c = nao * nao * int3c_dtype.itemsize
-
-#     n_eri3c_per_aux = nao * nao * 1
-#     n_Ppq_per_aux = siz_p * nao  + siz_p * siz_q * 1.5
-
-#     bytes_per_aux = (  n_eri3c_per_aux + n_Ppq_per_aux) * int3c_dtype.itemsize
-#     batch_size = min(naux, max(16, int(get_avail_cpumem() * 0.5 // bytes_per_aux)) )
-
-#     DEBUG = False
-#     if DEBUG:
-#         batch_size = 2
-
-#     log.info(f'eri3c per aux dimension will take {byte_eri3c / 1024**2:.0f} MB memory')
-#     log.info(f'eri3c per aux batch will take {byte_eri3c * batch_size / 1024**2:.0f} MB memory')
-#     log.info(get_mem_info('before generate int3c2e'))
-
-#     upper_inv_eri2c = lower_inv_eri2c.T
-
-#     if 'K' in calc:
-#         eri2c_inv = lower_inv_eri2c.dot(upper_inv_eri2c)
-#         eri2c_inv = eri2c_inv.astype(int3c_dtype, copy=False)
-
-
-#     if omega and omega != 0:
-
-#         log.info(f'omega {omega}')
-#         mol_omega = mol.copy()
-#         auxmol_omega = auxmol.copy()
-
-#         mol_omega.omega = omega
-#         auxmol_omega.omega = omega
-
-#         pmol_omega = mol_omega + auxmol_omega
-#         pmol_omega.cart = mol.cart
-
-
-#     batches = calculate_batches_by_basis_count(auxmol, batch_size)
-
-#     p1 = 0
-#     for start_shell, end_shell in batches:
-#         shls_slice = (
-#             0, mol.nbas,            # First dimension (mol)
-#             0, mol.nbas,            # Second dimension (mol)
-#             mol.nbas + start_shell,   # Start of aux basis
-#             mol.nbas + end_shell      # End of aux basis (exclusive)
-#         )
-
-#         eri3c_batch = pmol.intor('int3c2e' + tag, shls_slice=shls_slice)
-
-#         aux_batch_size = eri3c_batch.shape[2]
-
-#         p0, p1 = p1, p1 + aux_batch_size
-
-#         if omega and omega != 0:
-#             eri3c_batch_omega = pmol_omega.intor('int3c2e' + tag, shls_slice=shls_slice)
-#             ''' eri3c_batch_tmp = alpha * eri3c_batch_tmp + beta * eri3c_batch_omega_tmp '''
-#             eri3c_batch       *= alpha
-#             eri3c_batch_omega *= beta
-#             eri3c_batch       += eri3c_batch_omega
-#             del eri3c_batch_omega
-
-#         DEBUG = False
-#         if DEBUG:
-#             ''' generate full eri3c_batch and compare with incore.aux_e2(mol, auxmol) '''
-#             from pyscf.df import incore
-#             ref = incore.aux_e2(mol, auxmol)
-#             log.info(f'eri3c_batch.shape {eri3c_batch.shape}')
-#             if omega and omega != 0:
-#                 mol_omega = mol.copy()
-#                 auxmol_omega = auxmol.copy()
-#                 mol_omega.omega = omega
-#                 ref_omega = incore.aux_e2(mol_omega, auxmol_omega)
-#                 ref = alpha * ref + beta * ref_omega
-#                 log.info(f'eref.shape {ref.shape}')
-#             log.info(f'-------------eri3c DEBUG: out vs .incore.aux_e2(mol, auxmol) {abs(eri3c_batch-ref).max()}')
-#             assert abs(eri3c_batch-ref).max() < 1e-10
-
-#         eri3c_batch = eri3c_batch.astype(int3c_dtype, copy=False)
-#         eri3c_batch = eri3c_batch.transpose(2, 1, 0)
-
-#         '''Puv -> Ppq, AO->MO transform '''
-#         if 'J' in calc:
-#             Pia[p0:p1,:,:] = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_q)
-
-#         if 'K' in calc:
-#             Pij_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_p,C_p)
-#             Pij_lower = Pij_tmp[:, tril_indices_p[0], tril_indices_p[1]].reshape(Pij_tmp.shape[0], -1)
-#             del Pij_tmp
-#             gc.collect()
-
-#             Pij[p0:p1,:] = Pij_lower
-#             del Pij_lower
-#             gc.collect()
-
-#             Pab_tmp = get_PuvCupCvq_to_Ppq(eri3c_batch,C_q,C_q)
-#             Pab_lower = Pab_tmp[:, tril_indices_q[0], tril_indices_q[1]].reshape(Pab_tmp.shape[0], -1)
-#             del Pab_tmp
-#             gc.collect()
-
-#             Pab[p0:p1,:] = Pab_lower
-#             del Pab_lower
-#             gc.collect()
-
-#         last_reported = 0
-#         progress = int(100.0 * p1 / naux)
-
-#         if progress % 20 == 0 and progress != last_reported:
-#             log.last_reported = progress
-#             log.info(f'get_Tpq batch {p1} / {naux} done ({progress} percent). aux_batch_size: {aux_batch_size}')
-
-
-#     log.info(f' get_Tpq {calc} all batches processed')
-#     log.info(get_mem_info('after generate Ppq'))
-
-#     if calc == 'J':
-#         Tia = einsum2dot(upper_inv_eri2c, Pia)
-#         return Tia
-
-#     if calc == 'K':
-#         Tij = eri2c_inv.dot(Pij, out=Pij)
-#         Tab = Pab
-#         return Tij, Tab
-
-#     if calc == 'JK':
-#         Tia = einsum2dot(upper_inv_eri2c, Pia)
-#         Tij = eri2c_inv.dot(Pij, out=Pij)
-#         Tab = Pab
-#         return Tia, Tij, Tab
-
 
 def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_q_b=None, RKS=False, UKS=False,
            calc='JK',omega=None, alpha=None, beta=None,
@@ -485,9 +320,12 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
             tril_indices_p_b = np.tril_indices(siz_p_b)
             tril_indices_q_b = np.tril_indices(siz_q_b)
 
-    byte_eri3c = nao * nao * int3c_dtype.itemsize
-    n_eri3c_per_aux = nao * nao * 1
-    bytes_per_aux = (  n_eri3c_per_aux + n_Ppq_per_aux) * int3c_dtype.itemsize
+    intor_dtype_itemsize = 8  # pmol.intor() always returns float64
+    n_eri3c_per_aux = nao * nao
+    omega_factor = 2 if (omega and omega != 0) else 1
+    bytes_per_aux = (n_eri3c_per_aux * intor_dtype_itemsize * omega_factor
+                     + n_Ppq_per_aux * int3c_dtype.itemsize)
+    byte_eri3c = nao * nao * intor_dtype_itemsize
     batch_size = min(naux, max(1, int(get_avail_cpumem() * 0.5 // bytes_per_aux)) )
     log.info(f'batch_size: {batch_size}')
 
@@ -524,6 +362,9 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
         )
 
         eri3c_batch = pmol.intor('int3c2e' + tag, shls_slice=shls_slice)
+        log.info(f'eri3c_batch.shape {eri3c_batch.shape}')
+        log.info(f'eri3c_batch mem size {eri3c_batch.nbytes / 1024**3:.0f} GB')
+        log.info(get_mem_info(f'after generate eri3c_batch {p1}'))
 
         aux_batch_size = eri3c_batch.shape[2]
 
@@ -553,10 +394,15 @@ def get_Tpq(mol, auxmol, lower_inv_eri2c, C_p_a=None, C_q_a=None, C_p_b=None, C_
             log.info(f'-------------eri3c DEBUG: out vs .incore.aux_e2(mol, auxmol) {abs(eri3c_batch-ref).max()}')
             assert abs(eri3c_batch-ref).max() < 1e-10
 
-        tmp_astype = eri3c_batch.astype(int3c_dtype, copy=False)
+        log.info(get_mem_info('before transpose eri3c_batch'))
+        tmp = np.ascontiguousarray(
+            eri3c_batch.transpose(2, 1, 0), dtype=int3c_dtype
+        )
         del eri3c_batch
-        eri3c_batch = tmp_astype.transpose(2, 1, 0)
-        del tmp_astype
+        eri3c_batch = tmp
+        del tmp
+        gc.collect()
+        log.info(get_mem_info('after transpose eri3c_batch'))
 
 
         '''Puv -> Ppq, AO->MO transform '''
@@ -871,15 +717,20 @@ def gen_ijab_MVP_Tpq(T_ij, T_ab, log=None):
 
         log.info(get_mem_info('          ijab_MVP start'))
 
-        # Memory estimation for one P index
-        n_T_ab_chunk = 1 * n_vir * n_vir * 1.5  # T_ab chunk: (1, n_vir, n_vir)
-        n_T_ij_chunk = 1 * n_occ * n_occ * 1.5 # T_ij chunk: (1, n_occ, n_occ)
-        n_T_ab_chunk_X = 1 * n_state * n_occ * n_vir  # T_ab_X chunk: (1, n_state, n_occ)
-        n_ijab_chunk_X = n_state * n_occ * n_vir  # Full output size (accumulated)
+        # Memory estimation per P index
+        n_T_ab_full = n_vir * n_vir
+        n_T_ij_full = n_occ * n_occ
+        n_T_ab_X = n_vir * n_state * n_occ  # T_ab_chunk_X per P: (1, n_vir, n_state, n_occ)
 
-        bytes_per_P = max(n_T_ab_chunk + n_T_ab_chunk_X,  n_T_ij_chunk + n_T_ab_chunk_X ) * T_ab.itemsize
-        # log.info(f'bytes_per_P {bytes_per_P}')
-        mem_alloc = int((get_avail_cpumem() * 0.7 - n_ijab_chunk_X * T_ab.itemsize))
+        # Phase 1: einsum("Pab,mjb->Pamj") — T_ab reshape is contiguous, no extra copy
+        phase1_per_P = n_T_ab_full + n_T_ab_X
+        # Phase 2: einsum("Pij,Pamj->mia") — tensordot transposes both inputs for GEMM,
+        #          creating contiguous copies (2x for each)
+        phase2_per_P = 2 * n_T_ij_full + 2 * n_T_ab_X
+
+        bytes_per_P = max(phase1_per_P, phase2_per_P) * T_ab.itemsize
+        n_fixed = n_state * n_occ * n_vir  # reserve for tmp in Phase 2
+        mem_alloc = int(get_avail_cpumem() * 0.7 - n_fixed * T_ab.itemsize)
         P_chunk_size = min(nauxao, max(1, mem_alloc // bytes_per_P))
         log.info(f'    ijab with Tij Tab, P_chunk_size = {P_chunk_size}')
         # Iterate over chunks of the P (nauxao) dimension
@@ -1152,8 +1003,8 @@ class RisBase(lib.StreamObject):
     def __init__(self, mf,
                 theta: float = 0.2, J_fit: str = 'sp', K_fit: str = 's', excludeHs=False,
                 Ktrunc: float = 40.0, full_K_diag: bool = False, a_x: float = None, omega: float = None,
-                alpha: float = None, beta: float = None, conv_tol: float = 1e-3,
-                nstates: int = 5, max_iter: int = 25, extra_init=8, restart_iter=None, spectra: bool = False,
+                alpha: float = None, beta: float = None, conv_tol: float = 1e-3, conv_tol_scaling : float = 1,
+                nstates: int = 5, max_iter: int = 25, extra_init=8, restart_subspace=None, spectra: bool = False,
                 out_name: str = '', print_threshold: float = 0.05, gram_schmidt: bool = True,
                 single: bool = True,
                 verbose=None, citation=True):
@@ -1195,8 +1046,6 @@ class RisBase(lib.StreamObject):
             print_threshold (float, optional): Threshold for printing the transition coefficients. Defaults to 0.05.
             gram_schmidt (bool, optional): Whether to calculate the ground state. Defaults to False.
             single (bool, optional): Whether to use single precision. Defaults to True.
-            tensor_in_ram (bool, optional): Whether to store Tpq tensors in RAM. Defaults to False.
-            krylov_in_ram (bool, optional): Whether to store Krylov vectors in RAM. Defaults to False.
             verbose (optional): Verbosity level of the logger. If None, it will use the verbosity of `mf`.
         """
         self.single = single
@@ -1224,12 +1073,12 @@ class RisBase(lib.StreamObject):
         self.alpha = alpha
         self.beta = beta
         self.conv_tol = conv_tol
+        self.conv_tol_scaling = conv_tol_scaling
         self.nstates = nstates
         self.max_iter = max_iter
         self.extra_init = extra_init
-        self.restart_iter = restart_iter
+        self.restart_subspace = restart_subspace
         self.mol = mf.mol
-        # self.mo_coeff = np.asarray(mf.mo_coeff, dtype=self.dtype)
         self.spectra = spectra
         self.out_name = out_name
         self.print_threshold = print_threshold
@@ -1237,13 +1086,8 @@ class RisBase(lib.StreamObject):
 
         self.verbose = verbose if verbose else mf.verbose
 
-        # self.device = mf.device
         self.converged = None
-        # self._store_Tpq_J = store_Tpq_J
-        # self._store_Tpq_K = store_Tpq_K
 
-        # self._tensor_in_ram = tensor_in_ram
-        # self._krylov_in_ram = krylov_in_ram
 
         self.log = logger.new_logger(verbose=self.verbose)
 
@@ -1281,10 +1125,10 @@ class RisBase(lib.StreamObject):
         int_r = self.mol.intor_symmetric('int1e_r' + self.eri_tag)
         int_r = np.asarray(int_r, dtype=self.dtype)
         if self.RKS:
-            P = get_PuvCupCvq_to_Ppq(int_r, self.C_occ_notrunc, self.C_vir_notrunc).reshape(3,-1)
+            P = get_inter_contract_C(int_r, self.C_occ_notrunc, self.C_vir_notrunc).reshape(3,-1)
         else:
-            P_alpha = get_PuvCupCvq_to_Ppq(int_r, self.C_occ_a_notrunc, self.C_vir_a_notrunc).reshape(3,-1)
-            P_beta = get_PuvCupCvq_to_Ppq(int_r, self.C_occ_b_notrunc, self.C_vir_b_notrunc).reshape(3,-1)
+            P_alpha = get_inter_contract_C(int_r, self.C_occ_a_notrunc, self.C_vir_a_notrunc).reshape(3,-1)
+            P_beta = get_inter_contract_C(int_r, self.C_occ_b_notrunc, self.C_vir_b_notrunc).reshape(3,-1)
             P = np.hstack((P_alpha, P_beta))
         return P
 
@@ -1298,11 +1142,12 @@ class RisBase(lib.StreamObject):
         int_rxp = np.asarray(int_rxp, dtype=self.dtype)
 
         if self.RKS:
-            mdpol = get_PuvCupCvq_to_Ppq(int_rxp, self.C_occ_notrunc, self.C_vir_notrunc).reshape(3,-1)
+            mdpol = get_inter_contract_C(int_rxp, self.C_occ_notrunc, self.C_vir_notrunc).reshape(3,-1)
+
         else:
             ''' TODO '''
-            mdpol_alpha = get_PuvCupCvq_to_Ppq(int_rxp, self.C_occ_a_notrunc, self.C_vir_a_notrunc).reshape(3,-1)
-            mdpol_beta = get_PuvCupCvq_to_Ppq(int_rxp, self.C_occ_b_notrunc, self.C_vir_b_notrunc).reshape(3,-1)
+            mdpol_alpha = get_inter_contract_C(int_rxp, self.C_occ_a_notrunc, self.C_vir_a_notrunc).reshape(3,-1)
+            mdpol_beta = get_inter_contract_C(int_rxp, self.C_occ_b_notrunc, self.C_vir_b_notrunc).reshape(3,-1)
             mdpol = np.hstack((mdpol_alpha, mdpol_beta))
         return mdpol
 
@@ -1397,7 +1242,7 @@ class RisBase(lib.StreamObject):
 
         log.info(get_mem_info('  before process mo_coeff'))
 
-        auxmol_J = get_auxmol(mol=self.mol, theta=self.theta, fitting_basis=self.J_fit)
+        auxmol_J = get_auxmol(mol=self.mol, theta=self.theta, fitting_basis=self.J_fit, excludeHs=self._excludeHs)
         log.info(f'n_bf in auxmol_J = {auxmol_J.nao_nr()}')
         self.auxmol_J = auxmol_J
 
@@ -2083,15 +1928,17 @@ class TDA(RisBase):
             Unlike pure TDDFT, pure TDA is not using MZ=Zw^2 form
         '''
         log = self.log
+        cpu00 = (logger.process_clock(), logger.perf_counter())
 
         TDA_MVP, hdiag = self.gen_vind()
 
         converged, energies, X = _krylov_tools.krylov_solver(matrix_vector_product=TDA_MVP,hdiag=hdiag,
                                             n_states=self.nstates, problem_type='eigenvalue',
-                                            conv_tol=self.conv_tol, max_iter=self.max_iter,
-                                            extra_init=self.extra_init, restart_iter=self.restart_iter,
+                                            conv_tol=self.conv_tol, conv_tol_scaling=self.conv_tol_scaling,
+                                            max_iter=self.max_iter,
+                                            extra_init=self.extra_init, restart_subspace=self.restart_subspace,
                                             gs_initial=False, gram_schmidt=self.gram_schmidt,
-                                            print_eigeneV_along=True, single=self.single,  verbose=log)
+                                            single=self.single,  verbose=log)
 
         self.converged = converged
         log.debug(f'check orthonormality of X: {np.linalg.norm(np.dot(X, X.T) - np.eye(X.shape[0])):.2e}')
@@ -2126,6 +1973,7 @@ class TDA(RisBase):
         if self._citation:
             log.info(CITATION_INFO)
 
+        log.timer(' TDA-ris total time', *cpu00)
         return energies, X, oscillator_strength, rotatory_strength
 
     def Gradients(self):
@@ -2171,7 +2019,7 @@ class TDDFT(RisBase):
 
         hdiag_MVP = gen_hdiag_MVP(hdiag=self.hdiag, n_occ=n_occ, n_vir=n_vir)
 
-        def RKS_TDDFT_hybrid_MVP(X, Y):
+        def RKS_TDDFT_hybrid_MVP(XpY, XmY):
             '''
             RKS
             [A B][X] = [AX+BY] = [U1]
@@ -2179,21 +2027,19 @@ class TDDFT(RisBase):
             we want AX+BY and AY+BX
             instead of directly computing AX+BY and AY+BX
             we compute (A+B)(X+Y) and (A-B)(X-Y)
-            it can save one (ia|jb)V tensor einsumion compared to directly computing AX+BY and AY+BX
+            it can save one (ia|jb)V tensor contraction compared to directly computing AX+BY and AY+BX
 
-            (A+B)V = hdiag_MVP(V) + 4*iajb_MVP(V) - a_x * [ ijab_MVP(V) + ibja_MVP(V) ]
-            (A-B)V = hdiag_MVP(V) - a_x * [ ijab_MVP(V) - ibja_MVP(V) ]
+            (A+B)(X+Y) = hdiag_MVP(X+Y) + 4*iajb_MVP(X+Y) - a_x * [ ijab_MVP(X+Y) + ibja_MVP(X+Y) ]
+            (A-B)(X-Y) = hdiag_MVP(X-Y) - a_x * [ ijab_MVP(X-Y) - ibja_MVP(X-Y) ]
             for RSH, a_x = 1, because the exchange component is defined by alpha+beta (alpha+beta not awlways == 1)
 
             # X Y in shape (m, n_occ*n_vir)
             '''
-            nstates = X.shape[0]
+            nstates = XpY.shape[0]
 
-            X = X.reshape(nstates, n_occ, n_vir)
-            Y = Y.reshape(nstates, n_occ, n_vir)
+            XpY = XpY.reshape(nstates, n_occ, n_vir)
+            XmY = XmY.reshape(nstates, n_occ, n_vir)
 
-            XpY = X + Y
-            XmY = X - Y
             ApB_XpY = hdiag_MVP(XpY)
 
             iajb_MVP(XpY, factor=4, out=ApB_XpY)
@@ -2202,25 +2048,23 @@ class TDDFT(RisBase):
 
             ibja_MVP(XpY[:,n_occ-rest_occ:,:rest_vir], a_x=a_x, out=ApB_XpY[:,n_occ-rest_occ:,:rest_vir])
 
+            del XpY
+            gc.collect()
+
             AmB_XmY = hdiag_MVP(XmY)
 
             ijab_MVP(XmY[:,n_occ-rest_occ:,:rest_vir], a_x=a_x, out=AmB_XmY[:,n_occ-rest_occ:,:rest_vir])
 
             ibja_MVP(XmY[:,n_occ-rest_occ:,:rest_vir], a_x=-a_x, out=AmB_XmY[:,n_occ-rest_occ:,:rest_vir])
 
+            del XmY
+            gc.collect()
 
-            ''' (A+B)(X+Y) = AX + BY + AY + BX   (1)
-                (A-B)(X-Y) = AX + BY - AY - BX   (2)
-                (1) + (1) /2 = AX + BY = U1
-                (1) - (2) /2 = AY + BX = U2
-            '''
-            U1 = (ApB_XpY + AmB_XmY)/2
-            U2 = (ApB_XpY - AmB_XmY)/2
+            ApB_XpY = ApB_XpY.reshape(nstates, n_occ*n_vir)
+            AmB_XmY = AmB_XmY.reshape(nstates, n_occ*n_vir)
 
-            U1 = U1.reshape(nstates, n_occ*n_vir)
-            U2 = U2.reshape(nstates, n_occ*n_vir)
+            return ApB_XpY, AmB_XmY
 
-            return U1, U2
         return RKS_TDDFT_hybrid_MVP, self.hdiag
 
     ''' ===========  RKS pure =========== '''
@@ -2296,7 +2140,7 @@ class TDDFT(RisBase):
         A_aa_size = n_occ_a * n_vir_a
         A_bb_size = n_occ_b * n_vir_b
 
-        def UKS_TDDFT_hybrid_MVP(X, Y):
+        def UKS_TDDFT_hybrid_MVP(XpY, XmY):
             '''
             UKS
             [A B][X] = [AX+BY] = [U1]
@@ -2334,17 +2178,12 @@ class TDDFT(RisBase):
             (A-B)(x-y) =   [ (A-B)αα Vα ] = [ AmB_XmY_α ]
                            [ (A-B)ββ Vβ ]   [ AmB_XmY_β ]
             '''
-            nstates = X.shape[0]
+            nstates = XpY.shape[0]
 
-            X_a = X[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
-            X_b = X[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
-            Y_a = Y[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
-            Y_b = Y[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
-
-            XpY_a = X_a + Y_a
-            XpY_b = X_b + Y_b
-            XmY_a = X_a - Y_a
-            XmY_b = X_b - Y_b
+            XpY_a = XpY[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
+            XpY_b = XpY[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
+            XmY_a = XmY[:,:A_aa_size].reshape(nstates, n_occ_a, n_vir_a)
+            XmY_b = XmY[:,A_aa_size:].reshape(nstates, n_occ_b, n_vir_b)
 
             XpY_a_trunc = XpY_a[:,n_occ_a-rest_occ_a:,:rest_vir_a]
             XpY_b_trunc = XpY_b[:,n_occ_b-rest_occ_b:,:rest_vir_b]
@@ -2406,10 +2245,8 @@ class TDDFT(RisBase):
             ApB_XpY = np.concatenate([ApB_XpY_a, ApB_XpY_b], axis=1)
             AmB_XmY = np.concatenate([AmB_XmY_a, AmB_XmY_b], axis=1)
 
-            U1 = (ApB_XpY + AmB_XmY)/2
-            U2 = (ApB_XpY - AmB_XmY)/2
+            return ApB_XpY, AmB_XmY
 
-            return U1, U2
         return UKS_TDDFT_hybrid_MVP, self.hdiag
 
 
@@ -2504,12 +2341,15 @@ class TDDFT(RisBase):
 
     def kernel(self):
         log = self.log
+        cpu00 = (logger.process_clock(), logger.perf_counter())
         TDDFT_MVP, hdiag = self.gen_vind()
         if self.a_x != 0:
             '''hybrid TDDFT'''
-            converged, energies, X, Y = _krylov_tools.ABBA_krylov_solver(matrix_vector_product=TDDFT_MVP,
+            converged, energies, X, Y = _krylov_tools_casida.ABBA_krylov_solver(matrix_vector_product=TDDFT_MVP,
                                                     hdiag=hdiag, n_states=self.nstates, conv_tol=self.conv_tol,
-                                                    max_iter=self.max_iter, gram_schmidt=self.gram_schmidt,
+                                                    conv_tol_scaling=self.conv_tol_scaling,
+                                                    max_iter=self.max_iter, restart_subspace=self.restart_subspace,
+                                                    gram_schmidt=self.gram_schmidt, gs_initial=True,
                                                     single=self.single, verbose=self.verbose)
             self.converged = converged
             if not all(self.converged):
@@ -2519,8 +2359,10 @@ class TDDFT(RisBase):
             '''pure TDDFT'''
             hdiag_sq = hdiag
             converged, energies_sq, Z = _krylov_tools.krylov_solver(matrix_vector_product=TDDFT_MVP, hdiag=hdiag_sq,
-                                            n_states=self.nstates, conv_tol=self.conv_tol, max_iter=self.max_iter,
-                                            gram_schmidt=self.gram_schmidt, single=self.single, verbose=self.verbose)
+                                            n_states=self.nstates, conv_tol=self.conv_tol,
+                                            conv_tol_scaling=self.conv_tol_scaling, max_iter=self.max_iter,
+                                            gram_schmidt=self.gram_schmidt, gs_initial=True, single=self.single,
+                                            verbose=self.verbose)
             self.converged = converged
             if not all(self.converged):
                 log.info('TD-SCF states %s not converged.',
@@ -2554,13 +2396,14 @@ class TDDFT(RisBase):
                                                 n_occ_a=n_occ_a, n_vir_a=n_vir_a, n_occ_b=n_occ_b, n_vir_b=n_vir_b,
                                                 verbose=self.verbose)
         energies = energies*HARTREE2EV
+
         if self._citation:
             log.info(CITATION_INFO)
         self.energies = energies
         self.xy = X, Y
         self.oscillator_strength = oscillator_strength
         self.rotatory_strength = rotatory_strength
-
+        log.timer(' TDDFT-ris total time', *cpu00)
         return energies, X, Y, oscillator_strength, rotatory_strength
 
     Gradients = TDA.Gradients
