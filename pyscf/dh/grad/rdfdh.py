@@ -1,11 +1,7 @@
 from __future__ import annotations
 # dh import
-try:
-    from dh.rdfdh import RDFDH
-    from dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
-except ImportError:
-    from pyscf.dh.rdfdh import RDFDH
-    from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
+from pyscf.dh.rdfdh import RDFDH
+from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
 # pyscf import
 from pyscf import gto, lib, df
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho

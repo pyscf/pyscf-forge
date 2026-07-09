@@ -1,15 +1,12 @@
 from __future__ import annotations
 # dh import
-try:
-    from dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize
-except ImportError:
-    from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
+from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
     get_rho_from_dm_gga
 # typing import
 from typing import Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
-    from dh.grad.rdfdh import Gradients
-    from dh.polar.rdfdh import Polar
+    from pyscf.dh.grad.rdfdh import Gradients
+    from pyscf.dh.polar.rdfdh import Polar
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
@@ -703,19 +700,13 @@ class RDFDH(lib.StreamObject):
     # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
 
     def nuc_grad_method(self) -> Gradients:
-        try:
-            from dh.grad.rdfdh import Gradients
-        except ImportError:
-            from pyscf.dh.grad.rdfdh import Gradients
+        from pyscf.dh.grad.rdfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self
 
     def polar_method(self) -> Polar:
-        try:
-            from dh.polar.rdfdh import Polar
-        except ImportError:
-            from pyscf.dh.polar.rdfdh import Polar
+        from pyscf.dh.polar.rdfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)
         return self

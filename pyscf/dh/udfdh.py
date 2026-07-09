@@ -1,16 +1,12 @@
 from __future__ import annotations
 # dh import
-try:
-    from dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
-    from dh.rdfdh import get_cderi_mo, kernel, RDFDH
-except ImportError:
-    from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
-    from pyscf.dh.rdfdh import get_cderi_mo, kernel, RDFDH
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
+from pyscf.dh.rdfdh import get_cderi_mo, kernel, RDFDH
 # typing import
 from typing import Tuple, TYPE_CHECKING
 if TYPE_CHECKING:
-    from dh.grad.udfdh import Gradients
-    from dh.polar.udfdh import Polar
+    from pyscf.dh.grad.udfdh import Gradients
+    from pyscf.dh.polar.udfdh import Polar
 # pyscf import
 from pyscf import lib, gto, df, dft
 from pyscf.scf import ucphf
@@ -499,19 +495,13 @@ class UDFDH(RDFDH):
     # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
 
     def nuc_grad_method(self) -> Gradients:
-        try:
-            from dh.grad.udfdh import Gradients
-        except ImportError:
-            from pyscf.dh.grad.udfdh import Gradients
+        from pyscf.dh.grad.udfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self
 
     def polar_method(self) -> Polar:
-        try:
-            from dh.polar.udfdh import Polar
-        except ImportError:
-            from pyscf.dh.polar.udfdh import Polar
+        from pyscf.dh.polar.udfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
