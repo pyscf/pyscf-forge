@@ -10,12 +10,14 @@ from pyscf.ao2mo.outcore import balance_partition
 import numpy as np
 import tempfile
 from time import time, process_time
-from functools import wraps, partial
+from functools import wraps
 
 
-# To avoid too slow single-threaded einsum if pyscf-tblis is not available
 
-lib.numpy_helper._numpy_einsum = partial(np.einsum, optimize=True)
+def _patched_numpy_einsum(*args, **kwargs):
+    for k in ('alpha', 'beta', 'out'):
+        kwargs.pop(k, None)
+    return np.einsum(*args, optimize=True, **kwargs)
 
 
 class TicToc:
