@@ -1,15 +1,17 @@
 # dh import
+from pyscf.dh.dh import DHBase
 from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
-from pyscf.dh.rdfdh import kernel, RDFDH
-from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfump2
+from pyscf.dh.rdfdh import kernel, energy_nuc, energy_tot
+from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_ump2_ajz, energy_elec_mp2_dfump2
 # pyscf import
-from pyscf import lib, gto, df, dft
+from pyscf import lib, gto, df, dft, scf
 from pyscf.scf import ucphf
 from pyscf.lib.numpy_helper import ANTIHERMI
 from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
 # other import
 import h5py
 import numpy as np
+from functools import partial
 
 einsum = lib.einsum
 α, β = 0, 1
@@ -18,6 +20,23 @@ ndarray = np.ndarray or h5py.Dataset
 
 
 # region energy evaluation
+
+
+@timing
+def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
+    if mo_coeff is None:
+        if mf.mf_s.e_tot == 0:
+            mf.run_scf()
+            if mf.xc_n is None:
+                return mf.mf_s.e_tot - mf.mf_s.energy_nuc(), None
+        mo_coeff = mf.mf_s.mo_coeff
+    mo_occ = mf.mf_s.mo_occ
+    if mo_occ is NotImplemented:
+        mo_occ = scf.uhf.get_occ(mf.mf_s)
+    dm = mf.mf_s.make_rdm1(mo_coeff, mo_occ)
+    dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
+    eng_nc = mf.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
+    return eng_nc
 
 
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
@@ -154,7 +173,7 @@ def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
 # end region first derivative related
 
 
-class UDFDH(RDFDH):
+class UDFDH(DHBase):
     def __init__(self,
                  mol: gto.Mole,
                  xc: str or tuple = "XYG3",
@@ -162,13 +181,36 @@ class UDFDH(RDFDH):
                  auxbasis_ri: str or dict or None = None,
                  grids: dft.Grids = None,
                  grids_cpks: dft.Grids = None,
-                 unrestricted: bool = True,
                  mp2_backend: str = "ajz",
                  ):
-        super(UDFDH, self).__init__(mol, xc, auxbasis_jk, auxbasis_ri, grids, grids_cpks, unrestricted, mp2_backend)
-        self.nocc = mol.nelec  # type: Tuple[int, int]
+        super().__init__(mol, xc, auxbasis_jk, auxbasis_ri, mp2_backend)
+        mf_s = dft.UKS(mol, xc=self.xc).density_fit(auxbasis=self.auxbasis_jk)
+        self.grids = grids if grids else mf_s.grids
+        self.grids_cpks = grids_cpks if grids_cpks else self.grids
+        self.mf_s = mf_s
+        self.mf_s.grids = self.grids
+        self.xc_n = None if self.xc_n == self.xc else self.xc_n
+        self.mf_n = self.mf_s
+        if self.xc_n:
+            self.mf_n = dft.UKS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
+            self.mf_n.grids = self.mf_s.grids
+            self.mf_n.grids = self.grids
+        self.ni = self.mf_s._numint
+        self.cx = self.ni.hybrid_coeff(self.xc)
+        self.cx_n = self.ni.hybrid_coeff(self.xc_n)
+        self.df_jk = mf_s.with_df
+        self.aux_jk = self.df_jk.auxmol
+        self.df_ri = df.DF(mol, self.auxbasis_ri) if not self.same_aux else self.df_jk
+        self.aux_ri = self.df_ri.auxmol
+        self.nocc = mol.nelec
         self.mvir = NotImplemented
         self.mocc = max(max(self.nocc), 1)
+        self.nmo = self.nao
+        self.nvir = (self.nmo - self.nocc[α], self.nmo - self.nocc[β])
+        if mp2_backend == "dfmp2_native":
+            self.energy_elec_mp2 = partial(energy_elec_mp2_dfump2, self)
+        else:
+            self.energy_elec_mp2 = partial(energy_elec_ump2_ajz, self)
 
     @timing
     def run_scf(self, **kwargs):
@@ -177,13 +219,12 @@ class UDFDH(RDFDH):
         mf = self.mf_s
         if mf.e_tot == 0:
             mf.kernel(**kwargs)
-        # prepare
-        C = self.C = self.mo_coeff = mf.mo_coeff
-        e = self.e = self.mo_energy = mf.mo_energy
+        C = self.mo_coeff = mf.mo_coeff
+        e = self.mo_energy = mf.mo_energy
         self.mo_occ = mf.mo_occ
         self.D = mf.make_rdm1(mf.mo_coeff)
         nocc = self.nocc
-        nmo = self.nmo = self.C.shape[-1]
+        nmo = self.nmo = self.mo_coeff.shape[-1]
         self.nvir = nmo - nocc[α], nmo - nocc[β]
         self.mvir = max(max(self.nvir), 1)
         so = self.so = slice(0, nocc[α]), slice(0, nocc[β])
@@ -253,12 +294,12 @@ class UDFDH(RDFDH):
             flt.shape = X_shape
             return flt
 
-        return ucphf.solve(reshape_inner, self.e, self.mo_occ, rhs, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
+        return ucphf.solve(reshape_inner, self.mo_energy, self.mo_occ, rhs, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
 
     def prepare_integral(self):
         self.run_scf()
         tensors = self.tensors
-        C = self.C
+        C = self.mo_coeff
         nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
 
         for σ in α, β:
@@ -426,7 +467,7 @@ class UDFDH(RDFDH):
                 .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
                 .prepare_D_r()
         D_r = self.tensors["D_r"]
-        mol, C, D = self.mol, self.C, self.D
+        mol, C, D = self.mol, self.mo_coeff, self.D
         h = - mol.intor("int1e_r")
         d = np.einsum("Auv, suv -> A", h, D)  # seems to be wrong if lib.einsum used
         d += np.einsum("Auv, spq, sup, svq -> A", h, D_r, C, C, optimize=True)
@@ -447,6 +488,11 @@ class UDFDH(RDFDH):
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
 
+    energy_elec_nc = energy_elec_nc
     energy_elec_pt2 = energy_elec_pt2
+    energy_nuc = energy_nuc
     energy_elec = energy_elec
+    energy_tot = energy_tot
+    kernel = kernel
+    solve_cpks = solve_cpks
 

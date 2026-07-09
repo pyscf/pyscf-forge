@@ -120,7 +120,7 @@ class Polar(UDFDH, RPolar):
 
     def prepare_H_1(self):
         tensors = self.tensors
-        mol, C = self.mol, self.C
+        mol, C = self.mol, self.mo_coeff
         H_1_ao = - mol.intor("int1e_r")
         H_1_mo = np.array([C[σ].T @ H_1_ao @ C[σ] for σ in (α, β)])
         tensors.create("H_1_ao", H_1_ao)
@@ -146,7 +146,7 @@ class Polar(UDFDH, RPolar):
         U_1 = tensors.load("U_1")
         D_r = tensors.load("D_r")
         rho = tensors.load("rho")
-        C = self.C
+        C = self.mo_coeff
         so = self.so
         mol, grids, xc = self.mol, self.grids, self.xc
         # ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
@@ -172,14 +172,14 @@ class Polar(UDFDH, RPolar):
         U_1_pi = [U_1[σ, :, :, so[σ]] for σ in (α, β)]
 
         pdA_F_0_mo = tensors.load("H_1_mo").copy()
-        pdA_F_0_mo += einsum("sApq, sp -> sApq", U_1, self.e)
-        pdA_F_0_mo += einsum("sAqp, sq -> sApq", U_1, self.e)
+        pdA_F_0_mo += einsum("sApq, sp -> sApq", U_1, self.mo_energy)
+        pdA_F_0_mo += einsum("sAqp, sq -> sApq", U_1, self.mo_energy)
         pdA_F_0_mo += self.Ax0_Core(sa, sa, sa, so)(U_1_pi)
         tensors.create("pdA_F_0_mo", pdA_F_0_mo)
 
         if self.mf_n:
             F_0_ao_n = self.mf_n.get_fock(dm=self.D)
-            F_0_mo_n = einsum("sup, suv, svq -> spq", self.C, F_0_ao_n, self.C)
+            F_0_mo_n = einsum("sup, suv, svq -> spq", self.mo_coeff, F_0_ao_n, self.mo_coeff)
             pdA_F_0_mo_n = np.array(tensors.load("H_1_mo"))
             pdA_F_0_mo_n += einsum("sAmp, smq -> sApq", U_1, F_0_mo_n)
             pdA_F_0_mo_n += einsum("sAmq, spm -> sApq", U_1, F_0_mo_n)
@@ -212,11 +212,11 @@ class Polar(UDFDH, RPolar):
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
         mocc, mvir = max(nocc), max(nvir)
         so, sv = self.so, self.sv
-        eo, ev = self.eo, self.ev
+        eo, ev = self.mo_energyo, self.mo_energyv
         nprop = self.nprop
 
         pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(2, nprop, nmo, nmo))
-        if not self.eval_pt2:
+        if not self.mo_energyval_pt2:
             return self
 
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
@@ -307,7 +307,7 @@ class Polar(UDFDH, RPolar):
             if self.xc_n:
                 pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
                 SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
-        if not self.eval_pt2:
+        if not self.mo_energyval_pt2:
             return SCR3
 
         U_1 = tensors.load("U_1")

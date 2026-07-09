@@ -1,7 +1,8 @@
 # dh import
 from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
     get_rho_from_dm_gga
-from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfmp2, energy_elec_ump2_ajz, energy_elec_mp2_dfump2
+from pyscf.dh.dh import DHBase
+from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfmp2
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
@@ -46,10 +47,7 @@ def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
         mo_coeff = mf.mf_s.mo_coeff
     mo_occ = mf.mf_s.mo_occ
     if mo_occ is NotImplemented:
-        if not mf.unrestricted:
-            mo_occ = scf.hf.get_occ(mf.mf_s)
-        else:
-            mo_occ = scf.uhf.get_occ(mf.mf_s)
+        mo_occ = scf.hf.get_occ(mf.mf_s)
     dm = mf.mf_s.make_rdm1(mo_coeff, mo_occ)
     dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
     eng_nc = mf.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
@@ -202,7 +200,7 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
 # endregion first derivative related
 
 
-class RDFDH(lib.StreamObject):
+class RDFDH(DHBase):
 
     def __init__(self,
                  mol: gto.Mole,
@@ -211,142 +209,34 @@ class RDFDH(lib.StreamObject):
                  auxbasis_ri: str or dict or None = None,
                  grids: dft.Grids = None,
                  grids_cpks: dft.Grids = None,
-                 unrestricted: bool = False,
                  mp2_backend: str = "ajz",
                  ):
-        # tunable flags
-        self.with_t_ijab = False  # only in energy calculation; polarizability is forced dump t2 to disk or mem
-        self._incore_t_ijab = False
-        self._incore_Y_mo = False
-        self._incore_eri_cpks = False
-        self._fixed_batch = False
-        self.cpks_tol = 1e-8
-        self.cpks_cyc = 100
-        self.max_memory = mol.max_memory
-        # MP2 backend dispatch
-        self.mp2_backend = mp2_backend
-        if mp2_backend == "dfmp2_native":
-            if unrestricted:
-                self.energy_elec_mp2 = partial(energy_elec_mp2_dfump2, self)
-            else:
-                self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2, self)
-        else:
-            if unrestricted:
-                self.energy_elec_mp2 = partial(energy_elec_ump2_ajz, self)
-            else:
-                self.energy_elec_mp2 = partial(energy_elec_mp2_ajz, self)
-        # Parse xc code
-        # It's tricky to say that, self.xc refers to SCF xc, and self.xc_dh refers to double hybrid xc
-        # There should be three kinds of possible inputs:
-        # 1) String: "XYG3"
-        # 2) Tuple: ("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP", 0.3211, 1, 1)
-        # 3) Additional: (("0.69*HF + 0.31*PBE, 0.44*P86", None, 1, 0.52, 0.22), {"D3": ([0.48, 0, 0, 5.6, 0], 4)})
-        self.xc_dh = xc
-        if isinstance(xc, str):
-            xc_list, xc_add = parse_xc_dh(xc)
-        elif len(xc) == 5:  # here should assert xc is a tuple/list with 2 or 5 elements
-            xc_list = xc
-            xc_add = {}
-        else:  # assert len(xc) == 2
-            xc_list, xc_add = xc
-        self.xc, self.xc_n, self.cc, self.c_os, self.c_ss = xc_list
-        self.xc_add = xc_add
-        # parse auxiliary basis
-        self.auxbasis_jk = auxbasis_jk = auxbasis_jk if auxbasis_jk else df.make_auxbasis(mol, mp2fit=False)
-        self.auxbasis_ri = auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
-        self.same_aux = True if auxbasis_jk == auxbasis_ri or auxbasis_ri is None else False
-        # parse scf method
-        self.unrestricted = unrestricted
-        if unrestricted:
-            mf_s = dft.UKS(mol, xc=self.xc).density_fit(auxbasis=auxbasis_jk)
-        else:
-            mf_s = dft.KS(mol, xc=self.xc).density_fit(auxbasis=auxbasis_jk)
-        self.grids = grids if grids else mf_s.grids                        # type: dft.grid.Grids
-        self.grids_cpks = grids_cpks if grids_cpks else self.grids         # type: dft.grid.Grids
-        self.mf_s = mf_s                                                   # type: dft.rks.RKS
+        super().__init__(mol, xc, auxbasis_jk, auxbasis_ri, mp2_backend)
+        mf_s = dft.KS(mol, xc=self.xc).density_fit(auxbasis=self.auxbasis_jk)
+        self.grids = grids if grids else mf_s.grids
+        self.grids_cpks = grids_cpks if grids_cpks else self.grids
+        self.mf_s = mf_s
         self.mf_s.grids = self.grids
-        # parse non-consistent method
-        self.xc_n = None if self.xc_n == self.xc else self.xc_n            # type: str or None
-        self.mf_n = self.mf_s                                              # type: dft.rks.RKS
+        self.xc_n = None if self.xc_n == self.xc else self.xc_n
+        self.mf_n = self.mf_s
         if self.xc_n:
-            if unrestricted:
-                self.mf_n = dft.UKS(mol, xc=self.xc_n).density_fit(auxbasis=auxbasis_jk)
-            else:
-                self.mf_n = dft.KS(mol, xc=self.xc_n).density_fit(auxbasis=auxbasis_jk)
+            self.mf_n = dft.KS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
             self.mf_n.grids = self.mf_s.grids
             self.mf_n.grids = self.grids
-        # parse hybrid coefficients
         self.ni = self.mf_s._numint
         self.cx = self.ni.hybrid_coeff(self.xc)
         self.cx_n = self.ni.hybrid_coeff(self.xc_n)
-        # parse density fitting object
-        self.df_jk = mf_s.with_df  # type: df.DF
+        self.df_jk = mf_s.with_df
         self.aux_jk = self.df_jk.auxmol
-        self.df_ri = df.DF(mol, auxbasis_ri) if not self.same_aux else self.df_jk
+        self.df_ri = df.DF(mol, self.auxbasis_ri) if not self.same_aux else self.df_jk
         self.aux_ri = self.df_ri.auxmol
-        # other preparation
-        self.tensors = HybridDict()
-        self.mol = mol
-        self.nao = mol.nao  # type: int
         self.nocc = mol.nelec[0]
-        # variables awaits to be build
-        self.mo_coeff = NotImplemented
-        self.mo_energy = NotImplemented
-        self.mo_occ = NotImplemented
-        self.C = self.Co = self.Cv = NotImplemented
-        self.e = self.eo = self.ev = NotImplemented
-        self.D = NotImplemented
-        self.nmo = self.nvir = NotImplemented
-        self.so = self.sv = self.sa = NotImplemented
-        # results
-        self.e_tot = NotImplemented
-        self.eng_tot = self.eng_nc = self.eng_pt2 = self.eng_nuc = self.eng_os = self.eng_ss = NotImplemented
-        # DANGEROUS PLACE
-        # we could first initialize nmo as nao
         self.nmo = self.nao
         self.nvir = self.nmo - self.nocc
-
-    @property
-    def base(self):
-        return self
-
-    @property
-    def converged(self):
-        return self.mf_s.converged
-
-    def get_memory(self):  # leave at least 500MB space anyway
-        return max(self.max_memory - lib.current_memory()[0], 500)
-
-    def calc_batch_size(self, unit_flop, pre_flop=0, fixed_mem=None):
-        if self._fixed_batch:
-            return self._fixed_batch
-        if fixed_mem:
-            return calc_batch_size(unit_flop, fixed_mem, pre_flop)
+        if mp2_backend == "dfmp2_native":
+            self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2, self)
         else:
-            return calc_batch_size(unit_flop, self.get_memory(), pre_flop)
-
-    @property
-    def eval_ss(self):
-        return abs(self.cc * self.c_ss) > 1e-7
-
-    @property
-    def eval_os(self):
-        return abs(self.cc * self.c_os) > 1e-7
-
-    @property
-    def eval_pt2(self):
-        return self.eval_ss or self.eval_os
-
-    @timing
-    def build(self):
-        # make sure that grids in SCF run should be the same to other energy evaluations
-        self.mf_s.grids = self.mf_n.grids = self.grids
-        if self.df_jk.auxmol is None:
-            self.df_jk.build()
-            self.aux_jk = self.df_jk.auxmol
-        if self.df_ri.auxmol is None:
-            self.df_ri.build()
-            self.aux_ri = self.df_ri.auxmol
+            self.energy_elec_mp2 = partial(energy_elec_mp2_ajz, self)
 
     @timing
     def run_scf(self, **kwargs):
@@ -355,20 +245,17 @@ class RDFDH(lib.StreamObject):
         mf = self.mf_s
         if mf.e_tot == 0:
             mf.kernel(**kwargs)
-        # prepare
-        self.C = self.mo_coeff = mf.mo_coeff
-        self.e = self.mo_energy = mf.mo_energy
+        self.mo_coeff = mf.mo_coeff
+        self.mo_energy = mf.mo_energy
         self.mo_occ = mf.mo_occ
         self.D = mf.make_rdm1(mf.mo_coeff)
         nocc = self.nocc
-        nmo = self.nmo = self.C.shape[1]
+        nmo = self.nmo = self.mo_coeff.shape[1]
         self.nvir = nmo - nocc
         self.so, self.sv, self.sa = slice(0, nocc), slice(nocc, nmo), slice(0, nmo)
-        self.Co, self.Cv = self.C[:, self.so], self.C[:, self.sv]
-        self.eo, self.ev = self.e[self.so], self.e[self.sv]
+        self.Co, self.Cv = self.mo_coeff[:, self.so], self.mo_coeff[:, self.sv]
+        self.eo, self.ev = self.mo_energy[self.so], self.mo_energy[self.sv]
         return self
-
-    # region first derivative related in class
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = self.tensors["Y_mo_jk"]
@@ -399,9 +286,8 @@ class RDFDH(lib.StreamObject):
         return fx
 
     def Ax0_Core_resp(self, si, sa, sj, sb, mf=None, mo_coeff=None):
-        # this function is only a replacement to Ax0_Core or Ax0_cpks and left for efficiency comparasion
         mf = mf if mf else self.mf_s
-        mo_coeff = mo_coeff if mo_coeff else self.C
+        mo_coeff = mo_coeff if mo_coeff else self.mo_coeff
         return Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=self.get_memory())
 
     def Ax0_cpks(self):
@@ -415,84 +301,45 @@ class RDFDH(lib.StreamObject):
         return Ax0_cpks_inner
 
     def solve_cpks(self, rhs):
-        return cphf.solve(self.Ax0_cpks(), self.e, self.mo_occ, rhs, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
+        return cphf.solve(self.Ax0_cpks(), self.mo_energy, self.mo_occ, rhs, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
 
     def prepare_integral(self):
         self.run_scf()
         tensors = self.tensors
-        C = self.C
+        C = self.mo_coeff
         nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
 
-        # part: Y_mo_jk
         tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
         get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.get_memory())
-        # if self.same_aux:  # I decided repeat a space, not using the same.
-        #     tensors["Y_mo_ri"] = tensors["Y_mo_jk"]
-        # else:
         if self.eval_pt2:
             tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
             get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
-        # part: cpks and Ax0_Core preparation
         eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
         get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())
-        return self
-
-    @timing
-    def prepare_xc_kernel(self):
-        mol = self.mol
-        tensors = self.tensors
-        ni = self.ni
-        spin = 1 if self.unrestricted else 0
-        if "rho" in tensors:
-            return self
-        if ni._xc_type(self.xc) == "GGA":
-            rho = get_rho_from_dm_gga(ni, mol, self.grids, self.D)
-            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
-            tensors.create("rho", rho)
-            tensors.create("vxc" + self.xc, vxc)
-            tensors.create("fxc" + self.xc, fxc)
-            rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
-            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
-            tensors.create("rho" + "in cpks", rho)
-            tensors.create("vxc" + self.xc + "in cpks", vxc)
-            tensors.create("fxc" + self.xc + "in cpks", fxc)
-        if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
-            if "rho" in tensors:
-                vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0, spin=self.unrestricted)[1:3]
-                tensors.create("vxc" + self.xc_n, vxc)
-                tensors.create("fxc" + self.xc_n, fxc)
-            else:
-                rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
-                _, vxc, fxc, _ = ni.eval_xc(self.xc_n, rho, spin=spin, deriv=2)
-                tensors.create("rho", rho)
-                tensors.create("vxc" + self.xc_n, vxc)
-                tensors.create("fxc" + self.xc_n, fxc)
         return self
 
     @timing
     def prepare_pt2(self, dump_t_ijab=True):
         tensors = self.tensors
         nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
-        e = self.e
+        e = self.mo_energy
         naux = self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
         cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
 
         D_rdm1 = np.zeros((nmo, nmo))
 
-        if not self.eval_pt2:  # not a PT2 functional
+        if not self.eval_pt2:
             if self.eng_tot is NotImplemented:
                 tensors.create("D_rdm1", D_rdm1)
                 kernel(self, eng_bi=(0, 0))
             return self
-        # a PT2 functional
 
         G_ia_ri = np.zeros((naux, nocc, nvir))
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
 
-        dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab  # t_ijab to be dumped
-        # eval_t_ijab = True if "t_ijab" not in tensors else False     # t_ijab to be evaluated
-        eval_t_ijab = True  # to avoid any possible conflict for `as_scanner`
+        dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab
+        eval_t_ijab = True
         D_jab = e[so, None, None] - e[None, sv, None] - e[None, None, sv] if eval_t_ijab else None
         if dump_t_ijab:
             tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
@@ -508,16 +355,19 @@ class RDFDH(lib.StreamObject):
                     eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
                     if self.eval_ss:
                         eng_bi2 += einsum("ijab, ijba ->", t_ijab, g_ijab)
+                if dump_t_ijab:
+                    tensors["t_ijab"][sI] = t_ijab
             else:
                 t_ijab = tensors["t_ijab"][sI]
-            # T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
-            T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
-            D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
-            D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
-            G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)
-            if dump_t_ijab:
-                tensors["t_ijab"][sI] = t_ijab
-        if self.eng_tot is NotImplemented:
+            t_ijab_bi, t_ijab_os, t_ijab_ss = restricted_biorthogonalize(
+                t_ijab, cc, c_os, c_ss, eval_ss=self.eval_ss)
+            D_rdm1[so[sI], so] -= einsum("kab, jkb -> j", t_ijab_bi, t_ijab_bi)
+            D_rdm1[sv, sv] += einsum("ijc, ijb -> bc", t_ijab_bi, t_ijab_bi)
+            D_rdm1[so, so] += einsum("ijb, ikb -> jk", t_ijab_os, t_ijab_bi) + einsum("ijb, ikb -> jk", t_ijab_ss, t_ijab_bi)
+            G_ia_ri[:, sI] += einsum("Pjb, ijab -> Pia", Y_ia_ri, t_ijab_os + t_ijab_ss)
+            G_ia_ri += einsum("Pjb, ijab -> Pia", Y_ia_ri[:, sI], t_ijab_os + t_ijab_ss)
+
+        if self.eng_pt2 is NotImplemented:
             kernel(self, eng_bi=(eng_bi1, eng_bi2))
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia_ri", G_ia_ri)
@@ -526,34 +376,23 @@ class RDFDH(lib.StreamObject):
     @timing
     def prepare_lagrangian(self, gen_W=False):
         tensors = self.tensors
-        nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
+        nvir, nocc, naux = self.nvir, self.nocc, self.df_ri.get_naoaux()
         so, sv, sa = self.so, self.sv, self.sa
-
-        L = np.zeros((nvir, nocc))
-        if self.xc_n:  # non-consistent functional
-            L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
-        if not self.eval_pt2:  # not a PT2 functional
-            tensors.create("L", L)
-            return self
-
-        D_rdm1 = tensors.load("D_rdm1")
-        G_ia_ri = tensors.load("G_ia_ri")
+        Y_ij_ri = tensors["Y_mo_ri"][:, so, so]
         Y_mo_ri = tensors["Y_mo_ri"]
-        Y_ij_ri = np.asarray(Y_mo_ri[:, so, so])
+        G_ia_ri = tensors["G_ia_ri"]
+        D_rdm1 = tensors["D_rdm1"]
 
+        L = - 2 * einsum("sai, sPi -> Pa", D_rdm1[sv, so], Y_mo_ri[:, so])
+        L += - 2 * einsum("sai, sPi -> Pa", D_rdm1[so, sv], Y_mo_ri[:, sv])
         if gen_W:
-            Y_ia = np.asarray(Y_mo_ri[:, so, sv])
-            W_I = np.zeros((nmo, nmo))
-            W_I[so, so] = - 2 * einsum("Pia, Pja -> ij", G_ia_ri, Y_ia)
-            W_I[sv, sv] = - 2 * einsum("Pia, Pib -> ab", G_ia_ri, Y_ia)
-            W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_mo_ri[:, so, so])
+            W_I = - 4 * einsum("Pij, Pjk -> ik", Y_ij_ri, D_rdm1[so])
             tensors.create("W_I", W_I)
             L += W_I[sv, so]
         else:
             L -= 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_ij_ri)
 
-        # L += self.Ax0_Core(sv, so, sa, sa)(D_rdm1)
-        L += self.Ax0_Core_resp(sv, so, sa, sa)(D_rdm1)  # resp is faster
+        L += self.Ax0_Core_resp(sv, so, sa, sa)(D_rdm1)
 
         nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
         for saux in gen_batch(0, naux, nbatch):
@@ -578,52 +417,11 @@ class RDFDH(lib.StreamObject):
                 .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
                 .prepare_D_r()
         D_r = self.tensors["D_r"]
-        mol, C, D = self.mol, self.C, self.D
+        mol, C, D = self.mol, self.mo_coeff, self.D
         h = - mol.intor("int1e_r")
         d = einsum("tuv, uv -> t", h, D + C @ D_r @ C.T)
         d += einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
         return d
-
-    def dump_intermediates(self, dir_path="scratch"):
-        os.makedirs(dir_path, exist_ok=True)
-        # tensors
-        tensors = self.tensors
-        h5_path = dir_path + "/tensors.h5"
-        dat_path = dir_path + "/tensors.dat"
-        tensors.dump(h5_path, dat_path)
-        # scf
-        # scf_path = dir_path + "/scf.h5"
-        # if self.mf_s.chkfile:
-        #     shutil.copy(self.mf_s.chkfile, scf_path)
-        # class attributes, without results
-        att_path = dir_path + "/attributes.dat"
-        dct = {
-            "C": self.C,
-            "e": self.e,
-            "D": self.D,
-            "mo_occ": self.mo_occ,
-            "mf_s_e_tot": self.mf_s.e_tot,
-        }
-        with open(att_path, "wb") as f:
-            pickle.dump(dct, f)
-
-    def load_intermediates(self, dir_path="scratch", rerun_scf=False):
-        h5_path = dir_path + "/tensors.h5"
-        dat_path = dir_path + "/tensors.dat"
-        self.tensors = HybridDict.pick(h5_path, dat_path)
-        att_path = dir_path + "/attributes.dat"
-        with open(att_path, "rb") as f:
-            dct = pickle.load(f)
-        self.mf_s.mo_coeff = dct["C"]
-        self.mf_s.mo_energy = dct["e"]
-        self.mf_s.mo_occ = dct["mo_occ"]
-        self.mf_s.e_tot = dct["mf_s_e_tot"]
-        if rerun_scf:  # probably required for validation of dft grids
-            self.mf_s.kernel(dm=self.mf_s.make_rdm1())
-        self.run_scf()
-        return self
-
-    # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
 
     def nuc_grad_method(self):
         from pyscf.dh.grad.rdfdh import Gradients
@@ -636,8 +434,6 @@ class RDFDH(lib.StreamObject):
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
-
-    # endregion first derivative related in class
 
     energy_elec_nc = energy_elec_nc
     energy_elec_pt2 = energy_elec_pt2

@@ -321,13 +321,13 @@ class Gradients(RDFDH):
 
     def prepare_H_1(self):
         H_1_ao = get_H_1_ao(self.mol)
-        H_1_mo = self.C.T @ H_1_ao @ self.C
+        H_1_mo = self.mo_coeff.T @ H_1_ao @ self.mo_coeff
         self.tensors.create("H_1_ao", H_1_ao)
         self.tensors.create("H_1_mo", H_1_mo)
 
     def prepare_S_1(self):
         S_1_ao = get_S_1_ao(self.mol)
-        S_1_mo = self.C.T @ S_1_ao @ self.C
+        S_1_mo = self.mo_coeff.T @ S_1_ao @ self.mo_coeff
         self.tensors.create("S_1_ao", S_1_ao)
         self.tensors.create("S_1_mo", S_1_mo)
 
@@ -336,7 +336,7 @@ class Gradients(RDFDH):
         Y_mo = self.tensors["Y_mo_jk"]
         # a special treatment
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.C, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
+        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
 
     def prepare_gradient_gga_legacy(self):
         # assert prepare_xc_kernel has been called
@@ -357,7 +357,7 @@ class Gradients(RDFDH):
             vxc_n = self.tensors.get("vxc" + self.xc_n, None)
             if vxc_n is None and self.ni._xc_type(self.xc_n) == "HF":
                 vxc_n = np.zeros((2, rho.size))
-        self.grad_gga = get_gradient_gga(self.C, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
+        self.grad_gga = get_gradient_gga(self.mo_coeff, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
 
     @timing
     def prepare_gradient_gga(self):
@@ -369,7 +369,7 @@ class Gradients(RDFDH):
         from pyscf import grad, hessian
         ni, mol, grids = self.ni, self.mol, self.grids
         natm = mol.natm
-        C, D = self.C, self.D
+        C, D = self.mo_coeff, self.D
         grad_contrib = np.zeros((natm, 3))
 
         xc = self.xc_n if self.xc_n else self.xc
@@ -391,7 +391,7 @@ class Gradients(RDFDH):
     @timing
     def prepare_gradient_pt2(self):
         tensors = self.tensors
-        C, e = self.C, self.e
+        C, e = self.mo_coeff, self.mo_energy
         mol, aux_ri = self.mol, self.aux_ri
         natm, nao, nmo, nocc, nvir, naux = mol.natm, self.nao, self.nmo, self.nocc, self.nvir, self.df_ri.get_naoaux()
         # this algorithm asserts naux = aux.nao, i.e. no linear dependency in auxiliary basis
@@ -401,7 +401,7 @@ class Gradients(RDFDH):
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("pq, Apq -> A", D_r, H_1_mo)
-        if not self.eval_pt2:
+        if not self.mo_energyval_pt2:
             grad_corr.shape = (natm, 3)
             self.grad_pt2 = grad_corr
             return
@@ -458,7 +458,7 @@ class Gradients(RDFDH):
     def prepare_gradient_enfunc(self):
         tensors = self.tensors
         natm = self.mol.natm
-        Co, eo, D = self.Co, self.eo, self.D
+        Co, eo, D = self.mo_coeffo, self.mo_energyo, self.D
         so = self.so
 
         grad_contrib = self.mf_s.Gradients().grad_nuc()

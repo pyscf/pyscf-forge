@@ -1,4 +1,4 @@
-from . import rdfdh, udfdh, dhutil
+from . import dh, rdfdh, udfdh, dhutil
 from pyscf import gto
 
 

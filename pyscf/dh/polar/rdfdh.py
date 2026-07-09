@@ -86,7 +86,7 @@ class Polar(RDFDH):
 
     def prepare_H_1(self):
         tensors = self.tensors
-        mol, C = self.mol, self.C
+        mol, C = self.mol, self.mo_coeff
         H_1_ao = - mol.intor("int1e_r")
         H_1_mo = C.T @ H_1_ao @ C
         tensors.create("H_1_ao", H_1_ao)
@@ -110,7 +110,7 @@ class Polar(RDFDH):
         U_1 = tensors.load("U_1")
         D_r = tensors.load("D_r")
         rho = tensors.load("rho")
-        C, Co = self.C, self.Co
+        C, Co = self.mo_coeff, self.mo_coeffo
         so = self.so
         mol, grids, xc = self.mol, self.grids, self.xc
         # ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
@@ -135,13 +135,13 @@ class Polar(RDFDH):
         pdA_F_0_mo = tensors.load("H_1_mo").copy()
         U_1 = tensors.load("U_1")
 
-        pdA_F_0_mo += einsum("Apq, p -> Apq", U_1, self.e)
-        pdA_F_0_mo += einsum("Aqp, q -> Apq", U_1, self.e)
+        pdA_F_0_mo += einsum("Apq, p -> Apq", U_1, self.mo_energy)
+        pdA_F_0_mo += einsum("Aqp, q -> Apq", U_1, self.mo_energy)
         pdA_F_0_mo += self.Ax0_Core(sa, sa, sa, so)(U_1[:, :, so])
         tensors.create("pdA_F_0_mo", pdA_F_0_mo)
 
         if self.xc_n:
-            F_0_mo_n = einsum("up, uv, vq -> pq", self.C, self.mf_n.get_fock(dm=self.D), self.C)
+            F_0_mo_n = einsum("up, uv, vq -> pq", self.mo_coeff, self.mf_n.get_fock(dm=self.D), self.mo_coeff)
             pdA_F_0_mo_n = np.array(tensors.load("H_1_mo"))
             pdA_F_0_mo_n += einsum("Amp, mq -> Apq", U_1, F_0_mo_n)
             pdA_F_0_mo_n += einsum("Amq, pm -> Apq", U_1, F_0_mo_n)
@@ -170,11 +170,11 @@ class Polar(RDFDH):
         tensors = self.tensors
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
-        eo, ev = self.eo, self.ev
+        eo, ev = self.mo_energyo, self.mo_energyv
         nprop = self.nprop
 
         pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(nprop, nmo, nmo))
-        if not self.eval_pt2:
+        if not self.mo_energyval_pt2:
             return self
 
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
@@ -234,7 +234,7 @@ class Polar(RDFDH):
         # --- The following code is old code, transform wv2 to AO basis, then contract U_1 ---
         # U_1 = tensors.load("U_1")
         # nao = self.nao
-        # C, Co, so = self.C, self.Co, self.so
+        # C, Co, so = self.mo_coeff, self.mo_coeffo, self.so
         # Ax1 = np.zeros((3, nao, nao))
         # ip = 0
         # for ao, mask, weight, _ in ni.block_loop(mol, grids, nao, deriv=1):
@@ -259,7 +259,7 @@ class Polar(RDFDH):
         if self.xc_n:
             pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
             SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]
-        if not self.eval_pt2:
+        if not self.mo_energyval_pt2:
             return SCR3
 
         U_1 = tensors.load("U_1")
