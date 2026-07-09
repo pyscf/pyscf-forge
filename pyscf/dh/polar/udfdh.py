@@ -63,7 +63,7 @@ def _uks_gga_wv2_generator(fxc, kxc, weight):
         rho1 = np.asarray(rho1)
         rho2 = np.asarray(rho2)
 
-        r0, r1, r2 = rho0[:, 0], rho1[:, 0], rho2[:, 0]
+        _r0, r1, r2 = rho0[:, 0], rho1[:, 0], rho2[:, 0]
         n0, n1, n2 = rho0[:, 1:4], rho1[:, 1:4], rho2[:, 1:4]
         g01 = einsum("atg, btg -> abg", n0, n1)
         g02 = einsum("atg, btg -> abg", n0, n2)
@@ -146,7 +146,7 @@ class Polar(UDFDH, RPolar):
         U_1 = tensors.load("U_1")
         D_r = tensors.load("D_r")
         rho = tensors.load("rho")
-        C, Co = self.C, self.Co
+        C, _Co = self.C, self.Co
         so = self.so
         mol, grids, xc = self.mol, self.grids, self.xc
         # ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
@@ -284,7 +284,7 @@ class Polar(UDFDH, RPolar):
         fxc = tensors["fxc" + self.xc]
         kxc = tensors["kxc" + self.xc]
 
-        mol, ni, grids = self.mol, self.ni, self.grids
+        _mol, _ni, grids = self.mol, self.ni, self.grids
         wv_generator = _uks_gga_wv2_generator(fxc, kxc, grids.weights)
         wv = np.zeros((2, nprop, 4, grids.weights.size))
         for i in range(nprop):
@@ -296,7 +296,7 @@ class Polar(UDFDH, RPolar):
 
     def get_SCR3(self):
         tensors = self.tensors
-        so, sv, sa = self.so, self.sv, self.sa
+        so, sv, _sa = self.so, self.sv, self.sa
         naux = self.df_ri.get_naoaux()
         nocc, nvir, nmo = self.nocc, self.nvir, self.nmo
         nprop = self.nprop

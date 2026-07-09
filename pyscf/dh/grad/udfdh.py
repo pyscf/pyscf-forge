@@ -10,7 +10,7 @@ from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
 try:
     from pyscf.dispersion.dftd3 import DFTD3Dispersion
 except ImportError:
-    print('Warning: pyscf-dispersion not found. D3 correction unavailable.') 
+    print('Warning: pyscf-dispersion not found. D3 correction unavailable.')
 # other import
 import numpy as np
 import itertools
@@ -167,10 +167,10 @@ class Gradients(UDFDH, RGradients):
     @timing
     def prepare_gradient_pt2(self):
         tensors = self.tensors
-        C, D, e = self.C, self.D, self.e
+        C, e = self.C, self.e
         mol, aux_ri = self.mol, self.aux_ri
-        natm, nao, nmo, nocc, nvir, naux = mol.natm, self.nao, self.nmo, self.nocc, self.nvir, self.df_ri.get_naoaux()
-        mocc, mvir = max(nocc), max(nvir)
+        natm, nao, nocc, nvir, naux = mol.natm, self.nao, self.nocc, self.nvir, self.df_ri.get_naoaux()
+        mocc = max(nocc)
         # this algorithm asserts naux = aux.nao, i.e. no linear dependency in auxiliary basis
         assert naux == aux_ri.nao
         so, sv, sa = self.so, self.sv, self.sa
@@ -254,7 +254,6 @@ class Gradients(UDFDH, RGradients):
         # handle dftd3 situation
         mol = self.mol
         if "D3" in self.xc_add:
-            from pyscf.dispersion.dftd3 import DFTD3Dispersion
             d3_info = self.xc_add["D3"]
             model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
             disp = model.get_dispersion(grad=True)

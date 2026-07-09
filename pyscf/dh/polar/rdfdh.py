@@ -77,7 +77,7 @@ class Polar(RDFDH):
         self.pol_corr = NotImplemented
         self.pol_tot = NotImplemented
         self.de = NotImplemented
-    
+
     @property
     def nprop(self):
         if "H_1_ao" not in self.tensors:
@@ -224,7 +224,7 @@ class Polar(RDFDH):
         fxc = tensors["fxc" + self.xc]
         kxc = tensors["kxc" + self.xc]
 
-        mol, ni, grids = self.mol, self.ni, self.grids
+        _mol, _ni, grids = self.mol, self.ni, self.grids
 
         wv2 = np.empty((nprop, 4, grids.weights.size))
         for i in range(nprop):
@@ -251,7 +251,7 @@ class Polar(RDFDH):
 
     def get_SCR3(self):
         tensors = self.tensors
-        so, sv, sa = self.so, self.sv, self.sa
+        so, sv, _sa = self.so, self.sv, self.sa
         naux = self.df_ri.get_naoaux()
         nprop = self.nprop
 

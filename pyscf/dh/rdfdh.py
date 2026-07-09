@@ -116,7 +116,6 @@ def energy_nuc(mf: RDFDH, **_):
     mol = mf.mol
     eng_nuc = mol.energy_nuc()
     if "D3" in mf.xc_add:
-        from pyscf.dispersion.dftd3 import DFTD3Dispersion
         d3_info = mf.xc_add["D3"]
         model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
         eng_nuc += model.get_dispersion()["energy"]
