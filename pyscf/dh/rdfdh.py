@@ -1,6 +1,7 @@
 # dh import
 from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
     get_rho_from_dm_gga
+from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfmp2, energy_elec_ump2_ajz, energy_elec_mp2_dfump2
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
@@ -15,6 +16,7 @@ except ImportError:
 import os
 import pickle
 import numpy as np
+from functools import partial
 
 einsum = lib.einsum
 
@@ -55,55 +57,16 @@ def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
 
 
 @timing
-def energy_elec_mp2(mf, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
-    # prepare mo_coeff, mo_energy
-    if mo_coeff is None:
-        if mf.mf_s.e_tot == 0:
-            mf.run_scf()
-        mo_coeff = mf.mo_coeff
-    if mo_energy is None:
-        if mf.mf_s.e_tot == 0:
-            mf.run_scf()
-        mo_energy = mf.mo_energy
-    # prepare essential dimensions
-    if Y_ia_ri is None:
-        nmo = mo_coeff.shape[1]
-        nocc = mf.nocc
-        nvir = nmo - nocc
-    else:
-        nocc, nvir = Y_ia_ri.shape[1:]
-        nmo = nocc + nvir
-    so, sv = slice(0, nocc), slice(nocc, nmo)
-    iaslice = (0, nocc, nocc, nmo)
-    # prepare Y_ia_ri (cderi in MO occ-vir block)
-    if Y_ia_ri is None:
-        if dfobj is None:
-            dfobj = mf.df_ri
-        Y_ia_ri = get_cderi_mo(dfobj, mo_coeff, pqslice=iaslice, max_memory=mf.get_memory())
-    # evaluate energy
-    eng_bi1 = eng_bi2 = 0
-    D_jab = mo_energy[so, None, None] - mo_energy[None, sv, None] - mo_energy[None, None, sv]
-    nbatch = mf.calc_batch_size(2 * nocc * nvir ** 2, Y_ia_ri.size + D_jab.size)
-    for sI in gen_batch(0, nocc, nbatch):  # batch (i)
-        D_ijab = mo_energy[sI, None, None, None] + D_jab
-        g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[:, sI], Y_ia_ri)
-        t_ijab = g_ijab / D_ijab
-        eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
-        if eval_ss:
-            eng_bi2 += einsum("ijab, ijba ->", t_ijab, g_ijab)
-        if t_ijab_blk:
-            t_ijab_blk[sI] = t_ijab
-    return eng_bi1, eng_bi2
-
-
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
-    if not mf.eval_pt2:  # not a PT2 functional
+    if not mf.eval_pt2:
         return 0, 0, 0
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
     eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
-    return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),  # Total
-            eng_bi1,                                          # OS
-            eng_bi1 - eng_bi2)                                # SS
+    if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
+        return cc * eng_bi1, None, None
+    return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),
+            eng_bi1,
+            eng_bi1 - eng_bi2)
 
 
 def energy_nuc(mf, **_):
@@ -132,32 +95,6 @@ def energy_tot(mf, **kwargs):
     eng_nuc = mf.energy_nuc()
     eng_tot = eng_elec + eng_nuc
     return eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss
-
-
-@timing
-def get_cderi_mo(dfobj: df.DF, C, Y_mo=None, pqslice=None, max_memory=2000):
-    nmo, naux = dfobj.mol.nao, dfobj.get_naoaux()
-    if pqslice is None:
-        pqslice = (0, nmo, 0, nmo)
-        nump, numq = nmo, nmo
-    else:
-        nump, numq = pqslice[1] - pqslice[0], pqslice[3] - pqslice[2]
-    if Y_mo is None:
-        Y_mo = np.empty((naux, nump, numq))
-
-    def save(r0, r1, buf):
-        Y_mo[r0:r1] = buf.reshape(r1-r0, nump, numq)
-
-    p0, p1 = 0, 0
-    preflop = 0 if not isinstance(Y_mo, np.ndarray) else Y_mo.size
-    nbatch = calc_batch_size(2*nump*numq, max_memory, preflop)
-    with lib.call_in_background(save) as bsave:
-        for Y_ao in dfobj.loop(nbatch):
-            p1 = p0 + Y_ao.shape[0]
-            Y_mo_buf = _ao2mo.nr_e2(Y_ao, C, pqslice, aosym="s2", mosym="s1")
-            bsave(p0, p1, Y_mo_buf)
-            p0 = p1
-    return Y_mo
 
 
 # endregion energy evaluation
@@ -274,7 +211,8 @@ class RDFDH(lib.StreamObject):
                  auxbasis_ri: str or dict or None = None,
                  grids: dft.Grids = None,
                  grids_cpks: dft.Grids = None,
-                 unrestricted: bool = False,  # only for class initialization
+                 unrestricted: bool = False,
+                 mp2_backend: str = "ajz",
                  ):
         # tunable flags
         self.with_t_ijab = False  # only in energy calculation; polarizability is forced dump t2 to disk or mem
@@ -285,6 +223,18 @@ class RDFDH(lib.StreamObject):
         self.cpks_tol = 1e-8
         self.cpks_cyc = 100
         self.max_memory = mol.max_memory
+        # MP2 backend dispatch
+        self.mp2_backend = mp2_backend
+        if mp2_backend == "dfmp2_native":
+            if unrestricted:
+                self.energy_elec_mp2 = partial(energy_elec_mp2_dfump2, self)
+            else:
+                self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2, self)
+        else:
+            if unrestricted:
+                self.energy_elec_mp2 = partial(energy_elec_ump2_ajz, self)
+            else:
+                self.energy_elec_mp2 = partial(energy_elec_mp2_ajz, self)
         # Parse xc code
         # It's tricky to say that, self.xc refers to SCF xc, and self.xc_dh refers to double hybrid xc
         # There should be three kinds of possible inputs:
@@ -690,7 +640,6 @@ class RDFDH(lib.StreamObject):
     # endregion first derivative related in class
 
     energy_elec_nc = energy_elec_nc
-    energy_elec_mp2 = energy_elec_mp2
     energy_elec_pt2 = energy_elec_pt2
     energy_nuc = energy_nuc
     energy_elec = energy_elec

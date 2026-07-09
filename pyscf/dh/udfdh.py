@@ -1,6 +1,7 @@
 # dh import
 from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
-from pyscf.dh.rdfdh import get_cderi_mo, kernel, RDFDH
+from pyscf.dh.rdfdh import kernel, RDFDH
+from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfump2
 # pyscf import
 from pyscf import lib, gto, df, dft
 from pyscf.scf import ucphf
@@ -19,67 +20,13 @@ ndarray = np.ndarray or h5py.Dataset
 # region energy evaluation
 
 
-@timing
-def energy_elec_mp2(mf,
-                    mo_coeff=None,
-                    mo_energy=None,
-                    dfobj=None,
-                    Y_ia_ri=None,
-                    t_ijab_blk=None,
-                    eval_ss=True, **_):
-    # prepare mo_coeff, mo_energy
-    if mo_coeff is None:
-        if mf.mf_s.e_tot == 0:
-            mf.run_scf()
-        mo_coeff = mf.mo_coeff
-    if mo_energy is None:
-        if mf.mf_s.e_tot == 0:
-            mf.run_scf()
-        mo_energy = mf.mo_energy
-    # prepare essential dimensions
-    if Y_ia_ri is None:
-        nmo = mo_coeff.shape[-1]
-        nocc = mf.nocc
-        nvir = nmo - nocc[α], nmo - nocc[β]
-    else:
-        nocc = Y_ia_ri[α].shape[1], Y_ia_ri[β].shape[1]
-        nvir = Y_ia_ri[α].shape[2], Y_ia_ri[β].shape[2]
-        nmo = nocc[α] + nvir[α]
-    so = slice(0, nocc[α]), slice(0, nocc[β])
-    sv = slice(nocc[α], nmo), slice(nocc[β], nmo)
-    eo = mo_energy[α, so[α]], mo_energy[β, so[β]]
-    ev = mo_energy[α, sv[α]], mo_energy[β, sv[β]]
-    iaslice = (0, nocc[α], nocc[α], nmo), (0, nocc[β], nocc[β], nmo)
-    # prepare Y_ia_ri (cderi in MO occ-vir block)
-    if Y_ia_ri is None:
-        if dfobj is None:
-            dfobj = mf.df_ri
-        Y_ia_ri = [get_cderi_mo(dfobj, mo_coeff[σ], pqslice=iaslice[σ], max_memory=mf.get_memory()) for σ in (α, β)]
-    # evaluate energy
-    eng_bi1, eng_bi2 = [0, 0, 0], [0, 0, 0]
-    mocc, mvir = max(nocc), max(nvir)
-    nbatch = mf.calc_batch_size(2 * mocc * mvir ** 2, tot_size(Y_ia_ri) + mocc * mvir ** 2)
-    # situation αβ
-    for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
-        D_jab = eo[ς][:, None, None] - ev[σ][None, :, None] - ev[ς][None, None, :]
-        for sI in gen_batch(0, nocc[σ], nbatch):
-            if σς == αβ or eval_ss:  # if c_ss == 0, then SS contribution is not counted
-                D_ijab = eo[σ][sI, None, None, None] + D_jab
-                g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[σ][:, sI], Y_ia_ri[ς])
-                t_ijab = g_ijab / D_ijab
-                eng_bi1[σς] += einsum("ijab, ijab ->", t_ijab, g_ijab)
-                if t_ijab_blk:
-                    t_ijab_blk[σς][sI] = t_ijab
-                if σς in (αα, ββ):
-                    eng_bi2[σς] += einsum("ijab, ijba ->", t_ijab, g_ijab)
-    return tuple(eng_bi1), tuple(eng_bi2)
-
-
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
-    if not mf.eval_pt2:  # not a PT2 functional
+    if not mf.eval_pt2:
         return 0, 0, 0
-    eng_bi1, eng_bi2 = eng_bi if eng_bi else energy_elec_mp2(mf, eval_ss=mf.eval_ss, **kwargs)
+    eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
+    if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
+        return cc * eng_bi1, None, None
     eng_os = eng_bi1[αβ]
     eng_ss = 0.5 * (eng_bi1[αα] + eng_bi1[ββ] - eng_bi2[αα] - eng_bi2[ββ])
     eng_pt2 = cc * (c_os * eng_os + c_ss * eng_ss)
@@ -215,9 +162,10 @@ class UDFDH(RDFDH):
                  auxbasis_ri: str or dict or None = None,
                  grids: dft.Grids = None,
                  grids_cpks: dft.Grids = None,
-                 unrestricted: bool = True  # only for class initialization
+                 unrestricted: bool = True,
+                 mp2_backend: str = "ajz",
                  ):
-        super(UDFDH, self).__init__(mol, xc, auxbasis_jk, auxbasis_ri, grids, grids_cpks, unrestricted)
+        super(UDFDH, self).__init__(mol, xc, auxbasis_jk, auxbasis_ri, grids, grids_cpks, unrestricted, mp2_backend)
         self.nocc = mol.nelec  # type: Tuple[int, int]
         self.mvir = NotImplemented
         self.mocc = max(max(self.nocc), 1)
@@ -499,7 +447,6 @@ class UDFDH(RDFDH):
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
 
-    energy_elec_mp2 = energy_elec_mp2
     energy_elec_pt2 = energy_elec_pt2
     energy_elec = energy_elec
 
