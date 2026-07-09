@@ -1,31 +1,17 @@
 {
+    "HF_B3LYP": {
+        "code_scf": "HF",
+        "code": "B3LYP"
+    },
+    "HF_PBE0": {
+        "code_scf": "HF",
+        "code": "PBE0"
+    },
     "XYG3": {
         "code_scf": "B3LYPg",
         "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2",
         "ref": "10.1073/pnas.0901093106",
         "tested": "MRCC 2022-03-18"
-    },
-    "XYGJ_OS": {
-        "code_scf": "B3LYPg",
-        "code": "0.7731*HF + 0.2269*LDA, 0.2309*VWN3 + 0.2754*LYP + 0.4364*MP2_OS",
-        "ref": "10.1073/pnas.1115123108"
-    },
-    "xDH_PBE0": {
-        "code_scf": "PBE0",
-        "code": "0.8335*HF + 0.1665*PBE, 0.5292*PBE + 0.5428*MP2_OS",
-        "ref": "10.1063/1.3703893"
-    },
-    "lrc_XYG3": {
-        "code_scf": "B3LYPg",
-        "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2 + 0.4822*RS_MP2(0.2, 1, 1)",
-        "ref": "10.1021/jz400695u",
-        "tested": "QChem local"
-    },
-    "revXYG3": {
-        "code_scf": "B3LYPg",
-        "code": "0.9196*HF - 0.0222*LDA + 0.1026*B88, 0.6059*LYP + 0.3941*MP2",
-        "ref": "10.1021/acs.jpclett.1c00360",
-        "family": "xDH@B3LYP"
     },
     "XYG5": {
         "code_scf": "B3LYPg",
@@ -45,11 +31,10 @@
         "ref": "10.1021/acs.jpclett.1c00360",
         "family": "xDH@B3LYP"
     },
-    "revXYGJ_OS": {
+    "XYGJ_OS": {
         "code_scf": "B3LYPg",
-        "code": "0.8877*HF + 0.1123*LDA, -0.0697*VWN3 + 0.6167*LYP + 0.5485*MP2_OS",
-        "ref": "10.1021/acs.jpclett.1c00360",
-        "family": "xDH@B3LYP"
+        "code": "0.7731*HF + 0.2269*LDA, 0.2309*VWN3 + 0.2754*LYP + 0.4364*MP2_OS",
+        "ref": "10.1073/pnas.1115123108"
     },
     "XYGJ_OS5": {
         "code_scf": "B3LYPg",
@@ -69,12 +54,27 @@
         "ref": "10.1103/PhysRevLett.117.133002",
         "family": "ZRPS"
     },
-    "HF_B3LYP": {
-        "code_scf": "HF",
-        "code": "B3LYP"
+    "lrc_XYG3": {
+        "code_scf": "B3LYPg",
+        "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2 + 0.4822*RS_MP2(0.2, 1, 1)",
+        "ref": "10.1021/jz400695u",
+        "tested": "QChem local"
     },
-    "HF_PBE0": {
-        "code_scf": "HF",
-        "code": "PBE0"
+    "revXYG3": {
+        "code_scf": "B3LYPg",
+        "code": "0.9196*HF - 0.0222*LDA + 0.1026*B88, 0.6059*LYP + 0.3941*MP2",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "revXYGJ_OS": {
+        "code_scf": "B3LYPg",
+        "code": "0.8877*HF + 0.1123*LDA, -0.0697*VWN3 + 0.6167*LYP + 0.5485*MP2_OS",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "xDH_PBE0": {
+        "code_scf": "PBE0",
+        "code": "0.8335*HF + 0.1665*PBE, 0.5292*PBE + 0.5428*MP2_OS",
+        "ref": "10.1063/1.3703893"
     }
 }

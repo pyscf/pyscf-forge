@@ -1,12 +1,6 @@
-from __future__ import annotations
 # dh import
 from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
 from pyscf.dh.rdfdh import get_cderi_mo, kernel, RDFDH
-# typing import
-from typing import Tuple, TYPE_CHECKING
-if TYPE_CHECKING:
-    from pyscf.dh.grad.udfdh import Gradients
-    from pyscf.dh.polar.udfdh import Polar
 # pyscf import
 from pyscf import lib, gto, df, dft
 from pyscf.scf import ucphf
@@ -26,12 +20,12 @@ ndarray = np.ndarray or h5py.Dataset
 
 
 @timing
-def energy_elec_mp2(mf: UDFDH,
-                    mo_coeff: np.ndarray = None,
-                    mo_energy: np.ndarray = None,
-                    dfobj: df.DF = None,
-                    Y_ia_ri: Tuple[ndarray, ...] = None,
-                    t_ijab_blk: Tuple[ndarray, ...] = None,
+def energy_elec_mp2(mf,
+                    mo_coeff=None,
+                    mo_energy=None,
+                    dfobj=None,
+                    Y_ia_ri=None,
+                    t_ijab_blk=None,
                     eval_ss=True, **_):
     # prepare mo_coeff, mo_energy
     if mo_coeff is None:
@@ -81,7 +75,7 @@ def energy_elec_mp2(mf: UDFDH,
     return tuple(eng_bi1), tuple(eng_bi2)
 
 
-def energy_elec_pt2(mf: UDFDH, params=None, eng_bi=None, **kwargs):
+def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
     if not mf.eval_pt2:  # not a PT2 functional
         return 0, 0, 0
@@ -92,7 +86,7 @@ def energy_elec_pt2(mf: UDFDH, params=None, eng_bi=None, **kwargs):
     return eng_pt2, eng_os, eng_ss
 
 
-def energy_elec(mf: UDFDH, params=None, **kwargs):
+def energy_elec(mf, params=None, **kwargs):
     eng_nc = mf.energy_elec_nc(**kwargs)[0]
     nocc, nvir = mf.nocc, mf.nvir
     _, _, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
@@ -492,15 +486,14 @@ class UDFDH(RDFDH):
         return d
 
     # A REALLY DIRTY WAY transform to son class https://stackoverflow.com/questions/7078134/
-    # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
 
-    def nuc_grad_method(self) -> Gradients:
+    def nuc_grad_method(self):
         from pyscf.dh.grad.udfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self
 
-    def polar_method(self) -> Polar:
+    def polar_method(self):
         from pyscf.dh.polar.udfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)

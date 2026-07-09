@@ -1,12 +1,6 @@
-from __future__ import annotations
 # dh import
 from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
     get_rho_from_dm_gga
-# typing import
-from typing import Tuple, TYPE_CHECKING
-if TYPE_CHECKING:
-    from pyscf.dh.grad.rdfdh import Gradients
-    from pyscf.dh.polar.rdfdh import Polar
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
@@ -28,7 +22,7 @@ einsum = lib.einsum
 # region energy evaluation
 
 
-def kernel(mf: RDFDH, **kwargs):
+def kernel(mf, **kwargs):
     mf.build()
     eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss = mf.energy_tot(**kwargs)
     mf.e_tot = mf.eng_tot = eng_tot
@@ -41,7 +35,7 @@ def kernel(mf: RDFDH, **kwargs):
 
 
 @timing
-def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, **_):
+def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
             mf.run_scf()
@@ -61,7 +55,7 @@ def energy_elec_nc(mf: RDFDH, mo_coeff=None, h1e=None, vhf=None, **_):
 
 
 @timing
-def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
+def energy_elec_mp2(mf, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
     # prepare mo_coeff, mo_energy
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
@@ -102,7 +96,7 @@ def energy_elec_mp2(mf: RDFDH, mo_coeff=None, mo_energy=None, dfobj=None, Y_ia_r
     return eng_bi1, eng_bi2
 
 
-def energy_elec_pt2(mf: RDFDH, params=None, eng_bi=None, **kwargs):
+def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     if not mf.eval_pt2:  # not a PT2 functional
         return 0, 0, 0
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
@@ -112,7 +106,7 @@ def energy_elec_pt2(mf: RDFDH, params=None, eng_bi=None, **kwargs):
             eng_bi1 - eng_bi2)                                # SS
 
 
-def energy_nuc(mf: RDFDH, **_):
+def energy_nuc(mf, **_):
     mol = mf.mol
     eng_nuc = mol.energy_nuc()
     if "D3" in mf.xc_add:
@@ -122,7 +116,7 @@ def energy_nuc(mf: RDFDH, **_):
     return eng_nuc
 
 
-def energy_elec(mf: RDFDH, **kwargs):
+def energy_elec(mf, **kwargs):
     eng_nc = mf.energy_elec_nc(**kwargs)[0]
     nocc, nvir = mf.nocc, mf.nvir
     t_ijab_blk = None
@@ -133,7 +127,7 @@ def energy_elec(mf: RDFDH, **kwargs):
     return eng_elec, eng_nc, eng_pt2, eng_os, eng_ss
 
 
-def energy_tot(mf: RDFDH, **kwargs):
+def energy_tot(mf, **kwargs):
     eng_elec, eng_nc, eng_pt2, eng_os, eng_ss = mf.energy_elec(**kwargs)
     eng_nuc = mf.energy_nuc()
     eng_tot = eng_elec + eng_nuc
@@ -680,15 +674,14 @@ class RDFDH(lib.StreamObject):
         return self
 
     # A REALLY DIRTY WAY  https://stackoverflow.com/questions/7078134/
-    # to avoid cyclic imports in typing https://stackoverflow.com/questions/39740632/
 
-    def nuc_grad_method(self) -> Gradients:
+    def nuc_grad_method(self):
         from pyscf.dh.grad.rdfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self
 
-    def polar_method(self) -> Polar:
+    def polar_method(self):
         from pyscf.dh.polar.rdfdh import Polar
         self.__class__ = Polar
         Polar.__init__(self, self.mol, skip_construct=True)
