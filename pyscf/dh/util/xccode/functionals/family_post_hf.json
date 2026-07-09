@@ -1,0 +1,15 @@
+{
+    "MP2": {
+        "code": "HF, MP2",
+        "ref": "10.1103/PhysRev.46.618"
+    },
+    "MP2cr": {
+        "code": "HF, MP2CR",
+        "ref": "10.1002/(SICI)1097-461X(2000)78:4<226::AID-QUA4>3.0.CO;2-N",
+        "alias": ["MP2cr1"]
+    },
+    "MP2cr2": {
+        "code": "HF, MP2CR2",
+        "ref": "10.1002/(SICI)1097-461X(2000)78:4<226::AID-QUA4>3.0.CO;2-N"
+    }
+}

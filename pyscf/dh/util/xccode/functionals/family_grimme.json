@@ -1,0 +1,29 @@
+{
+    "B2PLYP": {
+        "code": "0.53*HF + 0.47*B88, 0.73*LYP + 0.27*MP2",
+        "ref": "10.1063/1.2148954",
+        "tested": "MRCC 2022-03-18"
+    },
+    "B2PLYP_D3BJ": {
+        "code": "0.53*HF + 0.47*B88, 0.73*LYP + 0.27*MP2 + DFTD3(BJ, xc=B2PLYP)",
+        "ref": ["10.1063/1.2148954", "10.1021/acs.jpclett.6b00780"],
+        "tested": "Gaussian 16, Rev B.01"
+    },
+    "mPW2PLYP": {
+        "code": "0.55*HF + 0.45*mPW91, 0.75*LYP + 0.25*MP2",
+        "ref": "10.1039/b608478h",
+        "tested": "Gaussian 16, Rev B.01"
+    },
+    "PTPSS_D3Zero": {
+        "code": "0.5*HF + 0.5*MGGA_X_TPSS(_b=0.15, _c=0.88491, _e=0.047, _kappa=0.872, _mu=0.16952), 0.625*MGGA_C_TPSS(_beta=0.06080, _d=6.3) + 0.375*MP2_OS + DFTD3(Zero, s6=0.75, s8=0.879, rs6=1.541)",
+        "ref": "10.1021/ct100466k",
+        "tested": "QChem 5.1.1",
+        "alias": ["PTPSS"]
+    },
+    "PWPB95_D3Zero": {
+        "code": "0.5*HF + 0.5*GGA_X_MPW91(_bt=0.00444, _alpha=19.823391, _expo=3.7868), 0.731*MGGA_C_BC95(_css=0.03241, _copp=0.00250) + 0.269*MP2_OS + DFTD3(Zero, s6=0.82, s8=0.705, rs6=1.557)",
+        "ref": "10.1021/ct100466k",
+        "tested": "QChem 5.1.1",
+        "alias": ["PWPB95"]
+    }
+}

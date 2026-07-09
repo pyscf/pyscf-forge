@@ -1,0 +1,32 @@
+{
+    "PBE_CIDH": {
+        "code": "0.55*HF + 0.45*PBE, 0.83*PBE + 0.17*MP2",
+        "ref": "10.1007/s00214-015-1689-4"
+    },
+    "TPSS_CIDH": {
+        "code": "0.55*HF + 0.45*TPSS, 0.83*TPSS + 0.17*MP2",
+        "ref": "10.1007/s00214-015-1689-4"
+    },
+    "SOS0_PBE0_DH": {
+        "code": "0.5*HF + 0.5*PBE, 0.875*PBE + 0.1666666667*MP2_OS",
+        "ref": "10.1021/acs.jpca.6b03406",
+        "alias": ["SOS_PBE0_DH"]
+    },
+    "SOS0_PBE_QIDH": {
+        "code": "0.6933612744*HF + 0.3066387256*PBE, 0.6666666667*PBE + 0.4444444444*MP2_OS",
+        "ref": "10.1021/acs.jpca.6b03406",
+        "alias": ["SOS_PBE_QIDH"]
+    },
+    "SOS_RSX_PBE0_DH": {
+        "code": "0.5*HF + 0.5*LR_HF(0.33) + 0.5*GGA_X_ITYH_PBE, 0.875*PBE + 0.1666666667*MP2_OS",
+        "ref": "10.1021/acs.jctc.1c00271",
+        "note": "This may have the same name to functionals in 10.1021/acs.jctc.1c00535.",
+        "alias": ["SOS_RSX_0DH"]
+    },
+    "SOS_RSX_PBE_QIDH": {
+        "code": "0.69*HF + 0.31*LR_HF(0.27) + 0.31*GGA_X_ITYH_PBE, 0.67*PBE + 0.4444444444*MP2_OS",
+        "ref": "10.1021/acs.jctc.1c00271",
+        "note": "This may have the same name to functionals in 10.1021/acs.jctc.1c00535.",
+        "alias": ["SOS_RSX_QIDH"]
+    }
+}

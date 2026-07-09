@@ -1,0 +1,53 @@
+{
+    "PBE0_DH_Gaussian": {
+        "code": "0.5*HF + 0.5*GGA_X_PBE_GAUSSIAN, 0.875*GGA_C_PBE_GAUSSIAN + 0.125*MP2",
+        "ref": "10.1063/1.3604569",
+        "tested": "Gaussian 16, Rev B.01"
+    },
+    "PBE_QIDH_Gaussian": {
+        "code": "0.69*HF + 0.31*GGA_X_PBE_GAUSSIAN, 0.6666*GGA_C_PBE_GAUSSIAN + 0.3334*MP2",
+        "ref": "10.1063/1.4890314",
+        "tested": "Gaussian 16, Rev B.01",
+        "notes": "This implementation gives results of Gaussian."
+    },
+    "PBE0_DH": {
+        "code": "0.5*HF + 0.5*PBE, 0.875*PBE + 0.125*MP2",
+        "ref": "10.1063/1.3604569"
+    },
+    "TPSS0_DH": {
+        "code": "0.5*HF + 0.5*TPSS, 0.875*TPSS + 0.125*MP2",
+        "ref": "10.1021/ct4003527"
+    },
+    "revPBE0_DH": {
+        "code": "0.5*HF + 0.5*revPBE, 0.875*PBE + 0.125*MP2",
+        "ref": "10.1021/ct4003527"
+    },
+    "PBE_QIDH": {
+        "code": "0.6933612744*HF + 0.3066387256*PBE, 0.6666666667*PBE + 0.3333333333*MP2",
+        "ref": "10.1063/1.4890314",
+        "tested": "QChem 5.1.1",
+        "notes": "This implementation should be the same to rhetoric of original paper (rounded at 1e-10).",
+        "alias": ["PBE_QIDH_QCHEM"]
+    },
+    "TPSS_QIDH": {
+        "code": "0.6933612744*HF + 0.3066387256*TPSS, 0.6666666667*TPSS + 0.3333333333*MP2",
+        "ref": "10.1063/1.4890314"
+    },
+    "LS1DH_PBE": {
+        "code": "0.75*HF + 0.25*PBE, 0.578125*PBE + 0.421875*MP2",
+        "ref": "10.1063/1.3640019",
+        "tested": "QChem 5.1.1"
+    },
+    "RSX_0DH": {
+        "code": "0.5*HF + 0.5*LR_HF(0.33) + 0.5*GGA_X_ITYH_PBE, 0.875*PBE + 0.125*MP2",
+        "ref": "10.1063/1.5097164",
+        "tested": "ORCA 5.0.4",
+        "alias": ["RSX_PBE0_DH"]
+    },
+    "RSX_QIDH": {
+        "code": "0.69*HF + 0.31*LR_HF(0.27) + 0.31*GGA_X_ITYH_PBE, 0.67*PBE + 0.33*MP2",
+        "ref": "10.1021/acs.jctc.8b00261",
+        "tested": "ORCA 5.0.4",
+        "alias": ["RSX_PBE_QIDH"]
+    }
+}

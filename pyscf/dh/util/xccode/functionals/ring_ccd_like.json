@@ -1,0 +1,7 @@
+{
+    "dRPA75": {
+        "code_scf": "0.75*HF + 0.25*PBE, PBE",
+        "code": "0.75*HF + 0.25*PBE, RS_RING_CCD(0)",
+        "ref": "10.1021/acs.jctc.5b00420"
+    }
+}

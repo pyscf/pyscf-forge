@@ -1,0 +1,22 @@
+{
+    "RS_PBE_P86": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PBE, 0.7), 0.75*SSR(GGA_C_P86, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18"
+    },
+    "RS_PBE_PBE": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PBE, 0.7), 0.75*SSR(GGA_C_PBE, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18"
+    },
+    "RS_B88_LYP": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_B88, 0.7), 0.75*SSR(GGA_C_LYP, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18"
+    },
+    "RS_PW91_PW91": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PW91, 0.7), 0.75*SSR(GGA_C_PW91, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18"
+    }
+}

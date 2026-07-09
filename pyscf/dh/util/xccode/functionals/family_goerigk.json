@@ -1,0 +1,26 @@
+{
+    "wB2PLYP": {
+        "code": "0.53*HF + 0.47*LR_HF(0.3) + 0.47*GGA_X_ITYH, 0.73*LYP + 0.27*MP2",
+        "ref": "10.1021/acs.jctc.9b00013",
+        "tested": "ORCA 5.0.4",
+        "alias": ["ωB2PLYP"]
+    },
+    "wB2GP_PLYP": {
+        "code": "0.65*HF + 0.35*LR_HF(0.27) + 0.35*GGA_X_ITYH, 0.64*LYP + 0.36*MP2",
+        "ref": "10.1021/acs.jctc.9b00013",
+        "tested": "ORCA 5.0.4",
+        "alias": ["ωB2GP_PLYP"]
+    },
+    "wB88PP86": {
+        "code": "0.65*HF + 0.35*LR_HF(0.2) + 0.35*GGA_X_ITYH, 0.58*GGA_C_P86VWN + 0.42*MP2",
+        "ref": "10.1021/acs.jctc.1c00535",
+        "tested": "ORCA 5.0.4",
+        "alias": ["ωB88PP86"]
+    },
+    "wPBEPP86": {
+        "code": "0.70*HF + 0.30*LR_HF(0.18) + 0.30*GGA_X_ITYH_PBE, 0.68*GGA_C_P86VWN + 0.48*MP2",
+        "ref": "10.1021/acs.jctc.1c00535",
+        "tested": "ORCA 5.0.4",
+        "alias": ["ωPBEPP86"]
+    }
+}

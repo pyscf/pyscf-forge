@@ -1,0 +1,42 @@
+{
+    "DSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.44*P86_FT + 0.52*MP2_OS + 0.22*MP2_SS + DFTD3(BJ, s6=0.48, a1=0, s8=0, a2=5.6)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1",
+        "notes": "P86_FT used in Gaussian, QChem, etc instead of P86. Also see https://github.com/pyscf/pyscf/issues/1004."
+    },
+    "DSD_PBEPBE_D3BJ": {
+        "code": "0.68*HF + 0.32*PBE, 0.49*PBE + 0.55*MP2_OS + 0.13*MP2_SS + DFTD3(BJ, s6=0.78, a1=0, s8=0, a2=6.1)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1"
+    },
+    "DSD_PBEB95_D3BJ": {
+        "code": "0.66*HF + 0.34*PBE, 0.55*BC95 + 0.46*MP2_OS + 0.09*MP2_SS + DFTD3(BJ, s6=0.61, a1=0, s8=0, a2=6.2)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1"
+    },
+    "DSD_BLYP_D3BJ": {
+        "code": "0.71*HF + 0.29*B88, 0.54*LYP + 0.47*MP2_OS + 0.40*MP2_SS + DFTD3(BJ, s6=0.57, a1=0, s8=0, a2=5.4)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "ORCA 5.0.4"
+    },
+    "B2GP_PLYP": {
+        "code": "0.65*HF + 0.35*B88, 0.64*LYP + 0.36*MP2",
+        "ref": "10.1021/jp801805p"
+    },
+    "B2GP_PLYP_D3BJ": {
+        "code": "0.65*HF + 0.35*B88, 0.64*LYP + 0.36*MP2 + DFTD3(BJ, xc=B2GPPLYP)",
+        "ref": ["10.1021/jp801805p", "10.1021/acs.jpclett.6b00780"],
+        "tested": "MRCC 2022-03-18",
+        "alias": ["B2GPPLYP_D3BJ"]
+    },
+    "DSD_PBEP86": {
+        "code": "0.72*HF + 0.28*PBE, 0.44*P86_FT + 0.51*MP2_OS + 0.36*MP2_SS",
+        "ref": "10.1002/jcc.23391"
+    },
+    "REV_DSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.4296*P86_FT + 0.5785*MP2_OS + 0.0799*MP2_SS + DFTD3(BJ, S6=0.4377, A1=0, S8=0, A2=5.5)",
+        "ref": "10.1002/jcc.23391",
+        "alias": ["REVDSDPBEP86D3"]
+    }
+}
