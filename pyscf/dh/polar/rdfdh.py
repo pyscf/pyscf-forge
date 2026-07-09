@@ -224,7 +224,7 @@ class Polar(RDFDH):
         fxc = tensors["fxc" + self.xc]
         kxc = tensors["kxc" + self.xc]
 
-        _mol, _ni, grids = self.mol, self.ni, self.grids
+        grids = self.grids
 
         wv2 = np.empty((nprop, 4, grids.weights.size))
         for i in range(nprop):
@@ -251,7 +251,7 @@ class Polar(RDFDH):
 
     def get_SCR3(self):
         tensors = self.tensors
-        so, sv, _sa = self.so, self.sv, self.sa
+        so, sv = self.so, self.sv
         naux = self.df_ri.get_naoaux()
         nprop = self.nprop
 

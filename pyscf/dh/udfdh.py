@@ -95,7 +95,7 @@ def energy_elec_pt2(mf: UDFDH, params=None, eng_bi=None, **kwargs):
 def energy_elec(mf: UDFDH, params=None, **kwargs):
     eng_nc = mf.energy_elec_nc(**kwargs)[0]
     nocc, nvir = mf.nocc, mf.nvir
-    _cc, _c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
+    _, _, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
     eval_ss = True if abs(c_ss) > 1e-7 else False
     t_ijab_blk = None
     if mf.with_t_ijab:
