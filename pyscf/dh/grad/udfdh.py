@@ -2,7 +2,7 @@ from __future__ import annotations
 # dh import
 from pyscf.dh.udfdh import UDFDH
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing
-from pyscf.dh.grad.rdfdh import get_H_1_ao, get_S_1_ao, generator_L_1
+from pyscf.dh.grad.rdfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel
 from pyscf.dh.grad.rdfdh import Gradients as RGradients
 # pyscf import
 from pyscf import gto, lib, df
@@ -178,7 +178,7 @@ class Gradients(UDFDH, RGradients):
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("spq, sApq -> A", D_r, H_1_mo)
-        if not self.mo_energyval_pt2:
+        if not self.eval_pt2:
             grad_corr.shape = (natm, 3)
             self.grad_pt2 = grad_corr
             return
@@ -230,7 +230,7 @@ class Gradients(UDFDH, RGradients):
     def prepare_gradient_enfunc(self):
         tensors = self.tensors
         natm = self.mol.natm
-        Co, eo, D = self.mo_coeffo, self.mo_energyo, self.D
+        Co, eo, D = self.Co, self.eo, self.D
         so = self.so
 
         grad_contrib = self.mf_s.Gradients().grad_nuc()
@@ -260,6 +260,8 @@ class Gradients(UDFDH, RGradients):
             grad_contrib += disp["gradient"]
 
         self.grad_enfunc = grad_contrib
+
+    kernel = kernel
 
     def base_method(self) -> UDFDH:
         self.__class__ = UDFDH

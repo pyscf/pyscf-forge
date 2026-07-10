@@ -1,8 +1,21 @@
 from pyscf import lib, df
 from pyscf.ao2mo import _ao2mo
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, timing, tot_size
+from pyscf.dh.dhutil import restricted_biorthogonalize as _restricted_biorthogonalize
 import numpy as np
 einsum = lib.einsum
+
+
+def _loop_t_ijab(mf, Y_ia_ri, mo_energy, nocc, nvir, callback):
+    so = slice(0, nocc)
+    sv = slice(nocc, nocc + nvir)
+    D_jab = mo_energy[so, None, None] - mo_energy[None, sv, None] - mo_energy[None, None, sv]
+    nbatch = mf.calc_batch_size(2 * nocc * nvir ** 2, Y_ia_ri.size + D_jab.size)
+    for sI in gen_batch(0, nocc, nbatch):
+        D_ijab = mo_energy[sI, None, None, None] + D_jab
+        g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[:, sI], Y_ia_ri)
+        t_ijab = g_ijab / D_ijab
+        callback(sI, t_ijab, g_ijab)
 
 
 @timing
@@ -35,7 +48,7 @@ def get_cderi_mo(dfobj, C, Y_mo=None, pqslice=None, max_memory=2000):
 
 @timing
 def energy_elec_mp2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
-                         Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
+                         Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **kwargs):
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
             mf.run_scf()
@@ -51,25 +64,23 @@ def energy_elec_mp2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
     else:
         nocc, nvir = Y_ia_ri.shape[1:]
         nmo = nocc + nvir
-    so, sv = slice(0, nocc), slice(nocc, nmo)
     iaslice = (0, nocc, nocc, nmo)
     if Y_ia_ri is None:
         if dfobj is None:
             dfobj = mf.df_ri
         Y_ia_ri = get_cderi_mo(dfobj, mo_coeff, pqslice=iaslice, max_memory=mf.get_memory())
-    eng_bi1 = eng_bi2 = 0
-    D_jab = mo_energy[so, None, None] - mo_energy[None, sv, None] - mo_energy[None, None, sv]
-    nbatch = mf.calc_batch_size(2 * nocc * nvir ** 2, Y_ia_ri.size + D_jab.size)
-    for sI in gen_batch(0, nocc, nbatch):
-        D_ijab = mo_energy[sI, None, None, None] + D_jab
-        g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[:, sI], Y_ia_ri)
-        t_ijab = g_ijab / D_ijab
-        eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
+    eng_bi1 = [0]
+    eng_bi2 = [0]
+
+    def accumulate(sI, t_ijab, g_ijab):
+        eng_bi1[0] += einsum("ijab, ijab ->", t_ijab, g_ijab)
         if eval_ss:
-            eng_bi2 += einsum("ijab, ijba ->", t_ijab, g_ijab)
+            eng_bi2[0] += einsum("ijab, ijba ->", t_ijab, g_ijab)
         if t_ijab_blk:
             t_ijab_blk[sI] = t_ijab
-    return eng_bi1, eng_bi2
+
+    _loop_t_ijab(mf, Y_ia_ri, mo_energy, nocc, nvir, accumulate)
+    return eng_bi1[0], eng_bi2[0]
 
 
 @timing

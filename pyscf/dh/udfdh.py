@@ -1,6 +1,6 @@
 # dh import
 from pyscf.dh.dh import DHBase
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim, xc_equal
 from pyscf.dh.rdfdh import kernel, energy_nuc, energy_tot
 from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_ump2_ajz, energy_elec_mp2_dfump2
 # pyscf import
@@ -189,7 +189,7 @@ class UDFDH(DHBase):
         self.grids_cpks = grids_cpks if grids_cpks else self.grids
         self.mf_s = mf_s
         self.mf_s.grids = self.grids
-        self.xc_n = None if self.xc_n == self.xc else self.xc_n
+        self.xc_n = None if xc_equal(self.xc_n, self.xc) else self.xc_n
         self.mf_n = self.mf_s
         if self.xc_n:
             self.mf_n = dft.UKS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)

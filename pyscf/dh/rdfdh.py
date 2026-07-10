@@ -1,8 +1,8 @@
 # dh import
 from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
-    get_rho_from_dm_gga
+    get_rho_from_dm_gga, xc_equal
 from pyscf.dh.dh import DHBase
-from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfmp2
+from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfmp2, _loop_t_ijab
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
@@ -217,7 +217,7 @@ class RDFDH(DHBase):
         self.grids_cpks = grids_cpks if grids_cpks else self.grids
         self.mf_s = mf_s
         self.mf_s.grids = self.grids
-        self.xc_n = None if self.xc_n == self.xc else self.xc_n
+        self.xc_n = None if xc_equal(self.xc_n, self.xc) else self.xc_n
         self.mf_n = self.mf_s
         if self.xc_n:
             self.mf_n = dft.KS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
@@ -339,36 +339,28 @@ class RDFDH(DHBase):
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
 
         dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab
-        eval_t_ijab = True
-        D_jab = e[so, None, None] - e[None, sv, None] - e[None, None, sv] if eval_t_ijab else None
         if dump_t_ijab:
             tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
 
-        eng_bi1 = eng_bi2 = 0
-        nbatch = self.calc_batch_size(4 * nocc * nvir ** 2, Y_ia_ri.size + G_ia_ri.size)
-        for sI in gen_batch(0, nocc, nbatch):
-            if eval_t_ijab:
-                D_ijab = e[sI, None, None, None] + D_jab
-                g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[:, sI], Y_ia_ri)
-                t_ijab = g_ijab / D_ijab
-                if self.eng_pt2 is NotImplemented:
-                    eng_bi1 += einsum("ijab, ijab ->", t_ijab, g_ijab)
-                    if self.eval_ss:
-                        eng_bi2 += einsum("ijab, ijba ->", t_ijab, g_ijab)
-                if dump_t_ijab:
-                    tensors["t_ijab"][sI] = t_ijab
-            else:
-                t_ijab = tensors["t_ijab"][sI]
-            t_ijab_bi, t_ijab_os, t_ijab_ss = restricted_biorthogonalize(
-                t_ijab, cc, c_os, c_ss, eval_ss=self.eval_ss)
-            D_rdm1[so[sI], so] -= einsum("kab, jkb -> j", t_ijab_bi, t_ijab_bi)
-            D_rdm1[sv, sv] += einsum("ijc, ijb -> bc", t_ijab_bi, t_ijab_bi)
-            D_rdm1[so, so] += einsum("ijb, ikb -> jk", t_ijab_os, t_ijab_bi) + einsum("ijb, ikb -> jk", t_ijab_ss, t_ijab_bi)
-            G_ia_ri[:, sI] += einsum("Pjb, ijab -> Pia", Y_ia_ri, t_ijab_os + t_ijab_ss)
-            G_ia_ri += einsum("Pjb, ijab -> Pia", Y_ia_ri[:, sI], t_ijab_os + t_ijab_ss)
+        eng_bi1 = [0]
+        eng_bi2 = [0]
 
-        if self.eng_pt2 is NotImplemented:
-            kernel(self, eng_bi=(eng_bi1, eng_bi2))
+        def build(sI, t_ijab, g_ijab):
+            if self.eng_pt2 is NotImplemented:
+                eng_bi1[0] += einsum("ijab, ijab ->", t_ijab, g_ijab)
+                if self.eval_ss:
+                    eng_bi2[0] += einsum("ijab, ijba ->", t_ijab, g_ijab)
+            if dump_t_ijab:
+                tensors["t_ijab"][sI] = t_ijab
+            T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
+            D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
+            D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
+            G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)
+
+        _loop_t_ijab(self, Y_ia_ri, e, nocc, nvir, build)
+
+        if self.eng_tot is NotImplemented:
+            kernel(self, eng_bi=(eng_bi1[0], eng_bi2[0]))
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia_ri", G_ia_ri)
         return self
@@ -376,17 +368,21 @@ class RDFDH(DHBase):
     @timing
     def prepare_lagrangian(self, gen_W=False):
         tensors = self.tensors
-        nvir, nocc, naux = self.nvir, self.nocc, self.df_ri.get_naoaux()
+        nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
         so, sv, sa = self.so, self.sv, self.sa
-        Y_ij_ri = tensors["Y_mo_ri"][:, so, so]
-        Y_mo_ri = tensors["Y_mo_ri"]
-        G_ia_ri = tensors["G_ia_ri"]
-        D_rdm1 = tensors["D_rdm1"]
 
-        L = - 2 * einsum("sai, sPi -> Pa", D_rdm1[sv, so], Y_mo_ri[:, so])
-        L += - 2 * einsum("sai, sPi -> Pa", D_rdm1[so, sv], Y_mo_ri[:, sv])
+        D_rdm1 = tensors.load("D_rdm1")
+        G_ia_ri = tensors.load("G_ia_ri")
+        Y_mo_ri = tensors["Y_mo_ri"]
+        Y_ij_ri = np.asarray(Y_mo_ri[:, so, so])
+        L = np.zeros((nvir, nocc))
+
         if gen_W:
-            W_I = - 4 * einsum("Pij, Pjk -> ik", Y_ij_ri, D_rdm1[so])
+            Y_ia = np.asarray(Y_mo_ri[:, so, sv])
+            W_I = np.zeros((nmo, nmo))
+            W_I[so, so] = - 2 * einsum("Pia, Pja -> ij", G_ia_ri, Y_ia)
+            W_I[sv, sv] = - 2 * einsum("Pia, Pib -> ab", G_ia_ri, Y_ia)
+            W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_mo_ri[:, so, so])
             tensors.create("W_I", W_I)
             L += W_I[sv, so]
         else:
@@ -397,6 +393,9 @@ class RDFDH(DHBase):
         nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
         for saux in gen_batch(0, naux, nbatch):
             L += 4 * einsum("Pib, Pab -> ai", G_ia_ri[saux], Y_mo_ri[saux, sv, sv])
+
+        if self.xc_n:
+            L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
 
         tensors.create("L", L)
         return self

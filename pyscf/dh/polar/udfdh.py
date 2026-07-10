@@ -1,8 +1,8 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.udfdh import UDFDH
-from pyscf.dh.polar.rdfdh import Polar as RPolar
-from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
+from pyscf.dh.polar.rdfdh import Polar as RPolar, kernel
+from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim, xc_equal
 # pyscf import
 from pyscf import gto, lib, dft
 from pyscf.dft.numint import _scale_ao
@@ -212,11 +212,11 @@ class Polar(UDFDH, RPolar):
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
         mocc, mvir = max(nocc), max(nvir)
         so, sv = self.so, self.sv
-        eo, ev = self.mo_energyo, self.mo_energyv
+        eo, ev = self.eo, self.ev
         nprop = self.nprop
 
         pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(2, nprop, nmo, nmo))
-        if not self.mo_energyval_pt2:
+        if not self.eval_pt2:
             return self
 
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
@@ -288,7 +288,7 @@ class Polar(UDFDH, RPolar):
         wv_generator = _uks_gga_wv2_generator(fxc, kxc, grids.weights)
         wv = np.zeros((2, nprop, 4, grids.weights.size))
         for i in range(nprop):
-            wv[:, i] = wv_generator(rho, rhoU[:, i], rhoR)
+            wv[:, i] = np.asarray(wv_generator(rho, rhoU[:, i], rhoR), dtype=np.float64)
             wv[:, i, 0] *= 2
         res = 0.5 * einsum("sArg, sBrg -> AB", rhoU, wv)
         tensors.create("Ax1_contrib", res)
@@ -307,7 +307,7 @@ class Polar(UDFDH, RPolar):
             if self.xc_n:
                 pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
                 SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
-        if not self.mo_energyval_pt2:
+        if not self.eval_pt2:
             return SCR3
 
         U_1 = tensors.load("U_1")
@@ -364,13 +364,15 @@ class Polar(UDFDH, RPolar):
             pol_corr -= einsum("Bai, Aai -> AB", SCR3[σ], U_1[σ][:, sv[σ], so[σ]])
             pol_corr += einsum("Bki, Aai, ak -> AB", pdA_F_0_mo[σ][:, so[σ], so[σ]], U_1[σ][:, sv[σ], so[σ]], D_r[σ][sv[σ], so[σ]])
             pol_corr -= einsum("Bca, Aai, ci -> AB", pdA_F_0_mo[σ][:, sv[σ], sv[σ]], U_1[σ][:, sv[σ], so[σ]], D_r[σ][sv[σ], so[σ]])
-        if self.xc != "HF":
+        if not xc_equal(self.xc, "HF"):
             pol_corr -= tensors.load("Ax1_contrib")
 
         self.pol_scf = pol_scf
         self.pol_corr = pol_corr
         self.de = self.pol_tot = pol_scf + pol_corr
         return self
+
+    kernel = kernel
 
     def base_method(self) -> UDFDH:
         self.__class__ = UDFDH

@@ -155,6 +155,15 @@ _D3_VERSIONS = {
 }
 
 
+def xc_equal(a, b):
+    from pyscf.dh.util.xccode.xccode import XCList
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    return XCList(a, code_scf=True) == XCList(b, code_scf=True)
+
+
 def parse_xc_dh(xc_dh: str):
     from pyscf.dh.util.xccode.xccode import XCDH, XCType
     xcdh = XCDH(xc_dh)
@@ -238,20 +247,17 @@ def tot_size(*args):
 
 
 def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
-    # accomplish task: cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
     coef_0 = cc * (c_os + c_ss)
     coef_1 = - cc * c_ss
-    # handle different situations
-    if abs(coef_1) < 1e-7:  # SS, do not make transpose
+    if abs(coef_1) < 1e-7:
         return coef_0 * t_ijab
-    else:
-        t_shape = t_ijab.shape
-        t_ijab = t_ijab.reshape(-1, t_ijab.shape[-2], t_ijab.shape[-1])
-        res = lib.transpose(t_ijab, axes=(0, 2, 1)).reshape(t_shape)
-        t_ijab = t_ijab.reshape(t_shape)
-        res *= coef_1
-        res += coef_0 * t_ijab
-        return res
+    t_shape = t_ijab.shape
+    t_ijab_flat = t_ijab.reshape(-1, t_ijab.shape[-2], t_ijab.shape[-1])
+    res = lib.transpose(t_ijab_flat, axes=(0, 2, 1)).reshape(t_shape)
+    t_ijab = t_ijab_flat.reshape(t_shape)
+    res *= coef_1
+    res += coef_0 * t_ijab
+    return res
 
 
 def hermi_sum_last2dim(tsr, inplace=True, hermi=HERMITIAN):

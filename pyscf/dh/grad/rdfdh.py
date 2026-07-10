@@ -18,7 +18,7 @@ einsum = lib.einsum
 
 def kernel(mf_dh: Gradients, **kwargs):
     # unrestricted method requires dump t_ijab_αβ to disk; controling αβ and SS dumping is too hard for me
-    dump_t_ijab = True if mf_dh.unrestricted else mf_dh.with_t_ijab
+    dump_t_ijab = mf_dh.with_t_ijab
 
     mf_dh.build()
     if mf_dh.mo_coeff is NotImplemented:
@@ -401,7 +401,7 @@ class Gradients(RDFDH):
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("pq, Apq -> A", D_r, H_1_mo)
-        if not self.mo_energyval_pt2:
+        if not self.eval_pt2:
             grad_corr.shape = (natm, 3)
             self.grad_pt2 = grad_corr
             return
@@ -458,7 +458,7 @@ class Gradients(RDFDH):
     def prepare_gradient_enfunc(self):
         tensors = self.tensors
         natm = self.mol.natm
-        Co, eo, D = self.mo_coeffo, self.mo_energyo, self.D
+        Co, eo, D = self.Co, self.eo, self.D
         so = self.so
 
         grad_contrib = self.mf_s.Gradients().grad_nuc()
