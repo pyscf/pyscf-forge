@@ -351,7 +351,7 @@ class RDFDH(DHBase):
         if not self.eval_pt2:
             if self.eng_tot is NotImplemented:
                 tensors.create("D_rdm1", D_rdm1)
-                kernel(self, eng_bi=(0, 0))
+                kernel(self, eng_bi=(None, 0, 0))
             return self
 
         G_ia_ri = np.zeros((naux, nocc, nvir))
@@ -379,7 +379,7 @@ class RDFDH(DHBase):
         _loop_t_ijab(self, Y_ia_ri, e, nocc, nvir, build)
 
         if self.eng_tot is NotImplemented:
-            kernel(self, eng_bi=(eng_bi1[0], eng_bi2[0]))
+            kernel(self, eng_bi=(None, eng_bi1[0], eng_bi2[0]))
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia_ri", G_ia_ri)
         return self
@@ -455,6 +455,7 @@ class RDFDH(DHBase):
 
     energy_elec_nc = energy_elec_nc
     energy_elec_pt2 = energy_elec_pt2
+    energy_elec_mp2 = energy_elec_mp2_ajz
     energy_nuc = energy_nuc
     energy_elec = energy_elec
     energy_tot = energy_tot

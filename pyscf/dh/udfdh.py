@@ -407,7 +407,7 @@ class UDFDH(DHBase):
                     G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α][:, sI])
 
         if self.eng_tot is NotImplemented:
-            kernel(self, eng_bi=(eng_bi1, eng_bi2))
+            kernel(self, eng_bi=(None, eng_bi1, eng_bi2))
 
         tensors.create("D_rdm1", D_rdm1)
         for σ in (α, β):
@@ -505,6 +505,7 @@ class UDFDH(DHBase):
 
     energy_elec_nc = energy_elec_nc
     energy_elec_pt2 = energy_elec_pt2
+    energy_elec_mp2 = energy_elec_ump2_ajz
     energy_nuc = energy_nuc
     energy_elec = energy_elec
     energy_tot = energy_tot
