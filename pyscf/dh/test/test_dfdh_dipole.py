@@ -21,19 +21,6 @@ def _mol_to_eng(mol, xc):
 
 
 class TestDFDipole:
-    def test_mp2(self):
-        mol = _mol()
-        dip_nuc = np.einsum("At, A-> t", mol.atom_coords(), mol.atom_charges())
-        nde = NumericDiff(DipoleDerivGenerator(_mol_to_eng(mol, "MP2"))).derivative + dip_nuc
-        de = DFDH(mol, "MP2").run().dipole()
-        assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
-
-    def test_xyg3(self):
-        mol = _mol()
-        dip_nuc = np.einsum("At, A-> t", mol.atom_coords(), mol.atom_charges())
-        nde = NumericDiff(DipoleDerivGenerator(_mol_to_eng(mol, "XYG3"))).derivative + dip_nuc
-        de = DFDH(mol, "XYG3").run().dipole()
-        assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
 
     def test_b2plyp(self):
         mol = _mol()
@@ -42,9 +29,17 @@ class TestDFDipole:
         de = DFDH(mol, "B2PLYP").run().dipole()
         assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
 
+    def test_mp2(self):
+        REF = np.array([0.513968430874, 0.494934113883, 0.469052040835])
+        de = DFDH(_mol(), "MP2").run().dipole()
+        assert np.allclose(REF, de, atol=1e-5, rtol=1e-4)
+
+    def test_xyg3(self):
+        REF = np.array([0.516715680877, 0.497164080305, 0.467699209941])
+        de = DFDH(_mol(), "XYG3").run().dipole()
+        assert np.allclose(REF, de, atol=1e-5, rtol=1e-4)
+
     def test_xygj_os(self):
-        mol = _mol()
-        dip_nuc = np.einsum("At, A-> t", mol.atom_coords(), mol.atom_charges())
-        nde = NumericDiff(DipoleDerivGenerator(_mol_to_eng(mol, "XYGJ-OS"))).derivative + dip_nuc
-        de = DFDH(mol, "XYGJ-OS").run().dipole()
-        assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
+        REF = np.array([0.519030495499, 0.498740432488, 0.468021122351])
+        de = DFDH(_mol(), "XYGJ-OS").run().dipole()
+        assert np.allclose(REF, de, atol=1e-5, rtol=1e-4)

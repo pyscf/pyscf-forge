@@ -35,9 +35,9 @@ class DHBase(lib.StreamObject):
         self.xc_dh = xc
         if isinstance(xc, str):
             xc_list, xc_add = parse_xc_dh(xc)
-        elif isinstance(xc, tuple) and len(xc) == 2 and isinstance(xc[0], str):
+        elif isinstance(xc, (tuple, list)) and len(xc) == 2 and isinstance(xc[0], str):
             xc_list, xc_add = parse_xc_dh(xc)
-        elif isinstance(xc, tuple) and len(xc) == 5:
+        elif len(xc) == 5:
             xc_list = xc
             xc_add = {}
         else:

@@ -20,17 +20,6 @@ def _mol_to_dipole(mol, xc):
 
 
 class TestDFPolar:
-    def test_mp2(self):
-        mol = _mol()
-        nde = - NumericDiff(DipoleDerivGenerator(_mol_to_dipole(mol, "MP2"))).derivative
-        de = DFDH(mol, "MP2").polar_method().run().pol_tot
-        assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
-
-    def test_xyg3(self):
-        mol = _mol()
-        nde = - NumericDiff(DipoleDerivGenerator(_mol_to_dipole(mol, "XYG3"))).derivative
-        de = DFDH(mol, "XYG3").polar_method().run().pol_tot
-        assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
 
     def test_b2plyp(self):
         mol = _mol()
@@ -38,8 +27,23 @@ class TestDFPolar:
         de = DFDH(mol, "B2PLYP").polar_method().run().pol_tot
         assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
 
+    def test_mp2(self):
+        REF = np.array([[ 7.287332131227, -0.143671547054, -0.203498074527, -0.143671618067,
+         8.724054795277, -0.334215302667, -0.203498168983, -0.33421529318 ,
+         10.345461647677]]).reshape((3, 3))
+        de = DFDH(_mol(), "MP2").polar_method().run().pol_tot
+        assert np.allclose(REF, de, atol=1e-5, rtol=1e-4)
+
+    def test_xyg3(self):
+        REF = np.array([[ 7.267950702094, -0.150453822162, -0.218852668583, -0.150453822202,
+         8.751947502917, -0.366999912293, -0.218852668702, -0.366999912383,
+         10.473371520993]]).reshape((3, 3))
+        de = DFDH(_mol(), "XYG3").polar_method().run().pol_tot
+        assert np.allclose(REF, de, atol=1e-5, rtol=1e-4)
+
     def test_xygj_os(self):
-        mol = _mol()
-        nde = - NumericDiff(DipoleDerivGenerator(_mol_to_dipole(mol, "XYGJ-OS"))).derivative
-        de = DFDH(mol, "XYGJ-OS").polar_method().run().pol_tot
-        assert np.allclose(nde, de, atol=1e-5, rtol=1e-4)
+        REF = np.array([[ 7.279946203272, -0.148991221551, -0.215161986695, -0.148991221593,
+         8.771801652821, -0.361506774213, -0.215161986816, -0.361506774303,
+         10.495615774576]]).reshape((3, 3))
+        de = DFDH(_mol(), "XYGJ-OS").polar_method().run().pol_tot
+        assert np.allclose(REF, de, atol=1e-5, rtol=1e-4)
