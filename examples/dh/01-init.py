@@ -28,3 +28,7 @@ print(f"to_dh reuse XYG3: {mf.e_tot:.8f}")
 mf_ks = dft.KS(mol, xc="PBE0").density_fit().run()
 mf = to_dh(mf_ks, xc="B2PLYP").run()
 print(f"to_dh conv PBE0→B2PLYP: {mf.e_tot:.8f}")
+
+# 6. xDH via 2-tuple (code_scf, code_eng) — no JSON entry needed
+mf = DFDH(mol, xc=("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2")).run()
+print(f"XYG3 via 2-tuple: {mf.e_tot:.8f}")

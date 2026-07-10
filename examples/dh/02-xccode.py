@@ -1,6 +1,6 @@
 """Example: xccode — how XC strings work in double-hybrid calculations."""
 
-from pyscf import gto, dft
+from pyscf import gto
 from pyscf.dh import DFDH
 from pyscf.dh.xccode import XCList, XCDH, XCType, parse_xc_dh, xc_equal
 
@@ -11,15 +11,10 @@ for name in ["B2PLYP", "XYG3", "PBE0-DH", "DSD-PBEP86-D3BJ", "TPSS0-DH"]:
     mf = DFDH(mol, xc=name).run()
     print(f"{name:25s} {mf.e_tot:.10f}")
 
-# 2. Custom XC strings — 5-tuple (xc_s, xc_n, cc, c_os, c_ss)
-xc_custom = ("HF", None, 1, 1, 1)  # plain MP2
-mf = DFDH(mol, xc=xc_custom).run()
-print(f"\ncustom MP2:           {mf.e_tot:.10f}")
-
-# xDH-type tuple (SCF functional + non-consistent energy)
-xc_xdh = ("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP", 0.3211, 1, 1)
+# 2. xDH via 2-tuple (code_scf, code_eng) — no JSON entry needed
+xc_xdh = ("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2")
 mf = DFDH(mol, xc=xc_xdh).run()
-print(f"custom XYG3 (tuple):  {mf.e_tot:.10f}")
+print(f"\ncustom XYG3 (2-tuple): {mf.e_tot:.10f}")
 
 # 3. Inspect what the parser returns for any functional
 print("\nFunc       xc_scf                            cc    c_os  c_ss")
@@ -33,6 +28,10 @@ print(f"\nXYG3 SCF  = {xcdh.xc_scf.token}")
 low_rung = xcdh.xc_eng.remove(
     xcdh.xc_eng.extract_by_xctype(XCType.MP2 | XCType.DFTD3), inplace=False)
 print(f"XYG3 xc_n = {low_rung.token}  (non-consistent energy)")
+
+# parse_xc_dh also handles the 2-tuple format
+xc_list, _ = parse_xc_dh(("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2"))
+print(f"2-tuple → xc=({xc_list[0]}, {xc_list[2]:.4f}, {xc_list[3]:g}, {xc_list[4]:g})")
 
 # 5. XC token comparison via xc_equal
 print(f"\nxc_equal('HF', 'HF,') = {xc_equal('HF', 'HF,')}")
