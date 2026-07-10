@@ -1,6 +1,6 @@
-from pyscf import lib, gto, dft, df
+from pyscf import lib, gto, dft, df, scf
 from pyscf.dh.dhutil import calc_batch_size, timing, HybridDict, get_rho_from_dm_gga
-from pyscf.dh.xccode import parse_xc_dh
+from pyscf.dh.xccode import parse_xc_dh, xc_equal
 import os
 import pickle
 import numpy as np
@@ -9,13 +9,19 @@ import numpy as np
 class DHBase(lib.StreamObject):
 
     def __init__(self,
-                 mol: gto.Mole,
+                 mf_or_mol,
                  xc: str or tuple = "XYG3",
                  auxbasis_jk: str or dict or None = None,
                  auxbasis_ri: str or dict or None = None,
                  mp2_backend: str = "ajz",
                  frozen: int = None,
                  ):
+        if isinstance(mf_or_mol, gto.Mole):
+            mol = mf_or_mol
+            self._scf = None
+        else:
+            mol = mf_or_mol.mol
+            self._scf = mf_or_mol
         self.with_t_ijab = False
         self._incore_t_ijab = False
         self._incore_Y_mo = False
@@ -29,13 +35,27 @@ class DHBase(lib.StreamObject):
         self.xc_dh = xc
         if isinstance(xc, str):
             xc_list, xc_add = parse_xc_dh(xc)
-        elif len(xc) == 5:
+        elif isinstance(xc, tuple) and len(xc) == 2 and isinstance(xc[0], str):
+            xc_list, xc_add = parse_xc_dh(xc)
+        elif isinstance(xc, tuple) and len(xc) == 5:
             xc_list = xc
             xc_add = {}
         else:
             xc_list, xc_add = xc
         self.xc, self.xc_n, self.cc, self.c_os, self.c_ss = xc_list
         self.xc_add = xc_add
+        if self._scf is not None:
+            if not hasattr(self._scf, 'xc'):
+                raise TypeError(
+                    "DFDH(mf) requires a dft.KS or dft.UKS object; "
+                    "scf.HF is not supported."
+                )
+            if not xc_equal(self._scf.xc, self.xc):
+                raise ValueError(
+                    f"SCF functional '{self._scf.xc}' does not match "
+                    f"DH SCF functional '{self.xc}'. "
+                    "Use a SCF converged with the same functional."
+                )
         self.auxbasis_jk = auxbasis_jk = auxbasis_jk if auxbasis_jk else df.make_auxbasis(mol, mp2fit=False)
         self.auxbasis_ri = auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
         self.same_aux = bool(auxbasis_jk == auxbasis_ri or auxbasis_ri is None)
@@ -197,3 +217,31 @@ def energy_elec_mp2_dfump2(mf, **kwargs):
     mp2 = DFUMP2(mf.mf_s, frozen=mf.frozen)
     mp2.kernel()
     return None, mp2.e_corr_os, mp2.e_corr_ss
+
+
+def to_dh(mf, xc="XYG3", **kwargs):
+    from pyscf.dh import rdfdh, udfdh
+
+    xc_list, _ = parse_xc_dh(xc)
+    dh_xc = xc_list[0]
+
+    can_reuse = (
+        hasattr(mf, 'xc')
+        and xc_equal(mf.xc, dh_xc)
+        and hasattr(mf, 'e_tot')
+        and mf.e_tot != 0
+        and getattr(mf, 'with_df', None) is not None
+        and mf.converged
+    )
+
+    if not can_reuse:
+        mol = mf.mol
+        if not isinstance(mf, scf.rhf.RHF):
+            mf = dft.UKS(mol, xc=dh_xc).density_fit()
+        else:
+            mf = dft.KS(mol, xc=dh_xc).density_fit()
+        mf.kernel()
+
+    if isinstance(mf, scf.rhf.RHF):
+        return rdfdh.RDFDH(mf, xc, **kwargs)
+    return udfdh.UDFDH(mf, xc, **kwargs)

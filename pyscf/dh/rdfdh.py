@@ -211,7 +211,7 @@ def Ax0_cpks_HF(eri_cpks, max_memory=2000):
 class RDFDH(DHBase):
 
     def __init__(self,
-                 mol: gto.Mole,
+                 mf_or_mol,
                  xc: str or tuple = "XYG3",
                  auxbasis_jk: str or dict or None = None,
                  auxbasis_ri: str or dict or None = None,
@@ -220,9 +220,15 @@ class RDFDH(DHBase):
                  mp2_backend: str = "ajz",
                  frozen: int = None,
                  ):
-        super().__init__(mol, xc, auxbasis_jk, auxbasis_ri, mp2_backend, frozen)
-        mf_s = dft.KS(mol, xc=self.xc).density_fit(auxbasis=self.auxbasis_jk)
-        self.grids = grids if grids else mf_s.grids
+        super().__init__(mf_or_mol, xc, auxbasis_jk, auxbasis_ri, mp2_backend, frozen)
+        mol = self.mol
+        if self._scf is not None:
+            mf_s = self._scf
+            if hasattr(mf_s, 'xc'):
+                mf_s.xc = self.xc
+        else:
+            mf_s = dft.KS(mol, xc=self.xc).density_fit(auxbasis=self.auxbasis_jk)
+        self.grids = grids if grids else (getattr(mf_s, 'grids', dft.Grids(mol)))
         self.grids_cpks = grids_cpks if grids_cpks else self.grids
         self.mf_s = mf_s
         self.mf_s.grids = self.grids
@@ -232,7 +238,7 @@ class RDFDH(DHBase):
             self.mf_n = dft.KS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
             self.mf_n.grids = self.mf_s.grids
             self.mf_n.grids = self.grids
-        self.ni = self.mf_s._numint
+        self.ni = getattr(self.mf_s, '_numint', dft.numint.NumInt())
         self.cx = self.ni.hybrid_coeff(self.xc)
         self.cx_n = self.ni.hybrid_coeff(self.xc_n)
         self.df_jk = mf_s.with_df
@@ -242,6 +248,8 @@ class RDFDH(DHBase):
         self.nocc = mol.nelec[0]
         self.nmo = self.nao
         self.nvir = self.nmo - self.nocc
+        if self._scf is not None and self._scf.e_tot != 0:
+            self.run_scf()
         if mp2_backend == "dfmp2_native":
             self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2_native, self)
         elif mp2_backend == "dfmp2":

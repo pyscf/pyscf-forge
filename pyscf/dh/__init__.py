@@ -1,11 +1,15 @@
-from . import dh, rdfdh, udfdh, dhutil
+from . import rdfdh, udfdh, dhutil
+from .dh import to_dh
 from pyscf import gto
 
 
-def DFDH(mol: gto.Mole, *args, **kwargs):
-    if mol.spin != 0:
-        return udfdh.UDFDH(mol, *args, **kwargs)
+def DFDH(mf_or_mol, *args, **kwargs):
+    if isinstance(mf_or_mol, gto.Mole):
+        if mf_or_mol.spin != 0:
+            return udfdh.UDFDH(mf_or_mol, *args, **kwargs)
+        return rdfdh.RDFDH(mf_or_mol, *args, **kwargs)
     else:
-        return rdfdh.RDFDH(mol, *args, **kwargs)
-
-
+        from pyscf import scf
+        if isinstance(mf_or_mol, scf.rhf.RHF):
+            return rdfdh.RDFDH(mf_or_mol, *args, **kwargs)
+        return udfdh.UDFDH(mf_or_mol, *args, **kwargs)

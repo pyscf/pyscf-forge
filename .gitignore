@@ -140,4 +140,4 @@ dmypy.json
 multigrid/
 **/multigrid/
 examples/occri/multigrid/
-pytest.ini
+pytest.ini/pyscf/dh/test/test_plans.md
