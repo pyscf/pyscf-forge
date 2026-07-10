@@ -91,7 +91,7 @@ class KnownValues(unittest.TestCase):
             pwcc.kernel()
             assert_allclose(pwcc.e_corr, -0.03234330656841895, atol=1.e-4, rtol=0)
 
-    def test_krccsd(self):
+    def test_krccsd_slow(self):
         ke_cutoff = 50
         basis = "gth-szv"
         pseudo = "gth-pade"
