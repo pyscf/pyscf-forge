@@ -1,5 +1,6 @@
 from pyscf import lib, gto, dft, df
-from pyscf.dh.dhutil import parse_xc_dh, calc_batch_size, timing, HybridDict, get_rho_from_dm_gga
+from pyscf.dh.dhutil import calc_batch_size, timing, HybridDict, get_rho_from_dm_gga
+from pyscf.dh.xccode import parse_xc_dh
 import os
 import pickle
 import numpy as np
@@ -166,20 +167,20 @@ class DHBase(lib.StreamObject):
 def energy_elec_mp2_dfmp2_native(mf, **kwargs):
     from pyscf.mp.dfmp2_native import DFRMP2
     mp2 = DFRMP2(mf.mf_s)
-    mp2.ps = mf.c_ss
-    mp2.pt = mf.c_os
+    mp2.ps = mf.c_os
+    mp2.pt = mf.c_ss
     emp2 = mp2.kernel()
-    return emp2, emp2
+    return emp2, None, None
 
 
 @timing
 def energy_elec_mp2_dfump2_native(mf, **kwargs):
     from pyscf.mp.dfump2_native import DFUMP2
     mp2 = DFUMP2(mf.mf_s)
-    mp2.ps = mf.c_ss
-    mp2.pt = mf.c_os
+    mp2.ps = mf.c_os
+    mp2.pt = mf.c_ss
     emp2 = mp2.kernel()
-    return emp2, emp2
+    return emp2, None, None
 
 
 @timing
@@ -187,7 +188,7 @@ def energy_elec_mp2_dfmp2(mf, **kwargs):
     from pyscf.mp.dfmp2 import DFRMP2
     mp2 = DFRMP2(mf.mf_s, frozen=mf.frozen)
     mp2.kernel()
-    return mp2.e_corr_os, mp2.e_corr_ss
+    return None, mp2.e_corr_os, mp2.e_corr_ss
 
 
 @timing
@@ -195,4 +196,4 @@ def energy_elec_mp2_dfump2(mf, **kwargs):
     from pyscf.mp.dfump2 import DFUMP2
     mp2 = DFUMP2(mf.mf_s, frozen=mf.frozen)
     mp2.kernel()
-    return mp2.e_corr_os, mp2.e_corr_ss
+    return None, mp2.e_corr_os, mp2.e_corr_ss

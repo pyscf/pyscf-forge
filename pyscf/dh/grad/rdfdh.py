@@ -482,6 +482,12 @@ class Gradients(RDFDH):
             model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
             disp = model.get_dispersion(grad=True)
             grad_contrib += disp["gradient"]
+        if "D4" in self.xc_add:
+            from pyscf.dispersion.dftd4 import DFTD4Dispersion
+            d4_info = self.xc_add["D4"]
+            model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
+            disp = model.get_dispersion(grad=True)
+            grad_contrib += disp["gradient"]
         self.grad_enfunc = grad_contrib
 
     def base_method(self) -> RDFDH:

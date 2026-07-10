@@ -2,7 +2,8 @@ from __future__ import annotations
 # dh import
 from pyscf.dh.udfdh import UDFDH
 from pyscf.dh.polar.rdfdh import Polar as RPolar, kernel
-from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim, xc_equal
+from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
+from pyscf.dh.xccode import xc_equal
 # pyscf import
 from pyscf import gto, lib, dft
 from pyscf.dft.numint import _scale_ao

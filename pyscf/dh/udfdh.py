@@ -1,6 +1,7 @@
 # dh import
 from pyscf.dh.dh import DHBase
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim, xc_equal
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
+from pyscf.dh.xccode import xc_equal
 from pyscf.dh.rdfdh import kernel, energy_nuc, energy_tot
 from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_ump2_ajz
 from pyscf.dh.dh import energy_elec_mp2_dfump2_native, energy_elec_mp2_dfump2
@@ -44,12 +45,11 @@ def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
     if not mf.eval_pt2:
         return 0, 0, 0
-    eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
+    emp2_0, eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
     if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
-        return cc * eng_bi1, None, None
+        return cc * emp2_0, None, None
     if getattr(mf, 'mp2_backend', None) == "dfmp2":
-        e_corr_os, e_corr_ss = eng_bi1, eng_bi2
-        return cc * (c_os * e_corr_os + c_ss * e_corr_ss), e_corr_os, e_corr_ss
+        return cc * (c_os * eng_bi1 + c_ss * eng_bi2), eng_bi1, eng_bi2
     eng_os = eng_bi1[αβ]
     eng_ss = 0.5 * (eng_bi1[αα] + eng_bi1[ββ] - eng_bi2[αα] - eng_bi2[ββ])
     eng_pt2 = cc * (c_os * eng_os + c_ss * eng_ss)

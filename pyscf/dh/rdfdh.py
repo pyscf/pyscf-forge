@@ -1,6 +1,7 @@
 # dh import
-from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
-    get_rho_from_dm_gga, xc_equal
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
+    get_rho_from_dm_gga
+from pyscf.dh.xccode import parse_xc_dh, xc_equal
 from pyscf.dh.dh import DHBase, energy_elec_mp2_dfmp2_native, energy_elec_mp2_dfmp2
 from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, _loop_t_ijab
 # pyscf import
@@ -59,12 +60,11 @@ def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     if not mf.eval_pt2:
         return 0, 0, 0
     cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
-    eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
+    emp2_0, eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
     if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
-        return cc * eng_bi1, None, None
+        return cc * emp2_0, None, None
     if getattr(mf, 'mp2_backend', None) == "dfmp2":
-        e_corr_os, e_corr_ss = eng_bi1, eng_bi2
-        return cc * (c_os * e_corr_os + c_ss * e_corr_ss), e_corr_os, e_corr_ss
+        return cc * (c_os * eng_bi1 + c_ss * eng_bi2), eng_bi1, eng_bi2
     return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),
             eng_bi1,
             eng_bi1 - eng_bi2)
@@ -76,6 +76,11 @@ def energy_nuc(mf, **_):
     if "D3" in mf.xc_add:
         d3_info = mf.xc_add["D3"]
         model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
+        eng_nuc += model.get_dispersion()["energy"]
+    if "D4" in mf.xc_add:
+        from pyscf.dispersion.dftd4 import DFTD4Dispersion
+        d4_info = mf.xc_add["D4"]
+        model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
         eng_nuc += model.get_dispersion()["energy"]
     return eng_nuc
 

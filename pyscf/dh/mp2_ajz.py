@@ -80,7 +80,7 @@ def energy_elec_mp2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
             t_ijab_blk[sI] = t_ijab
 
     _loop_t_ijab(mf, Y_ia_ri, mo_energy, nocc, nvir, accumulate)
-    return eng_bi1[0], eng_bi2[0]
+    return None, eng_bi1[0], eng_bi2[0]
 
 
 @timing
@@ -128,4 +128,4 @@ def energy_elec_ump2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
                     t_ijab_blk[σς][sI] = t_ijab
                 if σς in (αα, ββ):
                     eng_bi2[σς] += einsum("ijab, ijba ->", t_ijab, g_ijab)
-    return tuple(eng_bi1), tuple(eng_bi2)
+    return None, tuple(eng_bi1), tuple(eng_bi2)

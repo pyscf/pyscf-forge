@@ -1,5 +1,5 @@
 import unittest
-from pyscf.dh.util import XCList
+from pyscf.dh.xccode import XCList
 
 
 class TestXCCode(unittest.TestCase):

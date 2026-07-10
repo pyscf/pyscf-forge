@@ -1,7 +1,8 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.rdfdh import RDFDH
-from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim, xc_equal
+from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
+from pyscf.dh.xccode import xc_equal
 from pyscf import gto, lib
 import numpy as np
 
