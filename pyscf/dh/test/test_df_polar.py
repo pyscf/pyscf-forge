@@ -5,9 +5,6 @@ from pyscf import gto, scf
 import numpy as np
 
 
-# pytestmark = pytest.mark.xfail(reason="polar code numerically inaccurate (~2% error vs numerical diff)")
-
-
 def _mol():
     return gto.Mole(atom="N 0. 0. 0.; H .9 0. 0.; H 0. 1. 0.; H 0. 0. 1.1", basis="cc-pVDZ", verbose=0).build()
 

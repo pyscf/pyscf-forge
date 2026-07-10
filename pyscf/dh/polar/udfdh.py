@@ -323,14 +323,12 @@ class Polar(UDFDH, RPolar):
                 pdA_G_blk = np.asarray(pdA_G_ia_ri[σ][:, saux])
                 # pdA_Y_ij part
                 pdA_Y_blk = einsum("Ami, Pmj -> APij", U_1[σ][:, :, so[σ]], Y_blk[:, :, so[σ]])
-                # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
-                hermi_sum_last2dim(pdA_Y_blk)
+                pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
                 SCR3[σ] -= einsum("APja, Pij -> Aai", pdA_G_blk, Y_blk[:, so[σ], so[σ]])
                 SCR3[σ] -= einsum("Pja, APij -> Aai", G_blk, pdA_Y_blk)
                 # pdA_Y_ab part
                 pdA_Y_blk = einsum("Ama, Pmb -> APab", U_1[σ][:, :, sv[σ]], Y_blk[:, :, sv[σ]])
-                # pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
-                hermi_sum_last2dim(pdA_Y_blk)
+                pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
                 SCR3[σ] += einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv[σ], sv[σ]])
                 SCR3[σ] += einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
         return SCR3

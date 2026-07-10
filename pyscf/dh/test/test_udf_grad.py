@@ -15,7 +15,7 @@ def _mol_to_eng(xc):
     return fx
 
 
-@pytest.mark.slow
+
 class TestUDFGrad:
     def test_mp2(self):
         mol = _mol()
