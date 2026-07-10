@@ -7,6 +7,13 @@
         "code_scf": "HF",
         "code": "PBE0"
     },
+    "XYG2": {
+        "code_scf": "B3LYPg",
+        "code": "0.8016*HF + 0.1984*B88, 0.6613*LYP + 0.3387*MP2",
+        "ref": [
+            "10.1021/prechem.5c00432"
+        ]
+    },
     "XYG3": {
         "code_scf": "B3LYPg",
         "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2",
@@ -46,19 +53,22 @@
         "code_scf": "PBE",
         "code": "0.5*HF + 0.5*PBE, 0.75*PBE + 0.25*SIEPA_OS",
         "ref": "10.1103/PhysRevLett.117.133002",
-        "family": "ZRPS"
+        "family": "ZRPS",
+        "supported": false
     },
     "ZRPS@PBE0": {
         "code_scf": "PBE0",
         "code": "0.5*HF + 0.5*PBE, 0.75*PBE + 0.25*SIEPA_OS",
         "ref": "10.1103/PhysRevLett.117.133002",
-        "family": "ZRPS"
+        "family": "ZRPS",
+        "supported": false
     },
     "lrc_XYG3": {
         "code_scf": "B3LYPg",
         "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2 + 0.4822*RS_MP2(0.2, 1, 1)",
         "ref": "10.1021/jz400695u",
-        "tested": "QChem local"
+        "tested": "QChem local",
+        "supported": false
     },
     "revXYG3": {
         "code_scf": "B3LYPg",

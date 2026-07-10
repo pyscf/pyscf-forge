@@ -27,6 +27,13 @@
         ],
         "tested": "Gaussian 16, Rev B.01"
     },
+    "B2PLYP_D4": {
+        "code": "0.53*HF + 0.47*B88, 0.73*LYP + 0.27*MP2 + DFTD4(xc=B2PLYP)",
+        "ref": [
+            "10.1063/1.2148954",
+            "10.1063/1.5090222"
+        ]
+    },
     "DSD_BLYP_D3BJ": {
         "code": "0.71*HF + 0.29*B88, 0.54*LYP + 0.47*MP2_OS + 0.40*MP2_SS + DFTD3(BJ, s6=0.57, a1=0, s8=0, a2=5.4)",
         "ref": "10.1002/jcc.23391",
@@ -132,22 +139,26 @@
     "RS_B88_LYP": {
         "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_B88, 0.7), 0.75*SSR(GGA_C_LYP, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
         "ref": "10.1021/acs.jctc.0c01135",
-        "tested": "MRCC 2022-03-18"
+        "tested": "MRCC 2022-03-18",
+        "supported": false
     },
     "RS_PBE_P86": {
         "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PBE, 0.7), 0.75*SSR(GGA_C_P86, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
         "ref": "10.1021/acs.jctc.0c01135",
-        "tested": "MRCC 2022-03-18"
+        "tested": "MRCC 2022-03-18",
+        "supported": false
     },
     "RS_PBE_PBE": {
         "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PBE, 0.7), 0.75*SSR(GGA_C_PBE, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
         "ref": "10.1021/acs.jctc.0c01135",
-        "tested": "MRCC 2022-03-18"
+        "tested": "MRCC 2022-03-18",
+        "supported": false
     },
     "RS_PW91_PW91": {
         "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PW91, 0.7), 0.75*SSR(GGA_C_PW91, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
         "ref": "10.1021/acs.jctc.0c01135",
-        "tested": "MRCC 2022-03-18"
+        "tested": "MRCC 2022-03-18",
+        "supported": false
     },
     "SOS0_PBE0_DH": {
         "code": "0.5*HF + 0.5*PBE, 0.875*PBE + 0.1666666667*MP2_OS",
@@ -196,6 +207,10 @@
         "ref": "10.1039/b608478h",
         "tested": "Gaussian 16, Rev B.01"
     },
+    "revDSD_PBEP86_D4": {
+        "code": "0.69*HF + 0.31*PBE, 0.4210*P86_FT + 0.5922*MP2_OS + 0.0636*MP2_SS + DFTD4(xc=revdsdpbep86)",
+        "ref": "10.1021/acs.jpca.9b03157"
+    },
     "revPBE0_DH": {
         "code": "0.5*HF + 0.5*revPBE, 0.875*PBE + 0.125*MP2",
         "ref": "10.1021/ct4003527"
@@ -230,7 +245,8 @@
         "tested": "QChem 5.1.1",
         "alias": [
             "\u03c9B97X_2_LP"
-        ]
+        ],
+        "supported": false
     },
     "wB97X_2_TQZ": {
         "code": "HYB_GGA_XC_WB97X(_alpha=1, _beta=-0.363842, _omega=0.3, _cx0=0.315503, _cx1=1.04772, _cx2=-2.33506, _cx3=3.19909, _cx4=0, _css0=0.908460, _css1=-2.80936, _css2=6.02676, _css3=-4.56981, _css4=0, _cos0=0.518198, _cos1=-0.585956, _cos2=4.27080, _cos3=-6.48897, _cos4=0), 0.529319*MP2_SS + 0.447105*MP2_OS",
@@ -240,7 +256,8 @@
             "\u03c9B97X_2_TQZ",
             "wB97X_2",
             "\u03c9B97X_2"
-        ]
+        ],
+        "supported": false
     },
     "wPBEPP86": {
         "code": "0.70*HF + 0.30*LR_HF(0.18) + 0.30*GGA_X_ITYH_PBE, 0.68*GGA_C_P86VWN + 0.48*MP2",

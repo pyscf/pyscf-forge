@@ -164,9 +164,20 @@ def xc_equal(a, b):
     return XCList(a, code_scf=True) == XCList(b, code_scf=True)
 
 
+def _check_unsupported(name, funcs_dict):
+    key = name.upper().replace("-", "_")
+    entry = funcs_dict.get(key)
+    if entry and entry.get("supported") is False:
+        raise NotImplementedError(
+            f"Functional '{name}' is not supported in this version of pyscf.dh."
+        )
+
+
 def parse_xc_dh(xc_dh: str):
     from pyscf.dh.util.xccode.xccode import XCDH, XCType
+    from pyscf.dh.util.xccode.xcjson import FUNCTIONALS_DICT
     xcdh = XCDH(xc_dh)
+    _check_unsupported(xc_dh, FUNCTIONALS_DICT)
     xc_scf = xcdh.xc_scf.token
     xc_eng = xcdh.xc_eng
     xc = xc_scf
