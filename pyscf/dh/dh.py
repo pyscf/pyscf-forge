@@ -13,6 +13,7 @@ class DHBase(lib.StreamObject):
                  auxbasis_jk: str or dict or None = None,
                  auxbasis_ri: str or dict or None = None,
                  mp2_backend: str = "ajz",
+                 frozen: int = None,
                  ):
         self.with_t_ijab = False
         self._incore_t_ijab = False
@@ -23,6 +24,7 @@ class DHBase(lib.StreamObject):
         self.cpks_cyc = 100
         self.max_memory = mol.max_memory
         self.mp2_backend = mp2_backend
+        self.frozen = frozen
         self.xc_dh = xc
         if isinstance(xc, str):
             xc_list, xc_add = parse_xc_dh(xc)
@@ -158,3 +160,39 @@ class DHBase(lib.StreamObject):
             self.mf_s.kernel(dm=self.mf_s.make_rdm1())
         self.run_scf()
         return self
+
+
+@timing
+def energy_elec_mp2_dfmp2_native(mf, **kwargs):
+    from pyscf.mp.dfmp2_native import DFRMP2
+    mp2 = DFRMP2(mf.mf_s)
+    mp2.ps = mf.c_ss
+    mp2.pt = mf.c_os
+    emp2 = mp2.kernel()
+    return emp2, emp2
+
+
+@timing
+def energy_elec_mp2_dfump2_native(mf, **kwargs):
+    from pyscf.mp.dfump2_native import DFUMP2
+    mp2 = DFUMP2(mf.mf_s)
+    mp2.ps = mf.c_ss
+    mp2.pt = mf.c_os
+    emp2 = mp2.kernel()
+    return emp2, emp2
+
+
+@timing
+def energy_elec_mp2_dfmp2(mf, **kwargs):
+    from pyscf.mp.dfmp2 import DFRMP2
+    mp2 = DFRMP2(mf.mf_s, frozen=mf.frozen)
+    mp2.kernel()
+    return mp2.e_corr_os, mp2.e_corr_ss
+
+
+@timing
+def energy_elec_mp2_dfump2(mf, **kwargs):
+    from pyscf.mp.dfump2 import DFUMP2
+    mp2 = DFUMP2(mf.mf_s, frozen=mf.frozen)
+    mp2.kernel()
+    return mp2.e_corr_os, mp2.e_corr_ss

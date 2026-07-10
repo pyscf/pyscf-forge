@@ -1,8 +1,8 @@
 # dh import
 from pyscf.dh.dhutil import parse_xc_dh, gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
     get_rho_from_dm_gga, xc_equal
-from pyscf.dh.dh import DHBase
-from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, energy_elec_mp2_dfmp2, _loop_t_ijab
+from pyscf.dh.dh import DHBase, energy_elec_mp2_dfmp2_native, energy_elec_mp2_dfmp2
+from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, _loop_t_ijab
 # pyscf import
 from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
@@ -62,6 +62,9 @@ def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
     if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
         return cc * eng_bi1, None, None
+    if getattr(mf, 'mp2_backend', None) == "dfmp2":
+        e_corr_os, e_corr_ss = eng_bi1, eng_bi2
+        return cc * (c_os * e_corr_os + c_ss * e_corr_ss), e_corr_os, e_corr_ss
     return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),
             eng_bi1,
             eng_bi1 - eng_bi2)
@@ -210,8 +213,9 @@ class RDFDH(DHBase):
                  grids: dft.Grids = None,
                  grids_cpks: dft.Grids = None,
                  mp2_backend: str = "ajz",
+                 frozen: int = None,
                  ):
-        super().__init__(mol, xc, auxbasis_jk, auxbasis_ri, mp2_backend)
+        super().__init__(mol, xc, auxbasis_jk, auxbasis_ri, mp2_backend, frozen)
         mf_s = dft.KS(mol, xc=self.xc).density_fit(auxbasis=self.auxbasis_jk)
         self.grids = grids if grids else mf_s.grids
         self.grids_cpks = grids_cpks if grids_cpks else self.grids
@@ -234,6 +238,8 @@ class RDFDH(DHBase):
         self.nmo = self.nao
         self.nvir = self.nmo - self.nocc
         if mp2_backend == "dfmp2_native":
+            self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2_native, self)
+        elif mp2_backend == "dfmp2":
             self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2, self)
         else:
             self.energy_elec_mp2 = partial(energy_elec_mp2_ajz, self)

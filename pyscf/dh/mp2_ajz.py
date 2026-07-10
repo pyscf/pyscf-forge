@@ -84,26 +84,6 @@ def energy_elec_mp2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
 
 
 @timing
-def energy_elec_mp2_dfmp2(mf, **kwargs):
-    from pyscf.mp.dfmp2_native import DFRMP2
-    mp2 = DFRMP2(mf.mf_s)
-    mp2.ps = mf.c_ss
-    mp2.pt = mf.c_os
-    emp2 = mp2.kernel()
-    return emp2, emp2
-
-
-@timing
-def energy_elec_mp2_dfump2(mf, **kwargs):
-    from pyscf.mp.dfump2_native import DFUMP2
-    mp2 = DFUMP2(mf.mf_s)
-    mp2.ps = mf.c_ss
-    mp2.pt = mf.c_os
-    emp2 = mp2.kernel()
-    return emp2, emp2
-
-
-@timing
 def energy_elec_ump2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
                           Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
     α, β = 0, 1
