@@ -1,6 +1,7 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.rdfdh import RDFDH
+from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
 from pyscf import gto, lib
@@ -69,7 +70,7 @@ def _rks_gga_wv2(rho0, rho1, rho2, fxc, kxc, weight):
     return wv
 
 
-class Polar(RDFDH):
+class Polar(RDFDH, RDHRespMixin):
 
     def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:

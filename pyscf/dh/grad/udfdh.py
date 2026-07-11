@@ -1,16 +1,12 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.udfdh import UDFDH
-from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing
+from pyscf.dh.resp import UDHRespMixin, GradientMixin
+from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing, as_scanner_grad
 from pyscf.dh.grad.rdfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel
-from pyscf.dh.grad.rdfdh import Gradients as RGradients
 # pyscf import
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
-try:
-    from pyscf.dispersion.dftd3 import DFTD3Dispersion
-except ImportError:
-    print('Warning: pyscf-dispersion not found. D3 correction unavailable.')
 # other import
 import numpy as np
 import itertools
@@ -100,7 +96,7 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     return grad_contrib
 
 
-class Gradients(UDFDH, RGradients):
+class Gradients(UDFDH, UDHRespMixin, GradientMixin):
 
     def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
@@ -251,23 +247,12 @@ class Gradients(UDFDH, RGradients):
                 grad_contrib -= einsum("Aij, ij -> A", S_1_mo[σ][:, so[σ], so[σ]], nc_F_0_ij[σ])
         grad_contrib.shape = (natm, 3)
 
-        # handle dftd3 situation
-        mol = self.mol
-        if "D3" in self.xc_add:
-            d3_info = self.xc_add["D3"]
-            model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
-            disp = model.get_dispersion(grad=True)
-            grad_contrib += disp["gradient"]
-        if "D4" in self.xc_add:
-            from pyscf.dispersion.dftd4 import DFTD4Dispersion
-            d4_info = self.xc_add["D4"]
-            model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
-            disp = model.get_dispersion(grad=True)
-            grad_contrib += disp["gradient"]
+        grad_contrib = self._add_dispersion_gradient(grad_contrib)
 
         self.grad_enfunc = grad_contrib
 
     kernel = kernel
+    as_scanner = as_scanner_grad
 
     def base_method(self) -> UDFDH:
         self.__class__ = UDFDH

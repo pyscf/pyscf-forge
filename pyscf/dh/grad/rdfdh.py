@@ -1,15 +1,12 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.rdfdh import RDFDH
+from pyscf.dh.resp import RDHRespMixin, GradientMixin
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
 # pyscf import
 from pyscf import gto, lib, df
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
-try:
-    from pyscf.dispersion.dftd3 import DFTD3Dispersion
-except ImportError:
-    print('Warning: pyscf-dispersion not found. D3 correction unavailable.')
 # other import
 import numpy as np
 
@@ -306,7 +303,7 @@ def get_gradient_gga_hfref(xc_setting, vxc_n, max_memory=2000):
     return grad_contrib
 
 
-class Gradients(RDFDH):
+class Gradients(RDFDH, RDHRespMixin, GradientMixin):
 
     def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
@@ -475,19 +472,7 @@ class Gradients(RDFDH):
             grad_contrib -= 2 * einsum("Aij, ij -> A", S_1_mo[:, so, so], nc_F_0_ij)
         grad_contrib.shape = (natm, 3)
 
-        # handle dftd3 situation
-        mol = self.mol
-        if "D3" in self.xc_add:
-            d3_info = self.xc_add["D3"]
-            model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
-            disp = model.get_dispersion(grad=True)
-            grad_contrib += disp["gradient"]
-        if "D4" in self.xc_add:
-            from pyscf.dispersion.dftd4 import DFTD4Dispersion
-            d4_info = self.xc_add["D4"]
-            model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
-            disp = model.get_dispersion(grad=True)
-            grad_contrib += disp["gradient"]
+        grad_contrib = self._add_dispersion_gradient(grad_contrib)
         self.grad_enfunc = grad_contrib
 
     def base_method(self) -> RDFDH:

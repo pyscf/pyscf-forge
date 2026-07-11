@@ -3,9 +3,8 @@ from pyscf.dh.dhutil import gen_batch, calc_batch_size, HybridDict, timing, rest
     get_rho_from_dm_gga
 from pyscf.dh.xccode import parse_xc_dh, xc_equal
 from pyscf.dh.dh import DHBase, energy_elec_mp2_dfmp2_native, energy_elec_mp2_dfmp2
-from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_mp2_ajz, _loop_t_ijab
+from pyscf.dh.mp2_ajz import energy_elec_mp2_ajz, _loop_t_ijab
 # pyscf import
-from pyscf.scf import cphf
 from pyscf import lib, gto, df, dft, scf
 from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
 from pyscf.ao2mo import _ao2mo
@@ -108,103 +107,6 @@ def energy_tot(mf, **kwargs):
 # region first derivative related
 
 
-@timing
-def get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
-    naux, nmo, _ = Y_mo_jk.shape
-    nvir = nmo - nocc
-    so, sv = slice(0, nocc), slice(nocc, nmo)
-    # prepare space if bulk of eri_cpks is not provided
-    if eri_cpks is None:
-        eri_cpks = np.empty((nvir, nocc, nvir, nocc))
-    # copy some tensors to memory
-    Y_ai_jk = np.asarray(Y_mo_jk[:, sv, so])
-    Y_ij_jk = np.asarray(Y_mo_jk[:, so, so])
-
-    nbatch = calc_batch_size(nvir*naux + 2*nocc**2*nvir, max_memory, Y_ai_jk.size + Y_ij_jk.size)
-    for sA in gen_batch(nocc, nmo, nbatch):
-        sAvir = slice(sA.start - nocc, sA.stop - nocc)
-        eri_cpks[sAvir] = (
-            + 4 * einsum("Pai, Pbj -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
-            - cx * einsum("Paj, Pbi -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
-            - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, Y_mo_jk[:, sA, sv]))
-
-
-
-def Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
-    naux, nmo, _ = Y_mo_jk.shape
-    ni, na = si.stop - si.start, sa.stop - sa.start
-
-    @timing
-    def Ax0_Core_HF_inner(X):
-        X_shape = X.shape
-        X = X.reshape((-1, X_shape[-2], X_shape[-1]))
-        res = np.zeros((X.shape[0], ni, na))
-        nbatch = calc_batch_size(nmo**2, max_memory, X.size + res.size)
-        for saux in gen_batch(0, naux, nbatch):
-            Y_mo_blk = np.asarray(Y_mo_jk[saux])
-            for A in range(X.shape[0]):  # explicitly split X to X[A] to avoid einsum more than 2 oprehends
-                res[A] += (
-                    + 4 * einsum("Pia, Pjb, jb -> ia", Y_mo_blk[:, si, sa], Y_mo_blk[:, sj, sb], X[A])
-                    - cx * einsum("Pib, Pja, jb -> ia", Y_mo_blk[:, si, sb], Y_mo_blk[:, sj, sa], X[A])
-                    - cx * einsum("Pij, Pab, jb -> ia", Y_mo_blk[:, si, sj], Y_mo_blk[:, sa, sb], X[A]))
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
-        return res
-    return Ax0_Core_HF_inner
-
-
-def Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
-    C = mo_coeff
-    ni, mol, grids, xc, dm = xc_setting
-    rho, vxc, fxc = xc_kernel
-    vxc_ = transform_vxc(rho, vxc, "GGA", spin=0)
-    fxc_ = transform_fxc(rho, vxc, fxc, "GGA", spin=0)
-
-    @timing
-    def Ax0_Core_KS_inner(X):
-        X_shape = X.shape
-        X = X.reshape((-1, X_shape[-2], X_shape[-1]))
-        dmX = C[:, sj] @ X @ C[:, sb].T
-        dmX += dmX.swapaxes(-1, -2)
-        ax_ao = ni.nr_rks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc_, fxc=fxc_)
-        res = 2 * C[:, si].T @ ax_ao @ C[:, sa]
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
-        return res
-    return Ax0_Core_KS_inner
-
-
-def Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=2000):
-    C = mo_coeff
-    resp = _gen_rhf_response(mf, mo_coeff=C, hermi=1, max_memory=max_memory)
-
-    @timing
-    def Ax0_Core_resp_inner(X):
-        X_shape = X.shape
-        X = X.reshape((-1, X_shape[-2], X_shape[-1]))
-        dmX = C[:, sj] @ X @ C[:, sb].T
-        dmX += dmX.swapaxes(-1, -2)
-        ax_ao = resp(dmX)
-        res = 2 * C[:, si].T @ ax_ao @ C[:, sa]
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
-        return res
-    return Ax0_Core_resp_inner
-
-
-def Ax0_cpks_HF(eri_cpks, max_memory=2000):
-    nvir, nocc = eri_cpks.shape[:2]
-
-    @timing
-    def Ax0_cpks_HF_inner(X):
-        X_shape = X.shape
-        X = X.reshape((-1, X_shape[-2], X_shape[-1]))
-        res = np.zeros_like(X)
-        nbatch = calc_batch_size(nocc**2 * nvir, max_memory, 0)
-        for sA in gen_batch(0, nvir, nbatch):
-            res[:, sA] = einsum("aibj, Abj -> Aai", eri_cpks[sA], X)
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
-        return res
-    return Ax0_cpks_HF_inner
-
-
 # endregion first derivative related
 
 
@@ -276,67 +178,6 @@ class RDFDH(DHBase):
         self.eo, self.ev = self.mo_energy[self.so], self.mo_energy[self.sv]
         return self
 
-    def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
-        Y_mo_jk = self.tensors["Y_mo_jk"]
-        cx = cx if cx else self.cx
-        return Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.get_memory())
-
-    def Ax0_Core_KS(self, si, sa, sj, sb, xc=None, cpks=False):
-        xc = xc if xc else self.xc
-        if self.ni._xc_type(xc) == "HF":
-            return lambda _: 0
-        tensors = self.tensors
-        cpks_token = "in cpks" if cpks else ""
-        grids = self.grids_cpks if cpks else self.grids
-        xc_setting = self.ni, self.mol, grids, xc, self.D
-        if "rho" + cpks_token not in tensors:
-            self.prepare_xc_kernel()
-        xc_kernel = tensors["rho" + cpks_token], tensors["vxc" + xc + cpks_token], tensors["fxc" + xc + cpks_token]
-        mo_coeff = self.mo_coeff
-        return Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel)
-
-    def Ax0_Core(self, si, sa, sj, sb, xc=None, cpks=False):
-        xc = xc if xc else self.xc
-        cx = self.ni.hybrid_coeff(xc)
-        ax0_core_hf, ax0_core_ks = self.Ax0_Core_HF(si, sa, sj, sb, cx), self.Ax0_Core_KS(si, sa, sj, sb, xc, cpks)
-
-        def fx(X):
-            return ax0_core_hf(X) + ax0_core_ks(X)
-        return fx
-
-    def Ax0_Core_resp(self, si, sa, sj, sb, mf=None, mo_coeff=None):
-        mf = mf if mf else self.mf_s
-        mo_coeff = mo_coeff if mo_coeff else self.mo_coeff
-        return Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=self.get_memory())
-
-    def Ax0_cpks(self):
-        so, sv = self.so, self.sv
-        ax0_core_ks = self.Ax0_Core_KS(sv, so, sv, so, cpks=True)
-        ax0_cpks_hf = Ax0_cpks_HF(self.tensors["eri_cpks"], self.get_memory())
-
-        def Ax0_cpks_inner(X):
-            res = ax0_cpks_hf(X) + ax0_core_ks(X)
-            return res
-        return Ax0_cpks_inner
-
-    def solve_cpks(self, rhs):
-        return cphf.solve(self.Ax0_cpks(), self.mo_energy, self.mo_occ, rhs, max_cycle=self.cpks_cyc, tol=self.cpks_tol)[0]
-
-    def prepare_integral(self):
-        self.run_scf()
-        tensors = self.tensors
-        C = self.mo_coeff
-        nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
-
-        tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-        get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.get_memory())
-        if self.eval_pt2:
-            tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
-        eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
-        get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())
-        return self
-
     @timing
     def prepare_pt2(self, dump_t_ijab=True):
         tensors = self.tensors
@@ -384,63 +225,6 @@ class RDFDH(DHBase):
         tensors.create("G_ia_ri", G_ia_ri)
         return self
 
-    @timing
-    def prepare_lagrangian(self, gen_W=False):
-        tensors = self.tensors
-        nvir, nocc, nmo, naux = self.nvir, self.nocc, self.nmo, self.df_ri.get_naoaux()
-        so, sv, sa = self.so, self.sv, self.sa
-
-        D_rdm1 = tensors.load("D_rdm1")
-        G_ia_ri = tensors.load("G_ia_ri")
-        Y_mo_ri = tensors["Y_mo_ri"]
-        Y_ij_ri = np.asarray(Y_mo_ri[:, so, so])
-        L = np.zeros((nvir, nocc))
-
-        if gen_W:
-            Y_ia = np.asarray(Y_mo_ri[:, so, sv])
-            W_I = np.zeros((nmo, nmo))
-            W_I[so, so] = - 2 * einsum("Pia, Pja -> ij", G_ia_ri, Y_ia)
-            W_I[sv, sv] = - 2 * einsum("Pia, Pib -> ab", G_ia_ri, Y_ia)
-            W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_mo_ri[:, so, so])
-            tensors.create("W_I", W_I)
-            L += W_I[sv, so]
-        else:
-            L -= 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_ij_ri)
-
-        L += self.Ax0_Core_resp(sv, so, sa, sa)(D_rdm1)
-
-        nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
-        for saux in gen_batch(0, naux, nbatch):
-            L += 4 * einsum("Pib, Pab -> ai", G_ia_ri[saux], Y_mo_ri[saux, sv, sv])
-
-        if self.xc_n:
-            L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
-
-        tensors.create("L", L)
-        return self
-
-    @timing
-    def prepare_D_r(self):
-        tensors = self.tensors
-        sv, so = self.sv, self.so
-        D_r = tensors.load("D_rdm1").copy()
-        L = tensors.load("L")
-        D_r[sv, so] = self.solve_cpks(L)
-        tensors.create("D_r", D_r)
-        return self
-
-    def dipole(self):
-        if "D_r" not in self.tensors:
-            self.prepare_integral().prepare_xc_kernel() \
-                .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
-                .prepare_D_r()
-        D_r = self.tensors["D_r"]
-        mol, C, D = self.mol, self.mo_coeff, self.D
-        h = - mol.intor("int1e_r")
-        d = einsum("tuv, uv -> t", h, D + C @ D_r @ C.T)
-        d += einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
-        return d
-
     def nuc_grad_method(self):
         from pyscf.dh.grad.rdfdh import Gradients
         self.__class__ = Gradients
@@ -460,4 +244,3 @@ class RDFDH(DHBase):
     energy_elec = energy_elec
     energy_tot = energy_tot
     kernel = kernel
-    solve_cpks = solve_cpks

@@ -15,7 +15,7 @@ def _mol_to_dipole(mol, xc):
         def get_hcore(mol=mol):
             return scf.rhf.get_hcore(mol) - interval * mol.intor("int1e_r")[component]
         mf.mf_s.get_hcore = mf.mf_n.get_hcore = get_hcore
-        return mf.run().dipole()
+        return mf.run().polar_method().dipole()
     return fx
 
 

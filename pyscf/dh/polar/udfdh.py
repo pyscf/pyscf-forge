@@ -1,7 +1,8 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.udfdh import UDFDH
-from pyscf.dh.polar.rdfdh import Polar as RPolar, kernel
+from pyscf.dh.polar.rdfdh import kernel
+from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
 # pyscf import
@@ -109,7 +110,13 @@ def _uks_gga_wv2_generator(fxc, kxc, weight):
     return _uks_gga_wv2_inner
 
 
-class Polar(UDFDH, RPolar):
+class Polar(UDFDH, UDHRespMixin):
+
+    @property
+    def nprop(self):
+        if "H_1_ao" not in self.tensors:
+            self.prepare_H_1()
+        return self.tensors["H_1_ao"].shape[0]
 
     def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
         if not skip_construct:
