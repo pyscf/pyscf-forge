@@ -7,14 +7,14 @@ from pyscf.dh.xccode import XCDH, XCType, parse_xc_dh, xc_equal
 mol = gto.M(atom="O; H 1 0.94; H 1 0.94 2 104.5", basis="cc-pVDZ")
 
 # 1. DH functionals can be any name from the JSON database
-for name in ["B2PLYP", "XYG3", "PBE0-DH", "DSD-PBEP86-D3BJ", "TPSS0-DH"]:
+for name in ["B2PLYP", "XYG3", "PBE0-DH", "DSD-PBEP86-D3BJ"]:
     mf = DFDH(mol, xc=name).run()
     print(f"{name:25s} {mf.e_tot:.10f}")
 
-# 2. xDH via 2-tuple (code_scf, code_eng) — no JSON entry needed
+# 2. xDH via 2-tuple (code_scf, code_eng) 
 xc_xdh = ("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2")
 mf = DFDH(mol, xc=xc_xdh).run()
-print(f"\ncustom XYG3 (2-tuple): {mf.e_tot:.10f}")
+print(f"custom XYG3 (2-tuple): {mf.e_tot:.10f}")
 
 # 3. Inspect what the parser returns for any functional
 print("\nFunc       xc_scf                            cc    c_os  c_ss")
@@ -28,10 +28,6 @@ print(f"\nXYG3 SCF  = {xcdh.xc_scf.token}")
 low_rung = xcdh.xc_eng.remove(
     xcdh.xc_eng.extract_by_xctype(XCType.MP2 | XCType.DFTD3), inplace=False)
 print(f"XYG3 xc_n = {low_rung.token}  (non-consistent energy)")
-
-# parse_xc_dh also handles the 2-tuple format
-xc_list, _ = parse_xc_dh(("B3LYPg", "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2"))
-print(f"2-tuple → xc=({xc_list[0]}, {xc_list[2]:.4f}, {xc_list[3]:g}, {xc_list[4]:g})")
 
 # 5. XC token comparison via xc_equal
 print(f"\nxc_equal('HF', 'HF,') = {xc_equal('HF', 'HF,')}")
