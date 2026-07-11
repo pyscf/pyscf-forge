@@ -42,24 +42,22 @@ def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
 
 
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
-    cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
-    if not mf.eval_pt2:
-        return 0, 0, 0
+    c_os, c_ss = params if params else mf.c_os, mf.c_ss
     emp2_0, eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
     if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
-        return cc * emp2_0, None, None
+        return emp2_0, None, None
     if getattr(mf, 'mp2_backend', None) == "dfmp2":
-        return cc * (c_os * eng_bi1 + c_ss * eng_bi2), eng_bi1, eng_bi2
+        return c_os * eng_bi1 + c_ss * eng_bi2, eng_bi1, eng_bi2
     eng_os = eng_bi1[αβ]
     eng_ss = 0.5 * (eng_bi1[αα] + eng_bi1[ββ] - eng_bi2[αα] - eng_bi2[ββ])
-    eng_pt2 = cc * (c_os * eng_os + c_ss * eng_ss)
+    eng_pt2 = c_os * eng_os + c_ss * eng_ss
     return eng_pt2, eng_os, eng_ss
 
 
 def energy_elec(mf, params=None, **kwargs):
     eng_nc = mf.energy_elec_nc(**kwargs)[0]
     nocc, nvir = mf.nocc, mf.nvir
-    _, _, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
+    _, c_ss = params if params else mf.c_os, mf.c_ss
     eval_ss = True if abs(c_ss) > 1e-7 else False
     t_ijab_blk = None
     if mf.with_t_ijab:
@@ -337,7 +335,7 @@ class UDFDH(DHBase):
         eo, ev = self.eo, self.ev
         naux = self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
-        cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
+        c_os, c_ss = self.c_os, self.c_ss
         eval_ss = True if abs(c_ss) > 1e-7 else False
 
         D_rdm1 = np.zeros((2, nmo, nmo))
@@ -377,12 +375,12 @@ class UDFDH(DHBase):
                     t_ijab = tensors["t_ijab" + str(σς)][sI]
                 if σς in (αα, ββ):
                     # T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
-                    T_ijab = cc * 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
+                    T_ijab = 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
                     D_rdm1[σ, so[σ], so[σ]] -= 2 * einsum("kiab, kjab -> ij", T_ijab, t_ijab)
                     D_rdm1[σ, sv[σ], sv[σ]] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
                     G_ia_ri[σ][:, sI] += 4 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[σ])
                 else:  # σς == αβ
-                    T_ijab = cc * c_os * t_ijab
+                    T_ijab = c_os * t_ijab
                     # D_rdm1[α, so[α], so[α]] -= einsum("ikab, jkab -> ij", T_ijab, t_ijab)
                     # D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
                     # D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)

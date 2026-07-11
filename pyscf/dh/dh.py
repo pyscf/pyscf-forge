@@ -38,11 +38,20 @@ class DHBase(lib.StreamObject):
         elif isinstance(xc, (tuple, list)) and len(xc) == 2 and isinstance(xc[0], str):
             xc_list, xc_add = parse_xc_dh(xc)
         elif len(xc) == 5:
+            import warnings
+            warnings.warn(
+                "5-tuple XC format is deprecated. "
+                "Use a string name, a code string, or a 2-tuple (code_scf, code_eng) for xDH.",
+                FutureWarning
+            )
+            xc_list = xc[0], xc[1], xc[3], xc[4]
+            xc_add = {}
+        elif len(xc) == 4:
             xc_list = xc
             xc_add = {}
         else:
             xc_list, xc_add = xc
-        self.xc, self.xc_n, self.cc, self.c_os, self.c_ss = xc_list
+        self.xc, self.xc_n, self.c_os, self.c_ss = xc_list
         self.xc_add = xc_add
         if self._scf is not None:
             if not hasattr(self._scf, 'xc'):
@@ -97,11 +106,11 @@ class DHBase(lib.StreamObject):
 
     @property
     def eval_ss(self):
-        return abs(self.cc * self.c_ss) > 1e-7
+        return abs(self.c_ss) > 1e-7
 
     @property
     def eval_os(self):
-        return abs(self.cc * self.c_os) > 1e-7
+        return abs(self.c_os) > 1e-7
 
     @property
     def eval_pt2(self):

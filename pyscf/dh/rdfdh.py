@@ -59,13 +59,13 @@ def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     if not mf.eval_pt2:
         return 0, 0, 0
-    cc, c_os, c_ss = params if params else mf.cc, mf.c_os, mf.c_ss
+    c_os, c_ss = params if params else mf.c_os, mf.c_ss
     emp2_0, eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
     if getattr(mf, 'mp2_backend', None) == "dfmp2_native":
-        return cc * emp2_0, None, None
+        return emp2_0, None, None
     if getattr(mf, 'mp2_backend', None) == "dfmp2":
-        return cc * (c_os * eng_bi1 + c_ss * eng_bi2), eng_bi1, eng_bi2
-    return (cc * ((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),
+        return c_os * eng_bi1 + c_ss * eng_bi2, eng_bi1, eng_bi2
+    return (((c_os + c_ss) * eng_bi1 - c_ss * eng_bi2),
             eng_bi1,
             eng_bi1 - eng_bi2)
 
@@ -344,7 +344,7 @@ class RDFDH(DHBase):
         e = self.mo_energy
         naux = self.df_ri.get_naoaux()
         so, sv = self.so, self.sv
-        cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
+        c_os, c_ss = self.c_os, self.c_ss
 
         D_rdm1 = np.zeros((nmo, nmo))
 
@@ -371,7 +371,7 @@ class RDFDH(DHBase):
                     eng_bi2[0] += einsum("ijab, ijba ->", t_ijab, g_ijab)
             if dump_t_ijab:
                 tensors["t_ijab"][sI] = t_ijab
-            T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
+            T_ijab = restricted_biorthogonalize(t_ijab, c_os, c_ss)
             D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
             D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
             G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)

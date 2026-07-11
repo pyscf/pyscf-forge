@@ -191,9 +191,9 @@ def tot_size(*args):
     return size
 
 
-def restricted_biorthogonalize(t_ijab, cc, c_os, c_ss):
-    coef_0 = cc * (c_os + c_ss)
-    coef_1 = - cc * c_ss
+def restricted_biorthogonalize(t_ijab, c_os, c_ss):
+    coef_0 = c_os + c_ss
+    coef_1 = -c_ss
     if abs(coef_1) < 1e-7:
         return coef_0 * t_ijab
     t_shape = t_ijab.shape

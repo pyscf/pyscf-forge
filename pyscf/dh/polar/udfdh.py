@@ -209,7 +209,7 @@ class Polar(UDFDH, RPolar):
 
     def prepare_pt2_deriv(self):
         tensors = self.tensors
-        cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
+        c_os, c_ss = self.c_os, self.c_ss
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
         mocc, mvir = max(nocc), max(nvir)
         so, sv = self.so, self.sv
@@ -248,21 +248,21 @@ class Polar(UDFDH, RPolar):
                 if σς in (αα, ββ):
                     # T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
                     # pdA_T_ijab = cc * 0.5 * c_ss * (pdA_t_ijab - pdA_t_ijab.swapaxes(-1, -2))
-                    T_ijab = cc * 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
-                    pdA_T_ijab = cc * 0.5 * c_ss * hermi_sum_last2dim(pdA_t_ijab, hermi=ANTIHERMI, inplace=False)
+                    T_ijab = 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
+                    pdA_T_ijab = 0.5 * c_ss * hermi_sum_last2dim(pdA_t_ijab, hermi=ANTIHERMI, inplace=False)
                     pdA_D_rdm1[σ][:, so[σ], so[σ]] -= 2 * einsum("kiba, Akjba -> Aij", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[σ][:, sv[σ], sv[σ]] += 2 * einsum("ijac, Aijbc -> Aab", T_ijab, pdA_t_ijab)
                     pdA_G_ia_ri[σ][:, :, sI] += 4 * einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri[σ])
                     pdA_G_ia_ri[σ][:, :, sI] += 4 * einsum("Aijab, Pjb -> APia", pdA_T_ijab, Y_ia_ri[σ])
                 else:
-                    T_ijab = cc * c_os * t_ijab
-                    pdA_T_ijab = cc * c_os * pdA_t_ijab
+                    T_ijab = c_os * t_ijab
+                    pdA_T_ijab = c_os * pdA_t_ijab
                     for sJ in gen_batch(0, nocc[α], nbatch):
                         if sI == sJ:
                             T_jkab = T_ijab
                         else:
                             t_jkab = tensors["t_ijab" + str(αβ)][sJ]
-                            T_jkab = cc * c_os * t_jkab
+                            T_jkab = c_os * t_jkab
                         pdA_D_rdm1[α][:, sI, sJ] -= einsum("jkba, Aikba -> Aij", T_jkab, pdA_t_ijab)
                     # pdA_D_rdm1[α][:, so[α], so[α]] -= einsum("ikab, Ajkab -> Aij", T_ijab, pdA_t_ijab)
                     pdA_D_rdm1[β][:, so[β], so[β]] -= einsum("kiba, Akjba -> Aij", T_ijab, pdA_t_ijab)

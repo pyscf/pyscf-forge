@@ -45,14 +45,13 @@
         "tested": "QChem 5.1.1"
     },
     "DSD_PBEP86": {
-        "code": "0.72*HF + 0.28*PBE, 0.44*P86_FT + 0.51*MP2_OS + 0.36*MP2_SS",
+        "code": "0.72*HF + 0.28*PBE, 0.44*P86 + 0.51*MP2_OS + 0.36*MP2_SS",
         "ref": "10.1002/jcc.23391"
     },
     "DSD_PBEP86_D3BJ": {
-        "code": "0.69*HF + 0.31*PBE, 0.44*P86_FT + 0.52*MP2_OS + 0.22*MP2_SS + DFTD3(BJ, s6=0.48, a1=0, s8=0, a2=5.6)",
+        "code": "0.69*HF + 0.31*PBE, 0.44*P86 + 0.52*MP2_OS + 0.22*MP2_SS + DFTD3(BJ, xc=dsdpbep86)",
         "ref": "10.1002/jcc.23391",
-        "tested": "QChem 5.1.1",
-        "notes": "P86_FT used in Gaussian, QChem, etc instead of P86. Also see https://github.com/pyscf/pyscf/issues/1004."
+        "tested": "MRCC 2022-03-18"
     },
     "DSD_PBEPBE_D3BJ": {
         "code": "0.68*HF + 0.32*PBE, 0.49*PBE + 0.55*MP2_OS + 0.13*MP2_SS + DFTD3(BJ, s6=0.78, a1=0, s8=0, a2=6.1)",
@@ -112,6 +111,12 @@
         "alias": [
             "PWPB95"
         ]
+    },
+    "QCHEM_DSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.44*P86_FT + 0.52*MP2_OS + 0.22*MP2_SS + DFTD3(BJ, xc=dsdpbep86)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1",
+        "notes": "P86_FT used in Gaussian/QChem instead of P86; see https://github.com/pyscf/pyscf/issues/1004"
     },
     "REV_DSD_PBEP86_D3BJ": {
         "code": "0.69*HF + 0.31*PBE, 0.4296*P86_FT + 0.5785*MP2_OS + 0.0799*MP2_SS + DFTD3(BJ, S6=0.4377, A1=0, S8=0, A2=5.5)",

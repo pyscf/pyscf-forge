@@ -201,11 +201,11 @@ class Polar(RDFDH):
             pdA_t_ijab += einsum("Aca, ijcb -> Aijab", pdA_F_0_mo[:, sv, sv], t_ijab)
             pdA_t_ijab /= D_ijab
 
-            cc, c_os, c_ss = self.cc, self.c_os, self.c_ss
-            # T_ijab = cc * ((c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2))
-            # pdA_T_ijab = cc * ((c_os + c_ss) * pdA_t_ijab - c_ss * pdA_t_ijab.swapaxes(-1, -2))
-            T_ijab = restricted_biorthogonalize(t_ijab, cc, c_os, c_ss)
-            pdA_T_ijab = restricted_biorthogonalize(pdA_t_ijab, cc, c_os, c_ss)
+            c_os, c_ss = self.c_os, self.c_ss
+            # T_ijab = (c_os + c_ss) * t_ijab - c_ss * t_ijab.swapaxes(-1, -2)
+            # pdA_T_ijab = (c_os + c_ss) * pdA_t_ijab - c_ss * pdA_t_ijab.swapaxes(-1, -2)
+            T_ijab = restricted_biorthogonalize(t_ijab, c_os, c_ss)
+            pdA_T_ijab = restricted_biorthogonalize(pdA_t_ijab, c_os, c_ss)
 
             pdA_G_ia_ri[:, :, sI] += einsum("Aijab, Pjb -> APia", pdA_T_ijab, Y_ia_ri)
             pdA_G_ia_ri[:, :, sI] += einsum("ijab, APjb -> APia", T_ijab, pdA_Y_ia_ri)

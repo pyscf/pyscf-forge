@@ -42,9 +42,9 @@ def _extract_components(xc_eng, xc_scf, name):
     mp2_list = xc_eng.extract_by_xctype(XCType.MP2)
     if len(mp2_list) > 0:
         mp2 = mp2_list[0]
-        cc, c_os, c_ss = mp2.fac, mp2.parameters[0], mp2.parameters[1]
+        c_os, c_ss = mp2.fac * mp2.parameters[0], mp2.fac * mp2.parameters[1]
     else:
-        cc, c_os, c_ss = 0, 0, 0
+        c_os, c_ss = 0, 0
     xc_add = {}
     d3_list = xc_eng.extract_by_xctype(XCType.DFTD3)
     if len(d3_list) > 0:
@@ -62,19 +62,19 @@ def _extract_components(xc_eng, xc_scf, name):
         d4 = d4_list[0]
         d4_xc = d4.additional.get("XC", _strip_d3_suffix(name))
         xc_add["D4"] = {"xc": d4_xc, "version": "d4"}
-    return xc, xc_n, cc, c_os, c_ss, xc_add
+    return xc, xc_n, c_os, c_ss, xc_add
 
 
 def parse_xc_dh(xc_dh: str):
     if isinstance(xc_dh, tuple) and len(xc_dh) == 2:
         xc_scf = XCList(xc_dh[0], code_scf=True).token
         xc_eng = XCList(xc_dh[1], code_scf=False)
-        xc, xc_n, cc, c_os, c_ss, xc_add = _extract_components(xc_eng, xc_scf, "")
-        return (xc, xc_n, cc, c_os, c_ss), xc_add
+        xc, xc_n, c_os, c_ss, xc_add = _extract_components(xc_eng, xc_scf, "")
+        return (xc, xc_n, c_os, c_ss), xc_add
 
     xcdh = XCDH(xc_dh)
     _check_unsupported(xc_dh)
     xc_scf = xcdh.xc_scf.token
     xc_eng = xcdh.xc_eng
-    xc, xc_n, cc, c_os, c_ss, xc_add = _extract_components(xc_eng, xc_scf, xc_dh)
-    return (xc, xc_n, cc, c_os, c_ss), xc_add
+    xc, xc_n, c_os, c_ss, xc_add = _extract_components(xc_eng, xc_scf, xc_dh)
+    return (xc, xc_n, c_os, c_ss), xc_add
