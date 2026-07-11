@@ -2,7 +2,7 @@
 
 from pyscf import gto
 from pyscf.dh import DFDH
-from pyscf.dh.xccode import XCList, XCDH, XCType, parse_xc_dh, xc_equal
+from pyscf.dh.xccode import XCDH, XCType, parse_xc_dh, xc_equal
 
 mol = gto.M(atom="O; H 1 0.94; H 1 0.94 2 104.5", basis="cc-pVDZ")
 
@@ -37,9 +37,3 @@ print(f"2-tuple → xc=({xc_list[0]}, {xc_list[2]:.4f}, {xc_list[3]:g}, {xc_list
 print(f"\nxc_equal('HF', 'HF,') = {xc_equal('HF', 'HF,')}")
 print(f"xc_equal('B3LYPG', 'B3LYPg') = {xc_equal('B3LYPG', 'B3LYPg')}")
 print(f"xc_equal('PBE0', 'B3LYPG') = {xc_equal('PBE0', 'B3LYPG')}")
-
-# 6. Custom XC strings via XCList (requires code_scf boolean)
-xc = XCList("0.5*HF + 0.5*PBE, 0.875*PBE + 0.125*MP2", code_scf=False)
-print(f"\nXCList full:  {xc.token}")
-xc_scf = XCList("0.5*HF + 0.5*PBE, 0.875*PBE + 0.125*MP2", code_scf=True)
-print(f"XCList scf:   {xc_scf.token}")
