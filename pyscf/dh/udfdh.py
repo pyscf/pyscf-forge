@@ -219,19 +219,13 @@ class UDFDH(DHBase):
 
         return self
 
-    @timing
-    # A REALLY DIRTY WAY transform to son class https://stackoverflow.com/questions/7078134/
     def nuc_grad_method(self):
         from pyscf.dh.grad.udfdh import Gradients
-        self.__class__ = Gradients
-        Gradients.__init__(self, self.mol, skip_construct=True)
-        return self
+        return Gradients(self)
 
     def polar_method(self):
         from pyscf.dh.polar.udfdh import Polar
-        self.__class__ = Polar
-        Polar.__init__(self, self.mol, skip_construct=True)
-        return self
+        return Polar(self)
 
     energy_elec_pt2 = energy_elec_pt2
     energy_elec_mp2 = energy_elec_ump2_ajz

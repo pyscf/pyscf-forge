@@ -24,7 +24,7 @@ from pyscf.dh.rdfdh import RDFDH
 from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
-from pyscf import gto, lib
+from pyscf import lib
 import numpy as np
 
 einsum = lib.einsum
@@ -92,9 +92,9 @@ def _rks_gga_wv2(rho0, rho1, rho2, fxc, kxc, weight):
 
 class Polar(RDFDH, RDHRespMixin):
 
-    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
-        if not skip_construct:
-            super(Polar, self).__init__(mol, *args, **kwargs)
+    def __init__(self, method):
+        self.__dict__.update(method.__dict__)
+        self._base = method
         self.pol_scf = NotImplemented
         self.pol_corr = NotImplemented
         self.pol_tot = NotImplemented

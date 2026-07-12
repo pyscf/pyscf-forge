@@ -40,6 +40,6 @@ D_r_mo = mf_g.tensors["D_r"]
 # 3. Relaxed DM (AO basis)
 rdm1_ao = mf_g.make_rdm1_relaxed(ao_repr=True)
 
-# 4. .dipole() method uses relaxed DM internally
-dip = mf.dipole()
+# 4. .dipole() method on Gradients uses relaxed DM internally
+dip = mf_g.dipole()
 print(f"Dipole (via .dipole):   {np.linalg.norm(dip):.6f} a.u.")

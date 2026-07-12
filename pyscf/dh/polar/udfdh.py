@@ -26,7 +26,7 @@ from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
 # pyscf import
-from pyscf import gto, lib, dft
+from pyscf import lib, dft
 from pyscf.dft.numint import _scale_ao
 from pyscf.lib.numpy_helper import ANTIHERMI
 # other import
@@ -138,9 +138,9 @@ class Polar(UDFDH, UDHRespMixin):
             self.prepare_H_1()
         return self.tensors["H_1_ao"].shape[0]
 
-    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
-        if not skip_construct:
-            super(Polar, self).__init__(mol, *args, **kwargs)
+    def __init__(self, method):
+        self.__dict__.update(method.__dict__)
+        self._base = method
         self.pol_scf = NotImplemented
         self.pol_corr = NotImplemented
         self.pol_tot = NotImplemented

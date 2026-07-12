@@ -25,7 +25,7 @@ from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing, as_scanner_grad
 from pyscf.dh.grad.dfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel, GradientMixin
 # pyscf import
-from pyscf import gto, lib, df
+from pyscf import lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper
 # other import
 import numpy as np
@@ -118,10 +118,9 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
 
 class Gradients(UDFDH, UDHRespMixin, GradientMixin):
 
-    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
-        if not skip_construct:
-            super(Gradients, self).__init__(mol, *args, **kwargs)
-        # results
+    def __init__(self, method):
+        self.__dict__.update(method.__dict__)
+        self._base = method
         self.grad_jk = NotImplemented
         self.grad_gga = NotImplemented
         self.grad_pt2 = NotImplemented

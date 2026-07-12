@@ -343,10 +343,9 @@ class GradientMixin:
 
 class Gradients(RDFDH, RDHRespMixin, GradientMixin):
 
-    def __init__(self, mol: gto.Mole, *args, skip_construct=False, **kwargs):
-        if not skip_construct:
-            super(Gradients, self).__init__(mol, *args, **kwargs)
-        # results
+    def __init__(self, method):
+        self.__dict__.update(method.__dict__)
+        self._base = method
         self.grad_jk = NotImplemented
         self.grad_gga = NotImplemented
         self.grad_pt2 = NotImplemented

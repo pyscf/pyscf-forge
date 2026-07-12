@@ -172,15 +172,11 @@ class RDFDH(DHBase):
 
     def nuc_grad_method(self):
         from pyscf.dh.grad.dfdh import Gradients
-        self.__class__ = Gradients
-        Gradients.__init__(self, self.mol, skip_construct=True)
-        return self
+        return Gradients(self)
 
     def polar_method(self):
         from pyscf.dh.polar.rdfdh import Polar
-        self.__class__ = Polar
-        Polar.__init__(self, self.mol, skip_construct=True)
-        return self
+        return Polar(self)
 
     energy_elec_pt2 = energy_elec_pt2
     energy_elec_mp2 = energy_elec_mp2_ajz
