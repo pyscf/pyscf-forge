@@ -477,21 +477,4 @@ class UDHRespMixin(RespMixin):
         return self
 
 
-class GradientMixin:
-    """Shared gradient pipeline: D3/D4 dispersion gradient contributions."""
 
-    def _add_dispersion_gradient(self, grad_contrib):
-        mol = self.mol
-        if "D3" in self.xc_add:
-            from pyscf.dispersion.dftd3 import DFTD3Dispersion
-            d3_info = self.xc_add["D3"]
-            model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
-            disp = model.get_dispersion(grad=True)
-            grad_contrib += disp["gradient"]
-        if "D4" in self.xc_add:
-            from pyscf.dispersion.dftd4 import DFTD4Dispersion
-            d4_info = self.xc_add["D4"]
-            model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
-            disp = model.get_dispersion(grad=True)
-            grad_contrib += disp["gradient"]
-        return grad_contrib

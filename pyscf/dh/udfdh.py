@@ -241,7 +241,6 @@ class UDFDH(DHBase):
 
     @timing
     # A REALLY DIRTY WAY transform to son class https://stackoverflow.com/questions/7078134/
-
     def nuc_grad_method(self):
         from pyscf.dh.grad.udfdh import Gradients
         self.__class__ = Gradients

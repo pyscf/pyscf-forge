@@ -1,9 +1,9 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.udfdh import UDFDH
-from pyscf.dh.resp import UDHRespMixin, GradientMixin
+from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing, as_scanner_grad
-from pyscf.dh.grad.rdfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel
+from pyscf.dh.grad.dfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel, GradientMixin
 # pyscf import
 from pyscf import gto, lib, df
 from pyscf.df.grad.rhf import _int3c_wrapper as int3c_wrapper

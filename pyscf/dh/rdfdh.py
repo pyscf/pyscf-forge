@@ -226,7 +226,7 @@ class RDFDH(DHBase):
         return self
 
     def nuc_grad_method(self):
-        from pyscf.dh.grad.rdfdh import Gradients
+        from pyscf.dh.grad.dfdh import Gradients
         self.__class__ = Gradients
         Gradients.__init__(self, self.mol, skip_construct=True)
         return self

@@ -1,7 +1,7 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.rdfdh import RDFDH
-from pyscf.dh.resp import RDHRespMixin, GradientMixin
+from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
 # pyscf import
 from pyscf import gto, lib, df
@@ -97,19 +97,17 @@ def get_rho_derivs(ao, dm, mol, mask):
 
 
 @timing
-def get_H_1_ao(mol: gto.Mole):
+def get_H_1_ao(mol):
+    from pyscf.grad.rhf import get_hcore
     natm, nao = mol.natm, mol.nao
-    int1e_ipkin = mol.intor("int1e_ipkin")
-    int1e_ipnuc = mol.intor("int1e_ipnuc")
-    Z_A = mol.atom_charges()
+    h1 = get_hcore(mol)
     H_1_ao = np.zeros((natm, 3, nao, nao))
-    for A, (_, _, A0, A1) in enumerate(mol.aoslice_by_atom()):
-        sA = slice(A0, A1)
-        H_1_ao[A, :, sA, :] -= int1e_ipkin[:, sA, :]
-        H_1_ao[A, :, sA, :] -= int1e_ipnuc[:, sA, :]
-        with mol.with_rinv_as_nucleus(A):
-            H_1_ao[A] -= Z_A[A] * mol.intor("int1e_iprinv")
-    H_1_ao += H_1_ao.swapaxes(-1, -2)
+    for A, (_, _, p0, p1) in enumerate(mol.aoslice_by_atom()):
+        with mol.with_rinv_at_nucleus(A):
+            vrinv = mol.intor("int1e_iprinv", comp=3)
+            vrinv *= -mol.atom_charge(A)
+        vrinv[:, p0:p1] += h1[:, p0:p1]
+        H_1_ao[A] = vrinv + vrinv.transpose(0, 2, 1)
     H_1_ao.shape = (natm * 3, nao, nao)
     return H_1_ao
 
@@ -301,6 +299,26 @@ def get_gradient_gga_hfref(xc_setting, vxc_n, max_memory=2000):
                     + einsum("g, tg -> t", fg_n, gamma_A1))
         ig += weight.size
     return grad_contrib
+
+
+class GradientMixin:
+    """Shared gradient pipeline: D3/D4 dispersion gradient contributions."""
+
+    def _add_dispersion_gradient(self, grad_contrib):
+        mol = self.mol
+        if "D3" in self.xc_add:
+            from pyscf.dispersion.dftd3 import DFTD3Dispersion
+            d3_info = self.xc_add["D3"]
+            model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
+            disp = model.get_dispersion(grad=True)
+            grad_contrib += disp["gradient"]
+        if "D4" in self.xc_add:
+            from pyscf.dispersion.dftd4 import DFTD4Dispersion
+            d4_info = self.xc_add["D4"]
+            model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
+            disp = model.get_dispersion(grad=True)
+            grad_contrib += disp["gradient"]
+        return grad_contrib
 
 
 class Gradients(RDFDH, RDHRespMixin, GradientMixin):
