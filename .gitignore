@@ -140,3 +140,4 @@ dmypy.json
 multigrid/
 **/multigrid/
 examples/occri/multigrid/
+pytest.ini
