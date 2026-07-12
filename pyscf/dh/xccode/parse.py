@@ -160,3 +160,41 @@ def parse_xc_dh(xc_dh: str):
     xc_eng = xcdh.xc_eng
     xc, xc_n, c_os, c_ss, xc_add = _extract_components(xc_eng, xc_scf, xc_dh)
     return (xc, xc_n, c_os, c_ss), xc_add
+
+
+def describe_xc_dh(xc_dh, file=None):
+    """Print a human-readable summary of a parsed DH functional."""
+    xcdh = XCDH(xc_dh)
+    _check_unsupported(xc_dh)
+    xc_scf_orig = xcdh.xc_scf.token
+    xc_eng = xcdh.xc_eng
+    low_rung_orig = xc_eng.remove(
+        xc_eng.extract_by_xctype(XCType.MP2 | XCType.DFTD3 | XCType.DFTD4),
+        inplace=False)
+
+    (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh(xc_dh)
+    corr_list = xc_eng.extract_by_xctype(XCType.RUNG_HIGH)
+    corr = corr_list[0].name if corr_list else ""
+
+    if xc_n is not None:
+        dh_type = "xDH"
+    else:
+        has_exch = any(i.name != "HF" and XCType.EXCH & i.type for i in low_rung_orig)
+        dh_type = "bDH" if has_exch else "post-HF"
+
+    lines = [str(xc_dh)]
+    lines.append(f"  type:   {dh_type}")
+    lines.append(f"  corr:   {corr}")
+    lines.append(f"  xc:     {xc_scf_orig}")
+    if xc_n is not None:
+        lines.append(f"  xc_n:   {low_rung_orig.token}")
+    lines.append(f"  c_os:   {c_os}")
+    lines.append(f"  c_ss:   {c_ss}")
+    if xc_add.get("D3"):
+        d3 = xc_add["D3"]
+        lines.append(f"  D3:     xc={d3['xc']} version={d3['version']}")
+    if xc_add.get("D4"):
+        d4 = xc_add["D4"]
+        lines.append(f"  D4:     xc={d4['xc']} version={d4['version']}")
+    print("\n".join(lines), file=file)
+    print(file=file)
