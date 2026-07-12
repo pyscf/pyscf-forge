@@ -40,7 +40,7 @@ class DHBase(lib.StreamObject):
                 "Use a string name, a code string, or a 2-tuple (code_scf, code_eng) for xDH.",
                 FutureWarning
             )
-            xc_list = xc[0], xc[1], xc[3], xc[4]
+            xc_list = xc[0], xc[1], xc[2] * xc[3], xc[2] * xc[4]
             xc_add = {}
         elif len(xc) == 4:
             xc_list = xc
