@@ -407,7 +407,7 @@ class Gradients(RDFDH, RDHRespMixin, GradientMixin):
     def prepare_gradient_pt2(self):
         tensors = self.tensors
         C, e = self.mo_coeff, self.mo_energy
-        mol, aux_ri = self.mol, self.aux_ri
+        mol, aux_ri = self.mol, self.df_ri.auxmol
         natm, nao, nmo, nocc, nvir, naux = mol.natm, self.nao, self.nmo, self.nocc, self.nvir, self.df_ri.get_naoaux()
         # this algorithm asserts naux = aux.nao, i.e. no linear dependency in auxiliary basis
         assert naux == aux_ri.nao

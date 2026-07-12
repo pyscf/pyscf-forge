@@ -71,27 +71,16 @@ class UDFDH(DHBase):
         self.grids = grids if grids else (getattr(mf_s, 'grids', dft.Grids(mol)))
         self.grids_cpks = grids_cpks if grids_cpks else self.grids
         self.mf_s = mf_s
-        self.mf_s.grids = self.grids
         self.xc_n = None if xc_equal(self.xc_n, self.xc) else self.xc_n
         self.mf_n = self.mf_s
         if self.xc_n:
             self.mf_n = dft.UKS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
-            self.mf_n.grids = self.mf_s.grids
-            self.mf_n.grids = self.grids
-        self.ni = getattr(self.mf_s, '_numint', dft.numint.NumInt())
-        self.cx = self.ni.hybrid_coeff(self.xc)
-        self.cx_n = self.ni.hybrid_coeff(self.xc_n)
-        self.df_jk = mf_s.with_df
-        self.aux_jk = self.df_jk.auxmol
-        self.df_ri = df.DF(mol, self.auxbasis_ri) if not self.same_aux else self.df_jk
-        self.aux_ri = self.df_ri.auxmol
+            self.mf_n.grids = self.mf_s.grids = self.grids
+        self._init_common()
         self.nocc = mol.nelec
-        self.mvir = NotImplemented
         self.mocc = max(max(self.nocc), 1)
         self.nmo = self.nao
         self.nvir = (self.nmo - self.nocc[α], self.nmo - self.nocc[β])
-        if self._scf is not None and self._scf.e_tot != 0:
-            self.run_scf()
         if mp2_backend == "dfmp2_native":
             self.energy_elec_mp2 = partial(energy_elec_mp2_dfump2_native, self)
         elif mp2_backend == "dfmp2":

@@ -82,6 +82,23 @@ class DHBase(lib.StreamObject):
         self.e_tot = NotImplemented
         self.eng_tot = self.eng_nc = self.eng_pt2 = self.eng_nuc = self.eng_os = self.eng_ss = NotImplemented
 
+    def _init_common(self):
+        """Shared initialization after subclass creates mf_s / mf_n."""
+        mf_s = self.mf_s
+        mol = self.mol
+        if not hasattr(self, 'grids') or self.grids is None:
+            self.grids = getattr(mf_s, 'grids', dft.Grids(mol))
+        if not hasattr(self, 'grids_cpks') or self.grids_cpks is None:
+            self.grids_cpks = self.grids
+        self.mf_s.grids = self.grids
+        self.ni = getattr(mf_s, '_numint', dft.numint.NumInt())
+        self.cx = self.ni.hybrid_coeff(self.xc)
+        self.cx_n = self.ni.hybrid_coeff(self.xc_n)
+        self.df_jk = mf_s.with_df
+        self.df_ri = df.DF(mol, self.auxbasis_ri) if not self.same_aux else self.df_jk
+        if self._scf is not None and self._scf.e_tot != 0:
+            self.run_scf()
+
     @property
     def base(self):
         return self
@@ -163,47 +180,8 @@ class DHBase(lib.StreamObject):
         self.mf_s.grids = self.mf_n.grids = self.grids
         if self.df_jk.auxmol is None:
             self.df_jk.build()
-            self.aux_jk = self.df_jk.auxmol
         if self.df_ri.auxmol is None:
             self.df_ri.build()
-            self.aux_ri = self.df_ri.auxmol
-
-    def set_frozen(self, method='auto'):
-        if method != 'auto':
-            raise NotImplementedError("Only method='auto' is supported.")
-        return _ccsd_set_frozen(self)
-
-    def dump_intermediates(self, dir_path="scratch"):
-        os.makedirs(dir_path, exist_ok=True)
-        tensors = self.tensors
-        h5_path = dir_path + "/tensors.h5"
-        dat_path = dir_path + "/tensors.dat"
-        tensors.dump(h5_path, dat_path)
-        att_path = dir_path + "/attributes.dat"
-        dct = {
-            "mo_coeff": self.mo_coeff,
-            "mo_energy": self.mo_energy,
-            "D": self.D,
-            "mo_occ": self.mo_occ,
-            "mf_s_e_tot": self.mf_s.e_tot,
-        }
-        with open(att_path, "wb") as f:
-            pickle.dump(dct, f)
-
-    def load_intermediates(self, dir_path="scratch", rerun_scf=False):
-        h5_path = dir_path + "/tensors.h5"
-        dat_path = dir_path + "/tensors.dat"
-        self.tensors = HybridDict.pick(h5_path, dat_path)
-        att_path = dir_path + "/attributes.dat"
-        with open(att_path, "rb") as f:
-            dct = pickle.load(f)
-        self.mf_s.mo_coeff = dct["mo_coeff"]
-        self.mf_s.mo_energy = dct["mo_energy"]
-        self.mf_s.mo_occ = dct["mo_occ"]
-        self.mf_s.e_tot = dct["mf_s_e_tot"]
-        if rerun_scf:
-            self.mf_s.kernel(dm=self.mf_s.make_rdm1())
-        self.run_scf()
         return self
 
 
