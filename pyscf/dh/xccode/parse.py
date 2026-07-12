@@ -1,10 +1,47 @@
 from pyscf.dh.xccode.xccode import XCDH, XCType, XCList
 from pyscf.dh.xccode.xcjson import FUNCTIONALS_DICT
+from pyscf.dft.libxc import XCFunctionalCache
+from pyscf import dft
+import numpy
 
 _D3_VERSIONS = {
     "bj": "d3bj", "zero": "d3zero", "bjm": "d3bjm", "mbj": "d3mbj",
     "zerom": "d3zerom", "mzero": "d3mzero", "op": "d3op",
 }
+
+
+def _register_ext_params(xc_list):
+    r"""Register custom libxc functionals for XC components with external parameters.
+
+    Keyword-style parameters (e.g. ``_kappa=0.872``) are cast to positional form
+    using insertion-order of ``additional`` dict (Python 3.7+).  Full keyword
+    support will be added once ``pyscf.dft.libxc`` provides a keyword-aware API.
+    """
+    ext_params = {}
+    for info in xc_list:
+        if not (info.type & XCType.WITH_EXT_PARAM):
+            continue
+        if not info.additional:
+            continue
+        name = info.name
+        try:
+            xc_fc = XCFunctionalCache(name, 0)
+        except Exception:
+            continue
+        obj_by_id = xc_fc.obj_by_id()
+        if len(obj_by_id) != 1:
+            continue
+        xc_id = next(iter(obj_by_id))
+        params = numpy.array(list(info.additional.values()), dtype=numpy.float64)
+        ext_params[xc_id] = params
+        info.additional.clear()
+    if not ext_params:
+        return None
+    base_token = xc_list.token
+    reg_name = f"__dh_{abs(hash(base_token)):x}"
+    dft.libxc.register_custom_functional_(
+        reg_name, base_token, ext_params=ext_params)
+    return reg_name.lower()
 
 
 def xc_equal(a, b):
@@ -38,7 +75,23 @@ def _extract_components(xc_eng, xc_scf, name):
     low_rung = xc_eng.remove(
         xc_eng.extract_by_xctype(XCType.MP2 | XCType.DFTD3 | XCType.DFTD4),
         inplace=False)
-    xc_n = low_rung.token if low_rung.token != xc_scf else None
+    is_bdh = (low_rung.token == xc_scf)
+    if is_bdh:
+        reg = _register_ext_params(low_rung)
+        if reg:
+            xc = reg
+        else:
+            xc = low_rung.token
+        xc_n = None
+    else:
+        scf_reg = _register_ext_params(XCList(xc_scf, code_scf=True))
+        if scf_reg:
+            xc = scf_reg
+        non_reg = _register_ext_params(low_rung)
+        if non_reg:
+            xc_n = non_reg
+        else:
+            xc_n = low_rung.token if low_rung.token != xc_scf else None
     mp2_list = xc_eng.extract_by_xctype(XCType.MP2)
     if len(mp2_list) > 0:
         mp2 = mp2_list[0]

@@ -97,7 +97,7 @@
         "notes": "This implementation gives results of Gaussian."
     },
     "PTPSS_D3Zero": {
-        "code": "0.5*HF + 0.5*MGGA_X_TPSS(_b=0.15, _c=0.88491, _e=0.047, _kappa=0.872, _mu=0.16952), 0.625*MGGA_C_TPSS(_beta=0.06080, _d=6.3) + 0.375*MP2_OS + DFTD3(Zero)",
+        "code": "0.5*HF + 0.5*MGGA_X_TPSS(_b=0.15, _c=0.88491, _e=0.047, _kappa=0.872, _mu=0.16952, _BLOC_a=2, _BLOC_b=0), 0.625*MGGA_C_TPSS(_beta=0.06080, _d=6.3, _C0_c0=0.53, _C0_c1=0.87, _C0_c2=0.50, _C0_c3=2.26) + 0.375*MP2_OS + DFTD3(Zero)",
         "ref": "10.1021/ct100466k",
         "tested": "QChem 5.1.1",
         "alias": [
