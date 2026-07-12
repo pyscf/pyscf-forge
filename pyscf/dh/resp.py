@@ -230,6 +230,11 @@ class RespMixin:
             tensors.create("rho" + "in cpks", rho)
             tensors.create("vxc" + self.xc + "in cpks", vxc)
             tensors.create("fxc" + self.xc + "in cpks", fxc)
+        elif ni._xc_type(self.xc) == "MGGA":
+            raise NotImplementedError(
+                "MGGA meta-GGA functionals are not yet supported "
+                "for gradient, polarizability, or dipole calculations."
+            )
         if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
             if "rho" in tensors:
                 vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0, spin=spin)[1:3]
@@ -241,6 +246,11 @@ class RespMixin:
                 tensors.create("rho", rho)
                 tensors.create("vxc" + self.xc_n, vxc)
                 tensors.create("fxc" + self.xc_n, fxc)
+        elif self.xc_n and ni._xc_type(self.xc_n) == "MGGA":
+            raise NotImplementedError(
+                "MGGA meta-GGA functionals are not yet supported "
+                "for gradient, polarizability, or dipole calculations."
+            )
         return self
 
     def solve_cpks(self, rhs):
@@ -284,6 +294,24 @@ class RespMixin:
                 D_r[σ][sv[σ], so[σ]] = D_r_ai[σ]
         tensors.create("D_r", D_r)
         return self
+
+    def make_rdm1_relaxed(self, ao_repr=False):
+        if "D_r" not in self.tensors:
+            self.prepare_integral().prepare_xc_kernel() \
+                .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
+                .prepare_D_r()
+        D_r = self.tensors["D_r"]
+        if self.D.ndim == 2:
+            rdm1 = np.diag(self.mo_occ) + D_r
+        else:
+            rdm1 = [np.diag(self.mo_occ[σ]) + D_r[σ] for σ in (α, β)]
+        if ao_repr:
+            C = self.mo_coeff
+            if self.D.ndim == 2:
+                rdm1 = C @ rdm1 @ C.T
+            else:
+                rdm1 = np.array([C[σ] @ rdm1[σ] @ C[σ].T for σ in (α, β)])
+        return rdm1
 
     def dipole(self):
         if "D_r" not in self.tensors:
