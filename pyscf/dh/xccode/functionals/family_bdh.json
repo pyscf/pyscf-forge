@@ -35,12 +35,12 @@
         ]
     },
     "DSD_BLYP_D3BJ": {
-        "code": "0.71*HF + 0.29*B88, 0.54*LYP + 0.47*MP2_OS + 0.40*MP2_SS + DFTD3(BJ, s6=0.57, a1=0, s8=0, a2=5.4)",
+        "code": "0.71*HF + 0.29*B88, 0.54*LYP + 0.47*MP2_OS + 0.40*MP2_SS + DFTD3(BJ)",
         "ref": "10.1002/jcc.23391",
         "tested": "ORCA 5.0.4"
     },
     "DSD_PBEB95_D3BJ": {
-        "code": "0.66*HF + 0.34*PBE, 0.55*BC95 + 0.46*MP2_OS + 0.09*MP2_SS + DFTD3(BJ, s6=0.61, a1=0, s8=0, a2=6.2)",
+        "code": "0.66*HF + 0.34*PBE, 0.55*BC95 + 0.46*MP2_OS + 0.09*MP2_SS + DFTD3(BJ)",
         "ref": "10.1002/jcc.23391",
         "tested": "QChem 5.1.1"
     },
@@ -54,7 +54,7 @@
         "tested": "MRCC 2022-03-18"
     },
     "DSD_PBEPBE_D3BJ": {
-        "code": "0.68*HF + 0.32*PBE, 0.49*PBE + 0.55*MP2_OS + 0.13*MP2_SS + DFTD3(BJ, s6=0.78, a1=0, s8=0, a2=6.1)",
+        "code": "0.68*HF + 0.32*PBE, 0.49*PBE + 0.55*MP2_OS + 0.13*MP2_SS + DFTD3(BJ, XC=dsdpbe)",
         "ref": "10.1002/jcc.23391",
         "tested": "QChem 5.1.1"
     },
@@ -97,7 +97,7 @@
         "notes": "This implementation gives results of Gaussian."
     },
     "PTPSS_D3Zero": {
-        "code": "0.5*HF + 0.5*MGGA_X_TPSS(_b=0.15, _c=0.88491, _e=0.047, _kappa=0.872, _mu=0.16952), 0.625*MGGA_C_TPSS(_beta=0.06080, _d=6.3) + 0.375*MP2_OS + DFTD3(Zero, s6=0.75, s8=0.879, rs6=1.541)",
+        "code": "0.5*HF + 0.5*MGGA_X_TPSS(_b=0.15, _c=0.88491, _e=0.047, _kappa=0.872, _mu=0.16952), 0.625*MGGA_C_TPSS(_beta=0.06080, _d=6.3) + 0.375*MP2_OS + DFTD3(Zero)",
         "ref": "10.1021/ct100466k",
         "tested": "QChem 5.1.1",
         "alias": [
@@ -105,7 +105,7 @@
         ]
     },
     "PWPB95_D3Zero": {
-        "code": "0.5*HF + 0.5*GGA_X_MPW91(_bt=0.00444, _alpha=19.823391, _expo=3.7868), 0.731*MGGA_C_BC95(_css=0.03241, _copp=0.00250) + 0.269*MP2_OS + DFTD3(Zero, s6=0.82, s8=0.705, rs6=1.557)",
+        "code": "0.5*HF + 0.5*GGA_X_MPW91(_bt=0.00444, _alpha=19.823391, _expo=3.7868), 0.731*MGGA_C_BC95(_css=0.03241, _copp=0.00250) + 0.269*MP2_OS + DFTD3(Zero)",
         "ref": "10.1021/ct100466k",
         "tested": "QChem 5.1.1",
         "alias": [
@@ -118,12 +118,9 @@
         "tested": "QChem 5.1.1",
         "notes": "P86_FT used in Gaussian/QChem instead of P86; see https://github.com/pyscf/pyscf/issues/1004"
     },
-    "REV_DSD_PBEP86_D3BJ": {
-        "code": "0.69*HF + 0.31*PBE, 0.4296*P86_FT + 0.5785*MP2_OS + 0.0799*MP2_SS + DFTD3(BJ, S6=0.4377, A1=0, S8=0, A2=5.5)",
-        "ref": "10.1002/jcc.23391",
-        "alias": [
-            "REVDSDPBEP86D3"
-        ]
+    "REVDSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.4296*P86 + 0.5785*MP2_OS + 0.0799*MP2_SS + DFTD3(BJ)",
+        "ref": "10.1002/jcc.23391"
     },
     "RSX_0DH": {
         "code": "0.5*HF + 0.5*LR_HF(0.33) + 0.5*GGA_X_ITYH_PBE, 0.875*PBE + 0.125*MP2",

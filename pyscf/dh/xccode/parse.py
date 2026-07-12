@@ -42,7 +42,12 @@ def _extract_components(xc_eng, xc_scf, name):
     mp2_list = xc_eng.extract_by_xctype(XCType.MP2)
     if len(mp2_list) > 0:
         mp2 = mp2_list[0]
-        c_os, c_ss = mp2.fac * mp2.parameters[0], mp2.fac * mp2.parameters[1]
+        add = mp2.additional
+        if "OS" in add or "SS" in add:
+            c_os = mp2.fac * mp2.parameters[0] * add.get("OS", 1)
+            c_ss = mp2.fac * mp2.parameters[1] * add.get("SS", 1)
+        else:
+            c_os, c_ss = mp2.fac * mp2.parameters[0], mp2.fac * mp2.parameters[1]
     else:
         c_os, c_ss = 0, 0
     xc_add = {}
@@ -50,17 +55,41 @@ def _extract_components(xc_eng, xc_scf, name):
     if len(d3_list) > 0:
         d3 = d3_list[0]
         add = d3.additional
+        if any(k.upper() != "XC" for k in add):
+            raise NotImplementedError(
+                "Explicit D3 parameters are unsupported. "
+                "Use 'DFTD3(BJ)' or 'DFTD3(BJ, XC=name)' to look up defaults."
+            )
         damp = d3.parameters[0].lower() if d3.parameters else "bj"
         version = _D3_VERSIONS.get(damp, "d3bj")
         if "XC" in add:
             d3_xc = add["XC"]
         else:
             d3_xc = _strip_d3_suffix(name)
+            if "*" in d3_xc or "+" in d3_xc:
+                raise NotImplementedError(
+                    "D3 in code strings requires XC= parameter. "
+                    "Use 'DFTD3(BJ, XC=PBE)' or a named functional instead."
+                )
         xc_add["D3"] = {"xc": d3_xc, "version": version}
     d4_list = xc_eng.extract_by_xctype(XCType.DFTD4)
     if len(d4_list) > 0:
         d4 = d4_list[0]
-        d4_xc = d4.additional.get("XC", _strip_d3_suffix(name))
+        add = d4.additional
+        if any(k.upper() != "XC" for k in add):
+            raise NotImplementedError(
+                "Explicit D4 parameters are unsupported. "
+                "Use 'DFTD4()' or 'DFTD4(XC=name)' to look up defaults."
+            )
+        if "XC" in add:
+            d4_xc = add["XC"]
+        else:
+            d4_xc = _strip_d3_suffix(name)
+            if "*" in d4_xc or "+" in d4_xc:
+                raise NotImplementedError(
+                    "D4 in code strings requires XC= parameter. "
+                    "Use 'DFTD4(XC=PBE)' or a named functional instead."
+                )
         xc_add["D4"] = {"xc": d4_xc, "version": "d4"}
     return xc, xc_n, c_os, c_ss, xc_add
 

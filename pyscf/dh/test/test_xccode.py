@@ -1,5 +1,5 @@
 import unittest
-from pyscf.dh.xccode import XCList
+from pyscf.dh.xccode import XCList, parse_xc_dh
 
 
 class TestXCCode(unittest.TestCase):
@@ -45,3 +45,43 @@ class TestXCCode(unittest.TestCase):
         xc_io("0.5*Slater + 0.8*B88, 0.3*DFTD3(6, rs6=1.5)", "0.8*B88 + 0.5*SLATER, 0.3*DFTD3(6, RS6=1.5)")
         xc_io("0.5*Slater + 0.8*B88, 0.3*DFTD4(rs6=1.5)", "0.8*B88 + 0.5*SLATER, 0.3*DFTD4(RS6=1.5)")
         xc_io("0.75*HF + 0.25*PBE,", "0.75*HF + 0.25*PBE,")
+
+    def test_d3_behavior(self):
+        # Code string + D3 without XC= → NotImplementedError
+        with self.assertRaises(NotImplementedError):
+            parse_xc_dh("HF, PBE + DFTD3(BJ)")
+
+        # Code string + D3 with XC= → works
+        (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh("HF, PBE + DFTD3(BJ, XC=PBE)")
+        self.assertEqual(xc_add["D3"]["xc"], "PBE")
+
+        # Named functional + D3 → name-derived XC
+        (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh("B2PLYP-D3BJ")
+        self.assertEqual(xc_add["D3"]["xc"], "B2PLYP")
+
+    def test_mp2_named_params(self):
+        # Named OS+SS with factor
+        (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh("HF, 0.5*MP2(os=0.5, ss=0.3)")
+        self.assertAlmostEqual(c_os, 0.25)
+        self.assertAlmostEqual(c_ss, 0.15)
+
+        # OS only
+        (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh("HF, 0.5*MP2(os=0.5)")
+        self.assertAlmostEqual(c_os, 0.25)
+        self.assertAlmostEqual(c_ss, 0.5)
+
+        # SS only
+        (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh("HF, 0.5*MP2(ss=0.3)")
+        self.assertAlmostEqual(c_os, 0.5)
+        self.assertAlmostEqual(c_ss, 0.15)
+
+        # No external factor
+        (xc, xc_n, c_os, c_ss), xc_add = parse_xc_dh("HF, MP2(os=0.5, ss=0.3)")
+        self.assertAlmostEqual(c_os, 0.5)
+        self.assertAlmostEqual(c_ss, 0.3)
+
+        # Equivalence with positional form
+        (xc1, _, c1, c2), _ = parse_xc_dh("HF, 0.5*MP2(os=0.5, ss=0.3)")
+        (xc2, _, d1, d2), _ = parse_xc_dh("HF, 0.5*MP2(0.5, 0.3)")
+        self.assertAlmostEqual(c1, d1)
+        self.assertAlmostEqual(c2, d2)
