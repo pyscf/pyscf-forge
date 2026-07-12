@@ -49,6 +49,11 @@ def get_cderi_mo(dfobj, C, Y_mo=None, pqslice=None, max_memory=2000):
 @timing
 def energy_elec_mp2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
                          Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **kwargs):
+    if mf.frozen:
+        raise NotImplementedError(
+            "Frozen core is not supported by the AJZ MP2 backend. "
+            "Use mp2_backend='dfmp2' or 'dfmp2_native'."
+        )
     if mo_coeff is None:
         if mf.mf_s.e_tot == 0:
             mf.run_scf()
@@ -85,7 +90,12 @@ def energy_elec_mp2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
 
 @timing
 def energy_elec_ump2_ajz(mf, mo_coeff=None, mo_energy=None, dfobj=None,
-                          Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
+                           Y_ia_ri=None, t_ijab_blk=None, eval_ss=True, **_):
+    if mf.frozen:
+        raise NotImplementedError(
+            "Frozen core is not supported by the AJZ MP2 backend. "
+            "Use mp2_backend='dfmp2' or 'dfmp2_native'."
+        )
     α, β = 0, 1
     αα, αβ, ββ = 0, 1, 2
     if mo_coeff is None:

@@ -1,5 +1,7 @@
 from pyscf import lib, gto, dft, df, scf
-from pyscf.dh.dhutil import calc_batch_size, timing, HybridDict, get_rho_from_dm_gga
+from pyscf.cc.ccsd import set_frozen as _ccsd_set_frozen
+from pyscf.dh.dhutil import calc_batch_size, timing, HybridDict
+from pyscf.dispersion.dftd3 import DFTD3Dispersion
 from pyscf.dh.xccode import parse_xc_dh, xc_equal
 import os
 import pickle
@@ -24,7 +26,6 @@ class DHBase(lib.StreamObject):
             self._scf = mf_or_mol
         self.with_t_ijab = False
         self._incore_t_ijab = False
-        self._incore_Y_mo = False
         self.max_memory = mol.max_memory
         self.mp2_backend = mp2_backend
         self.frozen = frozen
@@ -111,6 +112,53 @@ class DHBase(lib.StreamObject):
         return self.eval_ss or self.eval_os
 
     @timing
+    def energy_elec_nc(self, mo_coeff=None, h1e=None, vhf=None, **_):
+        if mo_coeff is None:
+            if self.mf_s.e_tot == 0:
+                self.run_scf()
+                if self.xc_n is None:
+                    return self.mf_s.e_tot - self.mf_s.energy_nuc(), None
+            mo_coeff = self.mf_s.mo_coeff
+        mo_occ = self.mf_s.mo_occ
+        if mo_occ is NotImplemented:
+            mo_occ = self.mf_s.get_occ()
+        dm = self.mf_s.make_rdm1(mo_coeff, mo_occ)
+        dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
+        eng_nc = self.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
+        return eng_nc
+
+    def energy_nuc(self, **_):
+        mol = self.mol
+        eng_nuc = mol.energy_nuc()
+        if "D3" in self.xc_add:
+            d3_info = self.xc_add["D3"]
+            model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
+            eng_nuc += model.get_dispersion()["energy"]
+        if "D4" in self.xc_add:
+            from pyscf.dispersion.dftd4 import DFTD4Dispersion
+            d4_info = self.xc_add["D4"]
+            model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
+            eng_nuc += model.get_dispersion()["energy"]
+        return eng_nuc
+
+    def energy_tot(self, **kwargs):
+        eng_elec, eng_nc, eng_pt2, eng_os, eng_ss = self.energy_elec(**kwargs)
+        eng_nuc = self.energy_nuc()
+        eng_tot = eng_elec + eng_nuc
+        return eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss
+
+    def kernel(self, **kwargs):
+        self.build()
+        eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss = self.energy_tot(**kwargs)
+        self.e_tot = self.eng_tot = eng_tot
+        self.eng_nc = eng_nc
+        self.eng_pt2 = eng_pt2
+        self.eng_nuc = eng_nuc
+        self.eng_os = eng_os
+        self.eng_ss = eng_ss
+        return eng_tot
+
+    @timing
     def build(self):
         self.mf_s.grids = self.mf_n.grids = self.grids
         if self.df_jk.auxmol is None:
@@ -120,37 +168,10 @@ class DHBase(lib.StreamObject):
             self.df_ri.build()
             self.aux_ri = self.df_ri.auxmol
 
-    @timing
-    def prepare_xc_kernel(self):
-        mol = self.mol
-        tensors = self.tensors
-        ni = self.ni
-        spin = len(self.D.shape) - 2
-        if "rho" in tensors:
-            return self
-        if ni._xc_type(self.xc) == "GGA":
-            rho = get_rho_from_dm_gga(ni, mol, self.grids, self.D)
-            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
-            tensors.create("rho", rho)
-            tensors.create("vxc" + self.xc, vxc)
-            tensors.create("fxc" + self.xc, fxc)
-            rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
-            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
-            tensors.create("rho" + "in cpks", rho)
-            tensors.create("vxc" + self.xc + "in cpks", vxc)
-            tensors.create("fxc" + self.xc + "in cpks", fxc)
-        if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
-            if "rho" in tensors:
-                vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0, spin=spin)[1:3]
-                tensors.create("vxc" + self.xc_n, vxc)
-                tensors.create("fxc" + self.xc_n, fxc)
-            else:
-                rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
-                _, vxc, fxc, _ = ni.eval_xc(self.xc_n, rho, spin=spin, deriv=2)
-                tensors.create("rho", rho)
-                tensors.create("vxc" + self.xc_n, vxc)
-                tensors.create("fxc" + self.xc_n, fxc)
-        return self
+    def set_frozen(self, method='auto'):
+        if method != 'auto':
+            raise NotImplementedError("Only method='auto' is supported.")
+        return _ccsd_set_frozen(self)
 
     def dump_intermediates(self, dir_path="scratch"):
         os.makedirs(dir_path, exist_ok=True)
@@ -189,7 +210,7 @@ class DHBase(lib.StreamObject):
 @timing
 def energy_elec_mp2_dfmp2_native(mf, **kwargs):
     from pyscf.mp.dfmp2_native import DFRMP2
-    mp2 = DFRMP2(mf.mf_s)
+    mp2 = DFRMP2(mf.mf_s, frozen=mf.frozen)
     mp2.ps = mf.c_os
     mp2.pt = mf.c_ss
     emp2 = mp2.kernel()

@@ -9,10 +9,6 @@ from pyscf import lib, gto, df, dft, scf
 from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
 from pyscf.ao2mo import _ao2mo
 from pyscf.scf._response_functions import _gen_rhf_response
-try:
-    from pyscf.dispersion.dftd3 import DFTD3Dispersion
-except ImportError:
-    print('Warning: pyscf-dispersion not found. D3 correction unavailable.')
 # other import
 import os
 import pickle
@@ -22,39 +18,6 @@ from functools import partial
 einsum = lib.einsum
 
 
-# region energy evaluation
-
-
-def kernel(mf, **kwargs):
-    mf.build()
-    eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss = mf.energy_tot(**kwargs)
-    mf.e_tot = mf.eng_tot = eng_tot
-    mf.eng_nc = eng_nc
-    mf.eng_pt2 = eng_pt2
-    mf.eng_nuc = eng_nuc
-    mf.eng_os = eng_os
-    mf.eng_ss = eng_ss
-    return eng_tot
-
-
-@timing
-def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
-    if mo_coeff is None:
-        if mf.mf_s.e_tot == 0:
-            mf.run_scf()
-            if mf.xc_n is None:  # if bDH-like functional, just return SCF energy
-                return mf.mf_s.e_tot - mf.mf_s.energy_nuc(), None
-        mo_coeff = mf.mf_s.mo_coeff
-    mo_occ = mf.mf_s.mo_occ
-    if mo_occ is NotImplemented:
-        mo_occ = scf.hf.get_occ(mf.mf_s)
-    dm = mf.mf_s.make_rdm1(mo_coeff, mo_occ)
-    dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
-    eng_nc = mf.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
-    return eng_nc
-
-
-@timing
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     if not mf.eval_pt2:
         return 0, 0, 0
@@ -69,21 +32,7 @@ def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
             eng_bi1 - eng_bi2)
 
 
-def energy_nuc(mf, **_):
-    mol = mf.mol
-    eng_nuc = mol.energy_nuc()
-    if "D3" in mf.xc_add:
-        d3_info = mf.xc_add["D3"]
-        model = DFTD3Dispersion(mol, xc=d3_info["xc"], version=d3_info["version"])
-        eng_nuc += model.get_dispersion()["energy"]
-    if "D4" in mf.xc_add:
-        from pyscf.dispersion.dftd4 import DFTD4Dispersion
-        d4_info = mf.xc_add["D4"]
-        model = DFTD4Dispersion(mol, xc=d4_info["xc"], version=d4_info["version"])
-        eng_nuc += model.get_dispersion()["energy"]
-    return eng_nuc
-
-
+@timing
 def energy_elec(mf, **kwargs):
     eng_nc = mf.energy_elec_nc(**kwargs)[0]
     nocc, nvir = mf.nocc, mf.nvir
@@ -94,20 +43,6 @@ def energy_elec(mf, **kwargs):
     eng_elec = eng_nc + eng_pt2
     return eng_elec, eng_nc, eng_pt2, eng_os, eng_ss
 
-
-def energy_tot(mf, **kwargs):
-    eng_elec, eng_nc, eng_pt2, eng_os, eng_ss = mf.energy_elec(**kwargs)
-    eng_nuc = mf.energy_nuc()
-    eng_tot = eng_elec + eng_nuc
-    return eng_tot, eng_nc, eng_pt2, eng_nuc, eng_os, eng_ss
-
-
-# endregion energy evaluation
-
-# region first derivative related
-
-
-# endregion first derivative related
 
 
 class RDFDH(DHBase):
@@ -192,7 +127,7 @@ class RDFDH(DHBase):
         if not self.eval_pt2:
             if self.eng_tot is NotImplemented:
                 tensors.create("D_rdm1", D_rdm1)
-                kernel(self, eng_bi=(None, 0, 0))
+                DHBase.kernel(self, eng_bi=(None, 0, 0))
             return self
 
         G_ia_ri = np.zeros((naux, nocc, nvir))
@@ -220,7 +155,7 @@ class RDFDH(DHBase):
         _loop_t_ijab(self, Y_ia_ri, e, nocc, nvir, build)
 
         if self.eng_tot is NotImplemented:
-            kernel(self, eng_bi=(None, eng_bi1[0], eng_bi2[0]))
+            DHBase.kernel(self, eng_bi=(None, eng_bi1[0], eng_bi2[0]))
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia_ri", G_ia_ri)
         return self
@@ -237,10 +172,6 @@ class RDFDH(DHBase):
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
 
-    energy_elec_nc = energy_elec_nc
     energy_elec_pt2 = energy_elec_pt2
     energy_elec_mp2 = energy_elec_mp2_ajz
-    energy_nuc = energy_nuc
     energy_elec = energy_elec
-    energy_tot = energy_tot
-    kernel = kernel

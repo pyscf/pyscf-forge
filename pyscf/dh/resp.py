@@ -1,6 +1,6 @@
 from pyscf.scf import cphf, ucphf
 from pyscf import lib
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, HybridDict
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, HybridDict, get_rho_from_dm_gga
 import numpy as np
 einsum = lib.einsum
 
@@ -209,6 +209,39 @@ class RespMixin:
 
     cpks_tol = 1e-8
     cpks_cyc = 100
+    _incore_Y_mo = False
+
+    @timing
+    def prepare_xc_kernel(self):
+        mol = self.mol
+        tensors = self.tensors
+        ni = self.ni
+        spin = len(self.D.shape) - 2
+        if "rho" in tensors:
+            return self
+        if ni._xc_type(self.xc) == "GGA":
+            rho = get_rho_from_dm_gga(ni, mol, self.grids, self.D)
+            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
+            tensors.create("rho", rho)
+            tensors.create("vxc" + self.xc, vxc)
+            tensors.create("fxc" + self.xc, fxc)
+            rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
+            _, vxc, fxc, _ = ni.eval_xc(self.xc, rho, spin=spin, deriv=2)
+            tensors.create("rho" + "in cpks", rho)
+            tensors.create("vxc" + self.xc + "in cpks", vxc)
+            tensors.create("fxc" + self.xc + "in cpks", fxc)
+        if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
+            if "rho" in tensors:
+                vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0, spin=spin)[1:3]
+                tensors.create("vxc" + self.xc_n, vxc)
+                tensors.create("fxc" + self.xc_n, fxc)
+            else:
+                rho = get_rho_from_dm_gga(ni, mol, self.grids_cpks, self.D)
+                _, vxc, fxc, _ = ni.eval_xc(self.xc_n, rho, spin=spin, deriv=2)
+                tensors.create("rho", rho)
+                tensors.create("vxc" + self.xc_n, vxc)
+                tensors.create("fxc" + self.xc_n, fxc)
+        return self
 
     def solve_cpks(self, rhs):
         if isinstance(rhs, int) and rhs == 0:

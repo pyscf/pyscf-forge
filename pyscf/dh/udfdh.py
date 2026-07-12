@@ -2,7 +2,6 @@
 from pyscf.dh.dh import DHBase
 from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
-from pyscf.dh.rdfdh import kernel, energy_nuc, energy_tot
 from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_ump2_ajz
 from pyscf.dh.dh import energy_elec_mp2_dfump2_native, energy_elec_mp2_dfump2
 # pyscf import
@@ -20,26 +19,7 @@ einsum = lib.einsum
 ndarray = np.ndarray or h5py.Dataset
 
 
-# region energy evaluation
-
-
 @timing
-def energy_elec_nc(mf, mo_coeff=None, h1e=None, vhf=None, **_):
-    if mo_coeff is None:
-        if mf.mf_s.e_tot == 0:
-            mf.run_scf()
-            if mf.xc_n is None:
-                return mf.mf_s.e_tot - mf.mf_s.energy_nuc(), None
-        mo_coeff = mf.mf_s.mo_coeff
-    mo_occ = mf.mf_s.mo_occ
-    if mo_occ is NotImplemented:
-        mo_occ = scf.uhf.get_occ(mf.mf_s)
-    dm = mf.mf_s.make_rdm1(mo_coeff, mo_occ)
-    dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)
-    eng_nc = mf.mf_n.energy_elec(dm=dm, h1e=h1e, vhf=vhf)
-    return eng_nc
-
-
 def energy_elec_pt2(mf, params=None, eng_bi=None, **kwargs):
     c_os, c_ss = params if params else mf.c_os, mf.c_ss
     emp2_0, eng_bi1, eng_bi2 = eng_bi if eng_bi else mf.energy_elec_mp2(eval_ss=mf.eval_ss, **kwargs)
@@ -67,15 +47,6 @@ def energy_elec(mf, params=None, **kwargs):
     eng_pt2, eng_os, eng_ss = energy_elec_pt2(mf, t2_blk=t_ijab_blk, **kwargs)
     eng_elec = eng_nc + eng_pt2
     return eng_elec, eng_nc, eng_pt2, eng_os, eng_ss
-
-
-# end region energy evaluation
-
-# region first derivative related
-
-
-
-# end region first derivative related
 
 
 class UDFDH(DHBase):
@@ -231,7 +202,7 @@ class UDFDH(DHBase):
                     G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α][:, sI])
 
         if self.eng_tot is NotImplemented:
-            kernel(self, eng_bi=(None, eng_bi1, eng_bi2))
+            DHBase.kernel(self, eng_bi=(None, eng_bi1, eng_bi2))
 
         tensors.create("D_rdm1", D_rdm1)
         for σ in (α, β):
@@ -253,11 +224,7 @@ class UDFDH(DHBase):
         Polar.__init__(self, self.mol, skip_construct=True)
         return self
 
-    energy_elec_nc = energy_elec_nc
     energy_elec_pt2 = energy_elec_pt2
     energy_elec_mp2 = energy_elec_ump2_ajz
-    energy_nuc = energy_nuc
     energy_elec = energy_elec
-    energy_tot = energy_tot
-    kernel = kernel
 
