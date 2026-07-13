@@ -21,6 +21,7 @@
 import os
 import pickle
 import shutil
+import tempfile
 
 import h5py
 from pyscf import lib, gto
@@ -68,7 +69,7 @@ class HybridDict(dict):
         if dir is None:
             dir = lib.param.TMPDIR
         if chkfile_name is None:
-            self._chkfile = lib.NamedTemporaryFile(dir=dir)
+            self._chkfile = tempfile.NamedTemporaryFile(dir=dir)
             chkfile_name = self._chkfile.name
         # create or open exist chkfile
         self.chkfile_name = chkfile_name

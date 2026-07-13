@@ -57,7 +57,7 @@ def _register_ext_params(xc_list):
     if not ext_params:
         return None
     base_token = xc_list.token
-    reg_name = f"__dh_{abs(hash(base_token)):x}"
+    reg_name = f"__dh_{abs(hash((base_token, tuple((k, v.tobytes()) for k, v in sorted(ext_params.items()))))):x}"
     dft.libxc.register_custom_functional_(
         reg_name, base_token, ext_params=ext_params)
     return reg_name.lower()
