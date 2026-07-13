@@ -97,8 +97,9 @@ class UDFDH(DHBase):
         self.nmo = self.nao
         self.nvir = (self.nmo - self.nocc[α], self.nmo - self.nocc[β])
         if self.xc_n:
-            self.mf_n = dft.UKS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
-            self.mf_n.grids = self.mf_s.grids = self.grids
+            self.mf_n = self.mf_s.copy()
+            self.mf_n.xc = self.xc_n
+            self.mf_n._numint = dft.numint.NumInt()
         self._init_common()
         if mp2_backend == "dfmp2_native":
             self.energy_elec_mp2 = partial(energy_elec_mp2_dfump2_native, self)

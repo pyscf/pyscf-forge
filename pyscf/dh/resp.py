@@ -258,6 +258,11 @@ class RespMixin(lib.StreamObject):
                 "MGGA meta-GGA functionals are not yet supported "
                 "for gradient, polarizability, or dipole calculations."
             )
+        elif ni.rsh_coeff(self.xc)[0] != 0:
+            raise NotImplementedError(
+                "Range-separated hybrid (RSH) functionals are not yet supported "
+                "for gradient, polarizability, or dipole calculations."
+            )
         if self.xc_n and ni._xc_type(self.xc_n) == "GGA":
             if "rho" in tensors:
                 vxc, fxc = ni.eval_xc(self.xc_n, tensors["rho"], deriv=2, verbose=0, spin=spin)[1:3]
@@ -272,6 +277,11 @@ class RespMixin(lib.StreamObject):
         elif self.xc_n and ni._xc_type(self.xc_n) == "MGGA":
             raise NotImplementedError(
                 "MGGA meta-GGA functionals are not yet supported "
+                "for gradient, polarizability, or dipole calculations."
+            )
+        elif self.xc_n and ni.rsh_coeff(self.xc_n)[0] != 0:
+            raise NotImplementedError(
+                "Range-separated hybrid (RSH) functionals are not yet supported "
                 "for gradient, polarizability, or dipole calculations."
             )
         return self

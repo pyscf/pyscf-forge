@@ -76,6 +76,11 @@ class DHBase(lib.StreamObject):
                     "DFDH(mf) requires a dft.KS or dft.UKS object; "
                     "scf.HF is not supported."
                 )
+            if not hasattr(self._scf, 'with_df'):
+                raise TypeError(
+                    "DFDH(mf) requires density-fitting (with_df). "
+                    "Call mf.density_fit() before passing to DFDH."
+                )
             if not xc_equal(self._scf.xc, self.xc):
                 raise ValueError(
                     f"SCF functional '{self._scf.xc}' does not match "
@@ -268,12 +273,12 @@ def to_dh(mf, xc="XYG3", **kwargs):
 
     if not can_reuse:
         mol = mf.mol
-        if not isinstance(mf, scf.rhf.RHF):
+        if not mf.istype('RHF'):
             mf = dft.UKS(mol, xc=dh_xc).density_fit()
         else:
             mf = dft.KS(mol, xc=dh_xc).density_fit()
         mf.kernel()
 
-    if isinstance(mf, scf.rhf.RHF):
+    if mf.istype('RHF'):
         return rdfdh.RDFDH(mf, xc, **kwargs)
     return udfdh.UDFDH(mf, xc, **kwargs)
