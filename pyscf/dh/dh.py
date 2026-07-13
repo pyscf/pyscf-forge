@@ -155,13 +155,6 @@ class DHBase(lib.StreamObject):
             self.tensors.close()
         except Exception:
             pass
-        for attr in (getattr(self, 'xc', ''), getattr(self, 'xc_n', '')):
-            if attr and attr.startswith('__dh_'):
-                try:
-                    from pyscf.dft.libxc import unregister_custom_functional_
-                    unregister_custom_functional_(attr)
-                except Exception:
-                    pass
 
     @timing
     def energy_elec_nc(self, mo_coeff=None, h1e=None, vhf=None, **_):
