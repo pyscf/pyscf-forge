@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 # dh import
-from pyscf.dh.udfdh import UDFDH
 from pyscf.dh.polar.rdfdh import kernel
 from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
@@ -130,7 +129,7 @@ def _uks_gga_wv2_generator(fxc, kxc, weight):
     return _uks_gga_wv2_inner
 
 
-class Polar(UDFDH, UDHRespMixin):
+class Polar(UDHRespMixin):
 
     @property
     def nprop(self):
@@ -140,7 +139,7 @@ class Polar(UDFDH, UDHRespMixin):
 
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
-        self._base = method
+        self.base = method
         self.pol_scf = NotImplemented
         self.pol_corr = NotImplemented
         self.pol_tot = NotImplemented
@@ -224,7 +223,7 @@ class Polar(UDFDH, UDHRespMixin):
         so, sv = self.so, self.sv
         nprop = self.nprop
 
-        nbatch = self.calc_batch_size(8 * nmo**2, U_1.size + nprop*naux*mocc*mvir)
+        nbatch = self.base.calc_batch_size(8 * nmo**2, U_1.size + nprop*naux*mocc*mvir)
         for σ in (α, β):
             pdA_Y_ia_ri = np.zeros((nprop, naux, nocc[σ], nvir[σ]))
             for saux in gen_batch(0, naux, nbatch):
@@ -244,7 +243,7 @@ class Polar(UDFDH, UDHRespMixin):
         nprop = self.nprop
 
         pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(2, nprop, nmo, nmo))
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             return self
 
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
@@ -253,7 +252,7 @@ class Polar(UDFDH, UDHRespMixin):
 
         pdA_G_ia_ri = [tensors.create("pdA_G_ia_ri" + str(σ), shape=(nprop, naux, nocc[σ], nvir[σ])) for σ in (α, β)]
 
-        nbatch = self.calc_batch_size(8*mocc*mvir**2, tot_size(Y_ia_ri, pdA_Y_ia_ri, pdA_G_ia_ri, pdA_F_0_mo, pdA_D_rdm1))
+        nbatch = self.base.calc_batch_size(8*mocc*mvir**2, tot_size(Y_ia_ri, pdA_Y_ia_ri, pdA_G_ia_ri, pdA_F_0_mo, pdA_D_rdm1))
         eval_ss = True if abs(c_ss) > 1e-7 else False
         for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
             if σς in (αα, ββ) and not eval_ss:
@@ -335,7 +334,7 @@ class Polar(UDFDH, UDHRespMixin):
             if self.xc_n:
                 pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
                 SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             return SCR3
 
         U_1 = tensors.load("U_1")
@@ -343,7 +342,7 @@ class Polar(UDFDH, UDHRespMixin):
         pdA_G_ia_ri = [tensors.load("pdA_G_ia_ri" + str(σ)) for σ in (α, β)]
         Y_mo_ri = [tensors["Y_mo_ri" + str(σ)] for σ in (α, β)]
 
-        nbatch = self.calc_batch_size(10 * nmo**2, tot_size(G_ia_ri, pdA_G_ia_ri, U_1))
+        nbatch = self.base.calc_batch_size(10 * nmo**2, tot_size(G_ia_ri, pdA_G_ia_ri, U_1))
         for σ in (α, β):
             for saux in gen_batch(0, naux, nbatch):
                 G_blk = G_ia_ri[σ][saux]
@@ -400,9 +399,8 @@ class Polar(UDFDH, UDHRespMixin):
 
     kernel = kernel
 
-    def base_method(self) -> UDFDH:
-        self.__class__ = UDFDH
-        return self
+    def base_method(self):
+        return self.base
 
 
 

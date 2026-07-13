@@ -20,13 +20,12 @@
 
 # dh import
 from pyscf.dh.dh import DHBase
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, hermi_sum_last2dim
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing
 from pyscf.dh.xccode import xc_equal
 from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_ump2_ajz
 from pyscf.dh.dh import energy_elec_mp2_dfump2_native, energy_elec_mp2_dfump2
 # pyscf import
 from pyscf import lib, gto, df, dft, scf
-from pyscf.lib.numpy_helper import ANTIHERMI
 from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
 # other import
 import h5py
@@ -132,92 +131,6 @@ class UDFDH(DHBase):
         self.ev = e[α, sv[α]], e[β, sv[β]]
         return self
 
-
-    @timing
-    def prepare_pt2(self, dump_t_ijab=True, fast_trans=True):
-        tensors = self.tensors
-        nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
-        mocc, mvir = max(nocc), max(nvir)
-        eo, ev = self.eo, self.ev
-        naux = self.df_ri.get_naoaux()
-        so, sv = self.so, self.sv
-        c_os, c_ss = self.c_os, self.c_ss
-        eval_ss = True if abs(c_ss) > 1e-7 else False
-
-        D_rdm1 = np.zeros((2, nmo, nmo))
-        if not self.eval_pt2:
-            tensors.create("D_rdm1", D_rdm1)
-            return self
-
-        G_ia_ri = [np.zeros((naux, nocc[σ], nvir[σ])) for σ in (α, β)]
-        Y_ia_ri = [np.asarray(tensors["Y_mo_ri" + str(σ)][:, so[σ], sv[σ]]) for σ in (α, β)]
-
-        dump_t_ijab = False if "t_ijab" + str(αα) in tensors else dump_t_ijab  # t_ijab to be dumped
-        eval_t_ijab = True if "t_ijab" + str(αα) not in tensors else False     # t_ijab to be evaluated
-        if dump_t_ijab:
-            for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
-                if σς in (αα, ββ) and not eval_ss:
-                    continue
-                tensors.create("t_ijab" + str(σς), shape=(nocc[σ], nocc[ς], nvir[σ], nvir[ς]), incore=self._incore_t_ijab)
-
-        eng_bi1, eng_bi2 = [0, 0, 0], [0, 0, 0]
-        nbatch = self.calc_batch_size(2 * mocc * mvir ** 2, tot_size(Y_ia_ri) + mocc * mvir ** 2)
-        # situation αβ
-        for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
-            if σς in (αα, ββ) and not eval_ss:
-                continue
-            D_jab = eo[ς][:, None, None] - ev[σ][None, :, None] - ev[ς][None, None, :] if eval_t_ijab else None
-            for sI in gen_batch(0, nocc[σ], nbatch):
-                if eval_t_ijab:
-                    D_ijab = eo[σ][sI, None, None, None] + D_jab
-                    g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[σ][:, sI], Y_ia_ri[ς])
-                    t_ijab = g_ijab / D_ijab
-                    eng_bi1[σς] += einsum("ijab, ijab ->", t_ijab, g_ijab)
-                    if dump_t_ijab:
-                        tensors["t_ijab" + str(σς)][sI] = t_ijab
-                    if σς in (αα, ββ):
-                        eng_bi2[σς] += einsum("ijab, ijba ->", t_ijab, g_ijab)
-                else:
-                    t_ijab = tensors["t_ijab" + str(σς)][sI]
-                if σς in (αα, ββ):
-                    # T_ijab = cc * 0.5 * c_ss * (t_ijab - t_ijab.swapaxes(-1, -2))
-                    T_ijab = 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
-                    D_rdm1[σ, so[σ], so[σ]] -= 2 * einsum("kiab, kjab -> ij", T_ijab, t_ijab)
-                    D_rdm1[σ, sv[σ], sv[σ]] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
-                    G_ia_ri[σ][:, sI] += 4 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[σ])
-                else:  # σς == αβ
-                    T_ijab = c_os * t_ijab
-                    # D_rdm1[α, so[α], so[α]] -= einsum("ikab, jkab -> ij", T_ijab, t_ijab)
-                    # D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
-                    # D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
-                    # D_rdm1[β, sv[β], sv[β]] += einsum("jica, jicb -> ab", T_ijab, t_ijab)
-                    # G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
-                    # G_ia_ri[β][:, sI] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α])
-                    for sJ in gen_batch(0, nocc[α], nbatch):
-                        if sI == sJ:
-                            t_jkab = t_ijab
-                        elif sI.start < sJ.start:
-                            continue
-                        else:
-                            t_jkab = tensors["t_ijab" + str(αβ)][sJ]
-                        D_tmp = einsum("ikab, jkab -> ij", T_ijab, t_jkab)
-                        D_rdm1[α, sI, sJ] -= D_tmp
-                        if sI != sJ:
-                            D_rdm1[α, sJ, sI] -= D_tmp.swapaxes(-1, -2)
-                    D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
-                    D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
-                    D_rdm1[β, sv[β], sv[β]] += einsum("jica, jicb -> ab", T_ijab, t_ijab)
-                    G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
-                    G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α][:, sI])
-
-        if self.eng_tot is NotImplemented:
-            DHBase.kernel(self, eng_bi=(None, eng_bi1, eng_bi2))
-
-        tensors.create("D_rdm1", D_rdm1)
-        for σ in (α, β):
-            tensors.create("G_ia_ri" + str(σ), G_ia_ri[σ])
-
-        return self
 
     def nuc_grad_method(self):
         from pyscf.dh.grad.udfdh import Gradients

@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 # dh import
-from pyscf.dh.rdfdh import RDFDH
 from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
@@ -31,7 +30,8 @@ einsum = lib.einsum
 
 
 def kernel(mf: Polar):
-    mf.run_scf()
+    mf.base.run_scf()
+    mf.__dict__.update(mf.base.__dict__)
     mf.prepare_H_1()
     mf.prepare_integral()
     mf.prepare_xc_kernel()
@@ -43,7 +43,7 @@ def kernel(mf: Polar):
         mf.prepare_dms()
         mf.prepare_polar_Ax1_gga()
     mf.prepare_pdA_F_0_mo()
-    if mf.eval_pt2:
+    if mf.base.eval_pt2:
         mf.prepare_pdA_Y_ia_ri()
     mf.prepare_pt2_deriv()
     mf.prepare_polar()
@@ -90,11 +90,11 @@ def _rks_gga_wv2(rho0, rho1, rho2, fxc, kxc, weight):
     return wv
 
 
-class Polar(RDFDH, RDHRespMixin):
+class Polar(RDHRespMixin):
 
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
-        self._base = method
+        self.base = method
         self.pol_scf = NotImplemented
         self.pol_corr = NotImplemented
         self.pol_tot = NotImplemented
@@ -180,7 +180,7 @@ class Polar(RDFDH, RDHRespMixin):
         nprop = self.nprop
 
         pdA_Y_ia_ri = np.zeros((nprop, naux, nocc, nvir))
-        nbatch = self.calc_batch_size(8 * nmo**2, U_1.size)
+        nbatch = self.base.calc_batch_size(8 * nmo**2, U_1.size)
         for saux in gen_batch(0, naux, nbatch):
             pdA_Y_ia_ri[:, saux] = (
                 + einsum("Ami, Pma -> APia", U_1[:, :, so], Y_mo_ri[saux, :, sv])
@@ -196,7 +196,7 @@ class Polar(RDFDH, RDHRespMixin):
         nprop = self.nprop
 
         pdA_D_rdm1 = tensors.create("pdA_D_rdm1", shape=(nprop, nmo, nmo))
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             return self
 
         pdA_F_0_mo = tensors.load("pdA_F_0_mo")
@@ -205,7 +205,7 @@ class Polar(RDFDH, RDHRespMixin):
 
         pdA_G_ia_ri = tensors.create("pdA_G_ia_ri", shape=(nprop, naux, nocc, nvir))
 
-        nbatch = self.calc_batch_size(8*nocc*nvir**2, Y_ia_ri.size + pdA_F_0_mo.size + pdA_Y_ia_ri.size)
+        nbatch = self.base.calc_batch_size(8*nocc*nvir**2, Y_ia_ri.size + pdA_F_0_mo.size + pdA_Y_ia_ri.size)
         D_jab = eo[None, :, None, None] - ev[None, None, :, None] - ev[None, None, None, :]
         for sI in gen_batch(0, nocc, nbatch):
             t_ijab = np.asarray(tensors["t_ijab"][sI])
@@ -281,7 +281,7 @@ class Polar(RDFDH, RDHRespMixin):
         if self.xc_n:
             pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
             SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             return SCR3
 
         U_1 = tensors.load("U_1")
@@ -289,7 +289,7 @@ class Polar(RDFDH, RDHRespMixin):
         pdA_G_ia_ri = tensors.load("pdA_G_ia_ri")
         Y_mo_ri = tensors["Y_mo_ri"]
 
-        nbatch = self.calc_batch_size(10 * self.nmo**2, G_ia_ri.size + pdA_G_ia_ri.size)
+        nbatch = self.base.calc_batch_size(10 * self.nmo**2, G_ia_ri.size + pdA_G_ia_ri.size)
         for saux in gen_batch(0, naux, nbatch):
             G_blk = G_ia_ri[saux]
             Y_blk = np.asarray(Y_mo_ri[saux])
@@ -340,8 +340,7 @@ class Polar(RDFDH, RDHRespMixin):
         self.de = self.pol_tot = pol_scf + pol_corr
         return self
 
-    def base_method(self) -> RDFDH:
-        self.__class__ = RDFDH
-        return self
+    def base_method(self):
+        return self.base
 
     kernel = kernel

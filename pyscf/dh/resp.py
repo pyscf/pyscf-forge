@@ -20,7 +20,10 @@
 
 from pyscf.scf import cphf, ucphf
 from pyscf import lib
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, HybridDict, get_rho_from_dm_gga
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, HybridDict, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
+from pyscf.dh.mp2_ajz import _loop_t_ijab
+from pyscf.dh.dh import DHBase
+from pyscf.lib.numpy_helper import ANTIHERMI
 import numpy as np
 einsum = lib.einsum
 
@@ -224,7 +227,7 @@ def _u_Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
 
 # ---- RespMixin classes ----
 
-class RespMixin:
+class RespMixin(lib.StreamObject):
     """Mixin providing CPHF/CPKS solver, prepare_D_r, and dipole."""
 
     cpks_tol = 1e-8
@@ -353,26 +356,73 @@ class RespMixin:
 class RDHRespMixin(RespMixin):
     """Restricted response mixin: prepare_integral, Ax0_*, prepare_lagrangian."""
 
+    @timing
+    def prepare_pt2(self, dump_t_ijab=True):
+        tensors = self.tensors
+        nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
+        e = self.mo_energy
+        naux = self.df_ri.get_naoaux()
+        so, sv = self.so, self.sv
+        c_os, c_ss = self.c_os, self.c_ss
+
+        D_rdm1 = np.zeros((nmo, nmo))
+
+        if not self.base.eval_pt2:
+            if self.base.eng_tot is NotImplemented:
+                tensors.create("D_rdm1", D_rdm1)
+                DHBase.kernel(self.base, eng_bi=(None, 0, 0))
+            return self
+
+        G_ia_ri = np.zeros((naux, nocc, nvir))
+        Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
+
+        dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab
+        if dump_t_ijab:
+            tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
+
+        eng_bi1 = [0]
+        eng_bi2 = [0]
+
+        def build(sI, t_ijab, g_ijab):
+            if self.base.eng_pt2 is NotImplemented:
+                eng_bi1[0] += einsum("ijab, ijab ->", t_ijab, g_ijab)
+                if self.base.eval_ss:
+                    eng_bi2[0] += einsum("ijab, ijba ->", t_ijab, g_ijab)
+            if dump_t_ijab:
+                tensors["t_ijab"][sI] = t_ijab
+            T_ijab = restricted_biorthogonalize(t_ijab, c_os, c_ss)
+            D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
+            D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
+            G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)
+
+        _loop_t_ijab(self.base, Y_ia_ri, e, nocc, nvir, build)
+
+        if self.base.eng_tot is NotImplemented:
+            DHBase.kernel(self.base, eng_bi=(None, eng_bi1[0], eng_bi2[0]))
+        tensors.create("D_rdm1", D_rdm1)
+        tensors.create("G_ia_ri", G_ia_ri)
+        return self
+
     def prepare_integral(self):
         from pyscf.dh.mp2_ajz import get_cderi_mo
-        self.run_scf()
+        self.base.run_scf()
         tensors = self.tensors
         C = self.mo_coeff
         nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
 
         tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-        get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.get_memory())
-        if self.eval_pt2:
+        get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.base.get_memory())
+        if self.base.eval_pt2:
             tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.get_memory())
+            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.base.get_memory())
         eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
-        _r_get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.get_memory())
+        _r_get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.base.get_memory())
         return self
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = self.tensors["Y_mo_jk"]
         cx = cx if cx else self.cx
-        return _r_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.get_memory())
+        return _r_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.base.get_memory())
 
     def Ax0_Core_KS(self, si, sa, sj, sb, xc=None, cpks=False):
         xc = xc if xc else self.xc
@@ -400,12 +450,12 @@ class RDHRespMixin(RespMixin):
     def Ax0_Core_resp(self, si, sa, sj, sb, mf=None, mo_coeff=None):
         mf = mf if mf else self.mf_s
         mo_coeff = mo_coeff if mo_coeff else self.mo_coeff
-        return _r_Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=self.get_memory())
+        return _r_Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=self.base.get_memory())
 
     def Ax0_cpks(self):
         so, sv = self.so, self.sv
         ax0_core_ks = self.Ax0_Core_KS(sv, so, sv, so, cpks=True)
-        ax0_cpks_hf = _r_Ax0_cpks_HF(self.tensors["eri_cpks"], self.get_memory())
+        ax0_cpks_hf = _r_Ax0_cpks_HF(self.tensors["eri_cpks"], self.base.get_memory())
 
         def Ax0_cpks_inner(X):
             return ax0_cpks_hf(X) + ax0_core_ks(X)
@@ -435,7 +485,7 @@ class RDHRespMixin(RespMixin):
 
         L += self.Ax0_Core_resp(sv, so, sa, sa)(D_rdm1)
 
-        nbatch = self.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
+        nbatch = self.base.calc_batch_size(nvir ** 2 + nocc * nvir, G_ia_ri.size + Y_ij_ri.size)
         for saux in gen_batch(0, naux, nbatch):
             L += 4 * einsum("Pib, Pab -> ai", G_ia_ri[saux], Y_mo_ri[saux, sv, sv])
 
@@ -449,29 +499,107 @@ class RDHRespMixin(RespMixin):
 class UDHRespMixin(RespMixin):
     """Unrestricted response mixin: prepare_integral, Ax0_*, prepare_lagrangian."""
 
+    @timing
+    def prepare_pt2(self, dump_t_ijab=True):
+        tensors = self.tensors
+        nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
+        mocc, mvir = max(nocc), max(nvir)
+        eo, ev = self.eo, self.ev
+        naux = self.df_ri.get_naoaux()
+        so, sv = self.so, self.sv
+        c_os, c_ss = self.c_os, self.c_ss
+        eval_ss = True if abs(c_ss) > 1e-7 else False
+
+        D_rdm1 = np.zeros((2, nmo, nmo))
+        if not self.base.eval_pt2:
+            tensors.create("D_rdm1", D_rdm1)
+            return self
+
+        G_ia_ri = [np.zeros((naux, nocc[σ], nvir[σ])) for σ in (α, β)]
+        Y_ia_ri = [np.asarray(tensors["Y_mo_ri" + str(σ)][:, so[σ], sv[σ]]) for σ in (α, β)]
+
+        dump_t_ijab = False if "t_ijab" + str(αα) in tensors else dump_t_ijab
+        eval_t_ijab = True if "t_ijab" + str(αα) not in tensors else False
+        if dump_t_ijab:
+            for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
+                if σς in (αα, ββ) and not eval_ss:
+                    continue
+                tensors.create("t_ijab" + str(σς), shape=(nocc[σ], nocc[ς], nvir[σ], nvir[ς]), incore=self._incore_t_ijab)
+
+        eng_bi1, eng_bi2 = [0, 0, 0], [0, 0, 0]
+        nbatch = self.base.calc_batch_size(2 * mocc * mvir ** 2, tot_size(Y_ia_ri) + mocc * mvir ** 2)
+        for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
+            if σς in (αα, ββ) and not eval_ss:
+                continue
+            D_jab = eo[ς][:, None, None] - ev[σ][None, :, None] - ev[ς][None, None, :] if eval_t_ijab else None
+            for sI in gen_batch(0, nocc[σ], nbatch):
+                if eval_t_ijab:
+                    D_ijab = eo[σ][sI, None, None, None] + D_jab
+                    g_ijab = einsum("Pia, Pjb -> ijab", Y_ia_ri[σ][:, sI], Y_ia_ri[ς])
+                    t_ijab = g_ijab / D_ijab
+                    eng_bi1[σς] += einsum("ijab, ijab ->", t_ijab, g_ijab)
+                    if dump_t_ijab:
+                        tensors["t_ijab" + str(σς)][sI] = t_ijab
+                    if σς in (αα, ββ):
+                        eng_bi2[σς] += einsum("ijab, ijba ->", t_ijab, g_ijab)
+                else:
+                    t_ijab = tensors["t_ijab" + str(σς)][sI]
+                if σς in (αα, ββ):
+                    T_ijab = 0.5 * c_ss * hermi_sum_last2dim(t_ijab, hermi=ANTIHERMI, inplace=False)
+                    D_rdm1[σ, so[σ], so[σ]] -= 2 * einsum("kiab, kjab -> ij", T_ijab, t_ijab)
+                    D_rdm1[σ, sv[σ], sv[σ]] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
+                    G_ia_ri[σ][:, sI] += 4 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[σ])
+                else:
+                    T_ijab = c_os * t_ijab
+                    for sJ in gen_batch(0, nocc[α], nbatch):
+                        if sI == sJ:
+                            t_jkab = t_ijab
+                        elif sI.start < sJ.start:
+                            continue
+                        else:
+                            t_jkab = tensors["t_ijab" + str(αβ)][sJ]
+                        D_tmp = einsum("ikab, jkab -> ij", T_ijab, t_jkab)
+                        D_rdm1[α, sI, sJ] -= D_tmp
+                        if sI != sJ:
+                            D_rdm1[α, sJ, sI] -= D_tmp.swapaxes(-1, -2)
+                    D_rdm1[β, so[β], so[β]] -= einsum("kiba, kjba -> ij", T_ijab, t_ijab)
+                    D_rdm1[α, sv[α], sv[α]] += einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
+                    D_rdm1[β, sv[β], sv[β]] += einsum("jica, jicb -> ab", T_ijab, t_ijab)
+                    G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
+                    G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α][:, sI])
+
+        if self.base.eng_tot is NotImplemented:
+            DHBase.kernel(self.base, eng_bi=(None, eng_bi1, eng_bi2))
+
+        tensors.create("D_rdm1", D_rdm1)
+        for σ in (α, β):
+            tensors.create("G_ia_ri" + str(σ), G_ia_ri[σ])
+
+        return self
+
     def prepare_integral(self):
         from pyscf.dh.mp2_ajz import get_cderi_mo
-        self.run_scf()
+        self.base.run_scf()
         tensors = self.tensors
         C = self.mo_coeff
         nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
 
         for σ in α, β:
             y = tensors.create("Y_mo_jk" + str(σ), shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_jk, C[σ], y, max_memory=self.get_memory())
-            if self.eval_pt2:
+            get_cderi_mo(self.df_jk, C[σ], y, max_memory=self.base.get_memory())
+            if self.base.eval_pt2:
                 y = tensors.create("Y_mo_ri" + str(σ), shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-                get_cderi_mo(self.df_ri, C[σ], y, max_memory=self.get_memory())
+                get_cderi_mo(self.df_ri, C[σ], y, max_memory=self.base.get_memory())
         eri_cpks = [None, None, None]
         for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
             eri_cpks[σς] = tensors.create("eri_cpks" + str(σς), shape=(nvir[σ], nocc[σ], nvir[ς], nocc[ς]), incore=self._incore_Y_mo)
-        _u_get_eri_cpks([tensors["Y_mo_jk" + str(σ)] for σ in (α, β)], nocc, self.cx, eri_cpks, self.get_memory())
+        _u_get_eri_cpks([tensors["Y_mo_jk" + str(σ)] for σ in (α, β)], nocc, self.cx, eri_cpks, self.base.get_memory())
         return self
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]
         cx = cx if cx else self.cx
-        return _u_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.get_memory())
+        return _u_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.base.get_memory())
 
     def Ax0_Core_KS(self, si, sa, sj, sb, xc=None, cpks=False):
         xc = xc if xc else self.xc
@@ -501,7 +629,7 @@ class UDHRespMixin(RespMixin):
     def Ax0_cpks(self):
         so, sv = self.so, self.sv
         ax0_core_ks = self.Ax0_Core_KS(sv, so, sv, so, cpks=True)
-        ax0_cpks_hf = _u_Ax0_cpks_HF([self.tensors["eri_cpks" + str(σς)] for σς in (αα, αβ, ββ)], self.get_memory())
+        ax0_cpks_hf = _u_Ax0_cpks_HF([self.tensors["eri_cpks" + str(σς)] for σς in (αα, αβ, ββ)], self.base.get_memory())
 
         def Ax0_cpks_inner(X):
             ax0_hf = ax0_cpks_hf(X)
@@ -522,7 +650,7 @@ class UDHRespMixin(RespMixin):
             F_0_ai_n = [self.Cv[σ].T @ F_0_ao_n[σ] @ self.Co[σ] for σ in (α, β)]
             for σ in (α, β):
                 L[σ] += 2 * F_0_ai_n[σ]
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             for σ in (α, β):
                 tensors.create("L" + str(σ), L[σ])
             return self
@@ -548,7 +676,7 @@ class UDHRespMixin(RespMixin):
             for σ in (α, β):
                 L[σ] -= einsum("Pja, Pij -> ai", G_ia_ri[σ], Y_ij_ri[σ])
 
-        nbatch = self.calc_batch_size(mvir ** 2 + mocc * mvir, tot_size(G_ia_ri + Y_ij_ri))
+        nbatch = self.base.calc_batch_size(mvir ** 2 + mocc * mvir, tot_size(G_ia_ri + Y_ij_ri))
         for σ in (α, β):
             for saux in gen_batch(0, naux, nbatch):
                 L[σ] += einsum("Pib, Pab -> ai", G_ia_ri[σ][saux], Y_mo_ri[σ][saux, sv[σ], sv[σ]])

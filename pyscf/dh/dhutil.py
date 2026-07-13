@@ -28,7 +28,6 @@ from pyscf.lib.numpy_helper import HERMITIAN
 from pyscf.ao2mo.outcore import balance_partition
 
 import numpy as np
-import tempfile
 from time import time, process_time
 from functools import wraps
 
@@ -69,7 +68,7 @@ class HybridDict(dict):
         if dir is None:
             dir = lib.param.TMPDIR
         if chkfile_name is None:
-            self._chkfile = tempfile.NamedTemporaryFile(dir=dir)
+            self._chkfile = lib.NamedTemporaryFile(dir=dir)
             chkfile_name = self._chkfile.name
         # create or open exist chkfile
         self.chkfile_name = chkfile_name
@@ -154,6 +153,24 @@ class HybridDict(dict):
             dct = pickle.load(f)
         tensors.update(dct)
         return tensors
+
+    def close(self):
+        if hasattr(self, 'chkfile'):
+            try:
+                self.chkfile.close()
+            except Exception:
+                pass
+        if hasattr(self, '_chkfile'):
+            try:
+                self._chkfile.close()
+            except Exception:
+                pass
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 def timing(f):

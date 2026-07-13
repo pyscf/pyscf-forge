@@ -118,10 +118,7 @@ class DHBase(lib.StreamObject):
         self.df_ri = df.DF(mol, self.auxbasis_ri) if not self.same_aux else self.df_jk
         if self._scf is not None and self._scf.e_tot != 0:
             self.run_scf()
-
-    @property
-    def base(self):
-        return self
+        self.base = self
 
     @property
     def converged(self):
@@ -147,6 +144,12 @@ class DHBase(lib.StreamObject):
     @property
     def eval_pt2(self):
         return self.eval_ss or self.eval_os
+
+    def __del__(self):
+        try:
+            self.tensors.close()
+        except Exception:
+            pass
 
     @timing
     def energy_elec_nc(self, mo_coeff=None, h1e=None, vhf=None, **_):

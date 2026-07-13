@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 # dh import
-from pyscf.dh.udfdh import UDFDH
 from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing, as_scanner_grad
 from pyscf.dh.grad.dfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel, GradientMixin
@@ -116,11 +115,11 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     return grad_contrib
 
 
-class Gradients(UDFDH, UDHRespMixin, GradientMixin):
+class Gradients(UDHRespMixin, GradientMixin):
 
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
-        self._base = method
+        self.base = method
         self.grad_jk = NotImplemented
         self.grad_gga = NotImplemented
         self.grad_pt2 = NotImplemented
@@ -147,7 +146,7 @@ class Gradients(UDFDH, UDHRespMixin, GradientMixin):
         Y_mo = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]
         # a special treatment
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
+        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.base.get_memory())
 
     @timing
     def prepare_gradient_gga(self):
@@ -193,7 +192,7 @@ class Gradients(UDFDH, UDHRespMixin, GradientMixin):
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("spq, sApq -> A", D_r, H_1_mo)
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             grad_corr.shape = (natm, 3)
             self.grad_pt2 = grad_corr
             return
@@ -221,7 +220,7 @@ class Gradients(UDFDH, UDHRespMixin, GradientMixin):
             shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
             shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
 
-            nbatch = calc_batch_size(3*(nao+mocc)*naux, self.get_memory(), tot_size(Y_1_ia_ri))
+            nbatch = calc_batch_size(3*(nao+mocc)*naux, self.base.get_memory(), tot_size(Y_1_ia_ri))
             for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
                 su = slice(U0, U1)
                 int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
@@ -229,7 +228,7 @@ class Gradients(UDFDH, UDHRespMixin, GradientMixin):
                     Y_1_ia_ri[σ] -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[σ][su, so[σ]], C[σ][:, sv[σ]])
                     Y_1_ia_ri[σ] -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[σ][su, sv[σ]], C[σ][:, so[σ]])
 
-            nbatch = calc_batch_size(3*nao*(nao+mocc), self.get_memory(), tot_size(Y_1_ia_ri))
+            nbatch = calc_batch_size(3*nao*(nao+mocc), self.base.get_memory(), tot_size(Y_1_ia_ri))
             for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
                 sp = slice(P0, P1)
                 int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
@@ -273,7 +272,6 @@ class Gradients(UDFDH, UDHRespMixin, GradientMixin):
     kernel = kernel
     as_scanner = as_scanner_grad
 
-    def base_method(self) -> UDFDH:
-        self.__class__ = UDFDH
-        return self
+    def base_method(self):
+        return self.base
 

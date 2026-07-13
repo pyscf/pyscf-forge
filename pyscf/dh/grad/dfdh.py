@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 # dh import
-from pyscf.dh.rdfdh import RDFDH
 from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
 # pyscf import
@@ -37,9 +36,10 @@ def kernel(mf_dh: Gradients, **kwargs):
     # unrestricted method requires dump t_ijab_αβ to disk; controling αβ and SS dumping is too hard for me
     dump_t_ijab = mf_dh.with_t_ijab
 
-    mf_dh.build()
-    if mf_dh.mo_coeff is NotImplemented:
-        mf_dh.run_scf(**kwargs)
+    mf_dh.base.build()
+    if mf_dh.base.mo_coeff is NotImplemented:
+        mf_dh.base.run_scf(**kwargs)
+        mf_dh.__dict__.update(mf_dh.base.__dict__)
     mf_dh.prepare_H_1()
     mf_dh.prepare_S_1()
     mf_dh.prepare_integral()
@@ -321,7 +321,7 @@ def get_gradient_gga_hfref(xc_setting, vxc_n, max_memory=2000):
     return grad_contrib
 
 
-class GradientMixin:
+class GradientMixin(lib.StreamObject):
     """Shared gradient pipeline: D3/D4 dispersion gradient contributions."""
 
     def _add_dispersion_gradient(self, grad_contrib):
@@ -341,11 +341,11 @@ class GradientMixin:
         return grad_contrib
 
 
-class Gradients(RDFDH, RDHRespMixin, GradientMixin):
+class Gradients(RDHRespMixin, GradientMixin):
 
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
-        self._base = method
+        self.base = method
         self.grad_jk = NotImplemented
         self.grad_gga = NotImplemented
         self.grad_pt2 = NotImplemented
@@ -370,28 +370,7 @@ class Gradients(RDFDH, RDHRespMixin, GradientMixin):
         Y_mo = self.tensors["Y_mo_jk"]
         # a special treatment
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.get_memory())
-
-    def prepare_gradient_gga_legacy(self):
-        # assert prepare_xc_kernel has been called
-        tensors = self.tensors
-        D_r = tensors.load("D_r")
-        xc_setting = self.mf_s._numint, self.mol, self.grids, self.xc, self.D
-        if "rho" not in tensors:
-            self.grad_gga = 0
-            return
-        rho = tensors["rho"]
-        if self.ni._xc_type(self.xc) == "GGA":
-            vxc, fxc = tensors["vxc" + self.xc], tensors["fxc" + self.xc]
-        else:
-            vxc, fxc = None, None
-        xc_kernel = rho, vxc, fxc
-        vxc_n = None
-        if self.xc_n:
-            vxc_n = self.tensors.get("vxc" + self.xc_n, None)
-            if vxc_n is None and self.ni._xc_type(self.xc_n) == "HF":
-                vxc_n = np.zeros((2, rho.size))
-        self.grad_gga = get_gradient_gga(self.mo_coeff, D_r, xc_setting, xc_kernel, vxc_n, self.get_memory())
+        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.base.get_memory())
 
     @timing
     def prepare_gradient_gga(self):
@@ -435,7 +414,7 @@ class Gradients(RDFDH, RDHRespMixin, GradientMixin):
         D_r = tensors.load("D_r")
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("pq, Apq -> A", D_r, H_1_mo)
-        if not self.eval_pt2:
+        if not self.base.eval_pt2:
             grad_corr.shape = (natm, 3)
             self.grad_pt2 = grad_corr
             return
@@ -463,14 +442,14 @@ class Gradients(RDFDH, RDHRespMixin, GradientMixin):
             shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
             shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
 
-            nbatch = calc_batch_size(3*(nao+nocc)*naux, self.get_memory(), Y_1_ia_ri.size)
+            nbatch = calc_batch_size(3*(nao+nocc)*naux, self.base.get_memory(), Y_1_ia_ri.size)
             for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
                 su = slice(U0, U1)
                 int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
                 Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[su, so], C[:, sv])
                 Y_1_ia_ri -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[su, sv], C[:, so])
 
-            nbatch = calc_batch_size(3*nao*(nao+nocc), self.get_memory(), Y_1_ia_ri.size)
+            nbatch = calc_batch_size(3*nao*(nao+nocc), self.base.get_memory(), Y_1_ia_ri.size)
             for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
                 sp = slice(P0, P1)
                 int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
@@ -512,9 +491,8 @@ class Gradients(RDFDH, RDHRespMixin, GradientMixin):
         grad_contrib = self._add_dispersion_gradient(grad_contrib)
         self.grad_enfunc = grad_contrib
 
-    def base_method(self) -> RDFDH:
-        self.__class__ = RDFDH
-        return self
+    def base_method(self):
+        return self.base
 
     kernel = kernel
     as_scanner = as_scanner_grad

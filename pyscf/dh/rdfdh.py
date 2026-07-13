@@ -19,11 +19,11 @@
 #
 
 # dh import
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, HybridDict, timing, restricted_biorthogonalize, \
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, HybridDict, timing, \
     get_rho_from_dm_gga
 from pyscf.dh.xccode import parse_xc_dh, xc_equal
 from pyscf.dh.dh import DHBase, energy_elec_mp2_dfmp2_native, energy_elec_mp2_dfmp2
-from pyscf.dh.mp2_ajz import energy_elec_mp2_ajz, _loop_t_ijab
+from pyscf.dh.mp2_ajz import energy_elec_mp2_ajz
 # pyscf import
 from pyscf import lib, gto, df, dft, scf
 from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
@@ -121,53 +121,6 @@ class RDFDH(DHBase):
         self.so, self.sv, self.sa = slice(0, nocc), slice(nocc, nmo), slice(0, nmo)
         self.Co, self.Cv = self.mo_coeff[:, self.so], self.mo_coeff[:, self.sv]
         self.eo, self.ev = self.mo_energy[self.so], self.mo_energy[self.sv]
-        return self
-
-    @timing
-    def prepare_pt2(self, dump_t_ijab=True):
-        tensors = self.tensors
-        nvir, nocc, nmo = self.nvir, self.nocc, self.nmo
-        e = self.mo_energy
-        naux = self.df_ri.get_naoaux()
-        so, sv = self.so, self.sv
-        c_os, c_ss = self.c_os, self.c_ss
-
-        D_rdm1 = np.zeros((nmo, nmo))
-
-        if not self.eval_pt2:
-            if self.eng_tot is NotImplemented:
-                tensors.create("D_rdm1", D_rdm1)
-                DHBase.kernel(self, eng_bi=(None, 0, 0))
-            return self
-
-        G_ia_ri = np.zeros((naux, nocc, nvir))
-        Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
-
-        dump_t_ijab = False if "t_ijab" in tensors else dump_t_ijab
-        if dump_t_ijab:
-            tensors.create("t_ijab", shape=(nocc, nocc, nvir, nvir), incore=self._incore_t_ijab)
-
-        eng_bi1 = [0]
-        eng_bi2 = [0]
-
-        def build(sI, t_ijab, g_ijab):
-            if self.eng_pt2 is NotImplemented:
-                eng_bi1[0] += einsum("ijab, ijab ->", t_ijab, g_ijab)
-                if self.eval_ss:
-                    eng_bi2[0] += einsum("ijab, ijba ->", t_ijab, g_ijab)
-            if dump_t_ijab:
-                tensors["t_ijab"][sI] = t_ijab
-            T_ijab = restricted_biorthogonalize(t_ijab, c_os, c_ss)
-            D_rdm1[sv, sv] += 2 * einsum("ijac, ijbc -> ab", T_ijab, t_ijab)
-            D_rdm1[so, so] -= 2 * einsum("ijab, ikab -> jk", T_ijab, t_ijab)
-            G_ia_ri[:, sI] = einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri)
-
-        _loop_t_ijab(self, Y_ia_ri, e, nocc, nvir, build)
-
-        if self.eng_tot is NotImplemented:
-            DHBase.kernel(self, eng_bi=(None, eng_bi1[0], eng_bi2[0]))
-        tensors.create("D_rdm1", D_rdm1)
-        tensors.create("G_ia_ri", G_ia_ri)
         return self
 
     def nuc_grad_method(self):
