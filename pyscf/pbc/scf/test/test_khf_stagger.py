@@ -118,7 +118,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(etot, -1.133718254945507, 7)
         self.assertAlmostEqual(ek_stagger, -0.5678938270891276, 7)
 
-    def test_222_h2_fftdf_splitscf(self):
+    def test_222_h2_fftdf_splitscf_slow(self):
         cell = build_h2_cell()
         nk = [2, 2, 2]
         etot, ek_stagger = run_khf_fftdf(cell, nk, stagger_type="split-scf")
@@ -127,7 +127,7 @@ class KnownValues(unittest.TestCase):
             ek_stagger, -0.5690576097072846, 7
         )  # QChem value: -0.5690575951
 
-    def test_222_h2_fftdf_regular(self):
+    def test_222_h2_fftdf_regular_slow(self):
         cell = build_h2_cell()
         nk = [2, 2, 2]
         etot, ek_stagger = run_khf_fftdf(cell, nk, stagger_type="regular", kernel=False)
