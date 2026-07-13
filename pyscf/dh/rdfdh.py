@@ -90,13 +90,13 @@ class RDFDH(DHBase):
         self.mf_s = mf_s
         self.xc_n = None if xc_equal(self.xc_n, self.xc) else self.xc_n
         self.mf_n = self.mf_s
+        self.nocc = mol.nelec[0]
+        self.nmo = self.nao
+        self.nvir = self.nmo - self.nocc
         if self.xc_n:
             self.mf_n = dft.KS(mol, xc=self.xc_n).density_fit(auxbasis=self.auxbasis_jk)
             self.mf_n.grids = self.mf_s.grids = self.grids
         self._init_common()
-        self.nocc = mol.nelec[0]
-        self.nmo = self.nao
-        self.nvir = self.nmo - self.nocc
         if mp2_backend == "dfmp2_native":
             self.energy_elec_mp2 = partial(energy_elec_mp2_dfmp2_native, self)
         elif mp2_backend == "dfmp2":

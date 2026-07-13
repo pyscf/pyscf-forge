@@ -29,7 +29,6 @@ def DFDH(mf_or_mol, *args, **kwargs):
             return udfdh.UDFDH(mf_or_mol, *args, **kwargs)
         return rdfdh.RDFDH(mf_or_mol, *args, **kwargs)
     else:
-        from pyscf import scf
-        if isinstance(mf_or_mol, scf.rhf.RHF):
+        if mf_or_mol.istype('RHF'):
             return rdfdh.RDFDH(mf_or_mol, *args, **kwargs)
         return udfdh.UDFDH(mf_or_mol, *args, **kwargs)
