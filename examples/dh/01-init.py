@@ -25,7 +25,8 @@ from pyscf.dh import DFDH, to_dh
 mol = gto.M(atom="O; H 1 0.94; H 1 0.94 2 104.5", basis="cc-pVDZ")
 
 # 1. Init with gto.Mole 
-mf = DFDH(mol, xc="B2PLYP").run()
+mf = DFDH(mol, xc="B2PLYP").run() # J. Chem. Phys. 2006, 124 (3), 034108.
+
 print(f"B2PLYP via mol:   {mf.e_tot:.8f}")
 
 # 2. Init with converged KS SCF — reuses orbitals, skips SCF
@@ -33,7 +34,7 @@ mf_ks = dft.KS(mol, xc="0.53*HF + 0.47*B88, 0.73*LYP").density_fit().run()
 mf = DFDH(mf_ks, xc="B2PLYP").run()
 print(f"B2PLYP via KS:    {mf.e_tot:.8f}")
 
-# For xDH — pre-converge B3LYPg SCF for XYG3
+# For xDH — pre-converge B3LYPg SCF for XYG3 (Proc. Natl. Acad. Sci. 2009, 106 (13), 4963–4968.)
 mf_ks = dft.KS(mol, xc="B3LYPg").density_fit().run()
 mf = DFDH(mf_ks, xc="XYG3").run()
 print(f"XYG3 via B3LYPg:  {mf.e_tot:.8f}")
