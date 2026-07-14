@@ -38,8 +38,10 @@ int _get_twoM (uint64_t sconfstr, uint64_t detstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
 double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
 double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
-double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q, unsigned int r,
-               unsigned int p, unsigned int nspin);
+double _get_x (uint64_t brastr, uint64_t ketstr,
+               unsigned int t, unsigned int q, unsigned int r, unsigned int p,
+               int nt, int nq, int nr, int np,
+               unsigned int nspin);
 double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM);
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
                   double * h1e_s, double * eri,

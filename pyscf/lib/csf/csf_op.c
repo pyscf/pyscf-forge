@@ -208,16 +208,26 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
 
 double _get_xdiag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned int nspin)
 {
-    return _get_x (coupstr, coupstr, t, t, p, p, nspin);
+    return _get_x (coupstr, coupstr, t, t, p, p, 1, -1, 1, -1, nspin);
 }
 
-double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q, unsigned int r,
-               unsigned int p, unsigned int nspin)
+double _get_x (uint64_t brastr, uint64_t ketstr,
+               unsigned int t, unsigned int q, unsigned int r, unsigned int p,
+               int nt, int nq, int nr, int np,
+               unsigned int nspin)
 {
+    // nt, nq, nr, np:
+    // -2: doubly-occupied in the bra
+    // -1: singly-occupied in the bra
+    //  1: singly-occupied in the ket
+    //  2: doubly-occupied in the ket
+    assert ((t!=q) || ((nt+nq)==0));
+    assert ((r!=p) || ((nr+np)==0));
     double xdiag = 1.0;
     unsigned int twoS1k, twoS0k, twoS1b, twoS0b;
     int parity = 0;
     unsigned int i;
+
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
     // They have S0 = S and SN = 0
@@ -234,14 +244,34 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
     assert (q>=t);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
+    assert ((t>0) || abs (nt) == 1); // undefined to have doubly-occupied dummy orbital
+    assert ((q>0) || abs (nq) == 1); // undefined to have doubly-occupied dummy orbital
+
+    // Factorize out the damn norm! I'm not keeping track of this garbage in the subdiagrams anymore!
+    for (i=t; i < p; i++){
+        // 2S+1 for each CG coefficient
+        twoS0k = _get_twoS_running (ketstr, i, nspin);
+        twoS0b = _get_twoS_running (brastr, i, nspin);
+        // paired electrons don't have CG coefficients!
+        if (((i==t) || (i==t+1)) && nt==2){ twoS0k = 0; }
+        if (((i==q) || (i==q-1)) && nq==2){ twoS0k = 0; }
+        if (((i==r) || (i==r+1)) && nr==2){ twoS0k = 0; }
+        if (((i==p) || (i==p-1)) && np==2){ twoS0k = 0; }
+        if (((i==t) || (i==t+1)) && nt==-2){ twoS0b = 0; }
+        if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; }
+        if (((i==r) || (i==r+1)) && nr==-2){ twoS0b = 0; }
+        if (((i==p) || (i==p-1)) && np==-2){ twoS0b = 0; }
+        // For the dummy electron, somehow, the ket CG survives to cancel something
+        if (i==0){ twoS0b = 0; }
+        xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
+    }
+    xdiag = sqrt (xdiag);
 
     // TEMPORARY: t != q not yet implemented
     assert (q==t);
 
     // t
     //     -1**[S(t) + S'(t-1) - 1/2]
-    //     *
-    //     sqrt[2S'(t) + 1]
     //     *
     //     { S'(t)  S(t)  1      }
     //     { 1/2    1/2   S(t-1) }
@@ -256,14 +286,11 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
         parity = parity % 4; // remember everything is *2 until the very end
 
         xdiag *= _get_wigner_6j_j41h (twoS0b, twoS0k, 2, 1, twoS1k);
-        xdiag *= sqrt ((double) (twoS0b + 1)); // normalization
     }
 
     // t+1, t+2, ... p-2, p-1
     //
     //     -1**[S(i) + S'(i-1) - 1/2]
-    //     *
-    //     sqrt[(2S'(i) + 1)(2S(i-1) + 1)]
     //     *
     //     { 1    S'(i)   S(i)    }
     //     { 1/2  S(i-1)  S'(i-1) }
@@ -277,7 +304,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
         parity = parity % 4;
 
         xdiag *= _get_wigner_6j_j41h (2, twoS0b, twoS0k, twoS1k, twoS1b);
-        xdiag *= sqrt ((double) ((twoS0b+1)*(twoS1k+1))); // normalization
     }
 
     // TEMPORARY: p != r not yet implemented
@@ -286,8 +312,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
     // p
     //
     //     -1**[S'(p-1) + S(p) - 1/2]
-    //     *
-    //     sqrt[2S(p-1) + 1]
     //     *
     //     { S'(p-1)  S(p-1)  1    }
     //     { 1/2      1/2     S(p) }
@@ -300,7 +324,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr, unsigned int t, unsigned int q,
     parity = parity % 4;
 
     xdiag *= _get_wigner_6j_j41h (twoS1b, twoS1k, 2, 1, twoS0k);
-    xdiag *= sqrt ((double) (twoS1k+1)); // normalization
 
     // Final sign computation
     assert ((parity % 2)==0);
