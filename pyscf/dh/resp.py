@@ -370,10 +370,7 @@ class RespMixin(lib.StreamObject):
                                        self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
             self.tensors.consume(Y_mo).consume(eri)
             self.prepare_xc_kernel()
-            if self.D.ndim == 2:
-                pt2_res, _ = _prepare_pt2_r(self, dump_t_ijab=True)
-            else:
-                pt2_res, _ = _prepare_pt2_u(self, dump_t_ijab=True)
+            pt2_res, _ = self._prepare_pt2(dump_t_ijab=True)
             self.tensors.consume(pt2_res)
             self.prepare_lagrangian()
             self.prepare_D_r()
@@ -448,6 +445,9 @@ def _prepare_pt2_r(mf, dump_t_ijab=True):
 
 class RDHRespMixin(RespMixin):
     """Restricted response mixin: Ax0_*, prepare_lagrangian."""
+
+    def _prepare_pt2(self, dump_t_ijab=True):
+        return _prepare_pt2_r(self, dump_t_ijab=dump_t_ijab)
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = self.tensors["Y_mo_jk"]
@@ -604,6 +604,9 @@ def _prepare_pt2_u(mf, dump_t_ijab=True):
 
 class UDHRespMixin(RespMixin):
     """Unrestricted response mixin: Ax0_*, prepare_lagrangian."""
+
+    def _prepare_pt2(self, dump_t_ijab=True):
+        return _prepare_pt2_u(self, dump_t_ijab=dump_t_ijab)
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]
