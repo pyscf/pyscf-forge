@@ -224,9 +224,15 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     assert ((t!=q) || ((nt+nq)==0));
     assert ((r!=p) || ((nr+np)==0));
     double xdiag = 1.0;
-    unsigned int twoS1k, twoS0k, twoS1b, twoS0b;
+    unsigned int twoS0b, twoS0k, twoS0;
     int parity = 0;
     unsigned int i;
+    unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
+    for (i=0; i <= nspin; i++){
+        twoSk[i] = 0;
+        twoSb[i] = 0;
+    }
 
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
     // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
@@ -246,12 +252,16 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     // through nspin inclusively.
     assert ((t>0) || abs (nt) == 1); // undefined to have doubly-occupied dummy orbital
     assert ((q>0) || abs (nq) == 1); // undefined to have doubly-occupied dummy orbital
+    for (i=0; i <= p; i++){
+        twoSk[i] = _get_twoS_running (ketstr, i, nspin);
+        twoSb[i] = _get_twoS_running (brastr, i, nspin);
+    }
 
     // Factorize out the damn norm! I'm not keeping track of this garbage in the subdiagrams anymore!
     for (i=t; i < p; i++){
         // 2S+1 for each CG coefficient
-        twoS0k = _get_twoS_running (ketstr, i, nspin);
-        twoS0b = _get_twoS_running (brastr, i, nspin);
+        twoS0k = twoSk[i];
+        twoS0b = twoSb[i];
         // paired electrons don't have CG coefficients!
         if (((i==t) || (i==t+1)) && nt==2){ twoS0k = 0; }
         if (((i==q) || (i==q-1)) && nq==2){ twoS0k = 0; }
@@ -276,16 +286,11 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     //     { S'(t)  S(t)  1      }
     //     { 1/2    1/2   S(t-1) }
     // We just skip this diagram when we are doing Sz, which corresponds to i == 0
-    twoS0k = _get_twoS_running (ketstr, t, nspin);
-    twoS0b = _get_twoS_running (brastr, t, nspin);
     if (t>0){
-        twoS1k = _get_twoS_running (ketstr, t-1, nspin);
-        twoS1b = _get_twoS_running (brastr, t-1, nspin);
-
-        parity += twoS0k + twoS1b - 1; // graph signs
+        parity += twoSk[t] + twoSb[t-1] - 1; // graph signs
         parity = parity % 4; // remember everything is *2 until the very end
 
-        xdiag *= _get_wigner_6j_j41h (twoS0b, twoS0k, 2, 1, twoS1k);
+        xdiag *= _get_wigner_6j_j41h (twoSb[t], twoSk[t], 2, 1, twoSk[t-1]);
     }
 
     // t+1, t+2, ... p-2, p-1
@@ -295,15 +300,10 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     //     { 1    S'(i)   S(i)    }
     //     { 1/2  S(i-1)  S'(i-1) }
     for (i=q+1; i < r; i++){
-        twoS1b = twoS0b;
-        twoS1k = twoS0k;
-        twoS0b = _get_twoS_running (brastr, i, nspin);
-        twoS0k = _get_twoS_running (ketstr, i, nspin);
-
-        parity += twoS0k + twoS1b - 1; // graph signs
+        parity += twoSk[i] + twoSb[i-1] - 1; // graph signs
         parity = parity % 4;
 
-        xdiag *= _get_wigner_6j_j41h (2, twoS0b, twoS0k, twoS1k, twoS1b);
+        xdiag *= _get_wigner_6j_j41h (2, twoSb[i], twoSk[i], twoSk[i-1], twoSb[i-1]);
     }
 
     // TEMPORARY: p != r not yet implemented
@@ -313,23 +313,29 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     //
     //     -1**[S'(p-1) + S(p) - 1/2]
     //     *
-    //     { S'(p-1)  S(p-1)  1    }
-    //     { 1/2      1/2     S(p) }
-    twoS1b = twoS0b;
-    twoS1k = twoS0k;
-    twoS0b = _get_twoS_running (brastr, p, nspin);
-    twoS0k = _get_twoS_running (ketstr, p, nspin);
+    //     { S'(r-1)  S(r-1)  1     }
+    //     { 1/2      1/2     S"(r) }
+    //
+    //     S"(r) = S(r)   if nr isin {-2,+1}
+    //           = S'(r)  if nr isin {+2,-1}
+    if ((nr == -2) || (nr == 1)){ 
+        twoS0 = twoSk[r]; 
+    } else if ((nr == 2) || (nr == -1)){
+        twoS0 = twoSb[r];
+    } else { assert (false); }
+    xdiag *= _get_wigner_6j_j41h (twoSb[r-1], twoSk[r-1], 2, 1, twoS0);
 
-    parity += twoS0k + twoS1b - 1; // graph signs
+    parity += twoSk[p] + twoSb[p-1] - 1; // graph signs
     parity = parity % 4;
 
-    xdiag *= _get_wigner_6j_j41h (twoS1b, twoS1k, 2, 1, twoS0k);
 
     // Final sign computation
     assert ((parity % 2)==0);
     parity = parity / 2;
     if ((parity % 2) == 1){ xdiag = -xdiag; }
 
+    free (twoSk);
+    free (twoSb);
     return xdiag;
 }
 
