@@ -73,37 +73,41 @@ def kernel(mf_dh: Gradients, **kwargs):
 
     mf_dh.prepare_gradient_jk()
     D_r = mf_dh.tensors.load("D_r")
-    mf_dh.grad_gga = _get_gradient_gga(mf_dh.ni, mf_dh.grids,
-                                        mf_dh.xc, mf_dh.xc_n, mf_dh.D, D_r, mf_dh.mf_s)
+    mf_dh.grad_gga = _get_gradient_gga(mf_dh, D_r)
     mf_dh.prepare_gradient_pt2()
 
-    natm = mf_dh.mol.natm
-    so = mf_dh.so
+    grad_enfunc = _get_gradient_enfunc(mf_dh, S_1_mo, H_1_ao)
     grad_contrib = mf_dh.mf_s.Gradients().grad_nuc()
-    grad_contrib = grad_contrib.reshape(natm * 3)
-    if mf_dh.D.ndim == 2:
-        grad_contrib += einsum("Auv, uv -> A", H_1_ao, mf_dh.D)
-        if mf_dh.xc_n is None:
-            grad_contrib -= 2 * np.einsum("Ai, i -> A", S_1_mo[:, so, so].diagonal(0, -1, -2), mf_dh.eo)
-        else:
-            nc_F_0_ij = einsum("ui, uv, vj -> ij", mf_dh.Co, mf_dh.mf_n.get_fock(dm=mf_dh.D), mf_dh.Co)
-            grad_contrib -= 2 * einsum("Aij, ij -> A", S_1_mo[:, so, so], nc_F_0_ij)
-    else:
-        grad_contrib += np.einsum("Auv, suv -> A", H_1_ao, mf_dh.D, optimize=True)
-        if mf_dh.xc_n is None:
-            for σ in range(2):
-                grad_contrib -= np.einsum("Ai, i -> A", S_1_mo[σ][:, so[σ], so[σ]].diagonal(0, -1, -2), mf_dh.eo[σ])
-        else:
-            F_0_ao_n = mf_dh.mf_n.get_fock(dm=mf_dh.D)
-            nc_F_0_ij = [(mf_dh.Co[σ].T @ F_0_ao_n[σ] @ mf_dh.Co[σ]) for σ in range(2)]
-            for σ in range(2):
-                grad_contrib -= einsum("Aij, ij -> A", S_1_mo[σ][:, so[σ], so[σ]], nc_F_0_ij[σ])
-    grad_contrib = grad_contrib.reshape(natm, 3)
+    grad_contrib += grad_enfunc
     grad_contrib = mf_dh._add_dispersion_gradient(grad_contrib)
     mf_dh.grad_enfunc = grad_contrib
 
     mf_dh.grad_tot = mf_dh.de = mf_dh.grad_jk + mf_dh.grad_gga + mf_dh.grad_pt2 + mf_dh.grad_enfunc
     return mf_dh.grad_tot
+
+def _get_gradient_enfunc(mf, S_1_mo, H_1_ao):
+    xc_n, D, so, eo, Co, mf_n = mf.xc_n, mf.D, mf.so, mf.eo, mf.Co, mf.mf_n
+    natm = H_1_ao.shape[0] // 3
+    grad_contrib = np.zeros(natm * 3)
+    if D.ndim == 2:
+        grad_contrib += einsum("Auv, uv -> A", H_1_ao, D)
+        if xc_n is None:
+            grad_contrib -= 2 * np.einsum("Ai, i -> A", S_1_mo[:, so, so].diagonal(0, -1, -2), eo)
+        else:
+            nc_F_0_ij = einsum("ui, uv, vj -> ij", Co, mf_n.get_fock(dm=D), Co)
+            grad_contrib -= 2 * einsum("Aij, ij -> A", S_1_mo[:, so, so], nc_F_0_ij)
+    else:
+        grad_contrib += np.einsum("Auv, suv -> A", H_1_ao, D, optimize=True)
+        if xc_n is None:
+            for σ in range(2):
+                grad_contrib -= np.einsum("Ai, i -> A", S_1_mo[σ][:, so[σ], so[σ]].diagonal(0, -1, -2), eo[σ])
+        else:
+            F_0_ao_n = mf_n.get_fock(dm=D)
+            nc_F_0_ij = [(Co[σ].T @ F_0_ao_n[σ] @ Co[σ]) for σ in range(2)]
+            for σ in range(2):
+                grad_contrib -= einsum("Aij, ij -> A", S_1_mo[σ][:, so[σ], so[σ]], nc_F_0_ij[σ])
+    grad_contrib = grad_contrib.reshape(natm, 3)
+    return grad_contrib
 
 
 @timing
@@ -227,7 +231,9 @@ def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
     return grad_contrib
 
 
-def _get_gradient_gga(ni, grids, xc, xc_n, D, D_r, mf_s):
+def _get_gradient_gga(mf, D_r):
+    mf_s = mf.mf_s
+    ni, grids, xc, xc_n, D = mf.ni, mf.grids, mf.xc, mf.xc_n, mf.D
     from pyscf import grad, hessian
     mol, C, mo_occ = mf_s.mol, mf_s.mo_coeff, mf_s.mo_occ
     natm = mol.natm
