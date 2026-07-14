@@ -289,7 +289,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     if (t>0){
         parity += twoSk[t] + twoSb[t-1] - 1; // graph signs
         parity = parity % 4; // remember everything is *2 until the very end
-
         xdiag *= _get_wigner_6j_j41h (twoSb[t], twoSk[t], 2, 1, twoSk[t-1]);
     }
 
@@ -302,7 +301,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     for (i=q+1; i < r; i++){
         parity += twoSk[i] + twoSb[i-1] - 1; // graph signs
         parity = parity % 4;
-
         xdiag *= _get_wigner_6j_j41h (2, twoSb[i], twoSk[i], twoSk[i-1], twoSb[i-1]);
     }
 
@@ -311,21 +309,53 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     
     // p
     //
-    //     -1**[S'(p-1) + S(p) - 1/2]
+    //     -1**[parity]
     //     *
     //     { S'(r-1)  S(r-1)  1     }
     //     { 1/2      1/2     S"(r) }
     //
     //     S"(r) = S(r)   if nr isin {-2,+1}
     //           = S'(r)  if nr isin {+2,-1}
+    // --------------- parity ------------------
+    // coincidence (p=r)
+    //     |np| = |nr| = 1: S'(r-1) + S(r) - 1/2
+    // adjacency (p=r+1)
+    //     np = -1, nr = 1:     "shelf"
+    //     np = -1, nr = 2:     S'(r-1) + S(r-1)
+    //     np = -2, nr = 1:     2S'(r-1)
+    //     np = -2, nr = 2:     contradiction in terms
+    //     np = 1, nr = -1:     S'(r+1) + S(r) + 1/2 + "hill"
+    //     np = 1, nr = -2:     2S'(r-1)
+    //     np = 2, nr = -1:     S'(r-1) + S(r-1)
+    //     np = 2, nr = -2:     contradiction in terms
+    //     np = nr = -1:        S'(r-1) + S(r-1)
+    //     np = -2, nr = -1:    contradiction in terms
+    //     np < 0, nr = -2:     contradiction in terms
+    //     np = nr = 1:         1
+    //     np = 2, nr = 1:      contradiction in terms
+    //     np > 0, nr = 2:      contradiction in terms
+    // next adjacency (p=r+2; sgn (np) == sgn (nr))
+    //     np = -1, nr = -1,-2:  2S'(r+1) + "hill"
+    //     np = -2, nr = -1:     S(r) + S'(r-1) - 1/2
+    //     np = -2, nr = -2:     contradiction in terms
+    //     np = 1, nr = 1,2:     S'(r) + S(r+1) - 1/2 + "shelf"
+    //     np = 2, nr = 1:       S'(r) - S'(r-1) - 1/2
+    //     np = 2, nr = 2:       contradiction in terms
+    // the "shelf" diagram [includes a factor of ~T(r)]:
+    //    nr == 2:  S'(r-1) + S(r-1)
+    //    nr == 1:  2S'(r-1) + S(r) + S(r-1) + 1/2
+    //    if p > r+2 and np > 0: additional 2S'(r) + 2S'(r-1)
+    // the "hill" diagram [includes a factor of T(r)]: 
+    //    nr == -2:  S'(r-1) - S(r) - 1/2
+    //    nr == -1:  S(r-1) - S'(r-1) + 1
+    //    if p > r+2 and np < 0: additional 2S'(r)
     if ((nr == -2) || (nr == 1)){ 
         twoS0 = twoSk[r]; 
     } else if ((nr == 2) || (nr == -1)){
         twoS0 = twoSb[r];
     } else { assert (false); }
     xdiag *= _get_wigner_6j_j41h (twoSb[r-1], twoSk[r-1], 2, 1, twoS0);
-
-    parity += twoSk[p] + twoSb[p-1] - 1; // graph signs
+    parity += twoSk[r] + twoSb[r-1] - 1; // graph signs
     parity = parity % 4;
 
 
