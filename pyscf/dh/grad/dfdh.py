@@ -22,7 +22,8 @@ from __future__ import annotations
 # dh import
 from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.resp import _r_get_eri_cpks, _u_get_eri_cpks
-from pyscf.dh.resp import _get_Y_mo
+from pyscf.dh.resp import _get_Y_mo, _prepare_pt2_r, _prepare_pt2_u
+from pyscf.dh.dh import DHBase
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad, available_memory
 # pyscf import
 from pyscf import gto, lib, df
@@ -67,7 +68,13 @@ def kernel(mf_dh: Gradients, **kwargs):
     mf_dh.tensors.consume(Y_mo).consume(eri)
 
     mf_dh.prepare_xc_kernel()
-    mf_dh.prepare_pt2(dump_t_ijab=dump_t_ijab)
+    if mf_dh.D.ndim == 2:
+        pt2_res, eng_bi = _prepare_pt2_r(mf_dh, dump_t_ijab=dump_t_ijab)
+    else:
+        pt2_res, eng_bi = _prepare_pt2_u(mf_dh, dump_t_ijab=dump_t_ijab)
+    mf_dh.tensors.consume(pt2_res)
+    if mf_dh.base.eng_tot is None and eng_bi is not None:
+        DHBase.kernel(mf_dh.base, eng_bi=(None,) + tuple(eng_bi))
     mf_dh.prepare_lagrangian(gen_W=True)
     mf_dh.prepare_D_r()
 

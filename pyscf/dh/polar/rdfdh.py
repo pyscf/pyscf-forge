@@ -22,7 +22,8 @@ from __future__ import annotations
 # dh import
 from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.resp import _r_get_eri_cpks, _u_get_eri_cpks
-from pyscf.dh.resp import _get_Y_mo
+from pyscf.dh.resp import _get_Y_mo, _prepare_pt2_r, _prepare_pt2_u
+from pyscf.dh.dh import DHBase
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
 from pyscf import lib
@@ -54,7 +55,13 @@ def kernel(mf: Polar):
     mf.tensors.consume(Y_mo).consume(eri)
 
     mf.prepare_xc_kernel()
-    mf.prepare_pt2(dump_t_ijab=True)
+    if mf.D.ndim == 2:
+        pt2_res, eng_bi = _prepare_pt2_r(mf, dump_t_ijab=True)
+    else:
+        pt2_res, eng_bi = _prepare_pt2_u(mf, dump_t_ijab=True)
+    mf.tensors.consume(pt2_res)
+    if mf.base.eng_tot is None and eng_bi is not None:
+        DHBase.kernel(mf.base, eng_bi=(None,) + tuple(eng_bi))
     mf.prepare_lagrangian(gen_W=False)
     mf.prepare_D_r()
     mf.prepare_U_1()
