@@ -20,7 +20,7 @@
 
 from pyscf.scf import cphf, ucphf
 from pyscf import lib
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, HybridDict, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
+from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing, tot_size, HybridDict, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim, available_memory
 from pyscf.dh.mp2_ajz import _loop_t_ijab
 from pyscf.dh.dh import DHBase
 from pyscf.lib.numpy_helper import ANTIHERMI
@@ -33,12 +33,36 @@ einsum = lib.einsum
 
 # ---- Restricted module-level helpers (from rdfdh.py) ----
 
-def _r_get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
+def _get_3c2e_mo(df_jk, df_ri, C, eval_pt2, incore, spin=0, max_memory=2000):
+    from pyscf.dh.mp2_ajz import get_cderi_mo
+    max_memory = available_memory(max_memory)
+    tensors = HybridDict()
+    nmo = C.shape[-1]
+    if spin == 0:
+        naux_jk = df_jk.get_naoaux()
+        tensors.create("Y_mo_jk", shape=(naux_jk, nmo, nmo), incore=incore)
+        get_cderi_mo(df_jk, C, tensors["Y_mo_jk"], max_memory=max_memory)
+        if eval_pt2:
+            naux_ri = df_ri.get_naoaux()
+            tensors.create("Y_mo_ri", shape=(naux_ri, nmo, nmo), incore=incore)
+            get_cderi_mo(df_ri, C, tensors["Y_mo_ri"], max_memory=max_memory)
+    else:
+        for σ in range(2):
+            tensors.create("Y_mo_jk" + str(σ), shape=(df_jk.get_naoaux(), nmo, nmo), incore=incore)
+            get_cderi_mo(df_jk, C[σ], tensors["Y_mo_jk" + str(σ)], max_memory=max_memory)
+            if eval_pt2:
+                tensors.create("Y_mo_ri" + str(σ), shape=(df_ri.get_naoaux(), nmo, nmo), incore=incore)
+                get_cderi_mo(df_ri, C[σ], tensors["Y_mo_ri" + str(σ)], max_memory=max_memory)
+    return tensors
+
+
+def _r_get_eri_cpks(Y_mo_jk, nocc, cx, incore, max_memory=2000):
+    max_memory = available_memory(max_memory)
     naux, nmo, _ = Y_mo_jk.shape
     nvir = nmo - nocc
     so, sv = slice(0, nocc), slice(nocc, nmo)
-    if eri_cpks is None:
-        eri_cpks = np.empty((nvir, nocc, nvir, nocc))
+    tensors = HybridDict()
+    eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=incore)
     Y_ai_jk = np.asarray(Y_mo_jk[:, sv, so])
     Y_ij_jk = np.asarray(Y_mo_jk[:, so, so])
     nbatch = calc_batch_size(nvir*naux + 2*nocc**2*nvir, max_memory, Y_ai_jk.size + Y_ij_jk.size)
@@ -48,9 +72,11 @@ def _r_get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
             + 4 * einsum("Pai, Pbj -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
             - cx * einsum("Paj, Pbi -> aibj", Y_ai_jk[:, sAvir], Y_ai_jk)
             - cx * einsum("Pij, Pab -> aibj", Y_ij_jk, Y_mo_jk[:, sA, sv]))
+    return tensors
 
 
 def _r_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
+    max_memory = available_memory(max_memory)
     naux, nmo, _ = Y_mo_jk.shape
     ni, na = si.stop - si.start, sa.stop - sa.start
 
@@ -129,15 +155,17 @@ def _r_Ax0_cpks_HF(eri_cpks, max_memory=2000):
 
 # ---- Unrestricted module-level helpers (from udfdh.py) ----
 
-def _u_get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
+def _u_get_eri_cpks(Y_mo_jk, nocc, cx, incore, max_memory=2000):
+    max_memory = available_memory(max_memory)
     naux, nmo, _ = Y_mo_jk[0].shape
     nvir = nmo - nocc[α], nmo - nocc[β]
     mvir, mocc = max(nvir), max(nocc)
     so = slice(0, nocc[α]), slice(0, nocc[β])
     sv = slice(nocc[α], nmo), slice(nocc[β], nmo)
-    if eri_cpks is None:
-        eri_cpks = [np.empty((nv_σ, nc_σ, nv_ς, nc_ς)) for nc_σ, nv_σ, nc_ς, nv_ς in
-                    zip(nocc, nvir, nocc, nvir)]
+    tensors = HybridDict()
+    eri_cpks = [None, None, None]
+    for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
+        eri_cpks[σς] = tensors.create("eri_cpks" + str(σς), shape=(nvir[σ], nocc[σ], nvir[ς], nocc[ς]), incore=incore)
     Y_ai_jk = [np.asarray(Y_mo_jk[σ][:, sv[σ], so[σ]]) for σ in (α, β)]
     Y_ij_jk = [np.asarray(Y_mo_jk[σ][:, so[σ], so[σ]]) for σ in (α, β)]
     nbatch = calc_batch_size(mvir * naux + 2 * mocc ** 2 * mvir, max_memory, tot_size(Y_ai_jk + Y_ij_jk))
@@ -151,6 +179,7 @@ def _u_get_eri_cpks(Y_mo_jk, nocc, cx, eri_cpks=None, max_memory=2000):
                     - cx * einsum("Pij, Pab -> aibj", Y_ij_jk[σ], Y_mo_jk[ς][:, sA, sv[ς]]))
             else:
                 eri_cpks[σς][sAvir] = 2 * einsum("Pai, Pbj -> aibj", Y_ai_jk[σ][:, sAvir], Y_ai_jk[ς])
+    return tensors
 
 
 def _u_Ax0_cpks_HF(eri_cpks, max_memory=2000):
@@ -179,6 +208,7 @@ def _u_Ax0_cpks_HF(eri_cpks, max_memory=2000):
 
 
 def _u_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
+    max_memory = available_memory(max_memory)
     naux, nmo, _ = Y_mo_jk[0].shape
     ni = [si[σ].stop - si[σ].start for σ in (α, β)]
     na = [sa[σ].stop - sa[σ].start for σ in (α, β)]
@@ -330,9 +360,20 @@ class RespMixin(lib.StreamObject):
 
     def make_rdm1_relaxed(self, ao_repr=False):
         if "D_r" not in self.tensors:
-            self.prepare_integral().prepare_xc_kernel() \
-                .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
-                .prepare_D_r()
+            spin = 0 if self.D.ndim == 2 else 1
+            cd_mo = _get_3c2e_mo(self.df_jk, self.df_ri, self.mo_coeff,
+                                  self.base.eval_pt2, self._incore_Y_mo, spin=spin,
+                                  max_memory=self.max_memory)
+            if spin == 0:
+                eri = _r_get_eri_cpks(cd_mo["Y_mo_jk"], self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
+            else:
+                eri = _u_get_eri_cpks([cd_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
+                                       self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
+            self.tensors.consume(cd_mo).consume(eri)
+            self.prepare_xc_kernel()
+            self.prepare_pt2(dump_t_ijab=True)
+            self.prepare_lagrangian()
+            self.prepare_D_r()
         D_r = self.tensors["D_r"]
         if self.D.ndim == 2:
             rdm1 = np.diag(self.mo_occ) + D_r
@@ -347,24 +388,19 @@ class RespMixin(lib.StreamObject):
         return rdm1
 
     def dipole(self):
-        if "D_r" not in self.tensors:
-            self.prepare_integral().prepare_xc_kernel() \
-                .prepare_pt2(dump_t_ijab=True).prepare_lagrangian() \
-                .prepare_D_r()
-        D_r = self.tensors["D_r"]
-        mol, C, D = self.mol, self.mo_coeff, self.D
+        D_ao = self.make_rdm1_relaxed(ao_repr=True)
+        mol = self.mol
         h = - mol.intor("int1e_r")
-        if D.ndim == 2:
-            d = einsum("tuv, uv -> t", h, D + C @ D_r @ C.T)
+        if D_ao.ndim == 2:
+            d = einsum("tuv, uv -> t", h, D_ao)
         else:
-            d = einsum("tuv, suv -> t", h, D)
-            d += einsum("tuv, spq, sup, svq -> t", h, D_r, C, C, optimize=True)
+            d = einsum("tuv, suv -> t", h, D_ao)
         d += einsum("A, At -> t", mol.atom_charges(), mol.atom_coords())
         return d
 
 
 class RDHRespMixin(RespMixin):
-    """Restricted response mixin: prepare_integral, Ax0_*, prepare_lagrangian."""
+    """Restricted response mixin: Ax0_*, prepare_lagrangian."""
 
     @timing
     def prepare_pt2(self, dump_t_ijab=True):
@@ -413,26 +449,10 @@ class RDHRespMixin(RespMixin):
         tensors.create("G_ia_ri", G_ia_ri)
         return self
 
-    def prepare_integral(self):
-        from pyscf.dh.mp2_ajz import get_cderi_mo
-        self.base.run_scf()
-        tensors = self.tensors
-        C = self.mo_coeff
-        nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
-
-        tensors.create("Y_mo_jk", shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-        get_cderi_mo(self.df_jk, C, tensors["Y_mo_jk"], max_memory=self.base.get_memory())
-        if self.base.eval_pt2:
-            tensors.create("Y_mo_ri", shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_ri, C, tensors["Y_mo_ri"], max_memory=self.base.get_memory())
-        eri_cpks = tensors.create("eri_cpks", shape=(nvir, nocc, nvir, nocc), incore=self._incore_Y_mo)
-        _r_get_eri_cpks(tensors["Y_mo_jk"], nocc, self.cx, eri_cpks, max_memory=self.base.get_memory())
-        return self
-
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = self.tensors["Y_mo_jk"]
         cx = cx if cx else self.cx
-        return _r_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.base.get_memory())
+        return _r_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.max_memory)
 
     def Ax0_Core_KS(self, si, sa, sj, sb, xc=None, cpks=False):
         xc = xc if xc else self.xc
@@ -460,12 +480,12 @@ class RDHRespMixin(RespMixin):
     def Ax0_Core_resp(self, si, sa, sj, sb, mf=None, mo_coeff=None):
         mf = mf if mf else self.mf_s
         mo_coeff = mo_coeff if mo_coeff else self.mo_coeff
-        return _r_Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=self.base.get_memory())
+        return _r_Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=self.max_memory)
 
     def Ax0_cpks(self):
         so, sv = self.so, self.sv
         ax0_core_ks = self.Ax0_Core_KS(sv, so, sv, so, cpks=True)
-        ax0_cpks_hf = _r_Ax0_cpks_HF(self.tensors["eri_cpks"], self.base.get_memory())
+        ax0_cpks_hf = _r_Ax0_cpks_HF(self.tensors["eri_cpks"], self.max_memory)
 
         def Ax0_cpks_inner(X):
             return ax0_cpks_hf(X) + ax0_core_ks(X)
@@ -507,7 +527,7 @@ class RDHRespMixin(RespMixin):
 
 
 class UDHRespMixin(RespMixin):
-    """Unrestricted response mixin: prepare_integral, Ax0_*, prepare_lagrangian."""
+    """Unrestricted response mixin: Ax0_*, prepare_lagrangian."""
 
     @timing
     def prepare_pt2(self, dump_t_ijab=True):
@@ -587,29 +607,10 @@ class UDHRespMixin(RespMixin):
 
         return self
 
-    def prepare_integral(self):
-        from pyscf.dh.mp2_ajz import get_cderi_mo
-        self.base.run_scf()
-        tensors = self.tensors
-        C = self.mo_coeff
-        nmo, nocc, nvir = self.nmo, self.nocc, self.nvir
-
-        for σ in α, β:
-            y = tensors.create("Y_mo_jk" + str(σ), shape=(self.df_jk.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-            get_cderi_mo(self.df_jk, C[σ], y, max_memory=self.base.get_memory())
-            if self.base.eval_pt2:
-                y = tensors.create("Y_mo_ri" + str(σ), shape=(self.df_ri.get_naoaux(), nmo, nmo), incore=self._incore_Y_mo)
-                get_cderi_mo(self.df_ri, C[σ], y, max_memory=self.base.get_memory())
-        eri_cpks = [None, None, None]
-        for σς, σ, ς in (αα, α, α), (αβ, α, β), (ββ, β, β):
-            eri_cpks[σς] = tensors.create("eri_cpks" + str(σς), shape=(nvir[σ], nocc[σ], nvir[ς], nocc[ς]), incore=self._incore_Y_mo)
-        _u_get_eri_cpks([tensors["Y_mo_jk" + str(σ)] for σ in (α, β)], nocc, self.cx, eri_cpks, self.base.get_memory())
-        return self
-
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]
         cx = cx if cx else self.cx
-        return _u_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.base.get_memory())
+        return _u_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=self.max_memory)
 
     def Ax0_Core_KS(self, si, sa, sj, sb, xc=None, cpks=False):
         xc = xc if xc else self.xc
@@ -639,7 +640,7 @@ class UDHRespMixin(RespMixin):
     def Ax0_cpks(self):
         so, sv = self.so, self.sv
         ax0_core_ks = self.Ax0_Core_KS(sv, so, sv, so, cpks=True)
-        ax0_cpks_hf = _u_Ax0_cpks_HF([self.tensors["eri_cpks" + str(σς)] for σς in (αα, αβ, ββ)], self.base.get_memory())
+        ax0_cpks_hf = _u_Ax0_cpks_HF([self.tensors["eri_cpks" + str(σς)] for σς in (αα, αβ, ββ)], self.max_memory)
 
         def Ax0_cpks_inner(X):
             ax0_hf = ax0_cpks_hf(X)

@@ -21,7 +21,9 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.resp import RDHRespMixin
-from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad
+from pyscf.dh.resp import _r_get_eri_cpks, _u_get_eri_cpks
+from pyscf.dh.resp import _get_3c2e_mo
+from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad, available_memory
 # pyscf import
 from pyscf import gto, lib, df
 from pyscf.dft.numint import _dot_ao_dm, _contract_rho
@@ -40,17 +42,66 @@ def kernel(mf_dh: Gradients, **kwargs):
     if mf_dh.base.mo_coeff is None:
         mf_dh.base.run_scf(**kwargs)
         mf_dh.__dict__.update(mf_dh.base.__dict__)
-    mf_dh.prepare_H_1()
-    mf_dh.prepare_S_1()
-    mf_dh.prepare_integral()
+    H_1_ao = get_H_1_ao(mf_dh.mol)
+    if mf_dh.D.ndim == 2:
+        H_1_mo = mf_dh.mo_coeff.T @ H_1_ao @ mf_dh.mo_coeff
+    else:
+        H_1_mo = np.array([einsum("up, Auv, vq -> Apq", mf_dh.mo_coeff[σ], H_1_ao, mf_dh.mo_coeff[σ]) for σ in range(2)])
+    mf_dh.tensors.create("H_1_ao", H_1_ao)
+    mf_dh.tensors.create("H_1_mo", H_1_mo)
+
+    S_1_ao = get_S_1_ao(mf_dh.mol)
+    if mf_dh.D.ndim == 2:
+        S_1_mo = mf_dh.mo_coeff.T @ S_1_ao @ mf_dh.mo_coeff
+    else:
+        S_1_mo = np.array([einsum("up, Auv, vq -> Apq", mf_dh.mo_coeff[σ], S_1_ao, mf_dh.mo_coeff[σ]) for σ in range(2)])
+    mf_dh._S_1_ao = S_1_ao
+
+    spin = 0 if mf_dh.D.ndim == 2 else 1
+    cd_mo = _get_3c2e_mo(mf_dh.df_jk, mf_dh.df_ri, mf_dh.mo_coeff,
+                          mf_dh.base.eval_pt2, mf_dh._incore_Y_mo, spin=spin,
+                          max_memory=mf_dh.max_memory)
+    if spin == 0:
+        eri = _r_get_eri_cpks(cd_mo["Y_mo_jk"], mf_dh.nocc, mf_dh.cx, mf_dh._incore_Y_mo, mf_dh.max_memory)
+    else:
+        eri = _u_get_eri_cpks([cd_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
+                               mf_dh.nocc, mf_dh.cx, mf_dh._incore_Y_mo, mf_dh.max_memory)
+    mf_dh.tensors.consume(cd_mo).consume(eri)
+
     mf_dh.prepare_xc_kernel()
     mf_dh.prepare_pt2(dump_t_ijab=dump_t_ijab)
     mf_dh.prepare_lagrangian(gen_W=True)
     mf_dh.prepare_D_r()
+
     mf_dh.prepare_gradient_jk()
     mf_dh.prepare_gradient_gga()
     mf_dh.prepare_gradient_pt2()
-    mf_dh.prepare_gradient_enfunc()
+
+    natm = mf_dh.mol.natm
+    so = mf_dh.so
+    grad_contrib = mf_dh.mf_s.Gradients().grad_nuc()
+    grad_contrib.shape = (natm * 3,)
+    if mf_dh.D.ndim == 2:
+        grad_contrib += einsum("Auv, uv -> A", H_1_ao, mf_dh.D)
+        if mf_dh.xc_n is None:
+            grad_contrib -= 2 * np.einsum("Ai, i -> A", S_1_mo[:, so, so].diagonal(0, -1, -2), mf_dh.eo)
+        else:
+            nc_F_0_ij = einsum("ui, uv, vj -> ij", mf_dh.Co, mf_dh.mf_n.get_fock(dm=mf_dh.D), mf_dh.Co)
+            grad_contrib -= 2 * einsum("Aij, ij -> A", S_1_mo[:, so, so], nc_F_0_ij)
+    else:
+        grad_contrib += np.einsum("Auv, suv -> A", H_1_ao, mf_dh.D, optimize=True)
+        if mf_dh.xc_n is None:
+            for σ in range(2):
+                grad_contrib -= np.einsum("Ai, i -> A", S_1_mo[σ][:, so[σ], so[σ]].diagonal(0, -1, -2), mf_dh.eo[σ])
+        else:
+            F_0_ao_n = mf_dh.mf_n.get_fock(dm=mf_dh.D)
+            nc_F_0_ij = [(mf_dh.Co[σ].T @ F_0_ao_n[σ] @ mf_dh.Co[σ]) for σ in range(2)]
+            for σ in range(2):
+                grad_contrib -= einsum("Aij, ij -> A", S_1_mo[σ][:, so[σ], so[σ]], nc_F_0_ij[σ])
+    grad_contrib.shape = (natm, 3)
+    grad_contrib = mf_dh._add_dispersion_gradient(grad_contrib)
+    mf_dh.grad_enfunc = grad_contrib
+
     mf_dh.grad_tot = mf_dh.de = mf_dh.grad_jk + mf_dh.grad_gga + mf_dh.grad_pt2 + mf_dh.grad_enfunc
     return mf_dh.grad_tot
 
@@ -168,6 +219,7 @@ def generator_L_1(aux):
 
 @timing
 def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
+    max_memory = available_memory(max_memory)
     mol, aux = dfobj.mol, dfobj.auxmol
     natm, nao, nmo, nocc = mol.natm, mol.nao, C.shape[-1], mol.nelec[0]
     naux = Y_mo.shape[0]
@@ -256,6 +308,7 @@ def get_gradient_jk_by_pyscf(mf_s, D_r, cx, cx_n):
 
 @timing
 def get_gradient_gga(C, D_r, xc_setting, xc_kernel, vxc_n=None, max_memory=2000):
+    max_memory = available_memory(max_memory)
     # reference HF
     if xc_kernel[1] is None:
         return get_gradient_gga_hfref(xc_setting, vxc_n, max_memory)
@@ -353,24 +406,11 @@ class Gradients(RDHRespMixin, GradientMixin):
         self.grad_tot = None
         self.de = None
 
-    def prepare_H_1(self):
-        H_1_ao = get_H_1_ao(self.mol)
-        H_1_mo = self.mo_coeff.T @ H_1_ao @ self.mo_coeff
-        self.tensors.create("H_1_ao", H_1_ao)
-        self.tensors.create("H_1_mo", H_1_mo)
-
-    def prepare_S_1(self):
-        S_1_ao = get_S_1_ao(self.mol)
-        S_1_mo = self.mo_coeff.T @ S_1_ao @ self.mo_coeff
-        self.tensors.create("S_1_ao", S_1_ao)
-        self.tensors.create("S_1_mo", S_1_mo)
-
     def prepare_gradient_jk(self):
         D_r = self.tensors.load("D_r")
         Y_mo = self.tensors["Y_mo_jk"]
-        # a special treatment
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.base.get_memory())
+        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.max_memory)
 
     @timing
     def prepare_gradient_gga(self):
@@ -425,7 +465,7 @@ class Gradients(RDHRespMixin, GradientMixin):
         W_III[so, so] = - 0.5 * self.Ax0_Core(so, so, sa, sa)(D_r)
         W = W_I + W_II + W_III
         W_ao = C @ W @ C.T
-        S_1_ao = tensors.load("S_1_ao")
+        S_1_ao = self._S_1_ao
         grad_corr += einsum("uv, Auv -> A", W_ao, S_1_ao)
 
         # generate L_1_ri
@@ -442,14 +482,14 @@ class Gradients(RDHRespMixin, GradientMixin):
             shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
             shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
 
-            nbatch = calc_batch_size(3*(nao+nocc)*naux, self.base.get_memory(), Y_1_ia_ri.size)
+            nbatch = calc_batch_size(3*(nao+nocc)*naux, available_memory(self.max_memory), Y_1_ia_ri.size)
             for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
                 su = slice(U0, U1)
                 int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
                 Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[su, so], C[:, sv])
                 Y_1_ia_ri -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[su, sv], C[:, so])
 
-            nbatch = calc_batch_size(3*nao*(nao+nocc), self.base.get_memory(), Y_1_ia_ri.size)
+            nbatch = calc_batch_size(3*nao*(nao+nocc), available_memory(self.max_memory), Y_1_ia_ri.size)
             for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
                 sp = slice(P0, P1)
                 int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
@@ -466,30 +506,6 @@ class Gradients(RDHRespMixin, GradientMixin):
         grad_corr.shape = (natm, 3)
 
         self.grad_pt2 = grad_corr
-
-    @timing
-    def prepare_gradient_enfunc(self):
-        tensors = self.tensors
-        natm = self.mol.natm
-        Co, eo, D = self.Co, self.eo, self.D
-        so = self.so
-
-        grad_contrib = self.mf_s.Gradients().grad_nuc()
-        grad_contrib.shape = (natm * 3,)
-
-        H_1_ao = tensors.load("H_1_ao")
-        S_1_mo = tensors.load("S_1_mo")
-
-        grad_contrib += einsum("Auv, uv -> A", H_1_ao, D)
-        if self.xc_n is None:
-            grad_contrib -= 2 * np.einsum("Ai, i -> A", S_1_mo[:, so, so].diagonal(0, -1, -2), eo)
-        else:
-            nc_F_0_ij = einsum("ui, uv, vj -> ij", Co, self.mf_n.get_fock(dm=D), Co)
-            grad_contrib -= 2 * einsum("Aij, ij -> A", S_1_mo[:, so, so], nc_F_0_ij)
-        grad_contrib.shape = (natm, 3)
-
-        grad_contrib = self._add_dispersion_gradient(grad_contrib)
-        self.grad_enfunc = grad_contrib
 
     def base_method(self):
         return self.base

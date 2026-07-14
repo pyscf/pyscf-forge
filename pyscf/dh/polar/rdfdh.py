@@ -21,6 +21,8 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.resp import RDHRespMixin
+from pyscf.dh.resp import _r_get_eri_cpks, _u_get_eri_cpks
+from pyscf.dh.resp import _get_3c2e_mo
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
 from pyscf import lib
@@ -33,7 +35,18 @@ def kernel(mf: Polar):
     mf.base.run_scf()
     mf.__dict__.update(mf.base.__dict__)
     mf.prepare_H_1()
-    mf.prepare_integral()
+
+    spin = 0 if mf.D.ndim == 2 else 1
+    cd_mo = _get_3c2e_mo(mf.df_jk, mf.df_ri, mf.mo_coeff,
+                          mf.base.eval_pt2, mf._incore_Y_mo, spin=spin,
+                          max_memory=mf.max_memory)
+    if spin == 0:
+        eri = _r_get_eri_cpks(cd_mo["Y_mo_jk"], mf.nocc, mf.cx, mf._incore_Y_mo, mf.max_memory)
+    else:
+        eri = _u_get_eri_cpks([cd_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
+                               mf.nocc, mf.cx, mf._incore_Y_mo, mf.max_memory)
+    mf.tensors.consume(cd_mo).consume(eri)
+
     mf.prepare_xc_kernel()
     mf.prepare_pt2(dump_t_ijab=True)
     mf.prepare_lagrangian(gen_W=False)

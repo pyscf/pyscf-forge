@@ -21,7 +21,7 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.resp import UDHRespMixin
-from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing, as_scanner_grad
+from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, tot_size, timing, as_scanner_grad, available_memory
 from pyscf.dh.grad.dfdh import get_H_1_ao, get_S_1_ao, generator_L_1, kernel, GradientMixin
 # pyscf import
 from pyscf import lib, df
@@ -38,6 +38,7 @@ einsum = lib.einsum
 
 @timing
 def get_gradient_jk(dfobj: df.DF, C, D, D_r, Y_mo, cx, cx_n, max_memory=2000):
+    max_memory = available_memory(max_memory)
     mol, aux = dfobj.mol, dfobj.auxmol
     natm, nao, nmo, nocc = mol.natm, mol.nao, C.shape[-1], mol.nelec
     mocc = max(nocc)
@@ -127,26 +128,11 @@ class Gradients(UDHRespMixin, GradientMixin):
         self.grad_tot = None
         self.de = None
 
-    @timing
-    def prepare_H_1(self):
-        H_1_ao = get_H_1_ao(self.mol)
-        H_1_mo = np.array([einsum("up, Auv, vq -> Apq", self.mo_coeff[σ], H_1_ao, self.mo_coeff[σ]) for σ in (α, β)])
-        self.tensors.create("H_1_ao", H_1_ao)
-        self.tensors.create("H_1_mo", H_1_mo)
-
-    @timing
-    def prepare_S_1(self):
-        S_1_ao = get_S_1_ao(self.mol)
-        S_1_mo = np.array([einsum("up, Auv, vq -> Apq", self.mo_coeff[σ], S_1_ao, self.mo_coeff[σ]) for σ in (α, β)])
-        self.tensors.create("S_1_ao", S_1_ao)
-        self.tensors.create("S_1_mo", S_1_mo)
-
     def prepare_gradient_jk(self):
         D_r = self.tensors.load("D_r")
         Y_mo = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]
-        # a special treatment
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.base.get_memory())
+        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.max_memory)
 
     @timing
     def prepare_gradient_gga(self):
@@ -204,7 +190,7 @@ class Gradients(UDHRespMixin, GradientMixin):
         for σ in (α, β):
             W[σ][so[σ], so[σ]] += - 0.5 * W_III_tmp[σ]
         W_ao = einsum("sup, spq, svq -> suv", C, W, C)
-        S_1_ao = tensors.load("S_1_ao")
+        S_1_ao = self._S_1_ao
         grad_corr += np.einsum("suv, Auv -> A", W_ao, S_1_ao)
         grad_corr.shape = (natm, 3)
 
@@ -220,7 +206,7 @@ class Gradients(UDHRespMixin, GradientMixin):
             shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
             shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
 
-            nbatch = calc_batch_size(3*(nao+mocc)*naux, self.base.get_memory(), tot_size(Y_1_ia_ri))
+            nbatch = calc_batch_size(3*(nao+mocc)*naux, available_memory(self.max_memory), tot_size(Y_1_ia_ri))
             for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
                 su = slice(U0, U1)
                 int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
@@ -228,7 +214,7 @@ class Gradients(UDHRespMixin, GradientMixin):
                     Y_1_ia_ri[σ] -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[σ][su, so[σ]], C[σ][:, sv[σ]])
                     Y_1_ia_ri[σ] -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[σ][su, sv[σ]], C[σ][:, so[σ]])
 
-            nbatch = calc_batch_size(3*nao*(nao+mocc), self.base.get_memory(), tot_size(Y_1_ia_ri))
+            nbatch = calc_batch_size(3*nao*(nao+mocc), available_memory(self.max_memory), tot_size(Y_1_ia_ri))
             for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
                 sp = slice(P0, P1)
                 int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
@@ -239,35 +225,6 @@ class Gradients(UDHRespMixin, GradientMixin):
                 Y_1_ia_ri[σ] -= einsum("Qia, tRQ, PR -> tPia", Y_ia_ri[σ], L_1_ri, L_inv)
                 grad_corr[A] += einsum("Pia, tPia -> t", G_ia_ri[σ], Y_1_ia_ri[σ])
         self.grad_pt2 = grad_corr
-
-    @timing
-    def prepare_gradient_enfunc(self):
-        tensors = self.tensors
-        natm = self.mol.natm
-        Co, eo, D = self.Co, self.eo, self.D
-        so = self.so
-
-        grad_contrib = self.mf_s.Gradients().grad_nuc()
-        grad_contrib.shape = (natm * 3,)
-
-        H_1_ao = tensors.load("H_1_ao")
-        S_1_mo = tensors.load("S_1_mo")
-
-        grad_contrib += np.einsum("Auv, suv -> A", H_1_ao, D, optimize=True)  # TODO check PySCF lib.einsum why fails
-        if self.xc_n is None:
-            for σ in (α, β):
-                grad_contrib -= np.einsum("Ai, i -> A", S_1_mo[σ][:, so[σ], so[σ]].diagonal(0, -1, -2), eo[σ])
-        else:
-            # TODO see whether get_fock could use mo_coeff to accelearate RI-K
-            F_0_ao_n = self.mf_n.get_fock(dm=D)
-            nc_F_0_ij = [(Co[σ].T @ F_0_ao_n[σ] @ Co[σ]) for σ in (α, β)]
-            for σ in (α, β):
-                grad_contrib -= einsum("Aij, ij -> A", S_1_mo[σ][:, so[σ], so[σ]], nc_F_0_ij[σ])
-        grad_contrib.shape = (natm, 3)
-
-        grad_contrib = self._add_dispersion_gradient(grad_contrib)
-
-        self.grad_enfunc = grad_contrib
 
     kernel = kernel
     as_scanner = as_scanner_grad

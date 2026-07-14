@@ -17,7 +17,7 @@ def _mol_to_eng(xc):
 
 class TestUDFGrad:
 
-    def test_mp2(self):
+    def test_mp2_slow(self):
         mol = _mol()
         nde = NumericDiff(NucCoordDerivGenerator(mol, _mol_to_eng("MP2"))).derivative.reshape(-1, 3)
         de = DFDH(mol, "MP2").nuc_grad_method().run().grad_tot

@@ -21,7 +21,7 @@ def _mol_to_dipole(mol, xc):
 
 class TestUDFPolar:
 
-    def test_b2plyp(self):
+    def test_b2plyp_slow(self):
         mol = _mol()
         nde = - NumericDiff(DipoleDerivGenerator(_mol_to_dipole(mol, "B2PLYP"))).derivative
         de = DFDH(mol, "B2PLYP").polar_method().run().pol_tot

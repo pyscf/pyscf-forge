@@ -65,15 +65,14 @@ class HybridDict(dict):
     """
     def __init__(self, chkfile_name=None, dir=None, **kwargs):
         super(HybridDict, self).__init__(**kwargs)
-        # initialize input variables
         if dir is None:
             dir = lib.param.TMPDIR
         if chkfile_name is None:
             self._chkfile = tempfile.NamedTemporaryFile(dir=dir)
             chkfile_name = self._chkfile.name
-        # create or open exist chkfile
         self.chkfile_name = chkfile_name
         self.chkfile = h5py.File(self.chkfile_name, "r+")
+        self._external = []
 
     def create(self, name, data=None, incore=True, shape=None, dtype=None, **kwargs):
         # create logic check
@@ -104,6 +103,14 @@ class HybridDict(dict):
         else:
             raise ValueError("Could not handle create!")
         return self.get(name)
+
+    def consume(self, other):
+        if isinstance(other, HybridDict):
+            other._consumed = True
+            if hasattr(other, '_chkfile'):
+                self._external.append((other.chkfile, other._chkfile))
+        self.update(dict(other))
+        return self
 
     def delete(self, key):
         val = self.pop(key)
@@ -156,6 +163,16 @@ class HybridDict(dict):
         return tensors
 
     def close(self):
+        for chkfile, tmpfile in self._external:
+            try:
+                chkfile.close()
+            except Exception:
+                pass
+            try:
+                tmpfile.close()
+            except Exception:
+                pass
+        self._external.clear()
         if hasattr(self, 'chkfile'):
             try:
                 self.chkfile.close()
@@ -168,6 +185,8 @@ class HybridDict(dict):
                 pass
 
     def __del__(self):
+        if getattr(self, '_consumed', False):
+            return
         try:
             self.close()
         except Exception:
@@ -195,6 +214,11 @@ def gen_shl_batch(mol, blksize, start_id=0, stop_id=None):
     ao_loc = mol.ao_loc
     lst = balance_partition(ao_loc, blksize, start_id, stop_id)
     return [(t[0], t[1], ao_loc[t[0]], ao_loc[t[1]]) for t in lst]
+
+
+def available_memory(max_memory):
+    from pyscf import lib
+    return max(max_memory - lib.current_memory()[0], 500)
 
 
 def calc_batch_size(unit_flop, mem_avail, pre_flop=0):
