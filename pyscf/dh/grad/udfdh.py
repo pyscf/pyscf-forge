@@ -135,36 +135,6 @@ class Gradients(UDHRespMixin, GradientMixin):
         self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.max_memory)
 
     @timing
-    def prepare_gradient_gga(self):
-        tensors = self.tensors
-        if "rho" not in tensors:
-            self.grad_gga = 0
-            return self
-        # --- LAZY CODE ---
-        from pyscf import grad, hessian
-        ni, mol, grids = self.ni, self.mol, self.grids
-        natm = mol.natm
-        C, D = self.mo_coeff, self.D
-        grad_contrib = np.zeros((natm, 3))
-
-        xc = self.xc_n if self.xc_n else self.xc
-        if self.ni._xc_type(xc) == "GGA":  # energy functional contribution
-            veff_1_gga = grad.uks.get_vxc(ni, mol, grids, xc, D)[1]
-            for A, (_, _, A0, A1) in enumerate(mol.aoslice_by_atom()):
-                grad_contrib[A] += 2 * einsum("stuv, suv -> t", veff_1_gga[:, :, A0:A1], D[:, A0:A1])
-
-        if self.ni._xc_type(self.xc) == "GGA":  # reference functional skeleton fock derivative contribution
-            D_r = tensors.load("D_r")
-            D_r_symm = (D_r + D_r.swapaxes(-1, -2)) / 2
-            D_r_ao = einsum("sup, spq, svq -> suv", C, D_r_symm, C)
-
-            F_1_ao_dfa = np.array(hessian.uks._get_vxc_deriv1(self.mf_s.Hessian(), C, self.mo_occ, 2000))
-            grad_contrib += einsum("suv, sAtuv -> At", D_r_ao, F_1_ao_dfa)
-
-        self.grad_gga = grad_contrib
-        return self
-
-    @timing
     def prepare_gradient_pt2(self):
         tensors = self.tensors
         C, e = self.mo_coeff, self.mo_energy
@@ -179,7 +149,7 @@ class Gradients(UDHRespMixin, GradientMixin):
         H_1_mo = tensors.load("H_1_mo")
         grad_corr = einsum("spq, sApq -> A", D_r, H_1_mo)
         if not self.base.eval_pt2:
-            grad_corr.shape = (natm, 3)
+            grad_corr = grad_corr.reshape(natm, 3)
             self.grad_pt2 = grad_corr
             return
 
@@ -192,7 +162,7 @@ class Gradients(UDHRespMixin, GradientMixin):
         W_ao = einsum("sup, spq, svq -> suv", C, W, C)
         S_1_ao = self._S_1_ao
         grad_corr += np.einsum("suv, Auv -> A", W_ao, S_1_ao)
-        grad_corr.shape = (natm, 3)
+        grad_corr = grad_corr.reshape(natm, 3)
 
         L_inv, L_1_gen = generator_L_1(aux_ri)
         int3c2e_ip1_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip1", "s1")

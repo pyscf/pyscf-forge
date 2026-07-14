@@ -33,7 +33,8 @@ einsum = lib.einsum
 
 # ---- Restricted module-level helpers (from rdfdh.py) ----
 
-def _get_3c2e_mo(df_jk, df_ri, C, eval_pt2, incore, spin=0, max_memory=2000):
+def _get_Y_mo(df_jk, df_ri, C, eval_pt2, incore, max_memory=2000):
+    spin = C.ndim - 2
     from pyscf.dh.mp2_ajz import get_cderi_mo
     max_memory = available_memory(max_memory)
     tensors = HybridDict()
@@ -93,7 +94,7 @@ def _r_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
                     + 4 * einsum("Pia, Pjb, jb -> ia", Y_mo_blk[:, si, sa], Y_mo_blk[:, sj, sb], X[A])
                     - cx * einsum("Pib, Pja, jb -> ia", Y_mo_blk[:, si, sb], Y_mo_blk[:, sj, sa], X[A])
                     - cx * einsum("Pij, Pab, jb -> ia", Y_mo_blk[:, si, sj], Y_mo_blk[:, sa, sb], X[A]))
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
+        res = res.reshape(tuple(X_shape[:-2]) + (res.shape[-2], res.shape[-1]))
         return res
     return Ax0_Core_HF_inner
 
@@ -114,7 +115,7 @@ def _r_Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
         dmX += dmX.swapaxes(-1, -2)
         ax_ao = ni.nr_rks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc_, fxc=fxc_)
         res = 2 * C[:, si].T @ ax_ao @ C[:, sa]
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
+        res = res.reshape(tuple(X_shape[:-2]) + (res.shape[-2], res.shape[-1]))
         return res
     return Ax0_Core_KS_inner
 
@@ -132,7 +133,7 @@ def _r_Ax0_Core_resp(si, sa, sj, sb, mf, mo_coeff, max_memory=2000):
         dmX += dmX.swapaxes(-1, -2)
         ax_ao = resp(dmX)
         res = 2 * C[:, si].T @ ax_ao @ C[:, sa]
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
+        res = res.reshape(tuple(X_shape[:-2]) + (res.shape[-2], res.shape[-1]))
         return res
     return Ax0_Core_resp_inner
 
@@ -148,7 +149,7 @@ def _r_Ax0_cpks_HF(eri_cpks, max_memory=2000):
         nbatch = calc_batch_size(nocc**2 * nvir, max_memory, 0)
         for sA in gen_batch(0, nvir, nbatch):
             res[:, sA] = einsum("aibj, Abj -> Aai", eri_cpks[sA], X)
-        res.shape = list(X_shape[:-2]) + [res.shape[-2], res.shape[-1]]
+        res = res.reshape(tuple(X_shape[:-2]) + (res.shape[-2], res.shape[-1]))
         return res
     return Ax0_cpks_HF_inner
 
@@ -202,7 +203,7 @@ def _u_Ax0_cpks_HF(eri_cpks, max_memory=2000):
             res[α][:, sA] += einsum("aibj, Abj -> Aai", eri_cpks_batch, X[β])
             res[β] += einsum("aibj, Aai -> Abj", eri_cpks_batch, X[α][:, sA])
         for σ in α, β:
-            res[σ].shape = list(prop_shape) + list(res[σ].shape[-2:])
+            res[σ] = res[σ].reshape(tuple(prop_shape) + res[σ].shape[-2:])
         return res
     return Ax0_cpks_HF_inner
 
@@ -228,7 +229,7 @@ def _u_Ax0_Core_HF(si, sa, sj, sb, cx, Y_mo_jk, max_memory=2000):
                     - cx * einsum("Pib, Pja, Ajb -> Aia", Y_mo_blk[σ][:, si[σ], sb[σ]], Y_mo_blk[σ][:, sj[σ], sa[σ]], X[σ])
                     - cx * einsum("Pij, Pab, Ajb -> Aia", Y_mo_blk[σ][:, si[σ], sj[σ]], Y_mo_blk[σ][:, sa[σ], sb[σ]], X[σ]))
         for σ in α, β:
-            res[σ].shape = list(prop_shape) + list(res[σ].shape[-2:])
+            res[σ] = res[σ].reshape(tuple(prop_shape) + res[σ].shape[-2:])
         return res
     return Ax0_Core_HF_inner
 
@@ -250,7 +251,7 @@ def _u_Ax0_Core_KS(si, sa, sj, sb, mo_coeff, xc_setting, xc_kernel):
         ax_ao = ni.nr_uks_fxc(mol, grids, xc, dm, dmX, hermi=1, rho0=rho, vxc=vxc_, fxc=fxc_)
         res = [C[σ][:, si[σ]].T @ ax_ao[σ] @ C[σ][:, sa[σ]] for σ in (α, β)]
         for σ in α, β:
-            res[σ].shape = list(prop_shape) + list(res[σ].shape[-2:])
+            res[σ] = res[σ].reshape(tuple(prop_shape) + res[σ].shape[-2:])
         return res
     return Ax0_Core_KS_inner
 
@@ -337,7 +338,7 @@ class RespMixin(lib.StreamObject):
                 flt = np.zeros_like(X)
                 for prop, res_pair in enumerate(zip(*res)):
                     flt[prop] = np.concatenate([m.reshape(-1) for m in res_pair])
-                flt.shape = X_shape
+                flt = flt.reshape(X_shape)
                 return flt
 
             return ucphf.solve(reshape_inner, self.mo_energy, self.mo_occ, rhs,
@@ -360,16 +361,15 @@ class RespMixin(lib.StreamObject):
 
     def make_rdm1_relaxed(self, ao_repr=False):
         if "D_r" not in self.tensors:
-            spin = 0 if self.D.ndim == 2 else 1
-            cd_mo = _get_3c2e_mo(self.df_jk, self.df_ri, self.mo_coeff,
-                                  self.base.eval_pt2, self._incore_Y_mo, spin=spin,
+            Y_mo = _get_Y_mo(self.df_jk, self.df_ri, self.mo_coeff,
+                                  self.base.eval_pt2, self._incore_Y_mo,
                                   max_memory=self.max_memory)
-            if spin == 0:
-                eri = _r_get_eri_cpks(cd_mo["Y_mo_jk"], self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
+            if self.D.ndim == 2:
+                eri = _r_get_eri_cpks(Y_mo["Y_mo_jk"], self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
             else:
-                eri = _u_get_eri_cpks([cd_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
+                eri = _u_get_eri_cpks([Y_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
                                        self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
-            self.tensors.consume(cd_mo).consume(eri)
+            self.tensors.consume(Y_mo).consume(eri)
             self.prepare_xc_kernel()
             self.prepare_pt2(dump_t_ijab=True)
             self.prepare_lagrangian()

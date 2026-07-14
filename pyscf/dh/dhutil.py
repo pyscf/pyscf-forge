@@ -18,9 +18,6 @@
 #          Shirong Wang <srwang20@fudan.edu.cn>
 #
 
-import os
-import pickle
-import shutil
 import tempfile
 
 import h5py
@@ -32,29 +29,6 @@ import numpy as np
 from time import time, process_time
 from functools import wraps
 
-
-
-def _patched_numpy_einsum(*args, **kwargs):
-    for k in ('alpha', 'beta', 'out'):
-        kwargs.pop(k, None)
-    return np.einsum(*args, optimize=True, **kwargs)
-
-
-class TicToc:
-
-    def __init__(self):
-        self.t = time()
-        self.p = process_time()
-
-    def tic(self):
-        self.t = time()
-        self.p = process_time()
-
-    def toc(self, msg=""):
-        t = time() - self.t
-        p = process_time() - self.p
-        print("Wall: {:12.4f}, CPU: {:12.4f}, Ratio: {:6.1f}, msg: {:}".format(t, p, p / t * 100, msg))
-        self.tic()
 
 
 class HybridDict(dict):
@@ -123,44 +97,6 @@ class HybridDict(dict):
 
     def load(self, key):
         return np.asarray(self.get(key))
-
-    def dump(self, h5_path="tensors.h5", dat_path="tensors.dat"):
-        dct = {}
-        for key, val in self.items():
-            if not isinstance(val, h5py.Dataset):
-                dct[key] = val
-        with open(dat_path, "wb") as f:
-            pickle.dump(dct, f)
-        self.chkfile.close()
-        shutil.copy(self.chkfile_name, h5_path)
-        self.chkfile = h5py.File(self.chkfile_name, "r+")
-        # re-update keys stored on disk
-        for key in HybridDict.get_dataset_keys(self.chkfile):
-            self[key] = self.chkfile[key]
-
-    @staticmethod
-    def get_dataset_keys(f):
-        # get h5py dataset keys to the bottom level https://stackoverflow.com/a/65924963/7740992
-        keys = []
-        f.visit(lambda key: keys.append(key) if isinstance(f[key], h5py.Dataset) else None)
-        return keys
-
-    @staticmethod
-    def pick(h5_path, dat_path):
-        tensors = HybridDict()
-        tensors.chkfile.close()
-        file_name = tensors.chkfile_name
-        os.remove(file_name)
-        shutil.copyfile(h5_path, file_name)
-        tensors.chkfile = h5py.File(file_name, "r+")
-
-        for key in HybridDict.get_dataset_keys(tensors.chkfile):
-            tensors[key] = tensors.chkfile[key]
-
-        with open(dat_path, "rb") as f:
-            dct = pickle.load(f)
-        tensors.update(dct)
-        return tensors
 
     def close(self):
         for chkfile, tmpfile in self._external:
@@ -239,7 +175,7 @@ def get_rho_from_dm_gga(ni, mol, grids, dm):
         for i in range(nset):
             rho[i, :, ip:ip+ngrid] = ni.eval_rho(mol, ao, dm[i], mask, "GGA", hermi=1)
         ip += ngrid
-    rho.shape = list(dm_shape[:-2]) + list(rho.shape[-2:])
+    rho = rho.reshape(tuple(dm_shape[:-2]) + rho.shape[-2:])
     return rho
 
 
@@ -272,8 +208,8 @@ def hermi_sum_last2dim(tsr, inplace=True, hermi=HERMITIAN):
     tsr_shape = tsr.shape
     tsr = tsr.reshape(-1, tsr.shape[-2], tsr.shape[-1])
     res = lib.hermi_sum(tsr, axes=(0, 2, 1), hermi=hermi, inplace=inplace)
-    tsr.shape = tsr_shape
-    res.shape = tsr_shape
+    tsr = tsr.reshape(tsr_shape)
+    res = res.reshape(tsr_shape)
     return res
 
 

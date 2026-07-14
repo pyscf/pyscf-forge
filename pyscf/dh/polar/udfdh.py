@@ -133,8 +133,6 @@ class Polar(UDHRespMixin):
 
     @property
     def nprop(self):
-        if "H_1_ao" not in self.tensors:
-            self.prepare_H_1()
         return self.tensors["H_1_ao"].shape[0]
 
     def __init__(self, method):
@@ -144,15 +142,6 @@ class Polar(UDHRespMixin):
         self.pol_corr = None
         self.pol_tot = None
         self.de = None
-
-    def prepare_H_1(self):
-        tensors = self.tensors
-        mol, C = self.mol, self.mo_coeff
-        H_1_ao = - mol.intor("int1e_r")
-        H_1_mo = np.array([C[σ].T @ H_1_ao @ C[σ] for σ in (α, β)])
-        tensors.create("H_1_ao", H_1_ao)
-        tensors.create("H_1_mo", H_1_mo)
-        return self
 
     def prepare_U_1(self):
         tensors = self.tensors
