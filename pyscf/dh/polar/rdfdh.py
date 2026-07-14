@@ -95,10 +95,10 @@ class Polar(RDHRespMixin):
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
         self.base = method
-        self.pol_scf = NotImplemented
-        self.pol_corr = NotImplemented
-        self.pol_tot = NotImplemented
-        self.de = NotImplemented
+        self.pol_scf = None
+        self.pol_corr = None
+        self.pol_tot = None
+        self.de = None
 
     @property
     def nprop(self):

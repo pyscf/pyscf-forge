@@ -5,9 +5,9 @@ from pyscf import gto, lib
 class AbstractDerivGenerator:
 
     def __init__(self):
-        self.objects = NotImplemented  # type: np.ndarray
-        self.stencil = NotImplemented  # type: int
-        self.interval = NotImplemented  # type: float
+        self.objects = None  # type: np.ndarray
+        self.stencil = None  # type: int
+        self.interval = None  # type: float
 
 
 class NucCoordDerivGenerator(AbstractDerivGenerator):
@@ -77,12 +77,12 @@ class NumericDiff(AbstractDerivGenerator):
         self.num_method = num_method
         if self.num_method is None:
             self.num_method = lambda x: x
-        self.num_matrix = NotImplemented  # type: np.ndarray
-        self._derivative = NotImplemented  # type: np.ndarray
+        self.num_matrix = None  # type: np.ndarray
+        self._derivative = None  # type: np.ndarray
 
     @property
     def derivative(self):
-        if self._derivative is not NotImplemented:
+        if self._derivative is not None:
             return self._derivative
         # self.num_matrix = np.vectorize(self.num_method)(self.objects)
         self.num_matrix = np.empty_like(self.objects, dtype=object)
@@ -105,7 +105,7 @@ class DipoleDerivGenerator(AbstractDerivGenerator):
     def __init__(self, mf_func, stencil=3, interval=1e-6):
         super(DipoleDerivGenerator, self).__init__()
         self.mf_func = mf_func
-        self.objects = NotImplemented
+        self.objects = None
         self.stencil = stencil
         self.interval = interval
         self.init_objects()

@@ -90,22 +90,22 @@ class DHBase(lib.StreamObject):
         self.auxbasis_jk = auxbasis_jk = auxbasis_jk if auxbasis_jk else df.make_auxbasis(mol, mp2fit=False)
         self.auxbasis_ri = auxbasis_ri = auxbasis_ri if auxbasis_ri else df.make_auxbasis(mol, mp2fit=True)
         self.same_aux = bool(auxbasis_jk == auxbasis_ri or auxbasis_ri is None)
-        self.ni = NotImplemented
-        self.cx = NotImplemented
-        self.cx_n = NotImplemented
+        self.ni = None
+        self.cx = None
+        self.cx_n = None
         self.mol = mol
         self.nao = mol.nao
         self.tensors = HybridDict()
-        self.mo_coeff = NotImplemented
-        self.mo_energy = NotImplemented
-        self.mo_occ = NotImplemented
-        self.Co = self.Cv = NotImplemented
-        self.eo = self.ev = NotImplemented
-        self.D = NotImplemented
-        self.nmo = self.nvir = NotImplemented
-        self.so = self.sv = self.sa = NotImplemented
-        self.e_tot = NotImplemented
-        self.eng_tot = self.eng_nc = self.eng_pt2 = self.eng_nuc = self.eng_os = self.eng_ss = NotImplemented
+        self.mo_coeff = None
+        self.mo_energy = None
+        self.mo_occ = None
+        self.Co = self.Cv = None
+        self.eo = self.ev = None
+        self.D = None
+        self.nmo = self.nvir = None
+        self.so = self.sv = self.sa = None
+        self.e_tot = None
+        self.eng_tot = self.eng_nc = self.eng_pt2 = self.eng_nuc = self.eng_os = self.eng_ss = None
 
     def _init_common(self):
         """Shared initialization after subclass creates mf_s / mf_n."""
@@ -165,7 +165,7 @@ class DHBase(lib.StreamObject):
                     return self.mf_s.e_tot - self.mf_s.energy_nuc(), None
             mo_coeff = self.mf_s.mo_coeff
         mo_occ = self.mf_s.mo_occ
-        if mo_occ is NotImplemented:
+        if mo_occ is None:
             mo_occ = self.mf_s.get_occ()
         dm = self.mf_s.make_rdm1(mo_coeff, mo_occ)
         dm = lib.tag_array(dm, mo_coeff=mo_coeff, mo_occ=mo_occ)

@@ -298,7 +298,7 @@ def as_scanner_grad(mf: lib.StreamObject, consequent_dm_guess=True):
             dm = None
             if consequent_dm_guess:
                 dm = self.D
-            if dm is NotImplemented:
+            if dm is None:
                 dm = None
 
             self.tensors = HybridDict()

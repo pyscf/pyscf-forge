@@ -120,12 +120,12 @@ class Gradients(UDHRespMixin, GradientMixin):
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
         self.base = method
-        self.grad_jk = NotImplemented
-        self.grad_gga = NotImplemented
-        self.grad_pt2 = NotImplemented
-        self.grad_enfunc = NotImplemented
-        self.grad_tot = NotImplemented
-        self.de = NotImplemented
+        self.grad_jk = None
+        self.grad_gga = None
+        self.grad_pt2 = None
+        self.grad_enfunc = None
+        self.grad_tot = None
+        self.de = None
 
     @timing
     def prepare_H_1(self):

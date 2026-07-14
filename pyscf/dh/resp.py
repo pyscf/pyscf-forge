@@ -378,7 +378,7 @@ class RDHRespMixin(RespMixin):
         D_rdm1 = np.zeros((nmo, nmo))
 
         if not self.base.eval_pt2:
-            if self.base.eng_tot is NotImplemented:
+            if self.base.eng_tot is None:
                 tensors.create("D_rdm1", D_rdm1)
                 DHBase.kernel(self.base, eng_bi=(None, 0, 0))
             return self
@@ -394,7 +394,7 @@ class RDHRespMixin(RespMixin):
         eng_bi2 = [0]
 
         def build(sI, t_ijab, g_ijab):
-            if self.base.eng_pt2 is NotImplemented:
+            if self.base.eng_pt2 is None:
                 eng_bi1[0] += einsum("ijab, ijab ->", t_ijab, g_ijab)
                 if self.base.eval_ss:
                     eng_bi2[0] += einsum("ijab, ijba ->", t_ijab, g_ijab)
@@ -407,7 +407,7 @@ class RDHRespMixin(RespMixin):
 
         _loop_t_ijab(self.base, Y_ia_ri, e, nocc, nvir, build)
 
-        if self.base.eng_tot is NotImplemented:
+        if self.base.eng_tot is None:
             DHBase.kernel(self.base, eng_bi=(None, eng_bi1[0], eng_bi2[0]))
         tensors.create("D_rdm1", D_rdm1)
         tensors.create("G_ia_ri", G_ia_ri)
@@ -578,7 +578,7 @@ class UDHRespMixin(RespMixin):
                     G_ia_ri[α][:, sI] += 2 * einsum("ijab, Pjb -> Pia", T_ijab, Y_ia_ri[β])
                     G_ia_ri[β] += 2 * einsum("jiba, Pjb -> Pia", T_ijab, Y_ia_ri[α][:, sI])
 
-        if self.base.eng_tot is NotImplemented:
+        if self.base.eng_tot is None:
             DHBase.kernel(self.base, eng_bi=(None, eng_bi1, eng_bi2))
 
         tensors.create("D_rdm1", D_rdm1)

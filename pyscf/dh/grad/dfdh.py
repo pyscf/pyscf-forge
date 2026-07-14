@@ -37,7 +37,7 @@ def kernel(mf_dh: Gradients, **kwargs):
     dump_t_ijab = mf_dh.with_t_ijab
 
     mf_dh.base.build()
-    if mf_dh.base.mo_coeff is NotImplemented:
+    if mf_dh.base.mo_coeff is None:
         mf_dh.base.run_scf(**kwargs)
         mf_dh.__dict__.update(mf_dh.base.__dict__)
     mf_dh.prepare_H_1()
@@ -346,12 +346,12 @@ class Gradients(RDHRespMixin, GradientMixin):
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
         self.base = method
-        self.grad_jk = NotImplemented
-        self.grad_gga = NotImplemented
-        self.grad_pt2 = NotImplemented
-        self.grad_enfunc = NotImplemented
-        self.grad_tot = NotImplemented
-        self.de = NotImplemented
+        self.grad_jk = None
+        self.grad_gga = None
+        self.grad_pt2 = None
+        self.grad_enfunc = None
+        self.grad_tot = None
+        self.de = None
 
     def prepare_H_1(self):
         H_1_ao = get_H_1_ao(self.mol)
