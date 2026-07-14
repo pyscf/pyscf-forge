@@ -67,7 +67,7 @@ class KnownValues(unittest.TestCase):
         self.places_single = 3
 
 
-    def test_krylov_eigenvalue(self):
+    def test_krylov_eigenvalue_slow(self):
         """Test Krylov solver for eigenvalue problem"""
         _, eigenvalues, eigenvectors = krylov_solver(
             matrix_vector_product=self.matrix_vector_product,

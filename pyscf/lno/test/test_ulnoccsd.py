@@ -63,7 +63,7 @@ class WaterDimer(unittest.TestCase):
         cls.mol.stdout.close()
         del cls.mol, cls.mf, cls.ecano, cls.frozen
 
-    def test_ulno_pm_by_thresh(self):
+    def test_ulno_pm_by_thresh_slow(self):
         mol = self.mol
         mf = self.mf
         frozen = self.frozen
