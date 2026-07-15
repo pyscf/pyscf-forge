@@ -21,7 +21,6 @@
 from __future__ import annotations
 # dh import
 from pyscf.dh.resp import RDHRespMixin
-from pyscf.dh.resp import _r_get_eri_cpks, _u_get_eri_cpks
 from pyscf.dh.resp import _get_Y_mo
 from pyscf.dh.dh import DHBase
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
@@ -47,11 +46,7 @@ def kernel(mf: Polar):
     Y_mo = _get_Y_mo(mf.df_jk, mf.df_ri, mf.mo_coeff,
                           mf.base.eval_pt2, mf._incore_Y_mo,
                           max_memory=mf.max_memory)
-    if mf.D.ndim == 2:
-        eri = _r_get_eri_cpks(Y_mo["Y_mo_jk"], mf.nocc, mf.cx, mf._incore_Y_mo, mf.max_memory)
-    else:
-        eri = _u_get_eri_cpks([Y_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
-                               mf.nocc, mf.cx, mf._incore_Y_mo, mf.max_memory)
+    eri = mf.get_eri_cpks(Y_mo)
     mf.tensors.consume(Y_mo).consume(eri)
 
     mf.prepare_xc_kernel()

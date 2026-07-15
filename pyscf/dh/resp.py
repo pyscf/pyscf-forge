@@ -363,11 +363,7 @@ class RespMixin(lib.StreamObject):
             Y_mo = _get_Y_mo(self.df_jk, self.df_ri, self.mo_coeff,
                                   self.base.eval_pt2, self._incore_Y_mo,
                                   max_memory=self.max_memory)
-            if self.D.ndim == 2:
-                eri = _r_get_eri_cpks(Y_mo["Y_mo_jk"], self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
-            else:
-                eri = _u_get_eri_cpks([Y_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
-                                       self.nocc, self.cx, self._incore_Y_mo, self.max_memory)
+            eri = self.get_eri_cpks(Y_mo)
             self.tensors.consume(Y_mo).consume(eri)
             self.prepare_xc_kernel()
             pt2_res, _ = self._prepare_pt2(dump_t_ijab=True)
@@ -448,6 +444,10 @@ class RDHRespMixin(RespMixin):
 
     def _prepare_pt2(self, dump_t_ijab=True):
         return _prepare_pt2_r(self, dump_t_ijab=dump_t_ijab)
+
+    def get_eri_cpks(self, Y_mo):
+        return _r_get_eri_cpks(Y_mo["Y_mo_jk"], self.nocc, self.cx,
+                               self._incore_Y_mo, self.max_memory)
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = self.tensors["Y_mo_jk"]
@@ -607,6 +607,11 @@ class UDHRespMixin(RespMixin):
 
     def _prepare_pt2(self, dump_t_ijab=True):
         return _prepare_pt2_u(self, dump_t_ijab=dump_t_ijab)
+
+    def get_eri_cpks(self, Y_mo):
+        Y_mo_jk = [Y_mo["Y_mo_jk" + str(σ)] for σ in range(2)]
+        return _u_get_eri_cpks(Y_mo_jk, self.nocc, self.cx,
+                               self._incore_Y_mo, self.max_memory)
 
     def Ax0_Core_HF(self, si, sa, sj, sb, cx=None):
         Y_mo_jk = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]

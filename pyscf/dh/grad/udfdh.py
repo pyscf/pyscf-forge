@@ -128,11 +128,11 @@ class Gradients(UDHRespMixin, GradientMixin):
         self.grad_tot = None
         self.de = None
 
-    def prepare_gradient_jk(self):
+    def get_gradient_jk(self):
         D_r = self.tensors.load("D_r")
         Y_mo = [self.tensors["Y_mo_jk" + str(σ)] for σ in (α, β)]
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.max_memory)
+        return get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.max_memory)
 
     @timing
     def prepare_gradient_pt2(self):

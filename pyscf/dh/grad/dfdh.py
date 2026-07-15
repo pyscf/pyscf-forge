@@ -20,7 +20,6 @@
 
 from __future__ import annotations
 from pyscf.dh.resp import RDHRespMixin
-from pyscf.dh.resp import _r_get_eri_cpks, _u_get_eri_cpks
 from pyscf.dh.resp import _get_Y_mo
 from pyscf.dh.dh import DHBase
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, gen_shl_batch, timing, as_scanner_grad, available_memory
@@ -56,11 +55,7 @@ def kernel(mf_dh: Gradients, **kwargs):
     Y_mo = _get_Y_mo(mf_dh.df_jk, mf_dh.df_ri, mf_dh.mo_coeff,
                           mf_dh.base.eval_pt2, mf_dh._incore_Y_mo,
                           max_memory=mf_dh.max_memory)
-    if mf_dh.D.ndim == 2:
-        eri = _r_get_eri_cpks(Y_mo["Y_mo_jk"], mf_dh.nocc, mf_dh.cx, mf_dh._incore_Y_mo, mf_dh.max_memory)
-    else:
-        eri = _u_get_eri_cpks([Y_mo["Y_mo_jk" + str(σ)] for σ in range(2)],
-                               mf_dh.nocc, mf_dh.cx, mf_dh._incore_Y_mo, mf_dh.max_memory)
+    eri = mf_dh.get_eri_cpks(Y_mo)
     mf_dh.tensors.consume(Y_mo).consume(eri)
 
     mf_dh.prepare_xc_kernel()
@@ -71,7 +66,7 @@ def kernel(mf_dh: Gradients, **kwargs):
     mf_dh.prepare_lagrangian(gen_W=True)
     mf_dh.prepare_D_r()
 
-    mf_dh.prepare_gradient_jk()
+    mf_dh.grad_jk = mf_dh.get_gradient_jk()
     D_r = mf_dh.tensors.load("D_r")
     mf_dh.grad_gga = _get_gradient_gga(mf_dh, D_r)
     mf_dh.prepare_gradient_pt2()
@@ -292,11 +287,11 @@ class Gradients(RDHRespMixin, GradientMixin):
         self.grad_tot = None
         self.de = None
 
-    def prepare_gradient_jk(self):
+    def get_gradient_jk(self):
         D_r = self.tensors.load("D_r")
-        Y_mo = self.tensors["Y_mo_jk"]
         cx_n = self.cx_n if self.xc_n else self.cx
-        self.grad_jk = get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r, Y_mo, self.cx, cx_n, self.max_memory)
+        return get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r,
+                               self.tensors["Y_mo_jk"], self.cx, cx_n, self.max_memory)
 
     @timing
     def prepare_gradient_pt2(self):
