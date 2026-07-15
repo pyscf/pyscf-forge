@@ -348,10 +348,10 @@ class RespMixin(lib.StreamObject):
         sv, so = self.sv, self.so
         D_r = tensors.load("D_rdm1").copy()
         if D_r.ndim == 2:
-            L = tensors.load("L")
+            L = self.L
             D_r[sv, so] = self.solve_cpks(L)
         else:
-            L = [tensors.load("L" + str(σ)) for σ in (α, β)]
+            L = self.L
             D_r_ai = self.solve_cpks(L)
             for σ in (α, β):
                 D_r[σ][sv[σ], so[σ]] = D_r_ai[σ]
@@ -508,7 +508,7 @@ class RDHRespMixin(RespMixin):
             W_I[so, so] = - 2 * einsum("Pia, Pja -> ij", G_ia_ri, Y_ia)
             W_I[sv, sv] = - 2 * einsum("Pia, Pib -> ab", G_ia_ri, Y_ia)
             W_I[sv, so] = - 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_mo_ri[:, so, so])
-            tensors.create("W_I", W_I)
+            self.W_I = W_I
             L += W_I[sv, so]
         else:
             L -= 4 * einsum("Pja, Pij -> ai", G_ia_ri, Y_ij_ri)
@@ -522,7 +522,7 @@ class RDHRespMixin(RespMixin):
         if self.xc_n:
             L += 4 * einsum("ua, uv, vi -> ai", self.Cv, self.mf_n.get_fock(dm=self.D), self.Co)
 
-        tensors.create("L", L)
+        self.L = L
         return self
 
 
@@ -668,8 +668,7 @@ class UDHRespMixin(RespMixin):
             for σ in (α, β):
                 L[σ] += 2 * F_0_ai_n[σ]
         if not self.base.eval_pt2:
-            for σ in (α, β):
-                tensors.create("L" + str(σ), L[σ])
+            self.L = L
             return self
 
         G_ia_ri = [tensors.load("G_ia_ri" + str(σ)) for σ in (α, β)]
@@ -688,7 +687,7 @@ class UDHRespMixin(RespMixin):
                 W_I[σ][sv[σ], sv[σ]] = - 0.5 * einsum("Pia, Pib -> ab", G_ia_ri[σ], Y_ia_ri[σ])
                 W_I[σ][sv[σ], so[σ]] = - einsum("Pja, Pij -> ai", G_ia_ri[σ], Y_ij_ri[σ])
                 L[σ] += W_I[σ][sv[σ], so[σ]]
-                tensors.create("W_I", W_I)
+            self.W_I = W_I
         else:
             for σ in (α, β):
                 L[σ] -= einsum("Pja, Pij -> ai", G_ia_ri[σ], Y_ij_ri[σ])
@@ -698,8 +697,7 @@ class UDHRespMixin(RespMixin):
             for saux in gen_batch(0, naux, nbatch):
                 L[σ] += einsum("Pib, Pab -> ai", G_ia_ri[σ][saux], Y_mo_ri[σ][saux, sv[σ], sv[σ]])
 
-        for σ in (α, β):
-            tensors.create("L" + str(σ), L[σ])
+        self.L = L
         return self
 
 

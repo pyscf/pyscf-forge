@@ -69,7 +69,7 @@ def kernel(mf_dh: Gradients, **kwargs):
     mf_dh.grad_jk = mf_dh.get_gradient_jk()
     D_r = mf_dh.tensors.load("D_r")
     mf_dh.grad_gga = _get_gradient_gga(mf_dh, D_r)
-    mf_dh.prepare_gradient_pt2()
+    mf_dh.grad_pt2 = mf_dh.get_gradient_pt2()
 
     grad_enfunc = _get_gradient_enfunc(mf_dh, S_1_mo, H_1_ao)
     grad_contrib = mf_dh.mf_s.Gradients().grad_nuc()
@@ -275,6 +275,63 @@ class GradientMixin(lib.StreamObject):
         return grad_contrib
 
 
+@timing
+def _get_gradient_pt2(mf):
+    tensors = mf.tensors
+    C, e = mf.mo_coeff, mf.mo_energy
+    mol, aux_ri = mf.mol, mf.df_ri.auxmol
+    natm, nao, nmo, nocc, nvir, naux = mol.natm, mf.nao, mf.nmo, mf.nocc, mf.nvir, mf.df_ri.get_naoaux()
+    assert naux == aux_ri.nao
+    so, sv, sa = mf.so, mf.sv, mf.sa
+
+    D_r = tensors.load("D_r")
+    H_1_mo = tensors.load("H_1_mo")
+    grad_corr = einsum("pq, Apq -> A", D_r, H_1_mo)
+    if not mf.base.eval_pt2:
+        return grad_corr.reshape(natm, 3)
+
+    W_I = mf.W_I
+    W_II = - einsum("pq, q -> pq", D_r, e)
+    W_III = np.zeros((nmo, nmo))
+    W_III[so, so] = - 0.5 * mf.Ax0_Core(so, so, sa, sa)(D_r)
+    W = W_I + W_II + W_III
+    W_ao = C @ W @ C.T
+    S_1_ao = mf._S_1_ao
+    grad_corr += einsum("uv, Auv -> A", W_ao, S_1_ao)
+
+    L_inv, L_1_gen = generator_L_1(aux_ri)
+    int3c2e_ip1_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip1", "s1")
+    int3c2e_ip2_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip2", "s1")
+    Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
+
+    def lambda_Y_1_ia_ri(A):
+        L_1_ri = L_1_gen(A)
+        Y_1_ia_ri = np.zeros((3, naux, nocc, nvir))
+        shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
+        shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
+
+        nbatch = calc_batch_size(3*(nao+nocc)*naux, available_memory(mf.max_memory), Y_1_ia_ri.size)
+        for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
+            su = slice(U0, U1)
+            int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
+            Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[su, so], C[:, sv])
+            Y_1_ia_ri -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[su, sv], C[:, so])
+
+        nbatch = calc_batch_size(3*nao*(nao+nocc), available_memory(mf.max_memory), Y_1_ia_ri.size)
+        for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
+            sp = slice(P0, P1)
+            int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
+            Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip2, L_inv[:, sp], C[:, so], C[:, sv])
+
+        Y_1_ia_ri -= einsum("Qia, tRQ, PR -> tPia", Y_ia_ri, L_1_ri, L_inv)
+        return Y_1_ia_ri
+
+    G_ia_ri = tensors.load("G_ia_ri")
+    for A in range(natm):
+        grad_corr[3*A:3*A+3] += 4 * einsum("Pia, tPia -> t", G_ia_ri, lambda_Y_1_ia_ri(A))
+    return grad_corr.reshape(natm, 3)
+
+
 class Gradients(RDHRespMixin, GradientMixin):
 
     def __init__(self, method):
@@ -293,71 +350,8 @@ class Gradients(RDHRespMixin, GradientMixin):
         return get_gradient_jk(self.df_jk, self.mo_coeff, self.D, D_r,
                                self.tensors["Y_mo_jk"], self.cx, cx_n, self.max_memory)
 
-    @timing
-    def prepare_gradient_pt2(self):
-        tensors = self.tensors
-        C, e = self.mo_coeff, self.mo_energy
-        mol, aux_ri = self.mol, self.df_ri.auxmol
-        natm, nao, nmo, nocc, nvir, naux = mol.natm, self.nao, self.nmo, self.nocc, self.nvir, self.df_ri.get_naoaux()
-        # this algorithm asserts naux = aux.nao, i.e. no linear dependency in auxiliary basis
-        assert naux == aux_ri.nao
-        so, sv, sa = self.so, self.sv, self.sa
-
-        D_r = tensors.load("D_r")
-        H_1_mo = tensors.load("H_1_mo")
-        grad_corr = einsum("pq, Apq -> A", D_r, H_1_mo)
-        if not self.base.eval_pt2:
-            grad_corr = grad_corr.reshape(natm, 3)
-            self.grad_pt2 = grad_corr
-            return
-
-        W_I = tensors.load("W_I")
-        W_II = - einsum("pq, q -> pq", D_r, e)
-        W_III = np.zeros((nmo, nmo))
-        W_III[so, so] = - 0.5 * self.Ax0_Core(so, so, sa, sa)(D_r)
-        W = W_I + W_II + W_III
-        W_ao = C @ W @ C.T
-        S_1_ao = self._S_1_ao
-        grad_corr += einsum("uv, Auv -> A", W_ao, S_1_ao)
-
-        # generate L_1_ri
-        L_inv, L_1_gen = generator_L_1(aux_ri)
-
-        # generate Y_1_ia_ri
-        int3c2e_ip1_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip1", "s1")
-        int3c2e_ip2_gen = int3c_wrapper(mol, aux_ri, "int3c2e_ip2", "s1")
-        Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
-
-        def lambda_Y_1_ia_ri(A):
-            L_1_ri = L_1_gen(A)
-            Y_1_ia_ri = np.zeros((3, naux, nocc, nvir))
-            shA0, shA1, _, _ = mol.aoslice_by_atom()[A]
-            shA0a, shA1a, _, _ = aux_ri.aoslice_by_atom()[A]
-
-            nbatch = calc_batch_size(3*(nao+nocc)*naux, available_memory(self.max_memory), Y_1_ia_ri.size)
-            for shU0, shU1, U0, U1 in gen_shl_batch(mol, nbatch, shA0, shA1):
-                su = slice(U0, U1)
-                int3c2e_ip1 = int3c2e_ip1_gen((shU0, shU1, 0, mol.nbas, 0, aux_ri.nbas))
-                Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip1, L_inv, C[su, so], C[:, sv])
-                Y_1_ia_ri -= einsum("tuvQ, PQ, ua, vi -> tPia", int3c2e_ip1, L_inv, C[su, sv], C[:, so])
-
-            nbatch = calc_batch_size(3*nao*(nao+nocc), available_memory(self.max_memory), Y_1_ia_ri.size)
-            for shP0, shP1, P0, P1 in gen_shl_batch(aux_ri, nbatch, shA0a, shA1a):
-                sp = slice(P0, P1)
-                int3c2e_ip2 = int3c2e_ip2_gen((0, mol.nbas, 0, mol.nbas, shP0, shP1))
-                Y_1_ia_ri -= einsum("tuvQ, PQ, ui, va -> tPia", int3c2e_ip2, L_inv[:, sp], C[:, so], C[:, sv])
-
-            Y_1_ia_ri -= einsum("Qia, tRQ, PR -> tPia", Y_ia_ri, L_1_ri, L_inv)
-            return Y_1_ia_ri
-
-        # final contribution from G_ia_ri
-        # 4 * einsum("iaP, AiaP -> A", G_ia_ri, gradh.Y_mo_1_ri[:, so, sv]))
-        G_ia_ri = tensors.load("G_ia_ri")
-        for A in range(natm):
-            grad_corr[3*A:3*A+3] += 4 * einsum("Pia, tPia -> t", G_ia_ri, lambda_Y_1_ia_ri(A))
-        grad_corr = grad_corr.reshape(natm, 3)
-
-        self.grad_pt2 = grad_corr
+    def get_gradient_pt2(self):
+        return _get_gradient_pt2(self)
 
     def base_method(self):
         return self.base
