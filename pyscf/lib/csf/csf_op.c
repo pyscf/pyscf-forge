@@ -322,33 +322,33 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     // adjacency (p=r+1)
     //     np = -1, nr = 1:     "shelf"
     //     np = -1, nr = 2:     S'(r-1) + S(r-1)
-    //     np = -2, nr = 1:     2S'(r-1)
+    //     np = -2, nr = 1:     2S'(r)
     //     np = -2, nr = 2:     contradiction in terms
-    //     np = 1, nr = -1:     S'(r+1) + S(r) + 1/2 + "hill"
-    //     np = 1, nr = -2:     2S'(r-1)
-    //     np = 2, nr = -1:     S'(r-1) + S(r-1)
+    //     np = 1, nr = -1:     "hill"
+    //     np = 1, nr = -2:     2S'(r) + 1
+    //     np = 2, nr = -1:     S'(r-1) + S(r-1) + 1
     //     np = 2, nr = -2:     contradiction in terms
     //     np = nr = -1:        S'(r-1) + S(r-1)
     //     np = -2, nr = -1:    contradiction in terms
     //     np < 0, nr = -2:     contradiction in terms
-    //     np = nr = 1:         1
+    //     np = nr = 1:         S'(r-1) + S(r-1)
     //     np = 2, nr = 1:      contradiction in terms
     //     np > 0, nr = 2:      contradiction in terms
     // next adjacency (p=r+2; sgn (np) == sgn (nr))
-    //     np = -1, nr = -1,-2:  2S'(r+1) + "hill"
-    //     np = -2, nr = -1:     S(r) + S'(r-1) - 1/2
+    //     np = -1, nr = -1,-2:  ???
+    //     np = -2, nr = -1:     ???
     //     np = -2, nr = -2:     contradiction in terms
-    //     np = 1, nr = 1,2:     S'(r) + S(r+1) - 1/2 + "shelf"
-    //     np = 2, nr = 1:       S'(r) - S'(r-1) - 1/2
+    //     np = 1, nr = 1,2:     ???
+    //     np = 2, nr = 1:       ???
     //     np = 2, nr = 2:       contradiction in terms
-    // the "shelf" diagram [includes a factor of ~T(r)]:
+    // the "shelf" diagram:
     //    nr == 2:  S'(r-1) + S(r-1)
-    //    nr == 1:  2S'(r-1) + S(r) + S(r-1) + 1/2
-    //    if p > r+2 and np > 0: additional 2S'(r) + 2S'(r-1)
-    // the "hill" diagram [includes a factor of T(r)]: 
-    //    nr == -2:  S'(r-1) - S(r) - 1/2
-    //    nr == -1:  S(r-1) - S'(r-1) + 1
-    //    if p > r+2 and np < 0: additional 2S'(r)
+    //    nr == 1:  S(r) + S'(r-1) - 1/2 [and T'(r)]
+    //    if p > r+2 and np > 0: ???
+    // the "hill" diagram: 
+    //    nr == -2:  2S(r) + 1
+    //    nr == -1:  S'(r) + S'(r-1) - 1/2 [and T(r)]
+    //    if p > r+2 and np < 0: ???
     if ((nr == -2) || (nr == 1)){ 
         twoS0 = twoSk[r]; 
     } else if ((nr == 2) || (nr == -1)){
