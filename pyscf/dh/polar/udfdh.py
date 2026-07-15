@@ -150,7 +150,7 @@ def _get_pdA_F_0_mo(mf, U_1, H_1_mo):
     pdA_F_0_mo += mf.Ax0_Core(sa, sa, sa, so)(U_1_pi)
 
     pdA_F_0_mo_n = None
-    if mf.xc_n:
+    if mf.mf_n:
         F_0_ao_n = mf.mf_n.get_fock(dm=mf.D)
         F_0_mo_n = einsum("sup, suv, svq -> spq", mf.mo_coeff, F_0_ao_n, mf.mo_coeff)
         pdA_F_0_mo_n = np.array(H_1_mo)
@@ -179,11 +179,70 @@ def _get_pdA_Y_ia_ri(mf, U_1):
     return result
 
 
+def _get_polar_dms(mf, D_r, rho):
+    U_1 = mf.U_1
+    C = mf.mo_coeff
+    so = mf.so
+    mol, grids, xc = mf.mol, mf.grids, mf.xc
+    ni = mf.ni
+    dmU = np.array([C[σ] @ U_1[σ, :, :, so[σ]] @ C[σ, :, so[σ]].T for σ in (α, β)])
+    dmU += dmU.swapaxes(-1, -2)
+    dmR = np.array([C[σ] @ D_r[σ] @ C[σ].T for σ in (α, β)])
+    dmR += dmR.swapaxes(-1, -2)
+    dmX = np.concatenate([dmU, dmR[:, None]], axis=1)
+    rhoX = get_rho_from_dm_gga(ni, mol, grids, dmX)
+    _, _, _, kxc = ni.eval_xc(xc, rho, spin=1, deriv=3)
+    return rhoX[:, :-1], rhoX[:, -1], kxc
+
+
+def _get_Ax1_contrib(mf, rho, rhoU, rhoR, fxc, kxc):
+    nprop = mf.nprop
+    grids = mf.grids
+    wv_generator = _uks_gga_wv2_generator(fxc, kxc, grids.weights)
+    wv = np.zeros((2, nprop, 4, grids.weights.size))
+    for i in range(nprop):
+        wv[:, i] = np.asarray(wv_generator(rho, rhoU[:, i], rhoR), dtype=np.float64)
+        wv[:, i, 0] *= 2
+    return 0.5 * einsum("sArg, sBrg -> AB", rhoU, wv)
+
+
+def _get_SCR3(mf, U_1, pdA_F_0_mo_n):
+    tensors = mf.tensors
+    so, sv = mf.so, mf.sv
+    naux = mf.df_ri.get_naoaux()
+    nocc, nvir = mf.nocc, mf.nvir
+    nprop = mf.nprop
+    SCR3 = [np.zeros((nprop, nvir[σ], nocc[σ])) for σ in (α, β)]
+    if mf.xc_n:
+        for σ in (α, β):
+            SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
+    if not mf.base.eval_pt2:
+        return SCR3
+    G_ia_ri = [tensors.load("G_ia_ri" + str(σ)) for σ in (α, β)]
+    pdA_G_ia_ri = [tensors.load("pdA_G_ia_ri" + str(σ)) for σ in (α, β)]
+    Y_mo_ri = [tensors["Y_mo_ri" + str(σ)] for σ in (α, β)]
+    nbatch = mf.base.calc_batch_size(10 * mf.nmo**2, tot_size(G_ia_ri, pdA_G_ia_ri))
+    for σ in (α, β):
+        for saux in gen_batch(0, naux, nbatch):
+            G_blk = G_ia_ri[σ][saux]
+            Y_blk = np.asarray(Y_mo_ri[σ][saux])
+            pdA_G_blk = np.asarray(pdA_G_ia_ri[σ][:, saux])
+            pdA_Y_blk = einsum("Ami, Pmj -> APij", U_1[σ][:, :, so[σ]], Y_blk[:, :, so[σ]])
+            pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+            SCR3[σ] -= einsum("APja, Pij -> Aai", pdA_G_blk, Y_blk[:, so[σ], so[σ]])
+            SCR3[σ] -= einsum("Pja, APij -> Aai", G_blk, pdA_Y_blk)
+            pdA_Y_blk = einsum("Ama, Pmb -> APab", U_1[σ][:, :, sv[σ]], Y_blk[:, :, sv[σ]])
+            pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
+            SCR3[σ] += einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv[σ], sv[σ]])
+            SCR3[σ] += einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
+    return SCR3
+
+
 class Polar(UDHRespMixin):
 
     @property
     def nprop(self):
-        return self.tensors["H_1_ao"].shape[0]
+        return self.H_1_ao.shape[0]
 
     def __init__(self, method):
         self.__dict__.update(method.__dict__)
@@ -202,28 +261,24 @@ class Polar(UDHRespMixin):
     def get_pdA_Y_ia_ri(self, U_1):
         return _get_pdA_Y_ia_ri(self, U_1)
 
-    def prepare_dms(self):
-        tensors = self.tensors
-        U_1 = self.U_1
-        D_r = tensors.load("D_r")
-        rho = tensors.load("rho")
-        C = self.mo_coeff
-        so = self.so
-        mol, grids, xc = self.mol, self.grids, self.xc
-        # ni = dft.numint.NumInt()  # intended not to use self.ni, and xcfun as engine
-        # ni.libxc = dft.xcfun
-        ni = self.ni
-        dmU = np.array([C[σ] @ U_1[σ, :, :, so[σ]] @ C[σ, :, so[σ]].T for σ in (α, β)])
-        dmU += dmU.swapaxes(-1, -2)
-        dmR = np.array([C[σ] @ D_r[σ] @ C[σ].T for σ in (α, β)])
-        dmR += dmR.swapaxes(-1, -2)
-        dmX = np.concatenate([dmU, dmR[:, None]], axis=1)
-        rhoX = get_rho_from_dm_gga(ni, mol, grids, dmX)
-        _, _, _, kxc = ni.eval_xc(xc, rho, spin=1, deriv=3)
-        tensors.create("rhoU", rhoX[:, :-1])
-        tensors.create("rhoR", rhoX[:, -1])
-        tensors.create("kxc" + xc, kxc)
-        return self
+    def get_polar_dms(self):
+        D_r = self.tensors.load("D_r")
+        rho = self.tensors["rho"]
+        rhoU, rhoR, kxc = _get_polar_dms(self, D_r, rho)
+        self.tensors.create("rhoU", rhoU, incore=True)
+        self.tensors.create("rhoR", rhoR, incore=True)
+        self.tensors.create("kxc" + self.xc, kxc, incore=True)
+
+    def get_Ax1_contrib(self):
+        rho = self.tensors["rho"]
+        rhoU = self.tensors.load("rhoU")
+        rhoR = self.tensors.load("rhoR")
+        fxc = self.tensors["fxc" + self.xc]
+        kxc = self.tensors["kxc" + self.xc]
+        return _get_Ax1_contrib(self, rho, rhoU, rhoR, fxc, kxc)
+
+    def get_SCR3(self):
+        return _get_SCR3(self, self.U_1, self.pdA_F_0_mo_n)
 
     def prepare_pt2_deriv(self):
         tensors = self.tensors
@@ -293,71 +348,12 @@ class Polar(UDHRespMixin):
         pdA_D_rdm1[:] += pdA_D_rdm1.swapaxes(-1, -2)
         return self
 
-    def prepare_polar_Ax1_gga(self):
-        tensors = self.tensors
-        nprop = self.nprop
-
-        rho = tensors.load("rho")
-        rhoU = tensors.load("rhoU")
-        rhoR = tensors.load("rhoR")
-        fxc = tensors["fxc" + self.xc]
-        kxc = tensors["kxc" + self.xc]
-
-        grids = self.grids
-        wv_generator = _uks_gga_wv2_generator(fxc, kxc, grids.weights)
-        wv = np.zeros((2, nprop, 4, grids.weights.size))
-        for i in range(nprop):
-            wv[:, i] = np.asarray(wv_generator(rho, rhoU[:, i], rhoR), dtype=np.float64)
-            wv[:, i, 0] *= 2
-        res = 0.5 * einsum("sArg, sBrg -> AB", rhoU, wv)
-        tensors.create("Ax1_contrib", res)
-        return self
-
-    def get_SCR3(self):
-        tensors = self.tensors
-        so, sv = self.so, self.sv
-        naux = self.df_ri.get_naoaux()
-        nocc, nvir, nmo = self.nocc, self.nvir, self.nmo
-        nprop = self.nprop
-
-        SCR3 = [np.zeros((nprop, nvir[σ], nocc[σ])) for σ in (α, β)]
-
-        for σ in (α, β):
-            if self.xc_n:
-                pdA_F_0_mo_n = self.pdA_F_0_mo_n
-                SCR3[σ] += 2 * pdA_F_0_mo_n[σ][:, sv[σ], so[σ]]
-        if not self.base.eval_pt2:
-            return SCR3
-
-        U_1 = self.U_1
-        G_ia_ri = [tensors.load("G_ia_ri" + str(σ)) for σ in (α, β)]
-        pdA_G_ia_ri = [tensors.load("pdA_G_ia_ri" + str(σ)) for σ in (α, β)]
-        Y_mo_ri = [tensors["Y_mo_ri" + str(σ)] for σ in (α, β)]
-
-        nbatch = self.base.calc_batch_size(10 * nmo**2, tot_size(G_ia_ri, pdA_G_ia_ri, U_1))
-        for σ in (α, β):
-            for saux in gen_batch(0, naux, nbatch):
-                G_blk = G_ia_ri[σ][saux]
-                Y_blk = np.asarray(Y_mo_ri[σ][saux])
-                pdA_G_blk = np.asarray(pdA_G_ia_ri[σ][:, saux])
-                # pdA_Y_ij part
-                pdA_Y_blk = einsum("Ami, Pmj -> APij", U_1[σ][:, :, so[σ]], Y_blk[:, :, so[σ]])
-                pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
-                SCR3[σ] -= einsum("APja, Pij -> Aai", pdA_G_blk, Y_blk[:, so[σ], so[σ]])
-                SCR3[σ] -= einsum("Pja, APij -> Aai", G_blk, pdA_Y_blk)
-                # pdA_Y_ab part
-                pdA_Y_blk = einsum("Ama, Pmb -> APab", U_1[σ][:, :, sv[σ]], Y_blk[:, :, sv[σ]])
-                pdA_Y_blk += pdA_Y_blk.swapaxes(-1, -2)
-                SCR3[σ] += einsum("APib, Pab -> Aai", pdA_G_blk, Y_blk[:, sv[σ], sv[σ]])
-                SCR3[σ] += einsum("Pib, APab -> Aai", G_blk, pdA_Y_blk)
-        return SCR3
-
     def prepare_polar(self):
         tensors = self.tensors
         so, sv, sa = self.so, self.sv, self.sa
         nprop = self.nprop
 
-        H_1_mo = tensors.load("H_1_mo")
+        H_1_mo = self.H_1_mo
         U_1 = self.U_1
         pdA_F_0_mo = self.pdA_F_0_mo
         D_r = tensors.load("D_r")
@@ -382,7 +378,7 @@ class Polar(UDHRespMixin):
             pol_corr += einsum("Bki, Aai, ak -> AB", pdA_F_0_mo[σ][:, so[σ], so[σ]], U_1[σ][:, sv[σ], so[σ]], D_r[σ][sv[σ], so[σ]])
             pol_corr -= einsum("Bca, Aai, ci -> AB", pdA_F_0_mo[σ][:, sv[σ], sv[σ]], U_1[σ][:, sv[σ], so[σ]], D_r[σ][sv[σ], so[σ]])
         if not xc_equal(self.xc, "HF"):
-            pol_corr -= tensors.load("Ax1_contrib")
+            pol_corr -= self.Ax1_contrib
 
         self.pol_scf = pol_scf
         self.pol_corr = pol_corr

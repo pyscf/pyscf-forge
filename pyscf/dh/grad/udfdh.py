@@ -127,7 +127,7 @@ def _get_gradient_pt2(mf):
     so, sv, sa = mf.so, mf.sv, mf.sa
 
     D_r = tensors.load("D_r")
-    H_1_mo = tensors.load("H_1_mo")
+    H_1_mo = mf.H_1_mo
     grad_corr = einsum("spq, sApq -> A", D_r, H_1_mo)
     if not mf.base.eval_pt2:
         return grad_corr.reshape(natm, 3)

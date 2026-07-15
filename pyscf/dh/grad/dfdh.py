@@ -42,8 +42,8 @@ def kernel(mf_dh: Gradients, **kwargs):
         H_1_mo = mf_dh.mo_coeff.T @ H_1_ao @ mf_dh.mo_coeff
     else:
         H_1_mo = np.array([einsum("up, Auv, vq -> Apq", mf_dh.mo_coeff[σ], H_1_ao, mf_dh.mo_coeff[σ]) for σ in range(2)])
-    mf_dh.tensors.create("H_1_ao", H_1_ao)
-    mf_dh.tensors.create("H_1_mo", H_1_mo)
+    mf_dh.H_1_ao = H_1_ao
+    mf_dh.H_1_mo = H_1_mo
 
     S_1_ao = get_S_1_ao(mf_dh.mol)
     if mf_dh.D.ndim == 2:
@@ -285,7 +285,7 @@ def _get_gradient_pt2(mf):
     so, sv, sa = mf.so, mf.sv, mf.sa
 
     D_r = tensors.load("D_r")
-    H_1_mo = tensors.load("H_1_mo")
+    H_1_mo = mf.H_1_mo
     grad_corr = einsum("pq, Apq -> A", D_r, H_1_mo)
     if not mf.base.eval_pt2:
         return grad_corr.reshape(natm, 3)
