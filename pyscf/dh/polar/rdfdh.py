@@ -56,13 +56,18 @@ def kernel(mf: Polar):
         DHBase.kernel(mf.base, eng_bi=(None,) + tuple(eng_bi))
     mf.prepare_lagrangian(gen_W=False)
     mf.prepare_D_r()
-    mf.prepare_U_1()
+    mf.U_1 = mf.get_U_1(H_1_mo)
     if mf.ni._xc_type(mf.xc) == "GGA":
         mf.prepare_dms()
         mf.prepare_polar_Ax1_gga()
-    mf.prepare_pdA_F_0_mo()
+    mf.pdA_F_0_mo, mf.pdA_F_0_mo_n = mf.get_pdA_F_0_mo(mf.U_1, H_1_mo)
     if mf.base.eval_pt2:
-        mf.prepare_pdA_Y_ia_ri()
+        pdA_Y_ia_ri = mf.get_pdA_Y_ia_ri(mf.U_1)
+        if mf.D.ndim == 2:
+            mf.tensors["pdA_Y_ia_ri"] = pdA_Y_ia_ri
+        else:
+            for σ in range(2):
+                mf.tensors["pdA_Y_ia_ri" + str(σ)] = pdA_Y_ia_ri[σ]
     mf.prepare_pt2_deriv()
     mf.prepare_polar()
     return mf.de
@@ -108,6 +113,47 @@ def _rks_gga_wv2(rho0, rho1, rho2, fxc, kxc, weight):
     return wv
 
 
+def _get_U_1(mf, H_1_mo):
+    sv, so = mf.sv, mf.so
+    U_1_vo = mf.solve_cpks(H_1_mo[:, sv, so])
+    U_1 = np.zeros_like(H_1_mo)
+    U_1[:, sv, so] = U_1_vo
+    U_1[:, so, sv] = - U_1_vo.swapaxes(-1, -2)
+    return U_1
+
+
+def _get_pdA_F_0_mo(mf, U_1, H_1_mo):
+    so, sa = mf.so, mf.sa
+    pdA_F_0_mo = H_1_mo.copy()
+    pdA_F_0_mo += einsum("Apq, p -> Apq", U_1, mf.mo_energy)
+    pdA_F_0_mo += einsum("Aqp, q -> Apq", U_1, mf.mo_energy)
+    pdA_F_0_mo += mf.Ax0_Core(sa, sa, sa, so)(U_1[:, :, so])
+
+    pdA_F_0_mo_n = None
+    if mf.xc_n:
+        F_0_mo_n = einsum("up, uv, vq -> pq", mf.mo_coeff, mf.mf_n.get_fock(dm=mf.D), mf.mo_coeff)
+        pdA_F_0_mo_n = np.array(H_1_mo)
+        pdA_F_0_mo_n += einsum("Amp, mq -> Apq", U_1, F_0_mo_n)
+        pdA_F_0_mo_n += einsum("Amq, pm -> Apq", U_1, F_0_mo_n)
+        pdA_F_0_mo_n += mf.Ax0_Core(sa, sa, sa, so, xc=mf.xc_n)(U_1[:, :, so])
+    return pdA_F_0_mo, pdA_F_0_mo_n
+
+
+def _get_pdA_Y_ia_ri(mf, U_1):
+    Y_mo_ri = mf.tensors["Y_mo_ri"]
+    nocc, nvir, nmo, naux = mf.nocc, mf.nvir, mf.nmo, mf.df_ri.get_naoaux()
+    so, sv = mf.so, mf.sv
+    nprop = mf.nprop
+
+    pdA_Y_ia_ri = np.zeros((nprop, naux, nocc, nvir))
+    nbatch = mf.base.calc_batch_size(8 * nmo**2, U_1.size)
+    for saux in gen_batch(0, naux, nbatch):
+        pdA_Y_ia_ri[:, saux] = (
+            + einsum("Ami, Pma -> APia", U_1[:, :, so], Y_mo_ri[saux, :, sv])
+            + einsum("Ama, Pmi -> APia", U_1[:, :, sv], Y_mo_ri[saux, :, so]))
+    return pdA_Y_ia_ri
+
+
 class Polar(RDHRespMixin):
 
     def __init__(self, method):
@@ -122,21 +168,18 @@ class Polar(RDHRespMixin):
     def nprop(self):
         return self.tensors["H_1_ao"].shape[0]
 
-    def prepare_U_1(self):
-        tensors = self.tensors
-        sv, so = self.sv, self.so
+    def get_U_1(self, H_1_mo):
+        return _get_U_1(self, H_1_mo)
 
-        H_1_mo = tensors.load("H_1_mo")
-        U_1_vo = self.solve_cpks(H_1_mo[:, sv, so])
-        U_1 = np.zeros_like(H_1_mo)
-        U_1[:, sv, so] = U_1_vo
-        U_1[:, so, sv] = - U_1_vo.swapaxes(-1, -2)
-        tensors.create("U_1", U_1)
-        return self
+    def get_pdA_F_0_mo(self, U_1, H_1_mo):
+        return _get_pdA_F_0_mo(self, U_1, H_1_mo)
+
+    def get_pdA_Y_ia_ri(self, U_1):
+        return _get_pdA_Y_ia_ri(self, U_1)
 
     def prepare_dms(self):
         tensors = self.tensors
-        U_1 = tensors.load("U_1")
+        U_1 = self.U_1
         D_r = tensors.load("D_r")
         rho = tensors.load("rho")
         C, Co = self.mo_coeff, self.Co
@@ -157,44 +200,6 @@ class Polar(RDHRespMixin):
         tensors.create("kxc" + xc, kxc)
         return self
 
-    def prepare_pdA_F_0_mo(self):
-        tensors = self.tensors
-        so, sa = self.so, self.sa
-
-        pdA_F_0_mo = tensors.load("H_1_mo").copy()
-        U_1 = tensors.load("U_1")
-
-        pdA_F_0_mo += einsum("Apq, p -> Apq", U_1, self.mo_energy)
-        pdA_F_0_mo += einsum("Aqp, q -> Apq", U_1, self.mo_energy)
-        pdA_F_0_mo += self.Ax0_Core(sa, sa, sa, so)(U_1[:, :, so])
-        tensors.create("pdA_F_0_mo", pdA_F_0_mo)
-
-        if self.xc_n:
-            F_0_mo_n = einsum("up, uv, vq -> pq", self.mo_coeff, self.mf_n.get_fock(dm=self.D), self.mo_coeff)
-            pdA_F_0_mo_n = np.array(tensors.load("H_1_mo"))
-            pdA_F_0_mo_n += einsum("Amp, mq -> Apq", U_1, F_0_mo_n)
-            pdA_F_0_mo_n += einsum("Amq, pm -> Apq", U_1, F_0_mo_n)
-            pdA_F_0_mo_n += self.Ax0_Core(sa, sa, sa, so, xc=self.xc_n)(U_1[:, :, so])
-            tensors.create("pdA_F_0_mo_n", pdA_F_0_mo_n)
-        return self
-
-    def prepare_pdA_Y_ia_ri(self):
-        tensors = self.tensors
-        U_1 = tensors.load("U_1")
-        Y_mo_ri = tensors["Y_mo_ri"]
-        nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
-        so, sv = self.so, self.sv
-        nprop = self.nprop
-
-        pdA_Y_ia_ri = np.zeros((nprop, naux, nocc, nvir))
-        nbatch = self.base.calc_batch_size(8 * nmo**2, U_1.size)
-        for saux in gen_batch(0, naux, nbatch):
-            pdA_Y_ia_ri[:, saux] = (
-                + einsum("Ami, Pma -> APia", U_1[:, :, so], Y_mo_ri[saux, :, sv])
-                + einsum("Ama, Pmi -> APia", U_1[:, :, sv], Y_mo_ri[saux, :, so]))
-        tensors.create("pdA_Y_ia_ri", pdA_Y_ia_ri)
-        return self
-
     def prepare_pt2_deriv(self):
         tensors = self.tensors
         nocc, nvir, nmo, naux = self.nocc, self.nvir, self.nmo, self.df_ri.get_naoaux()
@@ -206,7 +211,7 @@ class Polar(RDHRespMixin):
         if not self.base.eval_pt2:
             return self
 
-        pdA_F_0_mo = tensors.load("pdA_F_0_mo")
+        pdA_F_0_mo = self.pdA_F_0_mo
         Y_ia_ri = np.asarray(tensors["Y_mo_ri"][:, so, sv])
         pdA_Y_ia_ri = tensors["pdA_Y_ia_ri"]
 
@@ -261,7 +266,7 @@ class Polar(RDHRespMixin):
             wv2[i, 0] *= 2
         res = 2 * einsum("Arg, Brg -> AB", rhoU, wv2)
         # --- The following code is old code, transform wv2 to AO basis, then contract U_1 ---
-        # U_1 = tensors.load("U_1")
+        # U_1 = self.U_1
         # nao = self.nao
         # C, Co, so = self.mo_coeff, self.Co, self.so
         # Ax1 = np.zeros((3, nao, nao))
@@ -286,12 +291,12 @@ class Polar(RDHRespMixin):
 
         SCR3 = np.zeros((nprop, self.nvir, self.nocc))
         if self.xc_n:
-            pdA_F_0_mo_n = tensors.load("pdA_F_0_mo_n")
+            pdA_F_0_mo_n = self.pdA_F_0_mo_n
             SCR3 += 4 * pdA_F_0_mo_n[:, sv, so]
         if not self.base.eval_pt2:
             return SCR3
 
-        U_1 = tensors.load("U_1")
+        U_1 = self.U_1
         G_ia_ri = tensors.load("G_ia_ri")
         pdA_G_ia_ri = tensors.load("pdA_G_ia_ri")
         Y_mo_ri = tensors["Y_mo_ri"]
@@ -319,8 +324,8 @@ class Polar(RDHRespMixin):
         so, sv, sa = self.so, self.sv, self.sa
 
         H_1_mo = tensors.load("H_1_mo")
-        U_1 = tensors.load("U_1")
-        pdA_F_0_mo = tensors.load("pdA_F_0_mo")
+        U_1 = self.U_1
+        pdA_F_0_mo = self.pdA_F_0_mo
         D_r = tensors.load("D_r")
         pdA_D_rdm1 = tensors.load("pdA_D_rdm1")
 
