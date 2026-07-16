@@ -32,15 +32,17 @@ _D3_VERSIONS = {
 def _register_ext_params(xc_list):
     r"""Register custom libxc functionals for XC components with external parameters.
 
-    Keyword-style parameters (e.g. ``_kappa=0.872``) are cast to positional form
-    using insertion-order of ``additional`` dict (Python 3.7+).  Full keyword
-    support will be added once ``pyscf.dft.libxc`` provides a keyword-aware API.
+    Uses named-parameter dict format (``{key: value}``) for ext_params, supported
+    by PySCF >= 2.14.
+    Omega values are extracted and passed to ``register_custom_functional_``
+    for proper RSH handling.
     """
     ext_params = {}
+    omega_vals = []
     for info in xc_list:
         if not (info.type & XCType.WITH_EXT_PARAM):
             continue
-        if not info.additional:
+        if not info.parameters_keyword and not info.parameters:
             continue
         name = info.name
         try:
@@ -51,15 +53,31 @@ def _register_ext_params(xc_list):
         if len(obj_by_id) != 1:
             continue
         xc_id = next(iter(obj_by_id))
-        params = numpy.array(list(info.additional.values()), dtype=numpy.float64)
-        ext_params[xc_id] = params
-        info.additional.clear()
+        if info.parameters_keyword:
+            named_params = {k.lower(): float(v) for k, v in info.parameters_keyword.items()}
+            ext_params[xc_id] = named_params
+        else:
+            ext_params[xc_id] = numpy.array(info.parameters, dtype=numpy.float64)
+            info.parameters.clear()
+        if isinstance(info.parameters_keyword, dict):
+            for k, v in info.parameters_keyword.items():
+                if k.upper() == '_OMEGA' and float(v):
+                    omega_vals.append(float(v))
+        info.parameters_keyword.clear()
     if not ext_params:
         return None
-    base_token = xc_list.token
-    reg_name = f"__dh_{abs(hash((base_token, tuple((k, v.tobytes()) for k, v in sorted(ext_params.items()))))):x}"
+    base_token = xc_list.name_token
+    # Build deterministic hash: for numpy arrays use tobytes(), for dicts use sorted items
+    def _hash_val(xid):
+        v = ext_params[xid]
+        if isinstance(v, dict):
+            return tuple(sorted(v.items()))
+        return v.tobytes()
+    reg_name = f"__dh_{abs(hash((base_token, tuple(_hash_val(xid) for xid in sorted(ext_params))))):x}"
     dft.libxc.register_custom_functional_(
-        reg_name, base_token, ext_params=ext_params)
+        reg_name, base_token,
+        ext_params=ext_params,
+        omega=omega_vals if omega_vals else None)
     return reg_name.lower()
 
 
@@ -114,7 +132,7 @@ def _extract_components(xc_eng, xc_scf, name):
     mp2_list = xc_eng.extract_by_xctype(XCType.MP2)
     if len(mp2_list) > 0:
         mp2 = mp2_list[0]
-        add = mp2.additional
+        add = mp2.parameters_keyword
         if "OS" in add or "SS" in add:
             c_os = mp2.fac * mp2.parameters[0] * add.get("OS", 1)
             c_ss = mp2.fac * mp2.parameters[1] * add.get("SS", 1)
@@ -126,7 +144,7 @@ def _extract_components(xc_eng, xc_scf, name):
     d3_list = xc_eng.extract_by_xctype(XCType.DFTD3)
     if len(d3_list) > 0:
         d3 = d3_list[0]
-        add = d3.additional
+        add = d3.parameters_keyword
         if any(k.upper() != "XC" for k in add):
             raise NotImplementedError(
                 "Explicit D3 parameters are unsupported. "
@@ -147,7 +165,7 @@ def _extract_components(xc_eng, xc_scf, name):
     d4_list = xc_eng.extract_by_xctype(XCType.DFTD4)
     if len(d4_list) > 0:
         d4 = d4_list[0]
-        add = d4.additional
+        add = d4.parameters_keyword
         if any(k.upper() != "XC" for k in add):
             raise NotImplementedError(
                 "Explicit D4 parameters are unsupported. "

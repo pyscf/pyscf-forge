@@ -97,7 +97,7 @@
         "notes": "This implementation gives results of Gaussian."
     },
     "PTPSS_D3Zero": {
-        "code": "0.5*HF + 0.5*MGGA_X_TPSS(_b=0.15, _c=0.88491, _e=0.047, _kappa=0.872, _mu=0.16952, _BLOC_a=2, _BLOC_b=0), 0.625*MGGA_C_TPSS(_beta=0.06080, _d=6.3, _C0_c0=0.53, _C0_c1=0.87, _C0_c2=0.50, _C0_c3=2.26) + 0.375*MP2_OS + DFTD3(Zero)",
+        "code": "0.5*HF + 0.5*MGGA_X_TPSS(0.15, 0.88491, 0.047, 0.872, 0.16952, 2, 0), 0.625*MGGA_C_TPSS(0.06080, 6.3, 0.53, 0.87, 0.50, 2.26) + 0.375*MP2_OS + DFTD3(Zero)",
         "ref": "10.1021/ct100466k",
         "tested": "QChem 5.1.1",
         "alias": [
@@ -105,7 +105,7 @@
         ]
     },
     "PWPB95_D3Zero": {
-        "code": "0.5*HF + 0.5*GGA_X_MPW91(_bt=0.00444, _alpha=19.823391, _expo=3.7868), 0.731*MGGA_C_BC95(_css=0.03241, _copp=0.00250) + 0.269*MP2_OS + DFTD3(Zero)",
+        "code": "0.5*HF + 0.5*GGA_X_MPW91(0.00444, 19.823391, 3.7868), 0.731*MGGA_C_BC95(0.03241, 0.00250) + 0.269*MP2_OS + DFTD3(Zero)",
         "ref": "10.1021/ct100466k",
         "tested": "QChem 5.1.1",
         "alias": [
@@ -247,8 +247,7 @@
         "tested": "QChem 5.1.1",
         "alias": [
             "\u03c9B97X_2_LP"
-        ],
-        "supported": false
+        ]
     },
 
     "wB97X_2_TQZ": {
@@ -259,8 +258,7 @@
             "\u03c9B97X_2_TQZ",
             "wB97X_2",
             "\u03c9B97X_2"
-        ],
-        "supported": false
+        ]
     },
     "wPBEPP86": {
         "code": "0.70*HF + 0.30*LR_HF(0.18) + 0.30*GGA_X_ITYH_PBE, 0.68*GGA_C_P86VWN + 0.48*MP2",

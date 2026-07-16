@@ -62,22 +62,22 @@ class XCInfo:
     """ Parameters list of xc contribution. """
     type: XCType
     """ Type of xc contribution. """
-    additional: dict
+    parameters_keyword: dict
     """ (experimental) Additional parameters.
 
     Parameters that is not sutiable to be passed as string token, or very advanced parameters.
     """
 
-    def __init__(self, fac, name, parameters, typ, additional=None):
+    def __init__(self, fac, name, parameters, typ, parameters_keyword=None):
         self.fac = fac
         self.name = name
         self.parameters = parameters
         self.type = typ
-        if additional is None:
-            self.additional = dict()
+        if parameters_keyword is None:
+            self.parameters_keyword = dict()
         else:
-            assert isinstance(additional, dict)
-            self.additional = additional
+            assert isinstance(parameters_keyword, dict)
+            self.parameters_keyword = parameters_keyword
         self.round()
 
     def round(self, ndigits=10) -> "XCInfo":
@@ -91,16 +91,16 @@ class XCInfo:
         self.parameters = [
             adv_round(f, ndigits) if isinstance(f, (float, int)) else str(f)
             for f in self.parameters]
-        self.additional = {
+        self.parameters_keyword = {
             k: adv_round(f, ndigits) if isinstance(f, (float, int)) else str(f)
-            for k, f in self.additional.items()}
+            for k, f in self.parameters_keyword.items()}
         return self
 
     @property
     def token(self) -> str:
         """ Standardlized name of XC contribution.
 
-        Note that additional parameter is not considered.
+        Note that keyword parameter is not considered.
         """
         self.round()
         token = ""
@@ -111,9 +111,9 @@ class XCInfo:
             token += str(abs(self.fac)) + "*"
         # 2. name
         token += self.name
-        # 3. parameter and additional
+        # 3. parameter and parameters_keyword
         param_tokens = [str(f) for f in self.parameters]
-        param_tokens += [f"{key}={val}" for key, val in self.additional.items()]
+        param_tokens += [f"{key}={val}" for key, val in self.parameters_keyword.items()]
         if len(param_tokens) != 0:
             token += "(" + ", ".join(param_tokens) + ")"
         # finalize: upper_case
@@ -162,7 +162,7 @@ class XCInfo:
                 return s
 
         parameters = []
-        additional = {}
+        parameters_keyword = {}
         if len(parameters_str) > 0:
             for item in re.split(r"[,;]", parameters_str[1:-1]):
                 if "=" not in item:
@@ -170,10 +170,10 @@ class XCInfo:
                 else:
                     assert item.count("=") == 1
                     key, val = item.split("=")
-                    additional[key] = try_convert_float(val)
+                    parameters_keyword[key] = try_convert_float(val)
 
         # build basic information
-        xc_info = XCInfo(fac, name, parameters, XCType.UNKNOWN, additional=additional)
+        xc_info = XCInfo(fac, name, parameters, XCType.UNKNOWN, parameters_keyword=parameters_keyword)
         # for advanced correlations, try to substitute alias first
         if xc_info.name in ADV_CORR_ALIAS:
             xc_info.name = ADV_CORR_ALIAS[xc_info.name]
@@ -224,13 +224,18 @@ class XCInfo:
             # try if pyscf parse_xc success (must be low_rung)
             dft_type = ni._xc_type(guess_name)
             if len(xc_info.parameters) != 0:
-                raise ValueError(f"Currently do not accept parameters (list of floats) for {dft_type}. "
-                                 f"Please try to use additional (dictionary of floats) to specify ext_params of libxc.")
-            if len(xc_info.additional) == 0:
-                xc_type |= XCType.PYSCF_PARSABLE
+                if not xc_info.parameters_keyword:
+                    # Positional params without key=value — treat as ext_params
+                    xc_type |= XCType.WITH_EXT_PARAM
+                else:
+                    raise ValueError(f"Currently do not accept mixed positional/named parameters "
+                                     f"for {dft_type}. Use either all positional "
+                                     f"(ext_params) or all named with '='.")
             else:
-                # if additional parameters included, then these should be handled by ext_param in libxc
-                xc_type |= XCType.WITH_EXT_PARAM
+                if len(xc_info.parameters_keyword) == 0:
+                    xc_type |= XCType.PYSCF_PARSABLE
+                else:
+                    xc_type |= XCType.WITH_EXT_PARAM
             # except special cases
             if name == "VV10" and len(xc_info.parameters) > 0:
                 raise ValueError("We use VV10 as vDW correction with parameters, instead of XC_GGA_XC_VV10.")
@@ -293,30 +298,20 @@ class XCInfo:
 
     @classmethod
     def parse_default_parameters(cls, xc_info: "XCInfo") -> "XCInfo":
-        """ Fill addable parameters (or setting default parameters for future possible API usage). """
-        # not listed in definition of parameters
         lst_addable = xc_info.type.addable_parameters()
-        # listed in definition of parameters
+        if not lst_addable:
+            return xc_info
         if len(xc_info.parameters) == len(lst_addable):
-            # additional check that if addable parameters is number
-            for n, addable in enumerate(lst_addable):
-                if addable and not convertable_to_float(xc_info.parameters[n]):
-                    raise ValueError("Some parameters that should be addable is not float number!")
             return xc_info
-        elif len(xc_info.parameters) == len(lst_addable) - sum(lst_addable):
-            # fill in addable parameters
-            n1 = 0
-            parameter_new = []
-            for n, addable in enumerate(lst_addable):
+        if len(xc_info.parameters) == len(lst_addable) - sum(lst_addable):
+            param_new = []
+            i = 0
+            for addable in lst_addable:
+                param_new.append(xc_info.parameters[i] if not addable else 1)
                 if not addable:
-                    parameter_new.append(xc_info.parameters[n1])
-                    n1 += 1
-                else:
-                    parameter_new.append(1)
-            xc_info.parameters = parameter_new
-            return xc_info
-        else:
-            raise ValueError("Number of parameter number is probably not correct for term {:}!".format(xc_info.token))
+                    i += 1
+            xc_info.parameters = param_new
+        return xc_info
 
     @classmethod
     def handle_rsh(cls, info: "XCInfo") -> None or List["XCInfo"]:
@@ -361,6 +356,8 @@ class XCInfo:
         self.type.check_sanity()
         self.round()
         lst_addable = self.type.addable_parameters()
+        if not lst_addable:
+            return
         assert len(self.parameters) == len(lst_addable)
         # additional check that if addable parameters is number
         for n, addable in enumerate(lst_addable):
@@ -386,7 +383,7 @@ class XCInfo:
         if (
                 self.name != other.name
                 or self.type != other.type
-                or self.additional != other.additional
+                or self.parameters_keyword != other.parameters_keyword
         ):
             return False
 

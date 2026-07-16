@@ -3,7 +3,10 @@
 
 import unittest
 from pyscf import gto
+from pyscf.dft.libxc import _itrf
 from pyscf.dh import DFDH
+
+_HAS_NAMED_PARAMS = hasattr(_itrf, 'LIBXC_xc_func_find_ext_params_name')
 
 
 class TestKnownEnergy(unittest.TestCase):
@@ -68,14 +71,16 @@ class TestKnownEnergy(unittest.TestCase):
         mf = DFDH(mol, xc="PWPB95").run()
         self.assertAlmostEqual(mf.e_tot, ref, places=4)
 
-    @unittest.skip('customized RSH support')
+    @unittest.skipUnless(_HAS_NAMED_PARAMS,
+                         'Named-param ext_params not available in this PySCF')
     def test_wB97X_2_TQZ(self):
         ref = -76.24074263  # QChem 5.1.1
         mol = gto.M(atom="O; H 1 0.94; H 1 0.94 2 104.5", basis="6-31G").build()
         mf = DFDH(mol, xc="wB97X-2-TQZ").run()
         self.assertAlmostEqual(mf.e_tot, ref, places=4)
 
-    @unittest.skip('customized RSH support')
+    @unittest.skipUnless(_HAS_NAMED_PARAMS,
+                         'Named-param ext_params not available in this PySCF')
     def test_wB97X_2_LP(self):
         ref = -76.28031455  # QChem 5.1.1
         mol = gto.M(atom="O; H 1 0.94; H 1 0.94 2 104.5", basis="6-31G").build()

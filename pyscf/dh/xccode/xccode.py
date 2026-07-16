@@ -226,6 +226,26 @@ class XCList:
         token = token.strip()
         return token
 
+    @property
+    def name_token(self) -> str:
+        """Token built from info.name — safe for libxc registration (no parenthesized params)."""
+        self.sort()
+        if len(self) == 0:
+            return ""
+
+        def _token(info):
+            fac = "" if abs(info.fac - 1.0) < 1e-12 else f"{info.fac}*"
+            return f"{fac}{info.name}"
+
+        xc_list_x = self.extract_by_xctype(lambda t: XCType.CORR not in t)
+        xc_list_c = self.extract_by_xctype(XCType.CORR)
+        token = " + ".join([_token(info) for info in xc_list_x]).replace("+ -", "-")
+        if len(xc_list_c) > 0:
+            token += ", " + " + ".join([_token(info) for info in xc_list_c]).replace("+ -", "-")
+        if len(self.extract_by_xctype(XCType.HYB)) == 0 and len(xc_list_c) == 0:
+            token += ","
+        return token.strip()
+
     def sort(self):
         """ Sort list of xc in unique way. """
         xc_list = self.copy()
