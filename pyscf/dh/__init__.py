@@ -18,8 +18,9 @@
 #          Shirong Wang <srwang20@fudan.edu.cn>
 #
 
-from . import rdfdh, udfdh, dhutil
-from .dh import to_dh
+from . import dhutil as dhutil
+from . import rdfdh, udfdh
+from .dh import to_dh as to_dh
 from pyscf import gto
 
 

@@ -18,14 +18,10 @@
 #          Shirong Wang <srwang20@fudan.edu.cn>
 #
 
-from pyscf import lib, gto, dft, df, scf
-from pyscf.cc.ccsd import set_frozen as _ccsd_set_frozen
+from pyscf import lib, gto, dft, df
 from pyscf.dh.dhutil import calc_batch_size, timing, HybridDict
 from pyscf.dispersion.dftd3 import DFTD3Dispersion
 from pyscf.dh.xccode import parse_xc_dh, xc_equal
-import os
-import pickle
-import numpy as np
 
 
 class DHBase(lib.StreamObject):

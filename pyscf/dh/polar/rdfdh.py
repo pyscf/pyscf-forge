@@ -23,7 +23,7 @@ from __future__ import annotations
 from pyscf.dh.resp import RDHRespMixin
 from pyscf.dh.resp import _get_Y_mo
 from pyscf.dh.dh import DHBase
-from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize, hermi_sum_last2dim
+from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, restricted_biorthogonalize
 from pyscf.dh.xccode import xc_equal
 from pyscf import lib
 import numpy as np

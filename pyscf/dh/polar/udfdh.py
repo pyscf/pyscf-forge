@@ -25,8 +25,7 @@ from pyscf.dh.resp import UDHRespMixin
 from pyscf.dh.dhutil import gen_batch, get_rho_from_dm_gga, tot_size, hermi_sum_last2dim
 from pyscf.dh.xccode import xc_equal
 # pyscf import
-from pyscf import lib, dft
-from pyscf.dft.numint import _scale_ao
+from pyscf import lib
 from pyscf.lib.numpy_helper import ANTIHERMI
 # other import
 import numpy as np

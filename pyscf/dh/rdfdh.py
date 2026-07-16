@@ -19,20 +19,13 @@
 #
 
 # dh import
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, HybridDict, timing, \
-    get_rho_from_dm_gga
-from pyscf.dh.xccode import parse_xc_dh, xc_equal
+from pyscf.dh.dhutil import timing
+from pyscf.dh.xccode import xc_equal
 from pyscf.dh.dh import DHBase, energy_elec_mp2_dfmp2_native, energy_elec_mp2_dfmp2
 from pyscf.dh.mp2_ajz import energy_elec_mp2_ajz
 # pyscf import
-from pyscf import lib, gto, df, dft, scf
-from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
-from pyscf.ao2mo import _ao2mo
-from pyscf.scf._response_functions import _gen_rhf_response
+from pyscf import lib, dft
 # other import
-import os
-import pickle
-import numpy as np
 from functools import partial
 
 einsum = lib.einsum

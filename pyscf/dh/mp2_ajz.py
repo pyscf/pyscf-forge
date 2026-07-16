@@ -17,10 +17,9 @@
 #          Shirong Wang <srwang20@fudan.edu.cn>
 #
 
-from pyscf import lib, df
+from pyscf import lib
 from pyscf.ao2mo import _ao2mo
 from pyscf.dh.dhutil import calc_batch_size, gen_batch, timing, tot_size
-from pyscf.dh.dhutil import restricted_biorthogonalize as _restricted_biorthogonalize
 import numpy as np
 einsum = lib.einsum
 

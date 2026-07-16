@@ -20,13 +20,12 @@
 
 # dh import
 from pyscf.dh.dh import DHBase
-from pyscf.dh.dhutil import gen_batch, calc_batch_size, timing
+from pyscf.dh.dhutil import timing
 from pyscf.dh.xccode import xc_equal
-from pyscf.dh.mp2_ajz import get_cderi_mo, energy_elec_ump2_ajz
+from pyscf.dh.mp2_ajz import energy_elec_ump2_ajz
 from pyscf.dh.dh import energy_elec_mp2_dfump2_native, energy_elec_mp2_dfump2
 # pyscf import
-from pyscf import lib, gto, df, dft, scf
-from pyscf.dft.xc_deriv import transform_vxc, transform_fxc
+from pyscf import lib, dft
 # other import
 import h5py
 import numpy as np
