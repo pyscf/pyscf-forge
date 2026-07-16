@@ -336,9 +336,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
         xdiag *= _get_wigner_6j_j41h (2, twoSb[i], twoSk[i], twoSk[i-1], twoSb[i-1]);
     }
 
-    // TEMPORARY: p != r not yet implemented
-    assert (p==r);
-
     // p
     //
     //     -1**[S'(r-1) + S(r) - 1/2]
