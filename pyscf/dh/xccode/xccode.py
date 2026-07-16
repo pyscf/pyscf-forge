@@ -375,7 +375,3 @@ class XCDH:
             self.xc_eng = XCList.build_from_token(token, False, **kwargs)
 
 
-if __name__ == '__main__':
-    lt = XCList.build_from_token("XYG3", False)
-    print(lt.xc_list)
-    print(lt.token)
