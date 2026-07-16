@@ -221,11 +221,13 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     // -1: singly-occupied in the bra
     //  1: singly-occupied in the ket
     //  2: doubly-occupied in the ket
+
     assert ((t!=q) || ((nt+nq)==0));
     assert ((r!=p) || ((nr+np)==0));
     double xdiag = 1.0;
     unsigned int twoS0b, twoS0k, twoS0;
     int parity = 0;
+    int mr,mp,mq,mt;
     unsigned int i;
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
@@ -252,6 +254,36 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     // through nspin inclusively.
     assert ((t>0) || abs (nt) == 1); // undefined to have doubly-occupied dummy orbital
     assert ((q>0) || abs (nq) == 1); // undefined to have doubly-occupied dummy orbital
+    bool qt_pp = ((nq > 0) && (nt > 0)) || ((nq < 0) && (nt < 0));
+    bool pr_pp = ((np > 0) && (nr > 0)) || ((np < 0) && (nr < 0));
+
+    // A bunch of index sanity checks
+    if (p==r){ // p'r, pr'
+        assert (abs (np) == 1);
+        assert (np == -nr);
+    } else if (p==(r+1)){
+        if (pr_pp==false){ // p'r, pr'
+            assert (abs (np) + abs (nr) < 4);
+        } else { // p'r', pr
+            assert (abs (np+nr) < 3);
+        }
+    } else if (p==(r+2)){ // p'r', pr
+        assert (abs (np+nr) < 4);
+    }
+    if (q==t){ // q't, qt'
+        assert (abs (nq) == 1);
+        assert (nq == -nt);
+    } else if (q==(t+1)){
+        if (qt_pp==false){ // q't, qt'
+            assert (abs (nq) + abs (nt) < 4);
+        } else { // q't', qt
+            assert (abs (nq+nt) < 3);
+        }
+    } else if (q==(t+2)){ // q't', qt
+        assert (abs (nq+nt) < 4);
+    }
+
+    // populate the actual S arrays   
     for (i=0; i <= p; i++){
         twoSk[i] = _get_twoS_running (ketstr, i, nspin);
         twoSb[i] = _get_twoS_running (brastr, i, nspin);
@@ -306,49 +338,16 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
 
     // TEMPORARY: p != r not yet implemented
     assert (p==r);
-    
+
     // p
     //
-    //     -1**[parity]
+    //     -1**[S'(r-1) + S(r) - 1/2]
     //     *
     //     { S'(r-1)  S(r-1)  1     }
     //     { 1/2      1/2     S"(r) }
     //
     //     S"(r) = S(r)   if nr isin {-2,+1}
     //           = S'(r)  if nr isin {+2,-1}
-    // --------------- parity ------------------
-    // coincidence (p=r)
-    //     |np| = |nr| = 1: S'(r-1) + S(r) - 1/2
-    // adjacency (p=r+1)
-    //     np = -1, nr = 1:     "shelf"
-    //     np = -1, nr = 2:     S'(r-1) + S(r-1)
-    //     np = -2, nr = 1:     2S'(r)
-    //     np = -2, nr = 2:     contradiction in terms
-    //     np = 1, nr = -1:     "hill"
-    //     np = 1, nr = -2:     2S'(r) + 1
-    //     np = 2, nr = -1:     S'(r-1) + S(r-1) + 1
-    //     np = 2, nr = -2:     contradiction in terms
-    //     np = nr = -1:        S'(r-1) + S(r-1)
-    //     np = -2, nr = -1:    contradiction in terms
-    //     np < 0, nr = -2:     contradiction in terms
-    //     np = nr = 1:         S'(r-1) + S(r-1)
-    //     np = 2, nr = 1:      contradiction in terms
-    //     np > 0, nr = 2:      contradiction in terms
-    // next adjacency (p=r+2; sgn (np) == sgn (nr))
-    //     np = -1, nr = -1,-2:  ???
-    //     np = -2, nr = -1:     ???
-    //     np = -2, nr = -2:     contradiction in terms
-    //     np = 1, nr = 1,2:     ???
-    //     np = 2, nr = 1:       ???
-    //     np = 2, nr = 2:       contradiction in terms
-    // the "shelf" diagram:
-    //    nr == 2:  S'(r-1) + S(r-1)
-    //    nr == 1:  S(r) + S'(r-1) - 1/2 [and T'(r)]
-    //    if p > r+2 and np > 0: ???
-    // the "hill" diagram: 
-    //    nr == -2:  2S(r) + 1
-    //    nr == -1:  S'(r) + S'(r-1) - 1/2 [and T(r)]
-    //    if p > r+2 and np < 0: ???
     if ((nr == -2) || (nr == 1)){ 
         twoS0 = twoSk[r]; 
     } else if ((nr == 2) || (nr == -1)){
@@ -358,6 +357,64 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     parity += twoSk[r] + twoSb[r-1] - 1; // graph signs
     parity = parity % 4;
 
+    // flip the 'hill' and 'shelf' diagrams for p'r'qt, t'q'rp
+    if ((p > (r+1)) && pr_pp){
+        if (nr > 0){
+            parity += twoSk[r+1] + (3*twoSb[r]) + 1;
+        } else {
+            parity += twoSb[r+1] + (3*twoSk[r]) - 1;
+        }
+    }
+    parity = parity % 4;
+
+    // 'hill' and 'shelf' diagrams
+    mr = nr;
+    mp = np;
+    // edge case: np = 2 with adjacent diagrams. Factor of -1 and np -> nr
+    if (abs (np) == 2){
+        if ((p==(r+1)) || ((p==(r+2)) && pr_pp)){
+            parity += 2;
+            mr = np;
+            mp = nr;
+        }
+    }
+
+    // 'hill' and 'shelf' diagrams
+    if (p>r){
+        switch (mr) {
+            case -2:
+                parity += twoSk[r] + 3*twoSb[r-1] - 1;
+            case -1:
+                parity += twoSb[r] + 3*twoSk[r];
+            case 2:
+                parity += 3*twoSb[r] + twoSk[r-1] + 1;
+        }
+    }
+    parity = parity % 4;
+
+    // T(i) and T'(i) strings
+    for (i=r+1; i < p; i++){
+        if (i==(p-1) && abs (np) == 2){
+            continue;
+        }
+        if (np > 0){ // T(i)
+            xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSb[i+1], twoSb[i], twoSk[i-1]);
+        } else { // T'(i)
+            xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
+        }
+        parity += 2 + twoSk[i] + twoSb[i];
+        parity = parity % 4;
+    }
+
+    // Final pairing sign flip
+    if (abs (mp) == 2){
+        if (mp > 0){
+            parity += twoSb[p-1] + 3*twoSb[p] + 1;
+        } else {
+            parity += twoSk[p-1] + 3*twoSk[p] + 1;
+        }
+    }
+    parity = parity % 4;
 
     // Final sign computation
     assert ((parity % 2)==0);
