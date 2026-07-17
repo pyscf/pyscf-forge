@@ -227,7 +227,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     double xdiag = 1.0;
     unsigned int twoS0b, twoS0k, twoS0;
     int parity = 0;
-    int mr,mp,mq,mt;
     unsigned int i;
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
@@ -312,46 +311,53 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     // TEMPORARY: t != q not yet implemented
     assert (q==t);
 
-    // t
-    //     -1**[S(t) + S'(t-1) - 1/2]
-    //     *
-    //     { S'(t)  S(t)  1      }
-    //     { 1/2    1/2   S(t-1) }
-    // We just skip this diagram when we are doing Sz, which corresponds to i == 0
-    if (t>0){
-        parity += twoSk[t] + twoSb[t-1] - 1; // graph signs
-        parity = parity % 4; // remember everything is *2 until the very end
-        xdiag *= _get_wigner_6j_j41h (twoSb[t], twoSk[t], 2, 1, twoSk[t-1]);
-    }
+    // We just skip all of these when we are doing Sz, which corresponds to t = q = 0
+    if (q>0){
 
-    // t+1, t+2, ... p-2, p-1
-    //
-    //     -1**[S(i) + S'(i-1) - 1/2]
+    // q
+    //     -1**[S(q) + S'(q-1) - 1/2]
+    //     *
+    //     { S'(q)  S(q)  1      }
+    //     { 1/2    1/2   S(q-1) }
+    parity += twoSk[q] + twoSb[q-1] - 1; // graph signs
+    parity = parity % 4; // remember everything is *2 until the very end
+    xdiag *= _get_wigner_6j_j41h (twoSb[q], twoSk[q], 2, 1, twoSk[q-1]);
+
+    } // q>0
+
+    // q+1, q+2, ... r-2, r-1
+    //     ~T(i) =
+    //     -1**[S'(i) + S(i-1) - 1/2]
     //     *
     //     { 1    S'(i)   S(i)    }
     //     { 1/2  S(i-1)  S'(i-1) }
     for (i=q+1; i < r; i++){
-        parity += twoSk[i] + twoSb[i-1] - 1; // graph signs
+        parity += twoSb[i] + twoSk[i-1] - 1; // graph signs
         parity = parity % 4;
         xdiag *= _get_wigner_6j_j41h (2, twoSb[i], twoSk[i], twoSk[i-1], twoSb[i-1]);
     }
 
-    // p
+    // r
     //
-    //     -1**[S'(r-1) + S(r) - 1/2]
+    //     -1**[S'(r-1) + S"(r) - 1/2]
     //     *
     //     { S'(r-1)  S(r-1)  1     }
     //     { 1/2      1/2     S"(r) }
     //
     //     S"(r) = S(r)   if nr isin {-2,+1}
     //           = S'(r)  if nr isin {+2,-1}
-    if ((nr == -2) || (nr == 1)){ 
-        twoS0 = twoSk[r]; 
-    } else if ((nr == 2) || (nr == -1)){
-        twoS0 = twoSb[r];
-    } else { assert (false); }
+    switch (nr) {
+        case -2:
+            twoS0 = twoSk[r];
+        case -1:
+            twoS0 = twoSb[r];
+        case 1:
+            twoS0 = twoSk[r];
+        case 2:
+            twoS0 = twoSb[r];
+    }
     xdiag *= _get_wigner_6j_j41h (twoSb[r-1], twoSk[r-1], 2, 1, twoS0);
-    parity += twoSk[r] + twoSb[r-1] - 1; // graph signs
+    parity += twoS0 + twoSb[r-1] - 1; // graph signs
     parity = parity % 4;
 
     // flip the 'hill' and 'shelf' diagrams for p'r'qt, t'q'rp
@@ -365,6 +371,8 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     parity = parity % 4;
 
     // 'hill' and 'shelf' diagrams
+
+    /* This might be unnecessary
     mr = nr;
     mp = np;
     // edge case: np = 2 with adjacent diagrams. Factor of -1 and np -> nr
@@ -374,24 +382,25 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
             mr = np;
             mp = nr;
         }
-    }
+    } */
 
     // 'hill' and 'shelf' diagrams
     if (p>r){
-        switch (mr) {
+        switch (nr) {
             case -2:
                 parity += twoSk[r] + 3*twoSb[r-1] - 1;
-            case -1:
-                parity += twoSb[r] + 3*twoSk[r];
             case 2:
-                parity += 3*twoSb[r] + twoSk[r-1] + 1;
+                parity += twoSb[r] + 3*twoSk[r-1] - 1;
         }
     }
     parity = parity % 4;
 
     // T(i) and T'(i) strings
-    for (i=r+1; i < p; i++){
-        if (i==(p-1) && abs (np) == 2){
+    for (i=r; i < p; i++){
+        if ((i==r) && (abs (nr) == 2)){
+            continue;
+        }
+        if ((i==(p-1)) && (abs (np) == 2)){
             continue;
         }
         if (np > 0){ // T(i)
@@ -404,8 +413,8 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     }
 
     // Final pairing sign flip
-    if (abs (mp) == 2){
-        if (mp > 0){
+    if (abs (np) == 2){
+        if (np > 0){
             parity += twoSb[p-1] + 3*twoSb[p] + 1;
         } else {
             parity += twoSk[p-1] + 3*twoSk[p] + 1;
