@@ -42,6 +42,10 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
                unsigned int t, unsigned int q, unsigned int r, unsigned int p,
                int nt, int nq, int nr, int np,
                unsigned int nspin);
+double _get_xcore (unsigned int * twoSk, unsigned int * twoSb,
+                   unsigned int r, unsigned int q,
+                   int nr, int nq, bool pphh);
+
 double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM);
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
                   double * h1e_s, double * eri,

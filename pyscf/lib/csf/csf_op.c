@@ -213,6 +213,116 @@ double _get_xdiag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned in
     return _get_x (coupstr, coupstr, t, t, p, p, 1, -1, 1, -1, nspin);
 }
 
+double _get_xcore (unsigned int * twoSk, unsigned int * twoSb,
+                   unsigned int r, unsigned int q,
+                   int nr, int nq, bool pphh)
+{
+    int parity = 0;
+    double xdiag = 1.0;
+    unsigned int twoS0;
+    unsigned int i;
+
+    // TODO: check that this still works for t = 1, q = 2 case
+    if (q>0){
+    if (pphh){
+        if (nq > 0){
+            parity += twoSb[q-1] + (3*twoSk[q-2]) - 1;
+        } else {
+            parity += twoSk[q-1] + (3*twoSb[q-2]) - 1;
+        }
+        if (nr > 0){
+            parity += twoSk[r+1] + (3*twoSb[r]) + 1;
+        } else {
+            parity += twoSb[r+1] + (3*twoSk[r]) - 1;
+        }
+    }
+    parity = parity % 4;
+
+    // q
+    //     -1**[S(q) + S"(q-1) + 1/2]
+    //     *
+    //     { S'(q)  S(q)  1       }
+    //     { 1/2    1/2   S"(q-1) }
+    //
+    //     S"(q-1) = S(q-1)   if nq isin {-2,+1}
+    //             = S'(q-1)  if nq isin {+2,-1}
+    switch (nq) {
+        case -2:
+            twoS0 = twoSk[q-1];
+        case -1:
+            twoS0 = twoSb[q-1];
+        case 1:
+            twoS0 = twoSk[q-1];
+        case 2:
+            twoS0 = twoSb[q-1];
+    }
+    parity += twoSk[q] + twoS0 + 1; // graph signs
+    parity = parity % 4; // remember everything is *2 until the very end
+    xdiag *= _get_wigner_6j_j41h (twoSb[q], twoSk[q], 2, 1, twoS0);
+
+    // 'hill' and 'self' parity: |nq| = 2
+    switch (nq) {
+        case -2:
+            parity += twoSk[q] + 3*twoSb[q-1] - 1;
+        case 2:
+            parity += twoSb[q] + 3*twoSk[q-1] - 1;
+    }
+    parity = parity % 4;
+
+    } // q>0
+
+    // q+1, q+2, ... r-2, r-1
+    //     ~T(i) =
+    //     -1**[S'(i) + S(i-1) - 1/2]
+    //     *
+    //     { 1    S'(i)   S(i)    }
+    //     { 1/2  S(i-1)  S'(i-1) }
+    for (i=q+1; i < r; i++){
+        parity += twoSb[i] + twoSk[i-1] - 1; // graph signs
+        parity = parity % 4;
+        xdiag *= _get_wigner_6j_j41h (2, twoSb[i], twoSk[i], twoSk[i-1], twoSb[i-1]);
+    }
+
+    // r
+    //
+    //     -1**[S'(r-1) + S"(r) - 1/2]
+    //     *
+    //     { S'(r-1)  S(r-1)  1     }
+    //     { 1/2      1/2     S"(r) }
+    //
+    //     S"(r) = S(r)   if nr isin {-2,+1}
+    //           = S'(r)  if nr isin {+2,-1}
+    switch (nr) {
+        case -2:
+            twoS0 = twoSk[r];
+        case -1:
+            twoS0 = twoSb[r];
+        case 1:
+            twoS0 = twoSk[r];
+        case 2:
+            twoS0 = twoSb[r];
+    }
+    xdiag *= _get_wigner_6j_j41h (twoSb[r-1], twoSk[r-1], 2, 1, twoS0);
+    parity += twoS0 + twoSb[r-1] - 1; // graph signs
+    parity = parity % 4;
+
+    // 'hill' and 'self' parity: |nr| = 2
+    switch (nr) {
+        case -2:
+            parity += twoSk[r] + 3*twoSb[r-1] - 1;
+        case 2:
+            parity += twoSb[r] + 3*twoSk[r-1] - 1;
+    }
+    parity = parity % 4;
+
+    // Final sign computation
+    assert ((parity % 2)==0);
+    parity = parity / 2;
+    if ((parity % 2) == 1){ xdiag = -xdiag; }
+
+    return xdiag;
+}
+
 double _get_x (uint64_t brastr, uint64_t ketstr,
                unsigned int t, unsigned int q, unsigned int r, unsigned int p,
                int nt, int nq, int nr, int np,
@@ -228,8 +338,8 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     assert ((r!=p) || ((nr+np)==0));
     double xdiag = 1.0;
     unsigned int twoS0b, twoS0k, twoS0;
-    unsigned int offk = 0;
-    unsigned int offb = 0;
+    int offk = 0;
+    int offb = 0;
     int parity = 0;
     unsigned int i;
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
@@ -313,9 +423,6 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     }
     xdiag = sqrt (xdiag);
 
-    // TEMPORARY: t != q not yet implemented
-    assert (q==t);
-
     // We just skip all of these when we are doing Sz, which corresponds to t = q = 0
     if (q>0){
 
@@ -354,131 +461,21 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
         parity += 2 + twoSk[i] + twoSb[i];
         parity = parity % 4;
     }
-
-    // q
-    //     -1**[S(q) + S"(q-1) + 1/2]
-    //     *
-    //     { S'(q)  S(q)  1       }
-    //     { 1/2    1/2   S"(q-1) }
-    //
-    //     S"(q-1) = S(q-1)   if nq isin {-2,+1}
-    //             = S'(q-1)  if nq isin {+2,-1}
-    if (qt_pp){
-        assert (q>=3);
-        if (nq > 0){
-            offb = 2;
-        } else {
-            offk = 2;
-        }
     }
-    switch (nq) {
-        case -2:
-            twoS0 = twoSk[q-1-offk];
-        case -1:
-            twoS0 = twoSb[q-1-offb];
-        case 1:
-            twoS0 = twoSk[q-1-offk];
-        case 2:
-            twoS0 = twoSb[q-1-offb];
-    }
-    parity += twoSk[q-offk] + twoS0 + 1; // graph signs
-    parity = parity % 4; // remember everything is *2 until the very end
-    xdiag *= _get_wigner_6j_j41h (twoSb[q-offb], twoSk[q-offb], 2, 1, twoS0);
 
-    // 'hill' and 'self' parity: flipping for pphh, hhpp
-    if ((q > (t+1)) && qt_pp){
-        if (nq > 0){
-            parity += twoSb[q-1-offb] + (3*twoSk[q-2-offk]) - 1;
-        } else {
-            parity += twoSk[q-1-offk] + (3*twoSb[q-2-offb]) - 1;
-        }
-    }
-    parity = parity % 4;
-
-    // 'hill' and 'self' parity: |nq| = 2
-    if (q>t){
-        switch (nq) {
-            case -2:
-                parity += twoSk[q-offk] + 3*twoSb[q-1-offb] - 1;
-            case 2:
-                parity += twoSb[q-offb] + 3*twoSk[q-1-offk] - 1;
-        }
-    }
-    parity = parity % 4;
-
-    } // q>0
-
-    // q+1, q+2, ... r-2, r-1
-    //     ~T(i) =
-    //     -1**[S'(i) + S(i-1) - 1/2]
-    //     *
-    //     { 1    S'(i)   S(i)    }
-    //     { 1/2  S(i-1)  S'(i-1) }
+    // Xcore
     if (qt_pp){
         if (nq > 0){
-            offb = 1;
+            offb = -2;
         } else {
-            offk = 1;
+            offk = -2;
         }
+        assert (q>=t+(abs(nt)+abs(nq))-1);
     }
-    for (i=q+1; i < r; i++){
-        parity += twoSb[i-offb] + twoSk[i-1-offk] - 1; // graph signs
-        parity = parity % 4;
-        xdiag *= _get_wigner_6j_j41h (2, twoSb[i-offb], twoSk[i-offk], twoSk[i-1-offk], twoSb[i-1-offb]);
-    }
-
-    // r
-    //
-    //     -1**[S'(r-1) + S"(r) - 1/2]
-    //     *
-    //     { S'(r-1)  S(r-1)  1     }
-    //     { 1/2      1/2     S"(r) }
-    //
-    //     S"(r) = S(r)   if nr isin {-2,+1}
-    //           = S'(r)  if nr isin {+2,-1}
-    offb = 0;
-    offk = 0;
-    if (pr_pp){
-        if (nr > 0){
-            offb = 2;
-        } else {
-            offk = 2;
-        }
-    }
-    switch (nr) {
-        case -2:
-            twoS0 = twoSk[r+offk];
-        case -1:
-            twoS0 = twoSb[r+offb];
-        case 1:
-            twoS0 = twoSk[r+offk];
-        case 2:
-            twoS0 = twoSb[r+offb];
-    }
-    xdiag *= _get_wigner_6j_j41h (twoSb[r-1+offb], twoSk[r-1+offk], 2, 1, twoS0);
-    parity += twoS0 + twoSb[r-1] - 1; // graph signs
-    parity = parity % 4;
-
-    // 'hill' and 'self' parity: flipping for pphh, hhpp
-    if ((p > (r+1)) && pr_pp){
-        if (nr > 0){
-            parity += twoSk[r+1+offk] + (3*twoSb[r+offb]) + 1;
-        } else {
-            parity += twoSb[r+1+offb] + (3*twoSk[r+offk]) - 1;
-        }
-    }
-    parity = parity % 4;
-
-    // 'hill' and 'self' parity: |nr| = 2
-    if (p>r){
-        switch (nr) {
-            case -2:
-                parity += twoSk[r+offk] + 3*twoSb[r-1+offb] - 1;
-            case 2:
-                parity += twoSb[r+offb] + 3*twoSk[r-1+offk] - 1;
-        }
-    }
-    parity = parity % 4;
+    xdiag *= _get_xcore (twoSk+offk, twoSb+offb,
+                         r, q,
+                         nr, nq,
+                         qt_pp);
 
     // T(i) and T'(i) strings
     //     T(i) =
