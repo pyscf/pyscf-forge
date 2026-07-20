@@ -70,7 +70,8 @@ maintainers at https://github.com/orgs/pyscf/people.
 
 After a feature has been added to PySCF-forge for over 6 months, developers can
 open an issue to request to transfer the feature to the PySCF core branch.
-The proposal template can be accessed at (TBD). The proposal will be reviewed
+A Feature Transfer Proposal template is available when creating a new GitHub
+issue. The proposal will be reviewed
 during the PySCF board meetings, held approximately every 3 months. If it is decided that
 the feature is incompatible with the requirements of the core branch, the board may recommend
 additional modifications, or that the feature be removed from PySCF-forge.

@@ -46,7 +46,7 @@ def kernel(mycc, eris, ulo, t1=None, t2=None, verbose=logger.NOTE):
     r''' (T) energy correction normalized to LOs.
 
     Args:
-        ulo[mu,i] = <mu|i> is the overlap between the mu-th LO and the i-th occ MO.
+        ulo[i,mu] = <i|mu> is the overlap between the i-th occ MO and the mu-th LO.
     '''
     cpu1 = cpu0 = (logger.process_clock(), logger.perf_counter())
     log = logger.new_logger(mycc, verbose)

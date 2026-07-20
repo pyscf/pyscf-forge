@@ -45,7 +45,7 @@ class TestISdfxEnergyComparison(unittest.TestCase):
         self.cell_h2.basis = "gth-szv"
         self.cell_h2.pseudo = "gth-pbe"
         self.cell_h2.a = numpy.eye(3) * 6.0
-        self.cell_h2.mesh = [11] * 3
+        self.cell_h2.mesh = [21] * 3
         self.cell_h2.verbose = 0
         self.cell_h2.build()
 

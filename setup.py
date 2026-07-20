@@ -20,7 +20,12 @@ DESCRIPTION  = 'Staging ground for PySCF core features'
 SO_EXTENSIONS = {
 }
 DEPENDENCIES = ['pyscf', 'numpy!=2.4.*']
-VERSION = '1.0.3'
+EXTRAS = {
+    'afqmc-cpu': ['jax'],
+    'afqmc-cuda12': ['jax[cuda12]'],
+    'afqmc-cuda13': ['jax[cuda13]'],
+}
+VERSION = '1.1.1'
 
 #######################################################################
 # Unless not working, nothing below needs to be changed.
@@ -125,6 +130,7 @@ settings = {
     'author': metadata.get('AUTHOR', None),
     'author_email': metadata.get('AUTHOR_EMAIL', None),
     'install_requires': metadata.get('DEPENDENCIES', []),
+    'extras_require': metadata.get('EXTRAS', {}),
     'cmdclass': {'build_py': CMakeBuildPy},
 }
 

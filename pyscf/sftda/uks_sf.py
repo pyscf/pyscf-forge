@@ -21,7 +21,6 @@ from pyscf.lib import logger
 from pyscf.sftda import uhf_sf
 from pyscf import __config__
 
-# import function
 from pyscf.sftda.scf_genrep_sftd import gen_uhf_response_sf
 
 from pyscf.lib.parameters import MAX_MEMORY

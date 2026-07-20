@@ -120,42 +120,42 @@ if(BUILD_OCCRI)
         occri/occri.c
         occri/occri.h
     )
-    
+
     # Check for required dependencies
     set(OCCRI_DEPS_FOUND TRUE)
-    
+
     # Find FFTW
     find_library(FFTW3_LIBRARY fftw3)
     find_library(FFTW3_THREADS_LIBRARY fftw3_threads)
     find_path(FFTW3_INCLUDE_DIR fftw3.h)
-    
+
     if(NOT FFTW3_LIBRARY OR NOT FFTW3_THREADS_LIBRARY OR NOT FFTW3_INCLUDE_DIR)
         message(STATUS "FFTW3 not found - OCCRI C extension will not be built")
         set(OCCRI_DEPS_FOUND FALSE)
     endif()
-    
+
     # Find OpenMP
     find_package(OpenMP)
     if(NOT OPENMP_FOUND)
         message(STATUS "OpenMP not found - OCCRI C extension will not be built")
         set(OCCRI_DEPS_FOUND FALSE)
     endif()
-    
+
     if(OCCRI_DEPS_FOUND)
         message(STATUS "Building OCCRI C extension with FFTW and OpenMP")
         add_library(occri SHARED ${OCCRI_SOURCE_FILES})
-        
+
         # Add include directories
         target_include_directories(occri PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/occri)
         target_include_directories(occri PRIVATE ${FFTW3_INCLUDE_DIR})
-        
+
         # Link against FFTW and OpenMP
         target_link_libraries(occri
             ${OPENMP_C_PROPERTIES}
             ${FFTW3_LIBRARY}
             ${FFTW3_THREADS_LIBRARY}
         )
-        
+
         # Set output directory and name
         set_target_properties(occri PROPERTIES
             CLEAN_DIRECT_OUTPUT 1
@@ -181,7 +181,7 @@ set_target_properties (clib_libxc_itrf2 PROPERTIES
     OUTPUT_NAME "xc_itrf2")
 
 # Build the DSRG library
-set (DSRG_SOURCE_FILES "../dsrg_mrpt2/dsrg_helper.c")
+set (DSRG_SOURCE_FILES "dsrg/dsrg_helper.c")
 add_library (clib_dsrg SHARED ${DSRG_SOURCE_FILES})
 set_target_properties (clib_dsrg PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
@@ -189,14 +189,14 @@ set_target_properties (clib_dsrg PROPERTIES
     OUTPUT_NAME "dsrg")
 
 # Build the LNO library
-set (LNO_SOURCE_FILES "lno/ccsd_t.c")
+set (LNO_SOURCE_FILES "lno/ccsd_t.c" "lno/uccsd_t.c")
 add_library (clib_lno SHARED ${LNO_SOURCE_FILES})
 target_link_libraries (clib_lno cc ao2mo cvhf np_helper ${BLAS_LIBRARIES} ${OPENMP_C_PROPERTIES})
 set_target_properties (clib_lno PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "lno")
-    
+
 # Build the CSFstring shared library
 set (CSF_SOURCE_FILES "csf/csfstring.c")
 add_library (clib_csf SHARED ${CSF_SOURCE_FILES})
@@ -208,4 +208,5 @@ set_target_properties (clib_csf PROPERTIES
     OUTPUT_NAME "csf")
 
 add_subdirectory(sfnoci)
+add_subdirectory(pwscf)
 

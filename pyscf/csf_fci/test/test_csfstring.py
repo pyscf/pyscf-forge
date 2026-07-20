@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 from scipy import special
 from pyscf.csf_fci.csfstring import *
+from pyscf import lib
 
 def case_spin_evecs (ks, nspin, ms):
     neleca = int (round (nspin/2 + ms))
