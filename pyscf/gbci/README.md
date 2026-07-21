@@ -1,10 +1,11 @@
-# GBCI and GBPDFT
+# GBCI, GBPDFT, and XMS-GBPDFT
 
-This directory contains the GBCI/GBCI implementation and the GBPDFT
-extension.
+This directory contains GBCI, GBPDFT, and multi-state XMS-GBPDFT tools.
 
-GBPDFT is now included inside the `pyscf.gbci` package. It is no longer used
-as a separate `pyscf.gbpdft` package.
+GBCI is the renamed and reorganized form of the previous SFNOCI module.  The
+new name reflects that the implementation is no longer limited to the old
+spin-flip NOCI interface and now serves as the grouped-bath CI reference used by
+GBPDFT and XMS-GBPDFT.
 
 ## Dependencies
 
@@ -13,31 +14,35 @@ contractions. Build the PySCF-forge C extensions before running GBPDFT.
 
 ## Modules
 
-Main GBCI/GBCI modules:
+Main GBCI modules:
 
 - `pyscf.gbci.gbci`
 - `pyscf.gbci.direct_gbci`
 - `pyscf.gbci.rdm`
+- `pyscf.gbci.fasscf`
 
 GBPDFT modules:
 
 - `pyscf.gbci.gbpdft`
 - `pyscf.gbci.otpd`
+- `pyscf.gbci.msgbpdft`
+- `pyscf.gbci.xmsgbpdft`
 
 ## Import Changes
 
-Use GBPDFT through `pyscf.gbci`:
+Use GBCI and GBPDFT through `pyscf.gbci`:
 
 ```python
+from pyscf import gbci
 from pyscf.gbci import gbpdft
 from pyscf.gbci import otpd
 ```
 
-Do not use the old separate-package imports:
+Do not use the old SFNOCI or separate-package imports:
 
 ```python
-from pyscf import gbpdft
-from pyscf.gbpdft import otpd
+from pyscf import sfnoci
+from pyscf.sfnoci import sfnoci
 ```
 
 ## GBCI Usage
@@ -60,6 +65,15 @@ mc.fcisolver.nroots = 1
 e_gbci, e_cas, ci = mc.kernel()
 
 print("GBCI energy:", e_gbci)
+```
+
+`group_a` can be used to build grouped baths by active MO index, atom index, or
+occupation-pattern index:
+
+```python
+gbci.gbci(mf, 2, (1, 1), group_a={"mo": [[0], [1]]})
+gbci.gbci(mf, 2, (1, 1), group_a={"atom": [[0], [1]]})
+gbci.gbci(mf, 2, (1, 1), group_a={"occ": [[0], [1], [2]]})
 ```
 
 ## GBPDFT Usage
@@ -101,7 +115,7 @@ print("on-top energy:", e_ot)
 print("GBCI energy:", e_gbci)
 ```
 
-### Build GBPDFT from an existing GBCI/GBCI object
+### Build GBPDFT from an existing GBCI object
 
 ```python
 from pyscf import gto, scf, gbci
@@ -126,6 +140,42 @@ e_tot, e_ot, e_gbci, e_cas, ci = pdft.kernel()
 print("GBPDFT total energy:", e_tot)
 ```
 
+## XMS-GBPDFT Usage
+
+XMS-GBPDFT is built from a GBPDFT object with `multi_state`:
+
+```python
+import numpy as np
+from pyscf import gto, scf
+from pyscf.gbci import gbpdft
+
+mol = gto.M(
+    atom="Li 0 0 0; H 0 0 1.6",
+    basis="sto-3g",
+    spin=0,
+    verbose=0,
+)
+
+mf = scf.ROHF(mol).run()
+
+pdft = gbpdft.GBCI(
+    mf,
+    "tPBE",
+    ncas=2,
+    nelecas=(1, 1),
+    group_a={"mo": [[0], [1]]},
+)
+pdft.fcisolver.nroots = 2
+
+xms = pdft.multi_state(np.ones(2) / 2, "xms")
+e_tot, e_ot, e_gbci, e_cas, ci, mo_coeff, mo_energy = xms.kernel()
+
+print("XMS-GBPDFT average energy:", e_tot)
+print("XMS-GBPDFT state energies:", xms.e_states)
+print("XMS-GBPDFT GBCI reference energies:", e_gbci)
+print("XMS-GBPDFT effective Hamiltonian:", xms.get_heff_pdft())
+```
+
 ## Examples
 
 Example input files are available in:
@@ -137,7 +187,7 @@ pyscf/gbci/examples/
 For example:
 
 ```bash
-python pyscf/gbci/examples/NH3_F2_GBCI.py
-python pyscf/gbci/examples/NH3_F2_GBPDFT.py
-python pyscf/gbci/examples/NH3_F2_grouping_cases.py --case atom
+python pyscf/gbci/examples/00-GBCI.py
+python pyscf/gbci/examples/01-GBPDFT.py
+python pyscf/gbci/examples/02-XMSGBPDFT.py
 ```

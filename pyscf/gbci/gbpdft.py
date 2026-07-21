@@ -131,11 +131,10 @@ class _BPDFT:
     def otxc(self, value):
         self._init_ot_grids(value)
 
-    def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
+    def optimize_gbci_(self, mo_coeff=None, ci0=None, **kwargs):
         """Run the underlying GBCI solver and keep the GBCI energy."""
         self.e_gbci, self.e_cas, self.ci = self._mc_class.kernel(
             self, mo_coeff=mo_coeff, ci0=ci0, **kwargs)
-        self.e_mcscf = self.e_gbci
         return self.e_gbci, self.e_cas, self.ci
 
     def _select_root(self, values, root):
@@ -211,7 +210,7 @@ class _BPDFT:
 
     def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_attr=None,
                grids_level=None, debug=False, **kwargs):
-        self.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0, debug=debug, **kwargs)
+        self.optimize_gbci_(mo_coeff=mo_coeff, ci0=ci0, debug=debug, **kwargs)
         self.compute_pdft_energy_(
             otxc=otxc, grids_attr=grids_attr, grids_level=grids_level,
             debug=debug)

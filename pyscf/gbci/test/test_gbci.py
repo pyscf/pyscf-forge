@@ -83,10 +83,10 @@ class KnownValues(unittest.TestCase):
                 self.assertTrue(np.all(np.isfinite(e_ot)))
                 self.assertTrue(np.all(np.isfinite(e_gbci)))
                 self.assertEqual(len(ci), 2)
-                self.assertEqual(xms.heff_mcscf.shape, (2, 2))
+                self.assertEqual(xms.heff_gbci.shape, (2, 2))
                 self.assertEqual(xms.get_heff_pdft().shape, (2, 2))
                 np.testing.assert_allclose(
-                    xms.heff_mcscf, xms.heff_mcscf.conj().T, atol=1e-10)
+                    xms.heff_gbci, xms.heff_gbci.conj().T, atol=1e-10)
                 np.testing.assert_allclose(
                     xms.get_heff_pdft(),
                     xms.get_heff_pdft().conj().T, atol=1e-10)

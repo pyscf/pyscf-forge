@@ -1006,15 +1006,13 @@ class GBCI(CASBase):
     def kernel(self, mo_coeff=None, ci0=None, verbose=None, debug=False):
         '''
         Returns:
-          Five elements, they are
+          Three elements:
           total energy,
           active space CI energy,
-          the active space FCI wavefunction coefficients,
-          the MCSCF canonical orbital coefficients,
-          the MCSCF canonical orbital coefficients.
+          the active space CI wavefunction coefficients.
 
-        They are attributes of mcscf object, which can be accessed by
-        .e_tot, .e_cas, .ci, .mo_coeff, .mo_energy
+        They are attributes of the GBCI object, which can be accessed by
+        .e_tot, .e_cas, .ci.
         '''
         if mo_coeff is None:
             mo_coeff = self.mo_coeff

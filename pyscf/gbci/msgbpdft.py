@@ -46,7 +46,7 @@ def _contract_hamiltonian(solver, erieff, civec, ncas, nelecas,
         ecore_list, link_index, ts, t_nonzero)
 
 
-def make_heff_mcscf(mc, mo_coeff=None, ci=None, debug=False):
+def make_heff_gbci(mc, mo_coeff=None, ci=None, debug=False):
     """Build the GBCI Hamiltonian matrix in the provided CI basis."""
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
@@ -105,9 +105,9 @@ class _MSGBPDFT:
         self.diabatization = diabatization
         self.weights = np.asarray(weights, dtype=float)
         self._e_states = None
-        self.si_mcscf = None
+        self.si_gbci = None
         self.si_pdft = None
-        self.heff_mcscf = None
+        self.heff_gbci = None
         self.hdiag_pdft = None
         self.diabatic_e_ot = None
 
@@ -131,21 +131,21 @@ class _MSGBPDFT:
         return linalg.eigh(heff)
 
     def get_heff_offdiag(self):
-        heff_offdiag = self.heff_mcscf.copy()
+        heff_offdiag = self.heff_gbci.copy()
         heff_offdiag[np.diag_indices_from(heff_offdiag)] = 0.0
         return heff_offdiag
 
     def get_heff_pdft(self):
-        heff_pdft = self.heff_mcscf.copy()
+        heff_pdft = self.heff_gbci.copy()
         heff_pdft[np.diag_indices_from(heff_pdft)] = self.hdiag_pdft
         return 0.5 * (heff_pdft + heff_pdft.conj().T)
 
     def get_ci_adiabats(self, ci=None, uci="MSGBPDFT"):
-        si_dict = {"MCSCF": self.si_mcscf, "MSGBPDFT": self.si_pdft}
+        si_dict = {"GBCI": self.si_gbci, "MSGBPDFT": self.si_pdft}
         if isinstance(uci, (str, np.bytes_)):
             key = uci.upper()
             if key not in si_dict:
-                raise RuntimeError("valid uci : 'MCSCF', 'MSGBPDFT', or ndarray")
+                raise RuntimeError("valid uci : 'GBCI', 'MSGBPDFT', or ndarray")
             uci = si_dict[key]
         if ci is None:
             ci = self.ci
@@ -176,7 +176,7 @@ class _MSGBPDFT:
     def _compute_diabatic_pdft_diag(self, otxc=None, grids_level=None,
                                     grids_attr=None, debug=False):
         old_e_gbci = self.e_gbci
-        self.e_gbci = np.asarray(self.heff_mcscf.diagonal()).real
+        self.e_gbci = np.asarray(self.heff_gbci.diagonal()).real
         try:
             _, e_ot, hdiag = self.compute_pdft_energy_(
                 otxc=otxc, grids_level=grids_level, grids_attr=grids_attr,
@@ -194,20 +194,22 @@ class _MSGBPDFT:
         if ci0 is None and isinstance(getattr(self, "ci", None), list):
             ci0 = [c.copy() for c in self.ci]
 
-        self.optimize_mcscf_(mo_coeff=mo_coeff, ci0=ci0, debug=debug)
+        self.optimize_gbci_(mo_coeff=mo_coeff, ci0=ci0, debug=debug)
         diab_conv, self.ci = self.diabatize(
             ci=self.ci, ci0=ci0, debug=debug)
         self.converged = bool(getattr(self, "converged", True) and diab_conv)
 
-        self.heff_mcscf = self.make_heff_mcscf(debug=debug)
-        self.e_mcscf, self.si_mcscf = self._eig_si(self.heff_mcscf)
+        self.heff_gbci = self.make_heff_gbci(debug=debug)
+        e_gbci, si_gbci = self._eig_si(self.heff_gbci)
         ref_e = _as_real_vector(self.e_gbci)
-        if len(ref_e) == len(self.e_mcscf):
-            err = linalg.norm(np.sort(ref_e) - np.sort(self.e_mcscf))
+        if len(ref_e) == len(e_gbci):
+            err = linalg.norm(np.sort(ref_e) - np.sort(e_gbci))
             if err > 1e-7:
                 lib.logger.warn(
-                    self, "XMS-GBPDFT heff_mcscf eigenvalues differ from "
+                    self, "XMS-GBPDFT heff_gbci eigenvalues differ from "
                     "GBCI root energies by %.3g", err)
+        self.e_gbci = e_gbci
+        self.si_gbci = si_gbci
 
         self.hdiag_pdft = self._compute_diabatic_pdft_diag(
             otxc=otxc, grids_level=grids_level, grids_attr=grids_attr,
@@ -217,20 +219,20 @@ class _MSGBPDFT:
         self.e_ot = self.diabatic_e_ot
         self._log_diabats()
         self._log_adiabats()
-        return (self.e_tot, self.e_ot, self.e_mcscf, self.e_cas, self.ci,
+        return (self.e_tot, self.e_ot, self.e_gbci, self.e_cas, self.ci,
                 self.mo_coeff, getattr(self, "mo_energy", None))
 
-    make_heff_mcscf = make_heff_mcscf
+    make_heff_gbci = make_heff_gbci
 
     def _log_diabats(self):
         log = lib.logger.new_logger(self, self.verbose)
         if log.verbose < lib.logger.NOTE:
             return
         log.note("%s diabatic states:", self.__class__.__name__)
-        for i, (e_pdft, e_mcscf) in enumerate(zip(
-                self.hdiag_pdft, self.heff_mcscf.diagonal().real)):
+        for i, (e_pdft, e_gbci) in enumerate(zip(
+                self.hdiag_pdft, self.heff_gbci.diagonal().real)):
             log.note("  State %d  EPDFT = %.15g  EGBCI = %.15g",
-                     i, e_pdft, e_mcscf)
+                     i, e_pdft, e_gbci)
 
     def _log_adiabats(self):
         log = lib.logger.new_logger(self, self.verbose)
@@ -263,4 +265,3 @@ def multi_state(mc, weights=(0.5, 0.5), diabatization="XMS"):
 
     MSGBPDFT.__name__ = diabatization.upper() + mcbase_class.__name__
     return MSGBPDFT(mc, diabatizer, diabatize, diabatization, weights)
-
