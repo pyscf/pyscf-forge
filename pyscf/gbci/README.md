@@ -1,6 +1,6 @@
 # GBCI, GBPDFT, and XMS-GBPDFT
 
-This directory contains GBCI, GBPDFT, and multi-state XMS-GBPDFT tools.
+This directory contains GBCI, GBPDFT, and multi-state (XMS) GBPDFT tools.
 
 GBCI is the renamed and reorganized form of the previous SFNOCI module.  The
 new name reflects that the implementation is no longer limited to the old
