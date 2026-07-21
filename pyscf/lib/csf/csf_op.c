@@ -171,26 +171,28 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
     return num;
 }
 
-double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
+double CGC_2e_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
 {
     /* Compute
-        -<Eijji>
-        = <Eii> - <Eij Eji>
-        = 1 - (3xdiag - 1/2)
-        = 1/2 - 3xdiag
+        <Eijij>
+        = <Eij Eji> - <Eii>
+        = (-1) * (3xdiag + 1/2) - 1
+        = -3xdiag - 1/2
        where i > j (although see below) using
        Drake & Schlesinger, PRA 15 1990 (1977) (DOI:10.1103/PhysRevA.15.1990)
        "xdiag" is the irreducible graph
+       -1 in line 2 comes from returning creation operators to their proper order at the end
+       I think this accounts for the factor of -1 on the 1/2 in Drake & Schlesinger as well
+       I think they arbitrarily put -1 on one of their terms in xcore to make it more
+       symmetrical.
     */
-    // TODO: figure out why sign is + below! It makes no sense!
-    // Every time I derive this I get it off by a factor of -1!
-    return 0.5 + 3*_get_xdiag (coupstr, i, j, nspin);
+    return -3*CGC_2e_X_diag (coupstr, i, j, nspin) - 0.5;
 }
 
-double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM)
+double CGC_1s_diag (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM)
 {
     unsigned int twoS = _get_twoS_running (coupstr, 0, nspin);
-    double szfac = _get_xdiag (coupstr, nspin, i, nspin);
+    double szfac = CGC_2e_X_diag (coupstr, nspin, i, nspin);
     // Sigma_z = ( 1/2  1  1/2 ) * S_z
     //           ( m    0   -m )
     //         = sqrt (2/3) * S_z
@@ -208,12 +210,12 @@ double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int two
     return szfac;
 }
 
-double _get_xdiag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned int nspin)
+double CGC_2e_X_diag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned int nspin)
 {
-    return _get_x (coupstr, coupstr, t, t, p, p, 1, -1, 1, -1, nspin);
+    return CGC_2e_X (coupstr, coupstr, t, t, p, p, 1, -1, 1, -1, nspin);
 }
 
-double _get_xcore (unsigned int * twoSk, unsigned int * twoSb,
+double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
                    unsigned int r, unsigned int q,
                    int nr, int nq, bool pphh)
 {
@@ -323,10 +325,10 @@ double _get_xcore (unsigned int * twoSk, unsigned int * twoSb,
     return xdiag;
 }
 
-double _get_x (uint64_t brastr, uint64_t ketstr,
-               unsigned int t, unsigned int q, unsigned int r, unsigned int p,
-               int nt, int nq, int nr, int np,
-               unsigned int nspin)
+double CGC_2e_X (uint64_t brastr, uint64_t ketstr,
+                 unsigned int t, unsigned int q, unsigned int r, unsigned int p,
+                 int nt, int nq, int nr, int np,
+                 unsigned int nspin)
 {
     // nt, nq, nr, np:
     // -2: doubly-occupied in the bra
@@ -337,7 +339,7 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
     assert ((t!=q) || ((nt+nq)==0));
     assert ((r!=p) || ((nr+np)==0));
     double xdiag = 1.0;
-    unsigned int twoS0b, twoS0k, twoS0;
+    unsigned int twoS0b, twoS0k;
     int offk = 0;
     int offb = 0;
     int parity = 0;
@@ -472,10 +474,10 @@ double _get_x (uint64_t brastr, uint64_t ketstr,
         }
         assert (q>=t+(abs(nt)+abs(nq))-1);
     }
-    xdiag *= _get_xcore (twoSk+offk, twoSb+offb,
-                         r, q,
-                         nr, nq,
-                         qt_pp);
+    xdiag *= CGC_2e_X_core (twoSk+offk, twoSb+offb,
+                            r, q,
+                            nr, nq,
+                            qt_pp);
 
     // T(i) and T'(i) strings
     //     T(i) =
@@ -606,16 +608,16 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
             ni = _get_occ (i, dconfstr, sconfstr);
             if (ni != 1){ continue; }
             si = _get_spinindex (i, dconfstr, sconfstr);
-            fac = _get_szfac (coupstrs[icoup], si, nspin, twoM);
+            fac = CGC_1s_diag (coupstrs[icoup], si, nspin, twoM);
             hdiag_csf[icoupconf] += fac * h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (j, dconfstr, sconfstr);
                 if (nj != 1){ continue; }
                 sj = _get_spinindex (j, dconfstr, sconfstr);
-                fac = _get_vcc (coupstrs[icoup], si, sj, nspin);
+                fac = CGC_2e_diag (coupstrs[icoup], si, sj, nspin);
                 idx = idxi + j*norb*(norb+1);
-                hdiag_csf[icoupconf] -= fac * eri[idx];
+                hdiag_csf[icoupconf] += fac * eri[idx];
             }
         }
     }

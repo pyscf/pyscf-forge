@@ -36,17 +36,17 @@ unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
 unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
 int _get_twoM (uint64_t sconfstr, uint64_t detstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
-double _get_vcc (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
-double _get_xdiag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
-double _get_x (uint64_t brastr, uint64_t ketstr,
-               unsigned int t, unsigned int q, unsigned int r, unsigned int p,
-               int nt, int nq, int nr, int np,
-               unsigned int nspin);
-double _get_xcore (unsigned int * twoSk, unsigned int * twoSb,
+double CGC_2e_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
+double CGC_2e_X_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
+double CGC_2e_X (uint64_t brastr, uint64_t ketstr,
+                 unsigned int t, unsigned int q, unsigned int r, unsigned int p,
+                 int nt, int nq, int nr, int np,
+                 unsigned int nspin);
+double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
                    unsigned int r, unsigned int q,
                    int nr, int nq, bool pphh);
+double CGC_1s_diag (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM);
 
-double _get_szfac (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM);
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
                   double * h1e_s, double * eri,
                   uint64_t * dconfstrs, uint64_t * sconfstrs,
