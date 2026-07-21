@@ -60,35 +60,35 @@ unsigned int _count_set_bits (uint64_t str)
     return n;
 }
 
-unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
+unsigned int _get_occ (Str3 * addr, unsigned int i)
 {
-    if ((1ULL << i) & dconfstr){ return 2; }
+    if ((1ULL << i) & addr->dconf){ return 2; }
     unsigned int j = i;
     for (unsigned int k = 0; k < i; k++){
-        if ((1ULL << k) & dconfstr){ j--; }
+        if ((1ULL << k) & addr->dconf){ j--; }
     }
-    if ((1ULL << j) & sconfstr){ return 1; }
+    if ((1ULL << j) & addr->sconf){ return 1; }
     else { return 0; }
 }
 
-unsigned int _get_spin (unsigned int i, uint64_t dconfstr, uint64_t sconfstr, uint64_t detstr)
+unsigned int _get_spin (Str3 * addr, unsigned int i)
 {
-    unsigned int ni = _get_occ (i, dconfstr, sconfstr);
+    unsigned int ni = _get_occ (addr, i);
     if (ni != 1){ return 0; }
-    ni = _get_spinindex (i, dconfstr, sconfstr);
-    ni = (detstr & (1ULL << ni)) >> ni;
+    ni = _get_spinindex (addr, i);
+    ni = (addr->spin & (1ULL << ni)) >> ni;
     return ni;
 }
 
-unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr)
+unsigned int _get_spinindex (Str3 * addr, unsigned int i)
 {
     unsigned int j = i;
     for (unsigned int k = 0; k < i; k++){
-        if ((1ULL << k) & dconfstr){ j--; }
+        if ((1ULL << k) & addr->dconf){ j--; }
     }
     i = j;
     for (unsigned int k = 0; k < i; k++){
-        if (((1ULL << k) & sconfstr) == 0){ j--; }
+        if (((1ULL << k) & addr->sconf) == 0){ j--; }
     }
     return j;
 }
@@ -171,7 +171,7 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
     return num;
 }
 
-double CGC_2e_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin)
+double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j)
 {
     /* Compute
         <Eijij>
@@ -186,13 +186,18 @@ double CGC_2e_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned i
        I think they arbitrarily put -1 on one of their terms in xcore to make it more
        symmetrical.
     */
-    return -3*CGC_2e_X_diag (coupstr, i, j, nspin) - 0.5;
+    unsigned int nspin = _count_set_bits (addr->sconf);
+    unsigned int si = _get_spinindex (addr, i);
+    unsigned int sj = _get_spinindex (addr, j);
+    return -3*CGC_2e_X_diag (addr->spin, si, sj, nspin) - 0.5;
 }
 
-double CGC_1s_diag (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM)
+double CGC_1s_diag (Str3 * addr, unsigned int i, int twoM)
 {
-    unsigned int twoS = _get_twoS_running (coupstr, 0, nspin);
-    double szfac = CGC_2e_X_diag (coupstr, nspin, i, nspin);
+    unsigned int nspin = _count_set_bits (addr->sconf);
+    unsigned int twoS = _get_twoS_running (addr->spin, 0, nspin);
+    unsigned int si = _get_spinindex (addr, i);
+    double szfac = CGC_2e_X_diag (addr->spin, nspin, si, nspin);
     // Sigma_z = ( 1/2  1  1/2 ) * S_z
     //           ( m    0   -m )
     //         = sqrt (2/3) * S_z
@@ -216,8 +221,8 @@ double CGC_2e_X_diag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned
 }
 
 double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
-                   unsigned int r, unsigned int q,
-                   int nr, int nq, bool pphh)
+                      unsigned int r, unsigned int q,
+                      int nr, int nq, bool pphh)
 {
     int parity = 0;
     double xdiag = 1.0;
@@ -565,27 +570,27 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
     size_t iconf, idoub, ising, icoup, icoupconf;
     double fac;
     unsigned int ni, nj, si, sj, idxi, idx;
-    unsigned int nspin;
-    uint64_t dconfstr, sconfstr;
+    Str3 addr;
 
 // Subtract SOMO exchange terms from hdiag_det
 #pragma omp for schedule(static)
     for (iconf = 0; iconf < nconf; iconf++){
         idoub = iconf / nsing;
         ising = iconf % nsing;
-        dconfstr = dconfstrs[idoub];
-        sconfstr = sconfstrs[ising];
+        addr.dconf = dconfstrs[idoub];
+        addr.sconf = sconfstrs[ising];
+        addr.spin = detstrs[0];
         wrk[iconf] = hdiag_det[iconf*ndet];
         for (unsigned int i = 0; i < norb; i++){
-            ni = _get_occ (i, dconfstr, sconfstr);
+            ni = _get_occ (&addr, i);
             if (ni != 1){ continue ; }
-            si = _get_spin (i, dconfstr, sconfstr, detstrs[0]);
+            si = _get_spin (&addr, i);
             wrk[iconf] -= si ? h1e_s[i] : -h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
-                nj = _get_occ (j, dconfstr, sconfstr);
+                nj = _get_occ (&addr, j);
                 if (nj != 1){ continue ; }
-                sj = _get_spin (j, dconfstr, sconfstr, detstrs[0]);
+                sj = _get_spin (&addr, j);
                 idx = idxi + j*norb*(norb+1);
                 if (si==sj){
                     wrk[iconf] += eri[idx];
@@ -600,22 +605,20 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
         icoup = icoupconf % ncoup;
         idoub = iconf / nsing;
         ising = iconf % nsing;
-        dconfstr = dconfstrs[idoub];
-        sconfstr = sconfstrs[ising];
+        addr.dconf = dconfstrs[idoub];
+        addr.sconf = sconfstrs[ising];
+        addr.spin = coupstrs[icoup];
         hdiag_csf[icoupconf] = wrk[iconf];
-        nspin = _count_set_bits (sconfstr);
         for (unsigned int i = 0; i < norb; i++){
-            ni = _get_occ (i, dconfstr, sconfstr);
+            ni = _get_occ (&addr, i);
             if (ni != 1){ continue; }
-            si = _get_spinindex (i, dconfstr, sconfstr);
-            fac = CGC_1s_diag (coupstrs[icoup], si, nspin, twoM);
+            fac = CGC_1s_diag (&addr, i, twoM);
             hdiag_csf[icoupconf] += fac * h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
-                nj = _get_occ (j, dconfstr, sconfstr);
+                nj = _get_occ (&addr, j);
                 if (nj != 1){ continue; }
-                sj = _get_spinindex (j, dconfstr, sconfstr);
-                fac = CGC_2e_diag (coupstrs[icoup], si, sj, nspin);
+                fac = CGC_2e_diag (&addr, i, j);
                 idx = idxi + j*norb*(norb+1);
                 hdiag_csf[icoupconf] += fac * eri[idx];
             }

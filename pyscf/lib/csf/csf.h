@@ -29,14 +29,17 @@ void dsbmv_(const char *uplo,
 #ifndef MAX_PARTICLE
 #define MAX_PARTICLE 64
 #endif
-
+typedef struct {
+    uint64_t dconf;
+    uint64_t sconf;
+    uint64_t spin;
+} Str3;
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS);
 unsigned int _count_set_bits (uint64_t str);
-unsigned int _get_occ (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
-unsigned int _get_spinindex (unsigned int i, uint64_t dconfstr, uint64_t sconfstr);
+unsigned int _get_occ (Str3 * addr, unsigned int i);
+unsigned int _get_spinindex (Str3 * addr, unsigned int i);
 int _get_twoM (uint64_t sconfstr, uint64_t detstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
-double CGC_2e_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
 double CGC_2e_X_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
 double CGC_2e_X (uint64_t brastr, uint64_t ketstr,
                  unsigned int t, unsigned int q, unsigned int r, unsigned int p,
@@ -45,7 +48,9 @@ double CGC_2e_X (uint64_t brastr, uint64_t ketstr,
 double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
                    unsigned int r, unsigned int q,
                    int nr, int nq, bool pphh);
-double CGC_1s_diag (uint64_t coupstr, unsigned int i, unsigned int nspin, int twoM);
+double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j);
+double CGC_1s_diag (Str3 * addr, unsigned int i, int twoM);
+
 
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
                   double * h1e_s, double * eri,
