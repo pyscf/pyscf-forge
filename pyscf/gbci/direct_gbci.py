@@ -18,8 +18,7 @@
 # Edited by: Seunghoon Lee <seunghoonlee@snu.ac.kr>
 
 '''
-Spin Flip Non-Orthogonal Configuration Interaction (SF-NOCI)
-and Grouped-Bath Ansatz for SF-NOCI (SF-GNOCI)
+Grouped-Bath Configuration Interaction (GBCI)
 
 References:
 [1] Spin-flip non-orthogonal configuration interaction: a variational and
@@ -27,7 +26,7 @@ References:
     Nicholas J. Mayhall, Paul R. Horn, Eric J. Sundstrom and Martin Head-Gordon
     Phys. Chem. Chem. Phys. 2014, 16, 22694
 [2] Efficient grouped-bath ansatz for spin-flip non-orthogonal configuration
-    interaction (SF-GNOCI) in transition-metal charge-transfer complexes
+    interaction in transition-metal charge-transfer complexes
     Jiseong Park and Seunghoon Lee
     J. Chem. Theory Comput. 2025
 '''
@@ -35,6 +34,7 @@ References:
 import sys
 
 import numpy
+import numpy as np
 import ctypes
 import scipy.linalg
 import types
@@ -48,9 +48,17 @@ from pyscf.fci import cistring
 from pyscf.fci import direct_uhf
 from pyscf.fci.direct_spin1 import FCIBase, FCISolver, FCIvector
 
-libsf = lib.load_library("libsfnoci")
+libgbci = lib.load_library("libgbci")
 
-PENALTY = getattr(__config__, 'sfnoci_SFNOCI_fix_spin_shift', 0.2)
+PENALTY = getattr(__config__, 'gbci_GBCI_fix_spin_shift', 0.2)
+
+def str2occ(str0,norb):
+    occ=numpy.zeros(norb)
+    for i in range(norb):
+        if str0 & ( 1 << i ):
+            occ[i]=1
+
+    return occ
 
 def make_hdiag(h1e, eri, ncas, nelecas, conf_info_list, ecore_list, opt=None):
     if isinstance(nelecas, (int, numpy.integer)):
@@ -135,7 +143,7 @@ def gen_nonzero_excitations(t1a, t1b, t2aa, t2bb):
     t2bb_nonzero = numpy.array(numpy.array(numpy.nonzero(t2bb)).T, order = 'C', dtype = numpy.int32)
     return t1a_nonzero, t1b_nonzero, t2aa_nonzero, t2bb_nonzero
 
-def contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list,
+def contract_h(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list,
                link_index=None, ts=None, t_nonzero=None):
     '''Compute H|CI>
     '''
@@ -163,6 +171,7 @@ def contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list
             gen_nonzero_excitations(t1a, t1b, t2aa, t2bb)
     else:
         t1a_nonzero, t1b_nonzero, t2aa_nonzero, t2bb_nonzero = t_nonzero
+    
     civec = numpy.asarray(civec, order = 'C')
     cinew = numpy.zeros_like(civec)
     erieff = numpy.asarray(erieff, order = 'C', dtype= numpy.float64)
@@ -176,7 +185,7 @@ def contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list
     ov_list = numpy.asarray(ov_list, order = 'C', dtype=numpy.float64)
     ecore_list = numpy.asarray(ecore_list, order = 'C', dtype=numpy.float64)
     mo_num = erieff.shape[0]
-    libsf.SFNOCIcontract_H_spin1(erieff.ctypes.data_as(ctypes.c_void_p),
+    libgbci.GBCIcontract_h_spin1(erieff.ctypes.data_as(ctypes.c_void_p),
          civec.ctypes.data_as(ctypes.c_void_p),
          cinew.ctypes.data_as(ctypes.c_void_p),
          ctypes.c_int(ncas),
@@ -196,7 +205,7 @@ def contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list
          ov_list.ctypes.data_as(ctypes.c_void_p), ecore_list.ctypes.data_as(ctypes.c_void_p))
     return cinew
 
-def contract_H_slow(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list, link_index=None):
+def contract_h_slow(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list, link_index=None):
     '''Compute H|CI>
     '''
     if isinstance(nelecas, (int, numpy.integer)):
@@ -240,6 +249,7 @@ def contract_H_slow(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore
             cinew[str1a,str1b] += civec[str0a,str0b] * erieff[p1,p2,aa,ia,ab,ib] \
                                     * t1a[aa,ia,str1a,str0a]* t1b[ab,ib,str1b,str0b] \
                                     * ov_list[p1,p2] *2
+
     for a1, i1, a2,i2, str1a, str0a in t2aa_nonzero:
         for str0b, stringb in enumerate(stringsb):
             p1 = conf_info_list[str1a, str0b]
@@ -259,15 +269,15 @@ def contract_H_slow(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore
     cinew.reshape(-1)
     return cinew
 
-def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecore_list,
-                  ci0=None, link_index=None, tol=None, lindep=None,
-                  max_cycle=None, max_space=None, nroots=None,
-                  davidson_only=None, pspace_size=None, hop=None,
-                  max_memory=None, verbose=None, **kwargs):
+def kernel(gbci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecore_list,
+           ci0=None, link_index=None, tol=None, lindep=None,
+           max_cycle=None, max_space=None, nroots=None,
+           davidson_only=None, pspace_size=None, hop=None,
+           max_memory=None, verbose=None, **kwargs):
     '''
     Args:
         h1e: ndarray
-            effective 1-electron Hamiltonian defined in SF-NOCI space : (nbath, nbath, N, N)
+            effective 1-electron Hamiltonian defined in GBCI space : (nbath, nbath, N, N)
         eri: ndarray
             2-electron integrals in chemist's notation
         ncas: int
@@ -309,20 +319,20 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecor
     dispatched, they can be passed to davidson solver via the extra keyword
     arguments **kwargs
     '''
-    if nroots is None: nroots = sfnoci.nroots
-    if davidson_only is None: davidson_only = sfnoci.davidson_only
-    if pspace_size is None: pspace_size = sfnoci.pspace_size
+    if nroots is None: nroots = gbci.nroots
+    if davidson_only is None: davidson_only = gbci.davidson_only
+    if pspace_size is None: pspace_size = gbci.pspace_size
     if max_memory is None:
-        max_memory = sfnoci.max_memory - lib.current_memory()[0]
-    log = logger.new_logger(sfnoci, verbose)
+        max_memory = gbci.max_memory - lib.current_memory()[0]
+    log = logger.new_logger(gbci, verbose)
     nelec = nelecas
     assert (0 <= nelec[0] <= ncas and 0 <= nelec[1] <= ncas)
-    hdiag = sfnoci.make_hdiag(h1e, eri, ncas, nelec, conf_info_list, ecore_list).ravel()
+    hdiag = gbci.make_hdiag(h1e, eri, ncas, nelec, conf_info_list, ecore_list).ravel()
     num_dets = hdiag.size
     civec_size = num_dets
-    precond = sfnoci.make_precond(hdiag)
+    precond = gbci.make_precond(hdiag)
     addr = [0]
-    erieff = sfnoci.absorb_h1e(h1e, eri, ncas, nelec, .5)
+    erieff = gbci.absorb_h1e(h1e, eri, ncas, nelec, .5)
     na = cistring.num_strings(ncas, nelec[0])
     nb = cistring.num_strings(ncas, nelec[1])
     if link_index is None:
@@ -337,13 +347,13 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecor
     if hop is None:
         cpu0 = [logger.process_clock(), logger.perf_counter()]
         def hop(c):
-            hc = sfnoci.contract_H(erieff, c, ncas, nelecas, conf_info_list,
+            hc = gbci.contract_h(erieff, c, ncas, nelecas, conf_info_list,
                                    ov_list, ecore_list,link_index, ts, t_nonzero)
-            cpu0[:] = log.timer_debug1('contract_H', *cpu0)
+            cpu0[:] = log.timer_debug1('contract_h', *cpu0)
             return hc.ravel()
     def init_guess():
-        if callable(getattr(sfnoci, 'get_init_guess', None)):
-            return sfnoci.get_init_guess(ncas, nelecas, nroots, hdiag)
+        if callable(getattr(gbci, 'get_init_guess', None)):
+            return gbci.get_init_guess(ncas, nelecas, nroots, hdiag)
         else:
             x0 = []
             for i in range(min(len(addr), nroots)):
@@ -353,172 +363,16 @@ def kernel_sfnoci(sfnoci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecor
             return x0
     if ci0 is None:
         ci0 = init_guess
-    if tol is None: tol = sfnoci.conv_tol
-    if lindep is None: lindep = sfnoci.lindep
-    if max_cycle is None: max_cycle = sfnoci.max_cycle
-    if max_space is None: max_space = sfnoci.max_space
+    if tol is None: tol = gbci.conv_tol
+    if lindep is None: lindep = gbci.lindep
+    if max_cycle is None: max_cycle = gbci.max_cycle
+    if max_space is None: max_space = gbci.max_space
     with lib.with_omp_threads(None):
-        e, c = sfnoci.eig(hop, ci0, precond, tol=tol, lindep=lindep,
+        e, c = gbci.eig(hop, ci0, precond, tol=tol, lindep=lindep,
                        max_cycle=max_cycle, max_space=max_space, nroots=nroots,
                        max_memory=max_memory, verbose=log, follow_state=True,
                        tol_residual=None, **kwargs)
     return e, c
-
-def make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
-    N = mo_coeff.shape[0]
-    mo_cas = mo_coeff[:,ncore:ncore+ncas]
-    stringsa = cistring.make_strings(range(ncas),nelecas[0])
-    stringsb = cistring.make_strings(range(ncas),nelecas[1])
-    link_indexa = cistring.gen_linkstr_index(range(ncas),nelecas[0])
-    link_indexb = cistring.gen_linkstr_index(range(ncas),nelecas[1])
-    na = cistring.num_strings(ncas,nelecas[0])
-    nb = cistring.num_strings(ncas,nelecas[1])
-    rdm1c = numpy.zeros((N,N))
-    ci = ci.reshape(na,nb)
-    for str0a, strsa in enumerate(stringsa):
-        for str0b, strsb in enumerate(stringsb):
-            p = conf_info_list[str0a, str0b]
-            rdm1c += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b]*dmet_core_list[p,p]
-
-    rdm1asmoa = numpy.zeros((ncas,ncas))
-    rdm1asmob = numpy.zeros((ncas,ncas))
-    for str0a , taba in enumerate(link_indexa):
-        for aa, ia, str1a, signa in link_indexa[str0a]:
-            for str0b, strsb in enumerate(stringsb):
-                p1 = conf_info_list[str1a, str0b]
-                p2 = conf_info_list[str0a, str0b]
-                rdm1asmoa[aa,ia] += signa * numpy.conjugate(ci[str1a,str0b]) * ci[str0a,str0b] * ov_list[p1,p2]
-    for str0b, tabb in enumerate(link_indexb):
-        for ab, ib, str1b, signb in link_indexb[str0b]:
-            for str0a, strsa in enumerate(stringsa):
-                p1 = conf_info_list[str0a, str1b]
-                p2 = conf_info_list[str0a, str0b]
-                rdm1asmob[ab,ib] += signb * numpy.conjugate(ci[str0a,str1b]) * ci[str0a,str0b] * ov_list[p1,p2]
-    rdm1a = lib.einsum('ia,ab,jb -> ij', numpy.conjugate(mo_cas),rdm1asmoa,mo_cas)
-    rdm1b = lib.einsum('ia,ab,jb-> ij', numpy.conjugate(mo_cas),rdm1asmob,mo_cas)
-    rdm1a += rdm1c
-    rdm1b += rdm1c
-
-    return rdm1a, rdm1b
-
-def make_rdm1(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
-    rdm1a, rdm1b = make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
-    return rdm1a + rdm1b
-
-def make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,  dmet_core_list, conf_info_list, ov_list):
-    mo_cas = mo_coeff[:,ncore:ncore+ncas]
-    N = mo_coeff.shape[0]
-    rdm2aa = numpy.zeros((N,N,N,N))
-    rdm2ab = numpy.zeros((N,N,N,N))
-    rdm2ba = numpy.zeros((N,N,N,N))
-    rdm2bb = numpy.zeros((N,N,N,N))
-    stringsa = cistring.make_strings(range(ncas),nelecas[0])
-    stringsb = cistring.make_strings(range(ncas),nelecas[1])
-    link_indexa = cistring.gen_linkstr_index(range(ncas),nelecas[0])
-    link_indexb = cistring.gen_linkstr_index(range(ncas),nelecas[1])
-    na = cistring.num_strings(ncas,nelecas[0])
-    nb = cistring.num_strings(ncas,nelecas[1])
-    ci = ci.reshape(na,nb)
-    t2aa = numpy.zeros((ncas,ncas,ncas,ncas,na,na))
-    t2bb = numpy.zeros((ncas,ncas,ncas,ncas,nb,nb))
-    t1a = numpy.zeros((ncas,ncas,na,na))
-    t1b = numpy.zeros((ncas,ncas,nb,nb))
-
-    rdm2aaac = numpy.zeros((ncas,ncas,ncas,ncas))
-    rdm2abac = numpy.zeros((ncas,ncas,ncas,ncas))
-    rdm2baac = numpy.zeros((ncas,ncas,ncas,ncas))
-    rdm2bbac = numpy.zeros((ncas,ncas,ncas,ncas))
-    for str0a , taba in enumerate(link_indexa):
-        for a1, i1, str1a, signa1 in link_indexa[str0a]:
-            t1a[a1,i1,str1a,str0a] += signa1
-            for a2 , i2, str2a, signa2 in link_indexa[str1a]:
-                t2aa[a2, i2, a1, i1, str2a, str0a] += signa1 * signa2
-    for str0b , tabb in enumerate(link_indexb):
-        for a1, i1, str1b, signb1 in link_indexb[str0b]:
-            t1b[a1,i1,str1b,str0b] += signb1
-            for a2 , i2, str2b, signb2 in link_indexb[str1b]:
-                t2bb[a2, i2, a1, i1, str2b, str0b] += signb1 * signb2
-    for str0a, strs0a in enumerate(stringsa):
-        for str0b, strs0b in enumerate(stringsb):
-            p2 = conf_info_list[str0a, str0b]
-            rdm2aa += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * (
-                lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
-                - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))
-            rdm2ab += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] \
-                        * lib.einsum('pq,rs -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
-            rdm2ba += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] \
-                        * lib.einsum('pq,rs -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
-            rdm2bb += numpy.conjugate(ci[str0a,str0b])*ci[str0a,str0b] * (
-                lib.einsum('pq,rs -> pqrs', dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:])
-                - lib.einsum('ps,rq -> pqrs',dmet_core_list[p2,p2,:,:],dmet_core_list[p2,p2,:,:]))
-            for str1a, strs1a in enumerate(stringsa):
-                p1 = conf_info_list[str1a, str0b]
-                rdm2aaac[:,:,:,:] += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
-                    *t2aa[:,:,:,:,str1a,str0a]*ov_list[p1,p2]
-                for k in range(ncas):
-                    rdm2aaac[:,k,k,:] -= numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
-                        *t1a[:,:,str1a,str0a]*ov_list[p1,p2]
-            for str1b, strs1b in enumerate(stringsb):
-                p1 = conf_info_list[str0a, str1b]
-                rdm2bbac[:,:,:,:] += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
-                    *t2bb[:,:,:,:,str1b,str0b]*ov_list[p1,p2]
-                for k in range(ncas):
-                    rdm2bbac[:,k,k,:] -= numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b] \
-                        * t1b[:,:,str1b,str0b]*ov_list[p1,p2]
-            for str1a, strs1a in enumerate(stringsa):
-                for str1b, strs1b in enumerate(stringsb):
-                    p1 = conf_info_list[str1a, str1b]
-                    rdm2abac += numpy.conjugate(ci[str1a,str1b])*ci[str0a,str0b]\
-                                *lib.einsum('pq,rs-> pqrs',t1a[:,:,str1a,str0a],t1b[:,:,str1b,str0b])*ov_list[p1,p2]
-                    rdm2baac += numpy.conjugate(ci[str1a,str1b])*ci[str0a,str0b]\
-                                *lib.einsum('pq,rs-> pqrs',t1b[:,:,str1b,str0b],t1a[:,:,str1a,str0a])*ov_list[p1,p2]
-
-    rdm2aa += lib.einsum('pa,qb,rc,sd,abcd -> pqrs',mo_cas,mo_cas,mo_cas,mo_cas,rdm2aaac)
-    rdm2ab += lib.einsum('pa,qb,rc,sd,abcd -> pqrs',mo_cas,mo_cas,mo_cas,mo_cas,rdm2abac)
-    rdm2ba += lib.einsum('pa,qb,rc,sd,abcd -> pqrs',mo_cas,mo_cas,mo_cas,mo_cas,rdm2baac)
-    rdm2bb += lib.einsum('pa,qb,rc,sd,abcd -> pqrs',mo_cas,mo_cas,mo_cas,mo_cas,rdm2bbac)
-    t1aao = lib.einsum('ia,jb,abcd -> ijcd', mo_cas, mo_cas, t1a)
-    t1bao = lib.einsum('ia,jb,abcd -> ijcd', mo_cas, mo_cas, t1b)
-
-
-    for str0a, taba in enumerate(link_indexa):
-        for str1a in numpy.unique(link_indexa[str0a][:,2]):
-            for str0b, strsb in enumerate(stringsb):
-                p1 = conf_info_list[str1a, str0b]
-                p2 = conf_info_list[str0a, str0b]
-                rdm2aa += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b] *(
-                    lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])
-                    + lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])
-                    - lib.einsum('ps,rq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:])
-                    - lib.einsum('rq,ps->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))\
-                        *ov_list[p1,p2]
-                rdm2ab += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
-                    *(lib.einsum('pq,rs->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
-                rdm2ba += numpy.conjugate(ci[str1a,str0b])*ci[str0a,str0b]\
-                    *(lib.einsum('rs,pq->pqrs',t1aao[:,:,str1a,str0a],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
-
-    for str0b, tabb in enumerate(link_indexb):
-        for str1b in numpy.unique(link_indexb[str0b][:,2]):
-            for str0a, strsa, in enumerate(stringsa):
-                p1 = conf_info_list[str0a, str0b]
-                p2 = conf_info_list[str0a, str1b]
-                rdm2bb += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b] * (
-                    lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])
-                    + lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])
-                    - lib.einsum('ps,rq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:])
-                    - lib.einsum('rq,ps->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))\
-                        *ov_list[p1,p2]
-                rdm2ab += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
-                    * (lib.einsum('rs,pq->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
-                rdm2ba += numpy.conjugate(ci[str0a,str1b])*ci[str0a,str0b]\
-                    * (lib.einsum('pq,rs->pqrs',t1bao[:,:,str1b,str0b],dmet_core_list[p1,p2,:,:]))*ov_list[p1,p2]
-
-    return rdm2aa, rdm2ab, rdm2ba, rdm2bb
-
-def make_rdm2(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
-    rdm2aa, rdm2ab, rdm2ba, rdm2bb = \
-        make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore,dmet_core_list, conf_info_list, ov_list)
-    return rdm2aa + rdm2ab + rdm2ba + rdm2bb
 
 def fix_spin(fciobj, shift=PENALTY, ss=None, **kwargs):
     r'''If FCI solver cannot stay on spin eigenfunction, this function can
@@ -553,14 +407,13 @@ def fix_spin(fciobj, shift=PENALTY, ss=None, **kwargs):
     else:
         ss_value = ss
 
-    if isinstance (fciobj, SpinPenaltySFNOCISolver):
+    if isinstance (fciobj, SpinPenaltyGBCISolver):
         # recursion avoidance
         fciobj.ss_penalty = shift
         fciobj.ss_value = ss_value
         return fciobj
-
-    return lib.set_class(SpinPenaltySFNOCISolver(fciobj, shift, ss_value),
-                         (SpinPenaltySFNOCISolver, fciobj.__class__))
+    return lib.set_class(SpinPenaltyGBCISolver(fciobj, shift, ss_value),
+                         (SpinPenaltyGBCISolver, fciobj.__class__))
 
 def fix_spin_(fciobj, shift=.1, ss=None):
     sp_fci = fix_spin(fciobj, shift, ss)
@@ -569,8 +422,8 @@ def fix_spin_(fciobj, shift=.1, ss=None):
     return fciobj
 
 
-class SFNOCISolver(FCISolver):
-    '''SF-NOCI
+class GBCISolver(FCISolver):
+    '''GBCI FCI solver.
     '''
     def make_hdiag(self, h1e, eri, ncas, nelecas, conf_info_list, ecore_list, opt=None):
         return make_hdiag(h1e, eri, ncas, nelecas, conf_info_list, ecore_list, opt)
@@ -581,10 +434,15 @@ class SFNOCISolver(FCISolver):
     def absorb_h1e(self, h1e, eri, ncas, nelecas, fac=1):
         return absorb_h1e(h1e, eri, ncas, nelecas, fac)
 
-    def contract_H(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list,
+    def contract_h(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list,
                  ecore_list, link_index=None, ts=None, t_nonzero=None):
-        return contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list,
+        return contract_h(erieff, civec, ncas, nelecas, conf_info_list, ov_list,
                         ecore_list ,link_index, ts, t_nonzero)
+
+    def contract_h_slow(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list,
+                 ecore_list, link_index=None):
+        return contract_h_slow(erieff, civec, ncas, nelecas, conf_info_list, ov_list,
+                        ecore_list ,link_index)
 
     def get_init_guess(self, ncas, nelecas, nroots, hdiag):
         return fci.direct_spin1.get_init_guess(ncas, nelecas, nroots, hdiag)
@@ -610,16 +468,15 @@ class SFNOCISolver(FCISolver):
         if nroots is None: nroots = self.nroots
         if self.verbose >= logger.WARN:
             self.check_sanity()
-        assert self.spin is None or self.spin == 0
         self.norb = norb
         self.nelec = nelec
         link_indexa = cistring.gen_linkstr_index(range(norb), nelec[0])
         link_indexb = cistring.gen_linkstr_index(range(norb), nelec[1])
         link_index = (link_indexa, link_indexb)
 
-        e, c = kernel_sfnoci(self, h1e, eri, norb, nelec, conf_info_list, ov_list, ecore_list, ci0,
-                           link_index, tol, lindep, max_cycle, max_space, nroots,
-                           davidson_only, pspace_size, **kwargs)
+        e, c = kernel(self, h1e, eri, norb, nelec, conf_info_list, ov_list, ecore_list, ci0,
+                      link_index, tol, lindep, max_cycle, max_space, nroots,
+                      davidson_only, pspace_size, **kwargs)
         self.eci = e
 
         na = link_index[0].shape[0]
@@ -630,18 +487,6 @@ class SFNOCISolver(FCISolver):
             self.ci = c.reshape(na,nb).view(FCIvector)
 
         return self.eci, self.ci
-
-    def make_rdm1s(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
-        return make_rdm1s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
-
-    def make_rdm1(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
-        return make_rdm1(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list,conf_info_list, ov_list)
-
-    def make_rdm2s(self, mo_coeff, ci, ncas, nelecas, ncore,dmet_core_list, conf_info_list, ov_list):
-        return make_rdm2s(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
-
-    def make_rdm2(self, mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list):
-        return make_rdm2(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
 
     def contract_ss(self, civec, ncas=None, nelecas=None):
         if ncas is None : ncas = self.ncas
@@ -663,58 +508,145 @@ class SFNOCISolver(FCISolver):
         '''
         fix_spin_(self, shift, ss)
         return self
-    fix_spin = fix_spin_
+    def fix_spin(self, shift=PENALTY, ss=None):
+        return self.fix_spin_(shift=shift, ss=ss)
 
     def spin_square(self, civec, ncas = None, nelecas = None):
         if ncas is None : ncas = self.ncas
         if nelecas is None : nelecas = self.nelecas
         return spin_op.spin_square0(civec, ncas, nelecas)
 
-class SpinPenaltySFNOCISolver:
+class SpinPenaltyGBCISolver:
     __name_mixin__ = 'SpinPenalty'
     _keys = {'ss_value', 'ss_penalty', 'base'}
 
-    def __init__(self, sfnocibase, shift, ss_value):
-        self.base = sfnocibase.copy()
-        self.__dict__.update (sfnocibase.__dict__)
-        self.ss_value = ss_value
-        self.ss_penalty = shift
-        self.davidson_only = self.base.davidson_only = True
+    def __init__(self, gbcibase, shift, ss_value):
+        object.__setattr__(self, 'base', gbcibase.copy())
+        object.__setattr__(self, 'ss_value', ss_value)
+        object.__setattr__(self, 'ss_penalty', float(shift))
 
-    def undo_fix_spin(self):
-        obj = lib.view(self, lib.drop_class(self.__class__, SpinPenaltySFNOCISolver))
-        del obj.base
-        del obj.ss_value
-        del obj.ss_penalty
-        return obj
+    # Delegate everything else to base
+    def __getattr__(self, name):
+        base = object.__getattribute__(self, 'base')
+        return getattr(base, name)
 
-    def base_contract_H(self, *args, **kwargs):
-        return super().contract_H(*args, **kwargs)
+    def __setattr__(self, name, value):
+        if name in ('__dict__', '__class__', '__weakref__'):
+            object.__setattr__(self, name, value)
+            return
 
-    def contract_H(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list,
+        d = object.__getattribute__(self, '__dict__')
+        if 'base' not in d or name in ('base', 'ss_value', 'ss_penalty',
+                                       '_contract_h_base'):
+            object.__setattr__(self, name, value)
+            return
+
+        base = object.__getattribute__(self, 'base')
+        setattr(base, name, value)
+
+    def undo_fix_spin(self): return self.base
+
+    def contract_h(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list,
                    ecore_list, link_index=None, ts=None, t_nonzero=None, **kwargs):
-        if isinstance(nelecas, (int, numpy.number)):
-            sz = (nelecas % 2) * .5
+        # --- spin penalty part (uses base.contract_ss, which is safe) ---
+        if isinstance(nelecas, (int, np.number)):
+            sz = (nelecas % 2) * 0.5
         else:
-            sz = abs(nelecas[0]-nelecas[1]) * .5
-        if self.ss_value is None:
-            ss = sz*(sz+1)
+            sz = abs(nelecas[0]-nelecas[1]) * 0.5
+        ss_tgt = self.ss_value if self.ss_value is not None else sz*(sz+1)
+
+        if ss_tgt < sz*(sz+1) + 0.1:
+            ci1 = self.base.contract_ss(civec, ncas, nelecas).reshape(civec.shape)
+            ci1 -= ss_tgt * civec
         else:
-            ss = self.ss_value
-        if ss < sz*(sz+1)+.1:
-            # (S^2-ss)|Psi> to shift state other than the lowest state
-            ci1 = self.contract_ss(civec, ncas, nelecas).reshape(civec.shape)
-            ci1 -= ss * civec
-        else:
-            # (S^2-ss)^2|Psi> to shift states except the given spin.
-            # It still relies on the quality of initial guess
-            tmp = self.contract_ss(civec, ncas, nelecas).reshape(civec.shape)
-            tmp -= ss * civec
-            ci1 = -ss * tmp
-            ci1 += self.contract_ss(tmp, ncas, nelecas).reshape(civec.shape)
-            tmp = None
+            tmp = self.base.contract_ss(civec, ncas, nelecas).reshape(civec.shape)
+            tmp -= ss_tgt * civec
+            ci1 = -ss_tgt * tmp
+            ci1 += self.base.contract_ss(tmp, ncas, nelecas).reshape(civec.shape)
         ci1 *= self.ss_penalty
-        ci0 = super().contract_H(erieff, civec, ncas, nelecas, conf_info_list, ov_list,
-                                 ecore_list, link_index, ts, t_nonzero, **kwargs)
-        ci1 += ci0.reshape(civec.shape)
-        return ci1
+
+        ci0 = self._contract_h_base(erieff, civec, ncas, nelecas,
+                                    conf_info_list, ov_list, ecore_list,
+                                    link_index, ts, t_nonzero, **kwargs)
+        return ci0.reshape(civec.shape) + ci1
+
+    def kernel(self, *args, **kwargs):
+        self._contract_h_base = self.base.contract_h
+
+        def _proxy_contract_h(erieff, civec, ncas, nelecas, conf_info_list, ov_list,
+                              ecore_list, link_index=None, ts=None, t_nonzero=None, **kw):
+            return self.contract_h(erieff, civec, ncas, nelecas, conf_info_list,
+                                   ov_list, ecore_list, link_index, ts, t_nonzero, **kw)
+
+        self.base.contract_h = _proxy_contract_h
+        try:
+            return self.base.kernel(*args, **kwargs)
+        finally:
+            self.base.contract_h = self._contract_h_base
+            del self._contract_h_base
+    def select_spin_roots(self, civecs, ncas, nelecas, tol=0.20,
+                          use_base=True, also_return_s2=False,
+                          nroots=None, dbg=False):
+         
+        s2_op  = self.base.contract_ss if use_base else self.contract_ss
+        target = self.ss_value
+        if target is None:
+            if isinstance(nelecas, (int, np.number)):
+                sz = (nelecas % 2) * 0.5
+            else:
+                sz = abs(nelecas[0] - nelecas[1]) * 0.5
+            target = sz * (sz + 1.0)
+        target = float(target)
+    
+        # decide how many roots we expect
+        if nroots is None:
+            nroots = getattr(self, "nroots", None)
+            if nroots is None:
+                # try to infer from last axis length
+                arr = np.asarray(civecs)
+                nroots = arr.shape[-1] if arr.ndim >= 2 else 1
+    
+        # robust iterator over roots
+        def _iter_roots(ci):
+            arr = np.asarray(ci)
+            if isinstance(ci, (list, tuple)):
+                for v in ci: yield np.asarray(v).ravel()
+                return
+            if arr.ndim == 1:
+                yield arr.ravel(); return
+            if arr.ndim == 2 and nroots in arr.shape:
+                # pick axis that equals nroots
+                axis = 0 if arr.shape[0] == nroots and arr.shape[1] != nroots else 1
+                if axis == 0:
+                    for i in range(arr.shape[0]): yield arr[i].ravel()
+                else:
+                    for i in range(arr.shape[1]): yield arr[:, i].ravel()
+                return
+            # generic: treat last axis as roots
+            arr2 = arr.reshape((-1, arr.shape[-1]))
+            for i in range(arr2.shape[1]): yield arr2[:, i].ravel()
+    
+        s2_vals = []
+        for c in _iter_roots(civecs):
+            c = np.asarray(c).ravel()
+            if c.size == 0:
+                s2_vals.append(np.nan)
+                continue
+            Sc  = np.asarray(s2_op(c, ncas, nelecas)).ravel()
+            den = (np.vdot(c, c)).real  # assumes orthonormal working space
+            s2  = (np.vdot(c, Sc) / den).real
+            s2_vals.append(s2)
+    
+        s2_vals = np.asarray(s2_vals, dtype=float)
+        dists   = np.abs(s2_vals - target)
+        idx     = [int(i) for i, d in enumerate(dists) if np.isfinite(d) and d <= tol]
+    
+        if dbg:
+            logger.debug(self, "[select_spin_roots] target ss=%.3f, tol=%.2f",
+                         target, tol)
+            logger.debug(self, "[select_spin_roots] <S^2> per root: %s", s2_vals)
+            logger.debug(self, "[select_spin_roots] |S^2 - target|: %s", dists)
+            logger.debug(self, "[select_spin_roots] chosen idx: %s", idx)
+
+        return (idx, s2_vals) if also_return_s2 else idx
+

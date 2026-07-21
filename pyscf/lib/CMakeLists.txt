@@ -198,5 +198,4 @@ set_target_properties (clib_csf PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "csf")
 
-add_subdirectory(sfnoci)
-
+add_subdirectory(gbci)
