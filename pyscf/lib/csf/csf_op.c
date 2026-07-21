@@ -18,6 +18,38 @@
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
 #endif
 
+static int first1(uint64_t r)
+{
+#if defined(__builtin_ffsll)
+        return __builtin_ffsll(r) - 1;
+#elif defined(HAVE_FFS)
+        return ffsll(r) - 1;
+#else
+        // I think this branch is wrong. It looks like the opposite of the other branches!
+        int n = 0;
+        if (r >> (n + 32)) n += 32;
+        if (r >> (n + 16)) n += 16;
+        if (r >> (n +  8)) n +=  8;
+        if (r >> (n +  4)) n +=  4;        
+        if (r >> (n +  2)) n +=  2;
+        if (r >> (n +  1)) n +=  1;
+        return n;
+#endif
+}
+
+static int last1 (uint64_t r)
+{
+    if (r==0ULL){ return -1; }
+    int n = 0;
+    if (r >> (n + 32)) n += 32;
+    if (r >> (n + 16)) n += 16;
+    if (r >> (n +  8)) n +=  8;
+    if (r >> (n +  4)) n +=  4;        
+    if (r >> (n +  2)) n +=  2;
+    if (r >> (n +  1)) n +=  1;
+    return n;
+}
+
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
 {
 
@@ -169,6 +201,134 @@ double _get_wigner_6j_j41h (unsigned int j1, unsigned int j2, unsigned int j3, u
     }
     num = fac * sqrt (num / denom);
     return num;
+}
+
+uint64_t _get_ustr (Str3 * addr, unsigned int norb)
+{
+    // Get a string identifying all orbitals with AT LEAST ONE electron in them!
+    uint64_t dstr = addr->dconf;
+    uint64_t sstr = addr->sconf;
+    for (unsigned int p=0; p<norb; p++){
+        if ((1ULL << p) & dstr){
+            sstr = ((((1ULL << p)-1) & sstr) |
+                    ((sstr >> p) << (p+1)));
+        }
+    }
+    return (dstr | sstr);
+}
+
+uint64_t _get_tstr (Str3 * addr, unsigned int norb)
+{
+    // Pseudo-spin-coupling string in which all unpaired or empty orbitals are "down",
+    // for quick evaluation of orthogonality
+    uint64_t sstr = ~(_get_ustr (addr, norb) ^ (addr->dconf)); // non-singly-occupied orbitals
+    uint64_t tstr = addr->spin;
+    for (unsigned int p=0; p<norb; p++){
+        if ((1ULL << p) & sstr){
+            tstr = ((((1ULL << p)-1) & tstr) |
+                    ((tstr >> p) << (p+1)));
+        }
+    }
+    return tstr;
+}
+
+int CGC_link (Str3 * bra, Str3 * ket, unsigned int norb,
+              unsigned int * a, unsigned int * i,
+              unsigned int * b, unsigned int * j)
+{
+    /* Return value:
+        -1 : determinants are guaranteed unlinked by a 2-body Hamiltonian
+         0 : determinants are identical
+         1 : determinants linked by a single excitation
+         2 : determinants are linked by a double excitation
+        On return, arguments "a","b"/"i","j" are set to the indices of the particle/hole operators
+        as relevant depending on the return value (i.e., "a" and "i" are undefined for return value
+        < 1, and "b" and "j" are only defined for return value 2).
+    */
+    unsigned int nelec_bra = 2*_count_set_bits (bra->dconf) + _count_set_bits (bra->sconf);
+    unsigned int nelec_ket = 2*_count_set_bits (ket->dconf) + _count_set_bits (ket->sconf);
+    assert (nelec_bra == nelec_ket);
+    uint64_t uket = _get_ustr (ket, norb); // occ > 0
+    uint64_t ubra = _get_ustr (bra, norb); // occ > 0
+    uint64_t tket = _get_tstr (ket, norb); // pseudo-spin-coupling
+    uint64_t tbra = _get_tstr (bra, norb); // pseudo-spin-coupling
+    uint64_t dsig = (bra->dconf) ^ (ket->dconf); // occ=2 to occ=0,1
+    uint64_t usig = uket ^ ubra; // occ=1,2 to occ=0
+    uint64_t osig = dsig^usig; // Identifies orbitals in which one electron hops in or out
+    uint64_t tsig = dsig&usig; // Identifies orbitals in which two electrons hop in or out
+
+    unsigned int n = 2*_count_set_bits (tsig) + _count_set_bits (osig);
+    assert ((n%2) == 0);
+    if (n>2){ n = -1; }
+    if (n<0){ return n; }
+    
+    unsigned int p,q,r;
+    unsigned int np;
+
+    // CSFs orthogonality escape
+    if (_count_set_bits (osig)){
+        p = first1 (osig);
+        if ((tket & ((1ULL<<p)-1)) != (tbra & ((1ULL<<p)-1))){
+            return -1;
+        }
+        p = last1 (osig);
+        if ((tket>>(p+1)) != (tbra>>(p+1))){
+            return -1;
+        }
+    }
+    
+    switch (_count_set_bits (tsig)){
+        case 2:
+            p = first1 (tsig);
+            q = last1 (tsig);
+            np = _get_occ (ket, p);
+            if (np==2){
+                (*i) = p; (*j) = p;
+                (*a) = q; (*b) = q;
+            } else {
+                (*a) = p; (*b) = p;
+                (*i) = q; (*j) = q;
+            }
+            break;
+        case 1:
+            p = first1 (tsig);
+            q = first1 (osig);
+            r = last1 (osig);
+            np = _get_occ (ket, p);
+            if (np==2){
+                (*i) = p; (*j) = p;
+                (*a) = q;
+                (*b) = r;
+            } else {
+                (*a) = p; (*b) = p;
+                (*i) = q;
+                (*j) = r;
+            }
+            break;
+        case 0:
+            unsigned int na = 0;
+            unsigned int ni = 0;
+            for (q=0; q<2*n; q++){
+                p = first1 (osig);
+                if (_get_occ (ket, p) > _get_occ (bra, p)){
+                    if (ni>0){
+                        (*j) = p;
+                    } else {
+                        (*i) = p;
+                        ni++;
+                    }
+                } else {
+                    if (na>0){
+                        (*b) = p;
+                    } else {
+                        (*a) = p;
+                        na++;
+                    }
+                }
+                osig = osig & (1ULL<<p);
+            }
+    }
+    return n;
 }
 
 double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j)
