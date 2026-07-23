@@ -234,7 +234,7 @@ void _pad_Str3 (Str3 * addr, Str3 * addr_padded)
     addr_padded->spin = spin;
 }
 
-int CGC_link (Str3 * bra, Str3 * ket, unsigned int norb,
+int CGC_link (Str3 * bra, Str3 * ket,
               unsigned int * p, unsigned int * r,
               unsigned int * q, unsigned int * t)
 {
@@ -250,6 +250,9 @@ int CGC_link (Str3 * bra, Str3 * ket, unsigned int norb,
     unsigned int nelec_bra = 2*_count_set_bits (bra->dconf) + _count_set_bits (bra->sconf);
     unsigned int nelec_ket = 2*_count_set_bits (ket->dconf) + _count_set_bits (ket->sconf);
     assert (nelec_bra == nelec_ket);
+    unsigned int smult_bra = _count_set_bits (bra->spin);
+    unsigned int smult_ket = _count_set_bits (ket->spin);
+    assert (smult_bra == smult_ket);
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
@@ -260,56 +263,52 @@ int CGC_link (Str3 * bra, Str3 * ket, unsigned int norb,
     uint64_t tbra = brap.spin; // pseudo-spin-coupling
     uint64_t dsig = (bra->dconf) ^ (ket->dconf); // occ=2 to occ=0,1
     uint64_t usig = uket ^ ubra; // occ=1,2 to occ=0
-    uint64_t osig = dsig^usig; // Identifies orbitals in which one electron hops in or out
-    uint64_t tsig = dsig&usig; // Identifies orbitals in which two electrons hop in or out
+    uint64_t c1sig = dsig^usig; // Identifies orbitals in which one electron hops in or out
+    uint64_t c2sig = dsig&usig; // Identifies orbitals in which two electrons hop in or out
+    dsig = tket^tbra;
+    usig = ~(c1sig|c2sig);
+    uint64_t s1sig = dsig&usig; // Identifies orbitals in which ONLY a spin-coupling flip happens
+    c2sig = c2sig | s1sig; // Identifies orbitals in which any 2-particle action happens
 
-    unsigned int n = 2*_count_set_bits (tsig) + _count_set_bits (osig);
+    unsigned int nc2 = _count_set_bits (c2sig);
+    unsigned int nc1 = _count_set_bits (c1sig);
+    unsigned int n = 2*nc2 + nc1;
     assert ((n%2) == 0);
+    n = n / 2;
     if (n>2){ n = -1; }
-    if (n<0){ return n; }
-    
-    // CSFs orthogonality escape
-    unsigned int m;
-    if (_count_set_bits (osig)){
-        m = first1 (osig);
-        if ((tket & ((1ULL<<m)-1)) != (tbra & ((1ULL<<m)-1))){
-            return -1;
+    if (n>0){
+        switch (nc2){
+            case 2:
+                *p = first1 (c2sig);
+                *r = first1 (c2sig);
+                *q = last1 (c2sig);
+                *t = last1 (c2sig);
+                break;
+            case 1:
+                if (first1 (c2sig) < first1 (c1sig)){
+                    *p = first1 (c2sig);
+                    *r = first1 (c2sig);
+                    *q = first1 (c1sig);
+                    *t = last1 (c1sig);
+                } else {
+                    *p = first1 (c1sig);
+                    *r = last1 (c1sig);
+                    *q = first1 (c2sig);
+                    *t = first1 (c2sig);
+                }
+                break;
+            case 0:
+                if (nc1 > 0){
+                    *p = first1 (c1sig);
+                    *t = last1 (c1sig);
+                    if (nc1 > 2){
+                        c1sig = c1sig ^ (1ULL << *p);
+                        c1sig = c1sig ^ (1ULL << *t);
+                        *r = first1 (c1sig);
+                        *q = last1 (c1sig);
+                    }
+                } 
         }
-        m = last1 (osig);
-        if ((tket>>(m+1)) != (tbra>>(m+1))){
-            return -1;
-        }
-    }
-
-    switch (_count_set_bits (tsig)){
-        case 2:
-            *p = first1 (tsig);
-            *r = first1 (tsig);
-            *q = last1 (tsig);
-            *t = last1 (tsig);
-            break;
-        case 1:
-            if (first1 (tsig) < first1 (osig)){
-                *p = first1 (tsig);
-                *r= first1 (tsig);
-                *q = first1 (osig);
-                *t = last1 (osig);
-            } else {
-                *p = first1 (osig);
-                *r = last1 (osig);
-                *q = first1 (tsig);
-                *t = first1 (tsig);
-            }
-            break;
-        case 0:
-            *p = first1 (osig);
-            osig = osig ^ (1ULL << *p);
-            *t = last1 (osig);
-            osig = osig ^ (1ULL << *t);
-            if (_count_set_bits (osig) > 0){
-                *r = first1 (osig);
-                *q = last1 (osig);
-            }
     }
     return n;
 }
