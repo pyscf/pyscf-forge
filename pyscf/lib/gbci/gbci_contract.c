@@ -2,7 +2,7 @@
 #include <stddef.h>
 
 
-void GBCIcontract_h_spin1(double *erieff, double *ci0, double *ci1,
+void gbci_contract_h_spin1(double *erieff, double *ci0, double *ci1,
 int ncas, int nelecasa, int nelecasb,
 int *conf_info_list, int na, uint64_t *stringsa, int nb, uint64_t *stringsb,
 int num, int *t1a, int *t1a_nonzero, int t1a_nonzero_size,

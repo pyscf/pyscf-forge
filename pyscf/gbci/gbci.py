@@ -14,22 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Jiseong Park <fark4308@snu.ac.kr>
-# Modified by: Minseok Oh <msjeff2001@snu.ac.kr>
+# Authors: Jiseong Park <fark4308@snu.ac.kr>
+#          Minseok Oh <msjeff2001@snu.ac.kr>
 # Edited by: Seunghoon Lee <seunghoonlee@snu.ac.kr>
 
 '''
 Grouped-Bath Configuration Interaction (GBCI)
 
 References:
-[1] Spin-flip non-orthogonal configuration interaction: a variational and
-    almost black-box method for describing strongly correlated molecules
-    Nicholas J. Mayhall, Paul R. Horn, Eric J. Sundstrom and Martin Head-Gordon
-    Phys. Chem. Chem. Phys. 2014, 16, 22694
-[2] Efficient grouped-bath ansatz for spin-flip non-orthogonal configuration
+[1] Efficient grouped-bath ansatz for spin-flip non-orthogonal configuration
     interaction in transition-metal charge-transfer complexes
     Jiseong Park and Seunghoon Lee
     J. Chem. Theory Comput. 2025
+[2] Spin-flip non-orthogonal configuration interaction: a variational and
+    almost black-box method for describing strongly correlated molecules
+    Nicholas J. Mayhall, Paul R. Horn, Eric J. Sundstrom and Martin Head-Gordon
+    Phys. Chem. Chem. Phys. 2014, 16, 22694
 '''
 
 import numpy
@@ -121,7 +121,6 @@ def kernel(gbci, mo_coeff=None, ci0=None, verbose=logger.NOTE, debug=False):
     eri = gbci.get_h2eff(mo_coeff)
     t1 = log.timer('effective 2e hamiltonian', *t1)
 
-    # FCI
     max_memory = max(400, gbci.max_memory-lib.current_memory()[0])
     e_tot, fcivec = gbci.fcisolver.kernel(h1e, eri, ncas, nelecas,
                                             conf_info_list, ov_list, ecore_list,
@@ -242,7 +241,6 @@ def group_occ(po_list, group):
 def group_by_occ(po_list, group_a):
     a = len(group_a)
     p = len(po_list)
-    #n = len(po_list[0])
     A_occ = numpy.zeros((p,a))
     for index, occ in enumerate(po_list):
         for i in range(a):

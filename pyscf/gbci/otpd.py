@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Minseok Oh <msjeff2001@snu.ac.kr>, Byungjoo Kim <creeperkim28@snu.ac.kr>
+# Authors: Minseok Oh <msjeff2001@snu.ac.kr>
+#          Byungjoo Kim <creeperkim28@snu.ac.kr>
 # Edited by: Seunghoon Lee <seunghoonlee@snu.ac.kr>
 
 '''
@@ -25,14 +26,14 @@ It evaluates the on-top pair density on numerical grids for grouped-bath
 core and active-space contributions.
 
 References:
-[1] Multiconfiguration Pair-Density Functional Theory
-    Giovanni Li Manni, Rebecca K. Carlson, Sijie Luo, Dongxia Ma,
-    Jeppe Olsen, Donald G. Truhlar and Laura Gagliardi
-    J. Chem. Theory Comput. 2014, 10, 3669-3680
-[2] Orbital-relaxed bath theory for charge-transfer processes in
+[1] Orbital-relaxed bath theory for charge-transfer processes in
     transition-metal complexes
     Minseok Oh, Jiseong Park, Byungjoo Kim, Hyeok Lim and Seunghoon Lee
     Phys. Chem. Chem. Phys. 2026
+[2] Multiconfiguration Pair-Density Functional Theory
+    Giovanni Li Manni, Rebecca K. Carlson, Sijie Luo, Dongxia Ma,
+    Jeppe Olsen, Donald G. Truhlar and Laura Gagliardi
+    J. Chem. Theory Comput. 2014, 10, 3669-3680
 '''
 
 import ctypes

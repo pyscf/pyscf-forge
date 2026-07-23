@@ -14,23 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Jiseong Park <fark4308@snu.ac.kr>
-# Modified by: Minseok Oh <msjeff2001@snu.ac.kr>
+# Authors: Jiseong Park <fark4308@snu.ac.kr>
+#          Minseok Oh <msjeff2001@snu.ac.kr>
 # Edited by: Seunghoon Lee <seunghoonlee@snu.ac.kr>
-
-'''
-Grouped-Bath Configuration Interaction (GBCI)
-
-References:
-[1] Spin-flip non-orthogonal configuration interaction: a variational and
-    almost black-box method for describing strongly correlated molecules
-    Nicholas J. Mayhall, Paul R. Horn, Eric J. Sundstrom and Martin Head-Gordon
-    Phys. Chem. Chem. Phys. 2014, 16, 22694
-[2] Efficient grouped-bath ansatz for spin-flip non-orthogonal configuration
-    interaction in transition-metal charge-transfer complexes
-    Jiseong Park and Seunghoon Lee
-    J. Chem. Theory Comput. 2025
-'''
 
 import sys
 
@@ -186,7 +172,7 @@ def contract_h(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list
     ov_list = numpy.asarray(ov_list, order = 'C', dtype=numpy.float64)
     ecore_list = numpy.asarray(ecore_list, order = 'C', dtype=numpy.float64)
     mo_num = erieff.shape[0]
-    libgbci.GBCIcontract_h_spin1(erieff.ctypes.data_as(ctypes.c_void_p),
+    libgbci.gbci_contract_h_spin1(erieff.ctypes.data_as(ctypes.c_void_p),
          civec.ctypes.data_as(ctypes.c_void_p),
          cinew.ctypes.data_as(ctypes.c_void_p),
          ctypes.c_int(ncas),

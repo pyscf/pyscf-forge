@@ -7,7 +7,7 @@ set_target_properties (clib_gbpdft PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "gbpdft")
 
-add_library (clib_gbci SHARED GBCI_contract.c)
+add_library (clib_gbci SHARED gbci_contract.c)
 target_link_libraries (clib_gbci ${OPENMP_C_PROPERTIES})
 set_target_properties (clib_gbci PROPERTIES
     CLEAN_DIRECT_OUTPUT 1

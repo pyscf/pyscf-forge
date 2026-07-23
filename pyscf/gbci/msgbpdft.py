@@ -26,14 +26,14 @@ GBCI reference coupling with GBPDFT diagonal energies for multi-state
 state-interaction calculations.
 
 References:
-[1] Multi-state pair-density functional theory
-    J. J. Bao, C. Zhou, Z. Varga, S. Kanchanakungwankul, L. Gagliardi
-    and D. G. Truhlar
-    Faraday Discuss. 2020, 224, 348-372
-[2] Orbital-relaxed bath theory for charge-transfer processes in
+[1] Orbital-relaxed bath theory for charge-transfer processes in
     transition-metal complexes
     Minseok Oh, Jiseong Park, Byungjoo Kim, Hyeok Lim and Seunghoon Lee
     Phys. Chem. Chem. Phys. 2026
+[2] Multi-state pair-density functional theory
+    J. J. Bao, C. Zhou, Z. Varga, S. Kanchanakungwankul, L. Gagliardi
+    and D. G. Truhlar
+    Faraday Discuss. 2020, 224, 348-372
 '''
 
 import numpy as np

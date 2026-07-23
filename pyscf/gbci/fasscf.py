@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Jiseong Park <fark4308@snu.ac.kr>
-# Modified by: Minseok Oh <msjeff2001@snu.ac.kr>
+# Authors: Jiseong Park <fark4308@snu.ac.kr>
+#          Minseok Oh <msjeff2001@snu.ac.kr>
 # Edited by: Seunghoon Lee <seunghoonlee@snu.ac.kr>
 
 

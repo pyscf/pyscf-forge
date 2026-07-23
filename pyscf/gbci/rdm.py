@@ -14,23 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Jiseong Park <fark4308@snu.ac.kr>
-# Modified by: Minseok Oh <msjeff2001@snu.ac.kr>
+# Authors: Jiseong Park <fark4308@snu.ac.kr>
+#          Minseok Oh <msjeff2001@snu.ac.kr>
 # Edited by: Seunghoon Lee <seunghoonlee@snu.ac.kr>
-
-'''
-Grouped-Bath Configuration Interaction (GBCI)
-
-References:
-[1] Spin-flip non-orthogonal configuration interaction: a variational and
-    almost black-box method for describing strongly correlated molecules
-    Nicholas J. Mayhall, Paul R. Horn, Eric J. Sundstrom and Martin Head-Gordon
-    Phys. Chem. Chem. Phys. 2014, 16, 22694
-[2] Efficient grouped-bath ansatz for spin-flip non-orthogonal configuration
-    interaction in transition-metal charge-transfer complexes
-    Jiseong Park and Seunghoon Lee
-    J. Chem. Theory Comput. 2025
-'''
 
 import numpy
 import numpy as np
