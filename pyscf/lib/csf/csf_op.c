@@ -245,36 +245,28 @@ int CGC_link (Str3 * bra, Str3 * ket,
          2 : determinants are linked by a double excitation
         On return, arguments "p","t"/"q","r" are set to the indices of the particle/hole operators
         as relevant depending on the return value (i.e., "p" and "t" are undefined for return value
-        < 1, and "r" and "q" are only defined for return value 2).
+        < 1, and "r" and "q" are only defined for return value 2). Only counts charge hops as
+        excitations (spin flips are hard to evaluate because the intermediate spin couplings
+        can be very differnt for 2-electron interactions).
     */
     unsigned int nelec_bra = 2*_count_set_bits (bra->dconf) + _count_set_bits (bra->sconf);
     unsigned int nelec_ket = 2*_count_set_bits (ket->dconf) + _count_set_bits (ket->sconf);
     assert (nelec_bra == nelec_ket);
-    unsigned int smult_bra = _count_set_bits (bra->spin);
-    unsigned int smult_ket = _count_set_bits (ket->spin);
-    assert (smult_bra == smult_ket);
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
 
     uint64_t uket = ketp.dconf | ketp.sconf; // occ > 0
     uint64_t ubra = brap.dconf | brap.sconf; // occ > 0
-    uint64_t tket = ketp.spin; // pseudo-spin-coupling
-    uint64_t tbra = brap.spin; // pseudo-spin-coupling
     uint64_t dsig = (bra->dconf) ^ (ket->dconf); // occ=2 to occ=0,1
     uint64_t usig = uket ^ ubra; // occ=1,2 to occ=0
     uint64_t c1sig = dsig^usig; // Identifies orbitals in which one electron hops in or out
     uint64_t c2sig = dsig&usig; // Identifies orbitals in which two electrons hop in or out
-    dsig = tket^tbra;
-    usig = ~(c1sig|c2sig);
-    uint64_t s1sig = dsig&usig; // Identifies orbitals in which ONLY a spin-coupling flip happens
-    c2sig = c2sig | s1sig; // Identifies orbitals in which any 2-particle action happens
 
     unsigned int nc2 = _count_set_bits (c2sig);
     unsigned int nc1 = _count_set_bits (c1sig);
-    unsigned int n = 2*nc2 + nc1;
-    assert ((n%2) == 0);
-    n = n / 2;
+    assert ((nc1%2) == 0);
+    unsigned int n = (2*nc2 + nc1) / 2;
     if (n>2){ n = -1; }
     if (n>0){
         switch (nc2){
@@ -769,5 +761,79 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
 }
 }
 
-
+void FCICSFpspace_h0tril(double *hmat,
+                         double *h1e_c, double *h1e_s, double *g2e,
+                         uint64_t * dconfstrs,
+                         uint64_t * sconfstrs,
+                         uint64_t * coupstrs,
+                         size_t np,
+                         unsigned int norb, int twoM)
+{
+const size_t nel = np * (np-1) / 2;
+#pragma omp parallel default(shared)
+{
+    unsigned int p,q,r,t;
+    int np,nq,nr,nt;
+    int mp,mq,mr,mt;
+    unsigned int a,b,i,j;
+    unsigned int nspin;
+    int nch;
+    Str3 bra,ket;
+    uint64_t sconf1,sconf2;
+    size_t ihmat, ihop;
+    double fac;
+    for (size_t ibra=0; ibra<np; ibra++){
+    bra.dconf = dconfstrs[ibra];
+    bra.sconf = sconfstrs[ibra];
+    bra.spin = coupstrs[ibra];
+    nspin = _count_set_bits (bra.sconf);
+    for (size_t iket=0; iket<ibra; iket++){
+    ihmat = (iket*np) + ibra;
+    ket.dconf = dconfstrs[iket];
+    ket.sconf = sconfstrs[iket];
+    ket.spin = coupstrs[iket];
+    nch = CGC_link (&bra, &ket, &p, &r, &q, &t);
+    sconf1 = bra.sconf;
+    sconf2 = bra.sconf;
+    if (nch > 0){
+        np = _get_occ (&ket, p);
+        mp = _get_occ (&bra, p);
+        if (np < mp){ np = -mp; }
+        nt = _get_occ (&ket, t);
+        mt = _get_occ (&bra, t);
+        if (nt < mt){ nt = -mt; }
+    }
+    if (nch > 1){
+        nr = _get_occ (&ket, r);
+        mr = _get_occ (&bra, r);
+        if (nr < mr){ nr = -mr; }
+        nq = _get_occ (&ket, q);
+        mq = _get_occ (&bra, q);
+        if (nq < mq){ nq = -mq; }
+    }
+    switch (nch) {
+        case 0: // spin interaction only
+            for (p=0; p<nspin; p++){
+                i = first1 (sconf1);
+                sconf1 = sconf1 ^ (1ULL<<i);
+                sconf2 = sconf1;
+                // Sz
+                ihop = i * (norb+1);
+                //fac = CGC_1s (&bra, &ket, p, p, 1, -1, twoM);
+                hmat[ihmat] += fac * h1e_s[ihop];
+                // eri exchange
+                for (q=p; q<nspin; q++){
+                    j = first1 (sconf2);
+                    sconf2 = sconf2 ^ (1ULL<<j);
+                    ihop = i*((norb*norb*norb) + 1) + j*(norb+1)*norb;
+                    //fac = CGC_2e (&bra, &ket, p, p, q, q, 1, -1, 1, -1);
+                }
+            }
+        case 1:
+        case 2:
+    }
+    }
+    }
+}
+}
 
