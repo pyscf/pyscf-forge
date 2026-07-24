@@ -761,6 +761,59 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
 }
 }
 
+void exc1_dir (Str3 * bra, Str3 * ket, 
+               unsigned int p, unsigned int q,
+               unsigned int * a, unsigned int * i)
+{
+    int np = _get_occ (ket, p) - _get_occ (bra, p);
+    if (np > 0){
+        *i = p;
+        *a = q;
+    } else {
+        *a = p;
+        *i = q;
+    }
+}
+
+void _exc2_dir_iter (unsigned int * as, unsigned int * is,
+                     unsigned int * aidx, unsigned int * iidx,
+                     unsigned int p, unsigned int np)
+{
+    if (np > 0){
+        is[*iidx] = p;
+        (*iidx)++;
+    } else {
+        as[*aidx] = p;
+        (*aidx)++;
+    }
+}
+
+void exc2_dir (Str3 * bra, Str3 * ket, 
+               unsigned int p, unsigned int q,
+               unsigned int r, unsigned int s,
+               unsigned int * a, unsigned int * i,
+               unsigned int * b, unsigned int * j)
+{
+    unsigned int as[2];
+    unsigned int is[2];
+    unsigned int aidx = 0;
+    unsigned int iidx = 0;
+    int np = _get_occ (ket, p) - _get_occ (bra, p);
+    _exc2_dir_iter (as, is, &aidx, &iidx, p, np);
+    np = _get_occ (ket, q) - _get_occ (bra, q);
+    _exc2_dir_iter (as, is, &aidx, &iidx, q, np);
+    nr = _get_occ (ket, r) - _get_occ (bra, r);
+    _exc2_dir_iter (as, is, &aidx, &iidx, r, np);
+    np = _get_occ (ket, s) - _get_occ (bra, s);
+    _exc2_dir_iter (as, is, &aidx, &iidx, s, np);
+    assert (aidx == 2);
+    assert (iidx == 2);
+    (*a) = as[0];
+    (*b) = as[1];
+    (*i) = is[0];
+    (*j) = js[1];
+}
+
 void FCICSFpspace_h0tril(double *hmat,
                          double *h1e_c, double *h1e_s, double *g2e,
                          uint64_t * dconfstrs,
@@ -773,8 +826,6 @@ const size_t nel = np * (np-1) / 2;
 #pragma omp parallel default(shared)
 {
     unsigned int p,q,r,t;
-    int np,nq,nr,nt;
-    int mp,mq,mr,mt;
     unsigned int a,b,i,j;
     unsigned int nspin;
     int nch;
@@ -782,6 +833,7 @@ const size_t nel = np * (np-1) / 2;
     uint64_t sconf1,sconf2;
     size_t ihmat, ihop;
     double fac;
+    double hop;
     for (size_t ibra=0; ibra<np; ibra++){
     bra.dconf = dconfstrs[ibra];
     bra.sconf = sconfstrs[ibra];
@@ -795,22 +847,6 @@ const size_t nel = np * (np-1) / 2;
     nch = CGC_link (&bra, &ket, &p, &r, &q, &t);
     sconf1 = bra.sconf;
     sconf2 = bra.sconf;
-    if (nch > 0){
-        np = _get_occ (&ket, p);
-        mp = _get_occ (&bra, p);
-        if (np < mp){ np = -mp; }
-        nt = _get_occ (&ket, t);
-        mt = _get_occ (&bra, t);
-        if (nt < mt){ nt = -mt; }
-    }
-    if (nch > 1){
-        nr = _get_occ (&ket, r);
-        mr = _get_occ (&bra, r);
-        if (nr < mr){ nr = -mr; }
-        nq = _get_occ (&ket, q);
-        mq = _get_occ (&bra, q);
-        if (nq < mq){ nq = -mq; }
-    }
     switch (nch) {
         case 0: // spin interaction only
             for (p=0; p<nspin; p++){
@@ -819,18 +855,54 @@ const size_t nel = np * (np-1) / 2;
                 sconf2 = sconf1;
                 // Sz
                 ihop = i * (norb+1);
-                //fac = CGC_1s (&bra, &ket, p, p, 1, -1, twoM);
+                // fac = CGC_1s (&bra, &ket, p, p, twoM);
                 hmat[ihmat] += fac * h1e_s[ihop];
                 // eri exchange
                 for (q=p; q<nspin; q++){
                     j = first1 (sconf2);
                     sconf2 = sconf2 ^ (1ULL<<j);
                     ihop = i*((norb*norb*norb) + 1) + j*(norb+1)*norb;
-                    //fac = CGC_2e (&bra, &ket, p, p, q, q, 1, -1, 1, -1);
+                    // fac = CGC_2e (&bra, &ket, p, q, q, p);
+                    hmat[ihmat] += fac * g2e[ihop];
                 }
             }
         case 1:
+            exc1_dir (bra, ket, p, t, &a, &i);
+            // E^a_i
+            ihop = (a*norb) + i;
+            hop = h1e_c[ihop];
+            ihop = (a*norb*norb*norb) + (i*((norb*norb + norb + 1)));
+            hop -= g2e[ihop] * .5;
+            ihop = (i*norb*norb*norb) + (a*((norb*norb + norb + 1)));
+            hop -= g2e[ihop] * .5;
+            for (p=0; p<nspin; p++){
+                ihop = (a*norb*norb*norb) + (i*norb*norb) + p*(norb+1);
+                hop += g2e[ihop] * _get_occ (&ket, p);
+                ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
+                hop -= g2e[ihop];
+            }
+            // fac = CGC_1e (&bra, &ket, a, i)
+            hmat[ihmat] += fac * hop;
+            // S^a_i
+            ihop = (a*norb) + i;
+            // fac = CGC_1s (&bra, &ket, a, i, twoM);
+            hmat[ihmat] += fac * h1e_s[ihop];
+            // E^a_p E^p_i
+            for (p=0; p<nspin; p++){
+                ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
+                // fac = CGC_2e (&bra, &ket, a, p, p, i);
+                hmat[ihmat] += g2e[ihop] * fac;
+            }
         case 2:
+            exc2_dir (bra, ket, p, r, q, t, &a, &i, &b, &j);
+            // E^a_i E^b_j
+            ihop = (a*norb*norb*norb) + (i*norb*norb) + (b*norb) + j;
+            // fac = CGC_2e (&bra, &ket, a, i, b, j);
+            hmat[ihmat] += g2e[ihop] * fac;
+            // E^a_j E^b_i
+            ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
+            // fac = CGC_2e (&bra, &ket, a, j, b, i);
+            hmat[ihmat] += g2e[ihop] * fac;
     }
     }
     }
