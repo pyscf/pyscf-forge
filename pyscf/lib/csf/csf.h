@@ -41,7 +41,7 @@ unsigned int _get_spinindex (Str3 * addr, unsigned int i);
 int _get_twoM (uint64_t sconfstr, uint64_t detstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
 double CGC_2e_X_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
-double CGC_2e_X (uint64_t brastr, uint64_t ketstr,
+double CGC_2e_X (unsigned int * twoSk, unsigned int * twoSb,
                  unsigned int t, unsigned int q, unsigned int r, unsigned int p,
                  int nt, int nq, int nr, int np,
                  unsigned int nspin);
