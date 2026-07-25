@@ -854,7 +854,43 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
 
 double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, unsigned int twoM)
 {
-    double fac = 1.0;
+    if (a>i){
+        return csf_Eai (ket, bra, i, a);
+    }
+    Str3 brap, ketp;
+    _pad_Str3 (bra, &brap);
+    _pad_Str3 (ket, &ketp);
+    // CSF orthogonality
+    if ((brap.spin & ((1ULL<<a)-1)) != (ketp.spin & ((1ULL<<a)-1))){
+        return 0.0;
+    }
+    int ni = _get_occ (ket, i);
+    int na = -_get_occ (bra, a);
+    unsigned int nspin_ket = _count_set_bits (ket->sconf);
+    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int nspin = MAX (nspin_bra, nspin_ket) - MIN (nspin_bra, nspin_ket);
+    nspin += MIN (nspin_bra, nspin_ket);
+    unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int si, sa;
+    _find_spin_Oai (bra, ket, a, i, nspin, twoSk, twoSb, &sa, &si);
+    double fac = CGC_2e_X (twoSk, twoSb, 0, 0, si, sa, 1, -1, ni, na, nspin);
+    free (twoSk);
+    free (twoSb);
+    unsigned int twoS = _get_twoS_running (bra->spin, 0, nspin_bra);
+    // Sigma_z = ( 1/2  1  1/2 ) * S_z
+    //           ( m    0   -m )
+    //         = sqrt (2/3) * S_z
+    // S_z = sqrt (3/2) * Sigma_z
+    //     -1**[S-M]
+    //     *
+    //     ( S  1  S )
+    //     ( M  0 -M )
+    // WHY? UNCLEAR FACTOR OF 2 * .5;
+    fac *= sqrt (1.5) * twoM; 
+    if (twoS > 0){
+       fac /= sqrt (twoS*(twoS+2)*.25);
+    }
     return fac;
 }
 
@@ -898,7 +934,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 sconf2 = sconf1;
                 // Sz
                 ihop = i * (norb+1);
-                // fac = csf_Sai (&bra, &ket, p, p, twoM);
+                fac = csf_Sai (&bra, &ket, p, p, twoM);
                 hmat[ihmat] += fac * h1e_s[ihop];
                 // eri exchange
                 for (q=p; q<nspin; q++){
@@ -928,7 +964,7 @@ void FCICSFpspace_h0tril(double *hmat,
             hmat[ihmat] += fac * hop;
             // S^a_i
             ihop = (a*norb) + i;
-            // fac = csf_Sai (&bra, &ket, a, i, twoM);
+            fac = csf_Sai (&bra, &ket, a, i, twoM);
             hmat[ihmat] += fac * h1e_s[ihop];
             // E^a_p E^p_i
             for (p=0; p<nspin; p++){
