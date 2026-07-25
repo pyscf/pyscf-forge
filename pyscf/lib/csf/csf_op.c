@@ -852,10 +852,10 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     return fac;
 }
 
-double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, unsigned int twoM)
+double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM)
 {
     if (a>i){
-        return csf_Eai (ket, bra, i, a);
+        return csf_Sai (ket, bra, i, a, twoM);
     }
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
@@ -1070,7 +1070,7 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
         for (unsigned int i = 0; i < norb; i++){
             ni = _get_occ (&addr, i);
             if (ni != 1){ continue; }
-            fac = CGC_1s_diag (&addr, i, twoM);
+            fac = csf_Sai (&addr, &addr, i, i, twoM);
             hdiag_csf[icoupconf] += fac * h1e_s[i];
             idxi = i*norb*norb*norb + i;
             for (unsigned int j = 0; j < i; j++){
