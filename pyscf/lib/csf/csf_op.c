@@ -321,36 +321,8 @@ double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j)
        symmetrical.
     */
     unsigned int nspin = _count_set_bits (addr->sconf);
-    unsigned int si = _get_spinindex (addr, i);
-    unsigned int sj = _get_spinindex (addr, j);
-    return -3*CGC_2e_X_diag (addr->spin, si, sj, nspin) - 0.5;
-}
-
-double CGC_1s_diag (Str3 * addr, unsigned int i, int twoM)
-{
-    unsigned int nspin = _count_set_bits (addr->sconf);
-    unsigned int twoS = _get_twoS_running (addr->spin, 0, nspin);
-    unsigned int si = _get_spinindex (addr, i);
-    double szfac = CGC_2e_X_diag (addr->spin, nspin, si, nspin);
-    // Sigma_z = ( 1/2  1  1/2 ) * S_z
-    //           ( m    0   -m )
-    //         = sqrt (2/3) * S_z
-    // S_z = sqrt (3/2) * Sigma_z
-    szfac *= sqrt (1.5);
-
-    //     -1**[S-M]
-    //     *
-    //     ( S  1  S )
-    //     ( M  0 -M )
-    szfac *= twoM; // WHY? UNCLEAR FACTOR OF 2 * .5;
-    if (twoS > 0){
-        szfac /= sqrt (twoS*(twoS+2)*.25);
-    }
-    return szfac;
-}
-
-double CGC_2e_X_diag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned int nspin)
-{
+    unsigned int t = _get_spinindex (addr, i);
+    unsigned int p = _get_spinindex (addr, j);
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
@@ -369,13 +341,13 @@ double CGC_2e_X_diag (uint64_t coupstr, unsigned int t, unsigned int p, unsigned
     // assert (r>=q);
     // assert (q>=t);
     for (unsigned int i=0; i <= nspin; i++){
-        twoSk[i] = _get_twoS_running (coupstr, i, nspin);
-        twoSb[i] = _get_twoS_running (coupstr, i, nspin);
+        twoSk[i] = _get_twoS_running (addr->spin, i, nspin);
+        twoSb[i] = _get_twoS_running (addr->spin, i, nspin);
     }
     double xdiag = CGC_2e_X (twoSk, twoSb, t, t, p, p, 1, -1, 1, -1, nspin);
     free (twoSk);
     free (twoSb);
-    return xdiag;
+    return -3*xdiag - 0.5;
 }
 
 double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
@@ -779,82 +751,43 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     return xdiag;
 }
 
-void _find_spin_Oai (Str3 * bra, Str3 * ket,
-                     unsigned int a, unsigned int i,
-                     unsigned int nspin,
-                     unsigned int * twoSk, unsigned int * twoSb,
-                     unsigned int * sa, unsigned int * si)
+void _get_spinindices1 (Str3 * addr, unsigned int p, unsigned int nspin,
+                        unsigned int * twoS, unsigned int * sp)
 {
-    assert (a<=i);
-    unsigned int nspin_ket = _count_set_bits (ket->sconf);
-    unsigned int nspin_bra = _count_set_bits (bra->sconf);
-    int ni = _get_occ (ket, i);
-    int na = -_get_occ (bra, a);
-    for (unsigned int p=0; p <= nspin_bra; p++){
-        twoSb[p] = _get_twoS_running (bra->spin, p, nspin_bra);
+    unsigned int nspin0 = _count_set_bits (addr->sconf);
+    for (unsigned int r=0; r <= nspin0; r++){
+        twoS[r] = _get_twoS_running (addr->spin, r, nspin0);
     }
-    for (unsigned int p=0; p <= nspin_ket; p++){
-        twoSk[p] = _get_twoS_running (ket->spin, p, nspin_ket);
-    }
-    *si = nspin_ket - _get_spinindex (ket, i);
-    *sa = nspin_bra - _get_spinindex (bra, a);
-    if (ni==2){
-        for (unsigned int p=nspin_ket+2; p>*si; p--){
-            assert (p < nspin+1);
-            twoSk[p] = twoSk[p-2];
-        }
-    }
-    if (na==2){
-        (*sa)++;
-        for (unsigned int p=nspin_bra+2; p>=*sa; p--){
-            assert (p < nspin+1);
-            twoSb[p] = twoSb[p-2];
+    *sp = nspin0 - _get_spinindex (addr, p);
+    int np = _get_occ (addr, p);
+    if (np==2){
+        for (unsigned int r=nspin0+2; r>*sp; r--){
+            assert (r < nspin+1);
+            twoS[r] = twoS[r-2];
         }
     }
 }
 
-void _find_spin_OaiObj (Str3 * bra, Str3 * ket,
-                        unsigned int a, unsigned int i,
-                        unsigned int b, unsigned int j,
+void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
                         unsigned int nspin,
-                        unsigned int * twoSk, unsigned int * twoSb,
-                        unsigned int * sa, unsigned int * si,
-                        unsigned int * sb, unsigned int * sj)
+                        unsigned int * twoS, 
+                        unsigned int * sp, unsigned int * sq)
 {
-    assert (a<=i);
-    unsigned int nspin_ket = _count_set_bits (ket->sconf);
-    unsigned int nspin_bra = _count_set_bits (bra->sconf);
-    for (unsigned int p=0; p <= nspin_bra; p++){
-        twoSb[p] = _get_twoS_running (bra->spin, p, nspin_bra);
+    if (p > q){
+        _get_spinindices2 (addr, q, p, nspin, twoS, sq, sp);
     }
-    for (unsigned int p=0; p <= nspin_ket; p++){
-        twoSk[p] = _get_twoS_running (ket->spin, p, nspin_ket);
-    }
-
-    int ni = _get_occ (ket, i);
-    int na = -_get_occ (bra, a);
-    int nj = _get_occ (ket, j);
-    int nb = -_get_occ (bra, b);
-    
-    if (ni==1){
-        *si = nspin_ket - _get_spinindex (ket, i);
-    } else {
-        *si = nspin_bra - _get_spinindex (bra, i);
-        for (unsigned int p=nspin_ket; p>=*si; p--){
-            assert (p+1 < nspin);
-            twoSk[p+2] = twoSk[p];
+    unsigned int nspin0 = _count_set_bits (addr->sconf);
+    _get_spinindices1 (addr, q, nspin, twoS, sq);
+    *sp = nspin0 - _get_spinindex (addr, p);
+    int np = _get_occ (addr, p);
+    int nq = _get_occ (addr, q);
+    if (nq==2){ *sp += (2 - ((int) (p==q))); }
+    if ((p!=q) && (np==2)){
+        for (unsigned int r=nspin0+2; r>*sp; r--){
+            assert (r < nspin+1);
+            twoS[r] = twoS[r-2];
         }
-        nspin_ket += 2;
-    }
-    if (na==-1){
-        *sa = nspin_bra - _get_spinindex (bra, a);
-    } else {
-        *sa = nspin_ket - _get_spinindex (ket, a);
-        for (unsigned int p=nspin_bra; p>=*sa; p--){
-            assert (p+1 < nspin);
-            twoSb[p+2] = twoSb[p];
-        }
-    }
+    } 
 }
 
 double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
@@ -881,7 +814,9 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa;
-    _find_spin_Oai (bra, ket, a, i, nspin, twoSk, twoSb, &sa, &si);
+    _get_spinindices1 (bra, a, nspin, twoSb, &sa);
+    _get_spinindices1 (ket, i, nspin, twoSk, &si);
+    if (abs (na) == 2){ sa++; }
     double fac = CGC_1e (twoSk, twoSb, sa, si, na, ni, nspin);
     free (twoSk);
     free (twoSb);
@@ -913,7 +848,9 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa;
-    _find_spin_Oai (bra, ket, a, i, nspin, twoSk, twoSb, &sa, &si);
+    _get_spinindices1 (bra, a, nspin, twoSb, &sa);
+    _get_spinindices1 (ket, i, nspin, twoSk, &si);
+    if (abs (na) == 2){ sa++; }
     double fac = CGC_2e_X (twoSk, twoSb, 0, 0, si, sa, 1, -1, ni, na, nspin);
     free (twoSk);
     free (twoSb);
@@ -973,16 +910,39 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa, sj, sb;
-    _find_spin_OaiObj (bra, ket, a, i, b, j, nspin, twoSk, twoSb,
-                       &sa, &si, &sb, &sj);
+    _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
+    _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
+    if (abs (na) == 2){ sa++; }
     int np = na;
-    int nr,nq,nt;
     unsigned int sp=sa;
+    int nr,nq,nt;
     unsigned int sr,sq,st;
-    // TODO: sort
+    if (r==i){
+        nr=ni; sr=si;
+        if (q==b){
+            nq=nb; sq=sb; nt=nj; st=sj;
+        } else {
+            nq=nj; sq=sj; nt=nb; st=sb;
+        }
+    } else if (r==b){
+        nr=nb; sr=sb;
+        if (q==i){
+            nq=ni; sq=si; nt=nj; st=sj;
+        } else {
+            nq=nj; sq=sj; nt=ni; st=si;
+        }
+    } else {
+        nr=nj; sr=sj;
+        if (q==b){
+            nq=nb; sq=sb; nt=ni; st=si;
+        } else {
+            nq=ni; sq=si; nt=nb; st=sb;
+        }
+    }
+    if (abs (nq) == 2){ sq++; }
 
-    int parity = sa + si + sb + sj + (int) (si<sj);
-    double facl = (i==r) ? 0 : 1.0;
+    int parity = sp + sr + sq + st + (int) (i>j);
+    double facl = (i==r) ? 0.0 : 1.0;
     double facu = unlinked_orth ? 0.0 : 1.0;
     if ((parity%2)==1){
         facl = -facl;

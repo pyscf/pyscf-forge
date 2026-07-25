@@ -40,7 +40,6 @@ unsigned int _get_occ (Str3 * addr, unsigned int i);
 unsigned int _get_spinindex (Str3 * addr, unsigned int i);
 int _get_twoM (uint64_t sconfstr, uint64_t detstr);
 unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
-double CGC_2e_X_diag (uint64_t coupstr, unsigned int i, unsigned int j, unsigned int nspin);
 double CGC_2e_X (unsigned int * twoSk, unsigned int * twoSb,
                  unsigned int t, unsigned int q, unsigned int r, unsigned int p,
                  int nt, int nq, int nr, int np,
@@ -49,7 +48,6 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
                    unsigned int r, unsigned int q,
                    int nr, int nq, bool pphh);
 double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j);
-double CGC_1s_diag (Str3 * addr, unsigned int i, int twoM);
 
 
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
