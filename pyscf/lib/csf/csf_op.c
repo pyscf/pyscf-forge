@@ -796,23 +796,19 @@ void _find_spin_Oai (Str3 * bra, Str3 * ket,
     for (unsigned int p=0; p <= nspin_ket; p++){
         twoSk[p] = _get_twoS_running (ket->spin, p, nspin_ket);
     }
-    if (ni==1){
-        *si = nspin_ket - _get_spinindex (ket, i);
-    } else {
-        *si = nspin_bra - _get_spinindex (bra, i);
-        for (unsigned int p=nspin_ket; p>=*si; p--){
-            assert (p+1 < nspin);
-            twoSk[p+2] = twoSk[p];
+    *si = nspin_ket - _get_spinindex (ket, i);
+    *sa = nspin_bra - _get_spinindex (bra, a);
+    if (ni==2){
+        for (unsigned int p=nspin_ket+2; p>*si; p--){
+            assert (p < nspin+1);
+            twoSk[p] = twoSk[p-2];
         }
-        nspin_ket += 2;
     }
-    if (na==-1){
-        *sa = nspin_bra - _get_spinindex (bra, a);
-    } else {
-        *sa = nspin_ket - _get_spinindex (ket, a);
-        for (unsigned int p=nspin_bra; p>=*sa; p--){
-            assert (p+1 < nspin);
-            twoSb[p+2] = twoSb[p];
+    if (na==2){
+        (*sa)++;
+        for (unsigned int p=nspin_bra+2; p>=*sa; p--){
+            assert (p < nspin+1);
+            twoSb[p] = twoSb[p-2];
         }
     }
 }
