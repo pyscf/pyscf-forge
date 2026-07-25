@@ -21,13 +21,17 @@ import numpy as np
 from pyscf import lib
 from pyscf.siso import anisoaddons
 
+# Register this function as an alias for generate_aniso_data, to 
+# avoid confusion with the name "aniso" in the context of SISO calculations.
+generate_siso_data = anisoaddons.generate_aniso_data
+
 # Taken from pyscf
 ge = 2.00231930436182
 
-def _compute_angmom_in_so_basis(aniso_data):
+def _compute_angmom_in_so_basis(siso_data):
     r"""
     Get the SO-basis orbital angular-momentum matrices.
-    The ``generate_aniso_data`` dict, does have the spin
+    The ``generate_siso_data`` dict, does have the spin
     and magnetic-moment matrices in the spin-orbit eigenbasis.
     Therefore, the orbital angular-momentum matrices can be
     recovered using the relation
@@ -40,60 +44,127 @@ def _compute_angmom_in_so_basis(aniso_data):
     """
 
     spin_mat = np.array([
-        aniso_data['spin_xr'] + 1j * aniso_data['spin_xi'],
-        aniso_data['spin_yr'] + 1j * aniso_data['spin_yi'],
-        aniso_data['spin_zr'] + 1j * aniso_data['spin_zi'],
+        siso_data['spin_xr'] + 1j * siso_data['spin_xi'],
+        siso_data['spin_yr'] + 1j * siso_data['spin_yi'],
+        siso_data['spin_zr'] + 1j * siso_data['spin_zi'],
     ])
 
     mu_mat = np.array([
-        aniso_data['magn_xr'] + 1j * aniso_data['magn_xi'],
-        aniso_data['magn_yr'] + 1j * aniso_data['magn_yi'],
-        aniso_data['magn_zr'] + 1j * aniso_data['magn_zi'],
+        siso_data['magn_xr'] + 1j * siso_data['magn_xi'],
+        siso_data['magn_yr'] + 1j * siso_data['magn_yi'],
+        siso_data['magn_zr'] + 1j * siso_data['magn_zi'],
     ])
 
     return -mu_mat - ge * spin_mat
 
-
-def _compute_total_angmom_in_so_basis(aniso_data):
-    """Return the total angular-momentum matrices in the SOC basis."""
+def _compute_total_angmom_in_so_basis(siso_data):
+    """
+    Total angular-momentum matrices in the SOC basis.
+    """
     spin_mat = np.array([
-        aniso_data['spin_xr'] + 1j * aniso_data['spin_xi'],
-        aniso_data['spin_yr'] + 1j * aniso_data['spin_yi'],
-        aniso_data['spin_zr'] + 1j * aniso_data['spin_zi'],
+        siso_data['spin_xr'] + 1j * siso_data['spin_xi'],
+        siso_data['spin_yr'] + 1j * siso_data['spin_yi'],
+        siso_data['spin_zr'] + 1j * siso_data['spin_zi'],
     ])
-    return _compute_angmom_in_so_basis(aniso_data) + spin_mat
+    return _compute_angmom_in_so_basis(siso_data) + spin_mat
 
-def _compute_spin_free_l_s_values(aniso_data, log):
+def _generate_degenerate_subblocks(energies, degeneracy_tol=1e-6):
+    """
+    Generate energy-degenerate state subblocks in original-state order.
+    """
+    energies = np.asarray(energies, dtype=np.float64).ravel()
+    energy_order = np.argsort(energies, kind='stable')
+    blocks = []
+    current_block = [int(energy_order[0])]
+    block_reference_energy = energies[current_block[0]]
+
+    for index in energy_order[1:]:
+        index = int(index)
+        if abs(energies[index] - block_reference_energy) <= degeneracy_tol:
+            current_block.append(index)
+        else:
+            blocks.append(np.asarray(current_block, dtype=np.int32))
+            current_block = [index]
+            block_reference_energy = energies[index]
+    blocks.append(np.asarray(current_block, dtype=np.int32))
+    return blocks
+
+def _diagonalize_degenerate_subblocks(operator, energies, degeneracy_tol=1e-6):
+    """
+    Diagonalize an operator independently within energy-degenerate blocks.
+    """
+    operator = np.asarray(operator, dtype=np.complex128)
+    energies = np.asarray(energies, dtype=np.float64).ravel()
+    nstate = energies.size
+    if operator.shape != (nstate, nstate):
+        raise ValueError('Operator has shape {}, but {} energies were provided'
+                         .format(operator.shape, nstate))
+
+    # Making it hermitian and removing numerical residuals.
+    operator = 0.5 * (operator + operator.conj().T)
+
+    blocks = _generate_degenerate_subblocks(energies, degeneracy_tol)
+    rotation = np.eye(nstate, dtype=np.complex128)
+    for block_indices in blocks:
+        if block_indices.size == 1:
+            continue
+        block = operator[np.ix_(block_indices, block_indices)]
+        _, block_vectors = np.linalg.eigh(block)
+        rotation[np.ix_(block_indices, block_indices)] = block_vectors
+
+    rotated_operator = rotation.conj().T @ operator @ rotation
+
+    diagonal = np.real_if_close(np.diag(rotated_operator), tol=1000)
+
+    if np.iscomplexobj(diagonal):
+        max_imaginary = np.max(np.abs(diagonal.imag))
+        if max_imaginary > 1e-10:
+            raise ValueError('Diagonalized operator has imaginary diagonal component '
+                '{:.3e}'.format(max_imaginary))
+        diagonal = diagonal.real
+    return rotated_operator, np.asarray(diagonal, dtype=np.float64), rotation, blocks
+
+def _compute_spin_free_l_s_values(siso_data, log, degeneracy_tol=1e-6):
     """
     Compute the L and S values for each spin-free state
     """
-    # The spin-free angmom matrices are stored in their real antisymmetric
+    # Note: the spin-free angmom matrices are stored in their real antisymmetric
     # representation, so multiply by 1j to obtain physical Hermitian L
-    Lx_mat = 1j * aniso_data['angmom_x']
-    Ly_mat = 1j * aniso_data['angmom_y']
-    Lz_mat = 1j * aniso_data['angmom_z']
+    Lx_mat = 1j * siso_data['angmom_x']
+    Ly_mat = 1j * siso_data['angmom_y']
+    Lz_mat = 1j * siso_data['angmom_z']
 
     l2_mat = Lx_mat @ Lx_mat + Ly_mat @ Ly_mat + Lz_mat @ Lz_mat
-    l2_expectation = np.real_if_close(np.diag(l2_mat)).real
+    _, l2_expectation, rotation, _ = _diagonalize_degenerate_subblocks(
+        l2_mat, siso_data['esfs'], degeneracy_tol)
+
+    Lx_mat = rotation.conj().T @ Lx_mat @ rotation
+    Ly_mat = rotation.conj().T @ Ly_mat @ rotation
+    Lz_mat = rotation.conj().T @ Lz_mat @ rotation
     l_values = (-1.0 + np.sqrt(1.0 + 4.0 * l2_expectation)) / 2.0
 
-    spin_mult = np.asarray(aniso_data['multiplicity'], dtype=np.int32)
+    spin_mult = np.asarray(siso_data['multiplicity'], dtype=np.int32)
     spin_values = (spin_mult - 1.0) / 2.0
     s2_values = spin_values * (spin_values + 1.0)
-    sof_energy = np.asarray(aniso_data['esfs'], dtype=np.float64)
+    sof_energy = np.asarray(siso_data['esfs'], dtype=np.float64)
+    sort_idx = np.argsort(np.asarray(sof_energy), kind='stable')
 
     log.note(" ")
     log.info('******** %s ********',
-             "Spin-Orbit Free Energies, L, and S values")
-    log.note('  State       Energy (au)    L-value       Spin (S)')
-    for state, (energy, l_value, s_value) in enumerate(
-            zip(sof_energy, l_values, spin_values)):
-        log.note(" {:<10} {:>20.10f} {:>20.4f} {:>20.4f}".format
-                 (state, energy, l_value, s_value))
+             "Spin-Orbit Free Energies, L, and S values")    
+    log.note('{:^7s} {:^22s} {:^14s} {:^14s}'.format(
+        'State', 'Energy (au)', 'L-value', 'Spin (S)'))
+    log.note('-' * 60)
+    for i, state in enumerate(sort_idx):
+        log.note('{:>7d} {:>22.10f} {:>10.4f} {:>10.4f}'.format(
+                i,
+                sof_energy[state],
+                l_values[state],
+                spin_values[state]))
 
     return (Lx_mat, Ly_mat, Lz_mat), l_values, spin_values, s2_values
 
-def _compute_soc_j_values(aniso_data, log):
+def _compute_soc_j_values(siso_data, log, degeneracy_tol=1e-6):
     r"""
     Compute the effective J values for each SOC state.
     The total angular momentum is given by
@@ -104,28 +175,29 @@ def _compute_soc_j_values(aniso_data, log):
     Note: J is well defined quantum number only for the atoms.
     """
 
-    tot_ang_mom = _compute_total_angmom_in_so_basis(aniso_data)
+    tot_ang_mom = _compute_total_angmom_in_so_basis(siso_data)
 
     j_mat = (tot_ang_mom[0] @ tot_ang_mom[0] +
              tot_ang_mom[1] @ tot_ang_mom[1] +
              tot_ang_mom[2] @ tot_ang_mom[2])
 
-    j2_exp = np.real_if_close(np.diag(j_mat)).real
+    j_mat, j2_exp, _, _ = _diagonalize_degenerate_subblocks(
+        j_mat, siso_data['eso'], degeneracy_tol)
     j_values = (-1.0 + np.sqrt(1.0 + 4.0 * j2_exp)) / 2.0
 
-    so_energies = np.asarray(aniso_data['eso'], dtype=np.float64)
+    so_energies = np.asarray(siso_data['eso'], dtype=np.float64)
 
     log.note(" ")
     log.info('******** %s ********', "SOC Energies and effective J values")
-    log.note('  State      Energy (au)       J-values')
-    for state, (energy, j_value) in enumerate(
-            zip(so_energies, j_values)):
-        log.note(" {:<10} {:>20.10f} {:>20.4f} ".format(
-            state, energy, j_value))
+    log.note('{:^10s} {:^22s} {:^16s}'.format(
+        'State', 'Energy (au)', 'J-values'))
+    log.note('-' * 60)
+    for state, (energy, j_value) in enumerate(zip(so_energies, j_values)):
+        log.note('{:>7d} {:>22.10f} {:>14.4f}'.format(state, energy, j_value))
 
     return j_mat, j_values
 
-def _compute_soc_omega_values(aniso_data, log, axis='z'):
+def _compute_soc_omega_values(siso_data, log, axis='z', degeneracy_tol=1e-6):
     r"""
     Compute the effective Omega values for each SOC state.
     Omega is the absolute projection of the total angular momentum along
@@ -140,26 +212,115 @@ def _compute_soc_omega_values(aniso_data, log, axis='z'):
     if axis not in (0, 1, 2):
         raise ValueError('axis must be 0 (x), 1 (y), or 2 (z)')
 
-    total_ang_mom = _compute_total_angmom_in_so_basis(aniso_data)
-    omega_matrix = total_ang_mom[axis]
-    omega_values = np.abs(np.real_if_close(np.diag(omega_matrix)).real)
-    energies = np.asarray(aniso_data['eso'], dtype=np.float64)
+    energies = np.asarray(siso_data['eso'], dtype=np.float64)
+    nstate = energies.size
 
-    log.note(" ")
-    log.info('******** %s ********',
-             "SOC Energies and effective Omega values")
-    log.note('  State      Energy (au)       Omega-values')
-    for state, (energy, omega) in enumerate(zip(energies, omega_values)):
-        log.note(" {:<10} {:>20.10f} {:>20.4f} ".format(
-            state, energy, omega))
+    total_ang_mom = _compute_total_angmom_in_so_basis(siso_data)
+    omega_matrix = np.asarray(total_ang_mom[axis], dtype=np.complex128)
 
+    if omega_matrix.shape != (nstate, nstate):
+        raise ValueError('Angular-momentum matrix has shape {}, but {} SOC energies '
+            'were provided'.format(omega_matrix.shape, nstate))
+
+    omega_matrix, omega_diagonal, _, degenerate_blocks = (
+        _diagonalize_degenerate_subblocks(
+            omega_matrix, energies, degeneracy_tol))
+
+    # Removing small numerical residuals
+    omega_values = np.abs(omega_diagonal)
+
+    # Clean up insignificant numerical residuals.
+    omega_values[omega_values < 1.0e-12] = 0.0
+
+    axis_label = ('x', 'y', 'z')[axis]
+
+    block_number_by_state = np.empty(nstate, dtype=np.int32)
+    for block_number, block_indices in enumerate(degenerate_blocks):
+        block_number_by_state[block_indices] = block_number
+
+    log.note(' ')
+    log.info('******** %s ********','SOC energies and effective Omega values',)
+    log.note('Projection axis: J_%s', axis_label)
+    log.note('Degeneracy tolerance: %.3e Hartree',degeneracy_tol,)
+    log.note('{:^10s} {:^22s} {:^16s} {:^8s}'.format(
+        'State', 'Energy (au)', 'Omega-value', 'Block'))
+    log.note('-' * 60)
+    for state, (energy, omega) in enumerate(
+            zip(energies, omega_values)):
+        log.note('{:>3d} {:>22.10f} {:>16.4f} {:>8d}'.format(
+                state,
+                energy,
+                omega,
+                int(block_number_by_state[state])))
     return omega_matrix, omega_values
 
-def soc_state_analysis(aniso_data, log, state=(0,), threshold=5e-3):
+
+def _compute_L_for_diatomics(siso_data, log, axis='z', degeneracy_tol=1e-6):
+    r"""
+    Compute the effective orbital-angular-momentum projection for each
+    spin-orbit state of a diatomic molecule.
+
+    For a linear molecule, the orbital projection is
+
+        ``Lambda = abs(<L_axis>)``
+
+    where the molecular axis is conventionally the z axis.  This function
+    projects the orbital angular momentum only; it does not include spin and
+    therefore does not compute Omega or J.
+    """
+
+    axis_map = {'x': 0, 'y': 1, 'z': 2}
+    if isinstance(axis, str):
+        axis = axis_map.get(axis.lower())
+
+    if axis not in (0, 1, 2):
+        raise ValueError('axis must be 0 (x), 1 (y), or 2 (z)')
+
+    energies = np.asarray(siso_data['eso'], dtype=np.float64)
+    nstate = energies.size
+
+    angmom = _compute_angmom_in_so_basis(siso_data)
+    projection_matrix = np.asarray(angmom[axis], dtype=np.complex128)
+
+    if projection_matrix.shape != (nstate, nstate):
+        raise ValueError('Angular-momentum matrix has shape {}, but {} SOC energies '
+                         'were provided'.format(projection_matrix.shape, nstate))
+
+    projection_matrix, projection_diagonal, _, degenerate_blocks = (
+        _diagonalize_degenerate_subblocks(
+            projection_matrix, energies, degeneracy_tol))
+
+    lambda_values = np.abs(projection_diagonal)
+    lambda_values[lambda_values < 1.0e-12] = 0.0
+
+    axis_label = ('x', 'y', 'z')[axis]
+    block_number_by_state = np.empty(nstate, dtype=np.int32)
+    for block_number, block_indices in enumerate(degenerate_blocks):
+        block_number_by_state[block_indices] = block_number
+
+    log.note(' ')
+    log.info('******** %s ********',
+             'SOC energies and effective orbital L projections')
+    log.note('Projection axis: L_%s', axis_label)
+    log.note('Degeneracy tolerance: %.3e Hartree', degeneracy_tol)
+    log.note('{:^10s} {:^22s} {:^16s} {:^8s}'.format(
+        'State', 'Energy (au)', 'Lambda-value', 'Block'))
+    log.note('-' * 60)
+    for state, (energy, lambda_value) in enumerate(
+            zip(energies, lambda_values)):
+        log.note('{:>3d} {:>22.10f} {:>16.4f} {:>8d}'.format(
+            state,
+            energy,
+            lambda_value,
+            int(block_number_by_state[state])))
+
+    return projection_matrix, lambda_values
+
+def soc_state_analysis(siso_data, log, state=(0,), threshold=5e-3):
     """
     The decomposition of selected SOC states in the spin-free basis.
     args:
-        aniso_data: dict
+        siso_data: dict
             Containing the SOC analysis data.
         log: The PySCF logger instance.
             For printing the analysis results.
@@ -168,10 +329,10 @@ def soc_state_analysis(aniso_data, log, state=(0,), threshold=5e-3):
         threshold: float
             Minimum coefficient weight to report.
     """
-    coefficients = (np.asarray(aniso_data['eigenr'])
-                    + 1j * np.asarray(aniso_data['eigeni']))
-    energies = np.asarray(aniso_data['eso'])
-    root_weights = np.zeros((sum(aniso_data['nroot']), 
+    coefficients = (np.asarray(siso_data['eigenr'])
+                    + 1j * np.asarray(siso_data['eigeni']))
+    energies = np.asarray(siso_data['eso'])
+    root_weights = np.zeros((sum(siso_data['nroot']), 
                              coefficients.shape[1]))
 
     states = np.atleast_1d(state)
@@ -189,10 +350,26 @@ def soc_state_analysis(aniso_data, log, state=(0,), threshold=5e-3):
         raise IndexError(f'SOC state index {invalid} is outside'\
                                  f'the range [0, {nstates})')
 
-    log.info('\nSOC-state decomposition in the spin-free basis')
+    # Printing the Spin-Orbit Free states and energies: to avoid
+    # confusion for below analysis.
+    sf_energies = np.asarray(siso_data['esfs'], dtype=np.float64)
+    sm_values = np.asarray(siso_data['multiplicity'], dtype=np.float64)
+    s2_values = (sm_values - 1.0) / 2.0 * ((sm_values - 1.0) / 2.0 + 1.0)
+
+    log.note(" ")
+    log.info('******** %s ********',
+             'Spin-Orbit Free States and Energies')
+    for state_idx in range(len(sf_energies)):
+        log.note(' state %d, energy = %.10f au, S^2 = %.6f', 
+                 state_idx, sf_energies[state_idx], s2_values[state_idx])
+
+    log.note(" ")
+    log.info('******** %s ********',
+             'SOC-state decomposition in the spin-free basis')
+    log.note('-' * 60)
     offset = 0
     root_number = 0
-    for nroots, multiplicity in zip(aniso_data['nroot'], aniso_data['imult']):
+    for nroots, multiplicity in zip(siso_data['nroot'], siso_data['imult']):
         for root in range(nroots):
             block = slice(offset + root * multiplicity,
                           offset + (root + 1) * multiplicity)
@@ -207,13 +384,13 @@ def soc_state_analysis(aniso_data, log, state=(0,), threshold=5e-3):
         log.note('\nSOC state %d, energy = %.10f au', state_idx, energy)
         for root, weight in enumerate(root_weights[:, state_idx]):
             if weight > threshold:
-                log.info('  spin-free root %d: total weight = %.8f',
+                log.info('  spin-free state %d: total weight = %.8f',
                          root, weight)
 
         offset = 0
         root_number = 0
-        for nroots, multiplicity in zip(aniso_data['nroot'],
-                                        aniso_data['imult']):
+        for nroots, multiplicity in zip(siso_data['nroot'],
+                                        siso_data['imult']):
             spin = (multiplicity - 1) / 2.0
             ms_values = np.arange(-spin, spin + 1.0, 1.0)
             for root in range(nroots):
@@ -221,9 +398,9 @@ def soc_state_analysis(aniso_data, log, state=(0,), threshold=5e-3):
                 for ms_index, ms in enumerate(ms_values):
                     coefficient = coefficients[block_start + ms_index, state_idx]
                     if np.abs(coefficient)**2 > threshold:
-                        log.note('    root %d, m_s = %+.1f: coefficient = %s, '
+                        log.note('    state %d, m_s = %+.1f: '
                                  'weight = %.8f', root_number, ms,
-                                 coefficient, np.abs(coefficient)**2)
+                                  np.abs(coefficient)**2)
                 root_number += 1
             offset += nroots * multiplicity
 
@@ -237,20 +414,20 @@ class soc_analysis:
     args:
         mysiso: converged SISO object.  
             It must have ``si_energies`` and
-            ``si_vecs`` when ``aniso_data`` is not supplied.
+            ``si_vecs`` when ``siso_data`` is not supplied.
     kwargs:
-        aniso_data: dict
+        siso_data: dict
             Containing the SOC analysis data generated by
-            anisoaddons.generate_aniso_data or by the SISO object.
+            anisoaddons.generate_siso_data or by the SISO object.
         modelspace: list, optional
-            The SISO model space used to generate the ``aniso_data``.
+            The SISO model space used to generate the ``siso_data``.
         origin: str, optional
-            Gauge origin used when generating ``aniso_data``.
+            Gauge origin used when generating ``siso_data``.
         ham: str, optional 
-            SOC Hamiltonian used when generating ``aniso_data``.
+            SOC Hamiltonian used when generating ``siso_data``.
     """
 
-    def __init__(self, mysiso, aniso_data=None, modelspace=None,
+    def __init__(self, mysiso, siso_data=None, modelspace=None,
                  origin='CHARGE_CENTER', ham=None):
         self.mysiso = mysiso
         self.mc = mysiso.mc
@@ -258,41 +435,56 @@ class soc_analysis:
         self.origin = origin
         self.ham = mysiso.ham if ham is None else ham
         
-        if self.aniso_data is None:
+        if siso_data is None:
             assert modelspace is not None, \
                 "modelspace must be provided and probably same as that of the SISO object " \
-                "if aniso_data is not supplied"
+                "if siso_data is not supplied"
             self.modelspace = list(modelspace)
-
-        if aniso_data is None:
             mol = self.mc._scf.mol
             assert self.modelspace == list(mysiso.modelspace), \
                 "modelspace must be the same as that of the SISO object " \
-                "if aniso_data is not supplied"
-            aniso_data = anisoaddons.generate_aniso_data(
+                "if siso_data is not supplied"
+            siso_data = anisoaddons.generate_siso_data(
                 mol, self.mc, self.modelspace, mysiso,
                 origin=origin, ham=self.ham)
-        self.aniso_data = aniso_data
+        self.siso_data = siso_data
 
     def _compute_angmom_in_so_basis(self):
-        return _compute_angmom_in_so_basis(self.aniso_data)
+        return _compute_angmom_in_so_basis(self.siso_data)
 
-    def compute_L_and_S_values(self):
-        return _compute_spin_free_l_s_values(self.aniso_data, self.log)
+    def compute_L_values(self, degeneracy_tol=1e-6):
+        return _compute_spin_free_l_s_values(
+            self.siso_data, self.log, degeneracy_tol=degeneracy_tol)
 
-    def compute_J_values(self):
-        return _compute_soc_j_values(self.aniso_data, self.log)
+    def compute_J_values(self, degeneracy_tol=1e-6):
+        return _compute_soc_j_values(
+            self.siso_data, self.log, degeneracy_tol=degeneracy_tol)
 
-    def _compute_soc_omega_values(self, axis='z'):
-        return _compute_soc_omega_values(self.aniso_data, self.log, axis=axis)
+    def _compute_soc_omega_values(self, axis='z', degeneracy_tol=1e-6):
+        return _compute_soc_omega_values(
+            self.siso_data, self.log, axis=axis,
+            degeneracy_tol=degeneracy_tol)
 
-    def compute_omega(self, axis='z'):
+    def _compute_L_for_diatomics(self, axis='z', degeneracy_tol=1e-6):
+        return _compute_L_for_diatomics(
+            self.siso_data, self.log, axis=axis,
+            degeneracy_tol=degeneracy_tol)
+
+    def compute_omega_values(self, axis='z', degeneracy_tol=1e-6):
         """
         Compute SOC-state Omega values along a principal axis.
         """
         # Only use this for the linear molecules.
-        return self._compute_soc_omega_values(axis=axis)
+        return self._compute_soc_omega_values(
+            axis=axis, degeneracy_tol=degeneracy_tol)
+
+    def compute_L_values_for_diatomics(self, axis='z', degeneracy_tol=1e-6):
+        """
+        Compute orbital L-projection (Lambda) values for a diatomic molecule.
+        """
+        return self._compute_L_for_diatomics(
+            axis=axis, degeneracy_tol=degeneracy_tol)
 
     def soc_state_analysis(self, state=(0,), threshold=5e-3):
-        return soc_state_analysis(self.aniso_data, self.log, state=state,
+        return soc_state_analysis(self.siso_data, self.log, state=state,
                                   threshold=threshold)
