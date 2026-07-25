@@ -785,10 +785,6 @@ void _find_spin_Oai (Str3 * bra, Str3 * ket,
                      unsigned int * twoSk, unsigned int * twoSb,
                      unsigned int * sa, unsigned int * si)
 {
-    if (a>i){
-        _find_spin_Oai (ket, bra, i, a, nspin, twoSb, twoSk, si, sa);
-        return;
-    }
     assert (a<=i);
     unsigned int nspin_ket = _count_set_bits (ket->sconf);
     unsigned int nspin_bra = _count_set_bits (bra->sconf);
@@ -800,6 +796,50 @@ void _find_spin_Oai (Str3 * bra, Str3 * ket,
     for (unsigned int p=0; p <= nspin_ket; p++){
         twoSk[p] = _get_twoS_running (ket->spin, p, nspin_ket);
     }
+    if (ni==1){
+        *si = nspin_ket - _get_spinindex (ket, i);
+    } else {
+        *si = nspin_bra - _get_spinindex (bra, i);
+        for (unsigned int p=nspin_ket; p>=*si; p--){
+            assert (p+1 < nspin);
+            twoSk[p+2] = twoSk[p];
+        }
+        nspin_ket += 2;
+    }
+    if (na==-1){
+        *sa = nspin_bra - _get_spinindex (bra, a);
+    } else {
+        *sa = nspin_ket - _get_spinindex (ket, a);
+        for (unsigned int p=nspin_bra; p>=*sa; p--){
+            assert (p+1 < nspin);
+            twoSb[p+2] = twoSb[p];
+        }
+    }
+}
+
+void _find_spin_OaiObj (Str3 * bra, Str3 * ket,
+                        unsigned int a, unsigned int i,
+                        unsigned int b, unsigned int j,
+                        unsigned int nspin,
+                        unsigned int * twoSk, unsigned int * twoSb,
+                        unsigned int * sa, unsigned int * si,
+                        unsigned int * sb, unsigned int * sj)
+{
+    assert (a<=i);
+    unsigned int nspin_ket = _count_set_bits (ket->sconf);
+    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    for (unsigned int p=0; p <= nspin_bra; p++){
+        twoSb[p] = _get_twoS_running (bra->spin, p, nspin_bra);
+    }
+    for (unsigned int p=0; p <= nspin_ket; p++){
+        twoSk[p] = _get_twoS_running (ket->spin, p, nspin_ket);
+    }
+
+    int ni = _get_occ (ket, i);
+    int na = -_get_occ (bra, a);
+    int nj = _get_occ (ket, j);
+    int nb = -_get_occ (bra, b);
+    
     if (ni==1){
         *si = nspin_ket - _get_spinindex (ket, i);
     } else {
@@ -849,6 +889,10 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     double fac = CGC_1e (twoSk, twoSb, sa, si, na, ni, nspin);
     free (twoSk);
     free (twoSb);
+    // operator anticommutation
+    if (((sa-si)%2) == 1){
+        fac = -fac;
+    }
     return fac;
 }
 
@@ -892,6 +936,78 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
        fac /= sqrt (twoS*(twoS+2)*.25);
     }
     return fac;
+}
+
+double csf_EaiEbj (Str3 * bra, Str3 * ket,
+                   unsigned int a, unsigned int i,
+                   unsigned int b, unsigned int j)
+{
+    if (MIN (a,b) > MIN (i,j)){
+        return csf_EaiEbj (ket, bra, i, a, j, b);
+    }
+    if (a > b){
+        return csf_EaiEbj (bra, ket, b, j, a, i);
+    }
+    Str3 brap, ketp;
+    _pad_Str3 (bra, &brap);
+    _pad_Str3 (ket, &ketp);
+    // CSF orthogonality
+    unsigned int p = a;
+    unsigned int r = MIN (i, MIN (j, b));
+    unsigned int t = MAX (i, MAX (j, b));
+    unsigned int q = (i+j+b) - (r+t);
+    if ((brap.spin & ((1ULL<<p)-1)) != (ketp.spin & ((1ULL<<p)-1))){
+        return 0.0;
+    }
+    if ((brap.spin>>t) != (ketp.spin>>t)){
+        return 0.0;
+    }
+    uint64_t bra_rq = ((bra->spin) & ((1ULL<<r)-1)) >> q;
+    uint64_t ket_rq = ((ket->spin) & ((1ULL<<r)-1)) >> q;
+    bool unlinked_orth = (bra_rq!=ket_rq);
+
+    int ni = _get_occ (ket, i);
+    int nj = _get_occ (ket, j);
+    int na = -_get_occ (bra, a);
+    int nb = -_get_occ (bra, b);
+    unsigned int nspin_ket = _count_set_bits (ket->sconf);
+    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int nspin = MAX (nspin_bra, nspin_ket) - MIN (nspin_bra, nspin_ket);
+    nspin += MIN (nspin_bra, nspin_ket);
+    unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int si, sa, sj, sb;
+    _find_spin_OaiObj (bra, ket, a, i, b, j, nspin, twoSk, twoSb,
+                       &sa, &si, &sb, &sj);
+    int np = na;
+    int nr,nq,nt;
+    unsigned int sp=sa;
+    unsigned int sr,sq,st;
+    // TODO: sort
+
+    int parity = sa + si + sb + sj + (int) (si<sj);
+    double facl = (i==r) ? 0 : 1.0;
+    double facu = unlinked_orth ? 0.0 : 1.0;
+    if ((parity%2)==1){
+        facl = -facl;
+        facu = -facu;
+    }
+
+    // linked term
+    if (i!=r){
+        facl *= CGC_2e_X (twoSk, twoSb, st, sq, sr, sp, nt, nq, nr, np, nspin);
+        facu *= 0.5; // this comes from closure of two S=0 Wigner 3j matrices + 1 fermion swap
+    }
+
+    // unlinked term
+    if (!unlinked_orth){
+        facu *= CGC_1e (twoSk, twoSb, sp, sr, np, nr, nspin);
+        facu *= CGC_1e (twoSk, twoSb, sq, st, nq, nt, nspin);
+    }
+
+    free (twoSk);
+    free (twoSb);
+    return facl+facu; 
 }
 
 void FCICSFpspace_h0tril(double *hmat,
