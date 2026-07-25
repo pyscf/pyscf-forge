@@ -21,8 +21,6 @@ mf.kernel()
 # Active space selection:
 mo_coeff = avas.kernel(mf, ['O 2s', 'O 2p'], minao=mol.basis)[2]
 
-mo_coeff = lib.chkfile.load('O2.chk', 'mcscf/mo_coeff')
-
 # 3. State-average Calculation.
 mc = mcscf.CASSCF(mf, 8, 12)
 mc = siso.sacasscf_solver(mc, [(3, 1), (1, 3)])

@@ -75,3 +75,18 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
  4                   0.000473957              0.01290            104.02147
  5                   0.000473957              0.01290            104.02147
 '''
+
+# Computing the L and J values:
+from pyscf.siso.addons import soc_analysis, generate_siso_data
+
+modelspace = [(3, 2),]
+mydata = generate_siso_data(mol, mc, modelspace, mysiso, 
+                            origin='CHARGE_CENTER', ham='DKH')
+
+mysiso_analysis = soc_analysis(mysiso, mydata, )
+
+# Now compute the L-values.
+mysiso_analysis.compute_L_values()
+
+# Now compute the J-values.
+mysiso_analysis.compute_J_values()
