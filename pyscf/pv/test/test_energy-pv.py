@@ -56,7 +56,15 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
     def test_pv(self):
 #       Reference results (for PV) compared with DIRAC24
-        Epv = Epv_molecule(mol, mf)
+        Epv = Epv_molecule(mol, mf, dm=None)
+        Epv_Oxigen = numpy.sum(Epv, axis=1)[0]
+        self.assertAlmostEqual(Epv_Oxigen, -2.745821e-21, 5)
+        self.assertAlmostEqual(mf.e_tot,-317.831176378,8)
+
+    def test_pv_dm(self):
+#       Reference results (for PV) compared with DIRAC24, using the density matrix
+        density_matrix = mf.make_rdm1()
+        Epv = Epv_molecule(mol, mf, dm=density_matrix)
         Epv_Oxigen = numpy.sum(Epv, axis=1)[0]
         self.assertAlmostEqual(Epv_Oxigen, -2.745821e-21, 5)
         self.assertAlmostEqual(mf.e_tot,-317.831176378,8)
