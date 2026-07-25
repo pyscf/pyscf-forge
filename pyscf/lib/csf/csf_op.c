@@ -305,51 +305,6 @@ int Str3_link (Str3 * bra, Str3 * ket,
     return n;
 }
 
-double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j)
-{
-    /* Compute
-        <Eijij>
-        = <Eij Eji> - <Eii>
-        = (-1) * (3xdiag + 1/2) - 1
-        = -3xdiag - 1/2
-       where i > j (although see below) using
-       Drake & Schlesinger, PRA 15 1990 (1977) (DOI:10.1103/PhysRevA.15.1990)
-       "xdiag" is the irreducible graph
-       -1 in line 2 comes from returning creation operators to their proper order at the end
-       I think this accounts for the factor of -1 on the 1/2 in Drake & Schlesinger as well
-       I think they arbitrarily put -1 on one of their terms in xcore to make it more
-       symmetrical.
-    */
-    unsigned int nspin = _count_set_bits (addr->sconf);
-    unsigned int t = _get_spinindex (addr, i);
-    unsigned int p = _get_spinindex (addr, j);
-    unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
-    unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
-    // Drake & Schlesinger ``reverse the order of counting'' so we have to do that here
-    // If I just bitshift the coupstr instead I'm not sure that the CSFs mean the same thing
-    // They have S0 = S and SN = 0
-    assert (t <= nspin);
-    // assert (q <= nspin);
-    // assert (r < nspin);
-    assert (p < nspin);
-    t = nspin - t;
-    // q = nspin - q;
-    // r = nspin - r;
-    p = nspin - p;
-    assert (p>=t);
-    // assert (p>=r);
-    // assert (r>=q);
-    // assert (q>=t);
-    for (unsigned int i=0; i <= nspin; i++){
-        twoSk[i] = _get_twoS_running (addr->spin, i, nspin);
-        twoSb[i] = _get_twoS_running (addr->spin, i, nspin);
-    }
-    double xdiag = CGC_2e_X (twoSk, twoSb, t, t, p, p, 1, -1, 1, -1, nspin);
-    free (twoSk);
-    free (twoSb);
-    return -3*xdiag - 0.5;
-}
-
 double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
                       unsigned int r, unsigned int q,
                       int nr, int nq, bool pphh)

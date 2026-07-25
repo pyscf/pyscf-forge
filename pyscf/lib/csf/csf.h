@@ -47,7 +47,6 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int * twoSb,
 double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
                    unsigned int r, unsigned int q,
                    int nr, int nq, bool pphh);
-double CGC_2e_diag (Str3 * addr, unsigned int i, unsigned int j);
 
 
 void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
