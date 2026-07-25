@@ -942,7 +942,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     if (abs (nq) == 2){ sq++; }
 
     int parity = sp + sr + sq + st + (int) (i>j);
-    double facl = (i==r) ? 0.0 : 1.0;
+    double facl = (i==r) ? 0.0 : 3.0;
     double facu = unlinked_orth ? 0.0 : 1.0;
     if ((parity%2)==1){
         facl = -facl;
@@ -1148,7 +1148,7 @@ int twoM = _get_twoM (sconfstrs[0], detstrs[0]);
             for (unsigned int j = 0; j < i; j++){
                 nj = _get_occ (&addr, j);
                 if (nj != 1){ continue; }
-                fac = CGC_2e_diag (&addr, i, j);
+                fac = csf_EaiEbj (&addr, &addr, i, j, j, i);
                 idx = idxi + j*norb*(norb+1);
                 hdiag_csf[icoupconf] += fac * eri[idx];
             }
