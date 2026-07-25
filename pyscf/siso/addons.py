@@ -21,7 +21,7 @@ import numpy as np
 from pyscf import lib
 from pyscf.siso import anisoaddons
 
-# Register this function as an alias for generate_aniso_data, to 
+# Register this function as an alias for generate_aniso_data, to
 # avoid confusion with the name "aniso" in the context of SISO calculations.
 generate_siso_data = anisoaddons.generate_aniso_data
 
@@ -151,7 +151,7 @@ def _compute_spin_free_l_s_values(siso_data, log, degeneracy_tol=1e-6):
 
     log.note(" ")
     log.info('******** %s ********',
-             "Spin-Orbit Free Energies, L, and S values")    
+             "Spin-Orbit Free Energies, L, and S values")
     log.note('{:^7s} {:^22s} {:^14s} {:^14s}'.format(
         'State', 'Energy (au)', 'L-value', 'Spin (S)'))
     log.note('-' * 60)
@@ -332,22 +332,22 @@ def soc_state_analysis(siso_data, log, state=(0,), threshold=5e-3):
     coefficients = (np.asarray(siso_data['eigenr'])
                     + 1j * np.asarray(siso_data['eigeni']))
     energies = np.asarray(siso_data['eso'])
-    root_weights = np.zeros((sum(siso_data['nroot']), 
+    root_weights = np.zeros((sum(siso_data['nroot']),
                              coefficients.shape[1]))
 
     states = np.atleast_1d(state)
     if not np.issubdtype(states.dtype, np.integer):
         raise TypeError('state must be an integer or a list of integers')
-    
+
     states = states.tolist()
     nstates = energies.size
 
     # Sanity check:
-    invalid = [state for state in states 
+    invalid = [state for state in states
                if state < 0 or state >= nstates]
-    
-    if invalid: 
-        raise IndexError(f'SOC state index {invalid} is outside'\
+
+    if invalid:
+        raise IndexError(f'SOC state index {invalid} is outside'
                                  f'the range [0, {nstates})')
 
     # Printing the Spin-Orbit Free states and energies: to avoid
@@ -360,7 +360,7 @@ def soc_state_analysis(siso_data, log, state=(0,), threshold=5e-3):
     log.info('******** %s ********',
              'Spin-Orbit Free States and Energies')
     for state_idx in range(len(sf_energies)):
-        log.note(' state %d, energy = %.10f au, S^2 = %.6f', 
+        log.note(' state %d, energy = %.10f au, S^2 = %.6f',
                  state_idx, sf_energies[state_idx], s2_values[state_idx])
 
     log.note(" ")
@@ -412,7 +412,7 @@ class soc_analysis:
     Class for analyzing the SOC states of a converged SISO object.
 
     args:
-        mysiso: converged SISO object.  
+        mysiso: converged SISO object.
             It must have ``si_energies`` and
             ``si_vecs`` when ``siso_data`` is not supplied.
     kwargs:
@@ -423,7 +423,7 @@ class soc_analysis:
             The SISO model space used to generate the ``siso_data``.
         origin: str, optional
             Gauge origin used when generating ``siso_data``.
-        ham: str, optional 
+        ham: str, optional
             SOC Hamiltonian used when generating ``siso_data``.
     """
 
@@ -434,7 +434,7 @@ class soc_analysis:
         self.log = lib.logger.Logger(self.mc.stdout, self.mc.verbose)
         self.origin = origin
         self.ham = mysiso.ham if ham is None else ham
-        
+
         if siso_data is None:
             assert modelspace is not None, \
                 "modelspace must be provided and probably same as that of the SISO object " \
