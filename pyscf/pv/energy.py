@@ -19,8 +19,9 @@
 '''
 
 import numpy
+
+from pyscf import gto, lib
 from pyscf.scf import dhf
-from pyscf import lib, gto
 
 
 def fc_integrals(mol, mf, atom, **kwargs):
@@ -97,7 +98,6 @@ def gamma5_fc_integrals(mol, mf, atom, **kwargs):
         atom_index = 0
         fc_matrix = PV_integrals(mol, mf, atom_index)
     """
-    c = lib.param.LIGHT_SPEED
     n4c = mf.mo_coeff.shape[0]
     n2c = n4c // 2
 
@@ -374,12 +374,8 @@ def Epv_molecule(mol, mf, dm=None):
         nNeg = nmo // 2
         nmo_pos = nmo - nNeg
 
-        # AO density
-        if dm.shape[0] == n4c:
-            ncol = nmo_pos
-
-        # MO density
-        elif dm.shape[0] == nmo_pos:
+        # AO or MO density
+        if dm.shape[0] == n4c or dm.shape[0] == nmo_pos:
             ncol = nmo_pos
 
         else:
