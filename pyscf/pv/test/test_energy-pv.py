@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2014-2022 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,13 @@
 # limitations under the License.
 #
 
-import numpy
 import unittest
-from pyscf import gto
-from pyscf import scf
-from pyscf import lib
+
+import numpy
+
+from pyscf import gto, lib, scf
 from pyscf.pv.energy import Epv_molecule
+
 
 def setUpModule():
     global mol, mf
