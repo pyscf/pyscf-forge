@@ -449,7 +449,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         assert (np == -nr);
     } else if (p==(r+1)){
         if (pr_pp==false){ // p'r, pr'
-            assert (abs (np) + abs (nr) < 4);
+            assert ((abs (np) + abs (nr)) < 4);
         } else { // p'r', pr
             assert (abs (np+nr) < 3);
         }
@@ -830,10 +830,51 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     return fac;
 }
 
+double csf_EaiEaj (Str3 * bra, Str3 * ket,
+                   unsigned int i, unsigned int j)
+{
+    if (i == j){ return 1.0; }
+    if (i > j){
+        return csf_EaiEaj (bra, ket, j, i);
+    }
+    Str3 brap, ketp;
+    _pad_Str3 (bra, &brap);
+    _pad_Str3 (ket, &ketp);
+    // CSF orthogonality
+    if ((brap.spin & ((1ULL<<i)-1)) != (ketp.spin & ((1ULL<<i)-1))){
+        return 0.0;
+    }
+    if ((brap.spin>>j) != (ketp.spin>>j)){
+        return 0.0;
+    }
+    int ni = _get_occ (ket, i);
+    int nj = _get_occ (ket, j);
+    unsigned int nspin_ket = _count_set_bits (ket->sconf);
+    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    nspin_ket += (ni-1)*2;
+    nspin_ket += (nj-1)*2;
+    assert ((nspin_bra+2)==nspin_ket);
+    unsigned int nspin=nspin_ket;
+    unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
+    unsigned int si, sj;
+    _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
+    int parity = si + sj + 1;
+    double fac = CGC_1e (twoSk, twoSb, si, sj, ni, nj, nspin);
+    if ((parity%2)==1){ fac = -fac; }
+    return fac;
+
+}
+
 double csf_EaiEbj (Str3 * bra, Str3 * ket,
                    unsigned int a, unsigned int i,
                    unsigned int b, unsigned int j)
 {
+    //if (a==b){
+    //    return csf_EaiEaj (bra, ket, i, j);
+    //} else if (i==j){
+    //    return csf_EaiEaj (ket, bra, a, b);
+    //}
     if (MIN (a,b) > MIN (i,j)){
         return csf_EaiEbj (ket, bra, i, a, j, b);
     }
@@ -941,10 +982,8 @@ void FCICSFpspace_h0tril(double *hmat,
 {
     unsigned int p,q,r,t;
     unsigned int a,b,i,j;
-    unsigned int nspin;
     int nch;
     Str3 bra,ket;
-    uint64_t sconf1,sconf2;
     size_t ihmat, ihop;
     double fac = 1.0;
     double hop;
@@ -952,30 +991,24 @@ void FCICSFpspace_h0tril(double *hmat,
     bra.dconf = dconfstrs[ibra];
     bra.sconf = sconfstrs[ibra];
     bra.spin = coupstrs[ibra];
-    nspin = _count_set_bits (bra.sconf);
     for (size_t iket=0; iket<ibra; iket++){
     ihmat = (iket*np) + ibra;
     ket.dconf = dconfstrs[iket];
     ket.sconf = sconfstrs[iket];
     ket.spin = coupstrs[iket];
     nch = Str3_link (&bra, &ket, &p, &r, &q, &t);
-    sconf1 = bra.sconf;
-    sconf2 = bra.sconf;
     switch (nch) {
         case 0: // spin interaction only
-            for (p=0; p<nspin; p++){
-                i = first1 (sconf1);
-                sconf1 = sconf1 ^ (1ULL<<i);
-                sconf2 = sconf1;
+            for (p=0; p<norb; p++){
+                if (_get_occ(&bra, p) != 1){ continue ; }
                 // Sz
-                ihop = i * (norb+1);
+                ihop = p * (norb+1);
                 fac = csf_Sai (&bra, &ket, p, p, twoM);
                 hmat[ihmat] += fac * h1e_s[ihop];
                 // eri exchange
-                for (q=p; q<nspin; q++){
-                    j = first1 (sconf2);
-                    sconf2 = sconf2 ^ (1ULL<<j);
-                    ihop = i*((norb*norb*norb) + 1) + j*(norb+1)*norb;
+                for (q=p; q<norb; q++){
+                    if (_get_occ(&bra, q) != 1){ continue ; }
+                    ihop = p*((norb*norb*norb) + 1) + q*(norb+1)*norb;
                     // fac = csf_EaiEbj (&bra, &ket, p, q, q, p);
                     hmat[ihmat] += fac * g2e[ihop];
                 }
@@ -989,7 +1022,10 @@ void FCICSFpspace_h0tril(double *hmat,
             hop -= g2e[ihop] * .5;
             ihop = (i*norb*norb*norb) + (a*((norb*norb + norb + 1)));
             hop -= g2e[ihop] * .5;
-            for (p=0; p<nspin; p++){
+            for (p=0; p<norb; p++){
+                if (_get_occ(&ket, p) == 0){ continue ; }
+                if (p==a){ continue; }
+                if (p==i){ continue; }
                 ihop = (a*norb*norb*norb) + (i*norb*norb) + p*(norb+1);
                 hop += g2e[ihop] * _get_occ (&ket, p);
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
@@ -1002,7 +1038,7 @@ void FCICSFpspace_h0tril(double *hmat,
             fac = csf_Sai (&bra, &ket, a, i, twoM);
             hmat[ihmat] += fac * h1e_s[ihop];
             // E^a_p E^p_i
-            for (p=0; p<nspin; p++){
+            for (p=0; p<norb; p++){
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
                 // fac = csf_EaiEbj (&bra, &ket, a, p, p, i);
                 hmat[ihmat] += g2e[ihop] * fac;
