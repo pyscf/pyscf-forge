@@ -236,34 +236,30 @@ def Epv_atom(mol, mf, atom_index, dm=None):
     # Prefactor
     fac = (2.2225 * 10 ** (-14) * QW) / (2 * numpy.sqrt(2))
 
-    # ------------------------------------------------------------
-    # PV operator in AO basis
-    # ------------------------------------------------------------
+    if dm is None:
+        # ------------------------------------------------------------
+        # PV operator in AO basis
+        # ------------------------------------------------------------
 
-    # Get the Fermi Contact integrals for the selected atom
-    fc_ao = fc_integrals(mol, mf, atom_index)
+        # Get the Fermi Contact integrals for the selected atom
+        fc_ao = fc_integrals(mol, mf, atom_index)
 
-    # Get the Gamma5 Fermi-Contact integrals for the selected atom (in AO basis)
-    gamma5_fc_ao = gamma5_fc_integrals(mol, mf, atom_index)
+        # ------------------------------------------------------------
+        # Orbital expectation values (4c-DHF or 4c-DFT reference)
+        # ------------------------------------------------------------
 
-    # ------------------------------------------------------------
-    # Orbital expectation values (4c-DHF or 4c-DFT reference)
-    # ------------------------------------------------------------
+        # Get the positive components of the MO spinors
+        Lo = mf.mo_coeff[:n2c, nNeg:nNeg + nocc]
+        So = mf.mo_coeff[n2c:, nNeg:nNeg + nocc]
 
-    # Get the positive components of the MO spinors
-    Lo = mf.mo_coeff[:n2c, nNeg:nNeg + nocc]
-    So = mf.mo_coeff[n2c:, nNeg:nNeg + nocc]
-
-    # Expectation values
-    expval_LS = numpy.einsum('ij,ji->i', Lo.conjugate().T @ fc_ao[:n2c, n2c:], So)
-    expval_SL = numpy.einsum('ij,ji->i', So.conjugate().T @ fc_ao[n2c:, :n2c], Lo)
-    expval_perorb = expval_LS + expval_SL
+        # Expectation values
+        expval_LS = numpy.einsum('ij,ji->i', Lo.conjugate().T @ fc_ao[:n2c, n2c:], So)
+        expval_SL = numpy.einsum('ij,ji->i', So.conjugate().T @ fc_ao[n2c:, :n2c], Lo)
+        expval_perorb = expval_LS + expval_SL
 
     # ------------------------------------------------------------
     # Density matrix contraction
     # ------------------------------------------------------------
-
-    expval_dm = None
 
     if dm is not None:
 
@@ -271,6 +267,9 @@ def Epv_atom(mol, mf, atom_index, dm=None):
         C = mf.mo_coeff[:, nNeg:]
 
         nmo_pos = C.shape[1]
+
+        # Get the Gamma5 Fermi-Contact integrals for the selected atom (in AO basis)
+        gamma5_fc_ao = gamma5_fc_integrals(mol, mf, atom_index)
 
         # Transform operator AO -> MO
         # Operator transformation:
@@ -309,10 +308,12 @@ def Epv_atom(mol, mf, atom_index, dm=None):
 
         # Total expectation value
         # E = Tr(𝑫 h)
-        expval_dm = numpy.trace(dm_mo @ gamma5_fc_mo)
+        #expval_dm = numpy.trace(dm_mo @ gamma5_fc_mo)
 
         # Orbital decomposition in MO basis
-        expval_dm_perorb = numpy.einsum(
+        # For correlated densities (MP2/CCSD), the orbital decomposition
+        # is representation-dependent. Only the total trace is invariant.
+        expval_perorb = numpy.einsum(
             'ij,ji->i',
             gamma5_fc_mo,
             dm_mo
@@ -323,12 +324,7 @@ def Epv_atom(mol, mf, atom_index, dm=None):
     # Return
     # ------------------------------------------------------------
 
-    if expval_dm is None:
-        return fac * expval_perorb.real
-
-    else:
-        return fac * expval_dm_perorb.real
-
+    return fac * expval_perorb.real
 
 
 
