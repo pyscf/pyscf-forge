@@ -222,6 +222,9 @@ class CSFTransformer (lib.StreamObject):
         printer ('ndeta, ndetb = {}, {}'.format (self.ndeta, self.ndetb))
         printer ('ncsf = {}'.format (self.ncsf))
 
+    def csfaddrs2str (self, addrs):
+        return csfaddrs2str (self._norb, self._neleca, self._nelecb, self._smult, addrs)
+
 def unpack_sym_ci (ci, idx, vec_on_cols=False):
     if idx is None: return ci
     tot_len = idx.size
