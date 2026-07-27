@@ -31,7 +31,7 @@ Reference:
 
 from pyscf.lib import logger
 from pyscf import dft, lib
-from pyscf.dft2 import libxc
+from pyscf.dft import libxc
 import numpy as np
 import copy
 
