@@ -334,7 +334,7 @@ def prep_local_orbitals(mf, frozen=0, localization_method="pm"):
     mlo = lo.PipekMezey(mf.mol, orbocc)
     lo_coeff = mlo.kernel()
     while True:
-        stable, lo_coeff1 = mlo.stability_jacobi()
+        lo_coeff1, stable = mlo.stability_jacobi(return_status=True)
         if stable:
             break
         mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=2)

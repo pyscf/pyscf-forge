@@ -78,7 +78,7 @@ class Water_REAL(unittest.TestCase):
         mlo = lo.PipekMezey(mf.cell, orbocc)
         lo_coeff = mlo.kernel()
         for i in range(100):
-            lo_coeff1 = mlo.stability_jacobi()[1]
+            lo_coeff1 = mlo.stability_jacobi()
             if lo_coeff1 is lo_coeff:
                 break
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
@@ -95,7 +95,7 @@ class Water_REAL(unittest.TestCase):
         mlo = lo.PipekMezey(mf.cell, orbvir)
         lo_coeff = mlo.kernel()
         for i in range(100):
-            lo_coeff1 = mlo.stability_jacobi()[1]
+            lo_coeff1 = mlo.stability_jacobi()
             if lo_coeff1 is lo_coeff:
                 break
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
@@ -198,7 +198,7 @@ class Water_COMPLEX(unittest.TestCase):
         mlo = lo.PipekMezey(mf.cell, orbocc)
         lo_coeff = mlo.kernel()
         for i in range(100):
-            lo_coeff1 = mlo.stability_jacobi()[1]
+            lo_coeff1 = mlo.stability_jacobi()
             if lo_coeff1 is lo_coeff:
                 break
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
@@ -215,7 +215,7 @@ class Water_COMPLEX(unittest.TestCase):
         mlo = lo.PipekMezey(mf.cell, orbvir)
         lo_coeff = mlo.kernel()
         for i in range(100):
-            lo_coeff1 = mlo.stability_jacobi()[1]
+            lo_coeff1 = mlo.stability_jacobi()
             if lo_coeff1 is lo_coeff:
                 break
             mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
