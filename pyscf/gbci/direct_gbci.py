@@ -158,7 +158,7 @@ def contract_h(erieff, civec, ncas, nelecas, conf_info_list, ov_list, ecore_list
             gen_nonzero_excitations(t1a, t1b, t2aa, t2bb)
     else:
         t1a_nonzero, t1b_nonzero, t2aa_nonzero, t2bb_nonzero = t_nonzero
-    
+
     civec = numpy.asarray(civec, order = 'C')
     cinew = numpy.zeros_like(civec)
     erieff = numpy.asarray(erieff, order = 'C', dtype= numpy.float64)
@@ -531,7 +531,8 @@ class SpinPenaltyGBCISolver:
         base = object.__getattribute__(self, 'base')
         setattr(base, name, value)
 
-    def undo_fix_spin(self): return self.base
+    def undo_fix_spin(self):
+        return self.base
 
     def contract_h(self, erieff, civec, ncas, nelecas, conf_info_list, ov_list,
                    ecore_list, link_index=None, ts=None, t_nonzero=None, **kwargs):
@@ -574,7 +575,7 @@ class SpinPenaltyGBCISolver:
     def select_spin_roots(self, civecs, ncas, nelecas, tol=0.20,
                           use_base=True, also_return_s2=False,
                           nroots=None, dbg=False):
-         
+
         s2_op  = self.base.contract_ss if use_base else self.contract_ss
         target = self.ss_value
         if target is None:
@@ -584,7 +585,7 @@ class SpinPenaltyGBCISolver:
                 sz = abs(nelecas[0] - nelecas[1]) * 0.5
             target = sz * (sz + 1.0)
         target = float(target)
-    
+
         # decide how many roots we expect
         if nroots is None:
             nroots = getattr(self, "nroots", None)
@@ -592,27 +593,32 @@ class SpinPenaltyGBCISolver:
                 # try to infer from last axis length
                 arr = np.asarray(civecs)
                 nroots = arr.shape[-1] if arr.ndim >= 2 else 1
-    
+
         # robust iterator over roots
         def _iter_roots(ci):
             arr = np.asarray(ci)
             if isinstance(ci, (list, tuple)):
-                for v in ci: yield np.asarray(v).ravel()
+                for v in ci:
+                    yield np.asarray(v).ravel()
                 return
             if arr.ndim == 1:
-                yield arr.ravel(); return
+                yield arr.ravel()
+                return
             if arr.ndim == 2 and nroots in arr.shape:
                 # pick axis that equals nroots
                 axis = 0 if arr.shape[0] == nroots and arr.shape[1] != nroots else 1
                 if axis == 0:
-                    for i in range(arr.shape[0]): yield arr[i].ravel()
+                    for i in range(arr.shape[0]):
+                        yield arr[i].ravel()
                 else:
-                    for i in range(arr.shape[1]): yield arr[:, i].ravel()
+                    for i in range(arr.shape[1]):
+                        yield arr[:, i].ravel()
                 return
             # generic: treat last axis as roots
             arr2 = arr.reshape((-1, arr.shape[-1]))
-            for i in range(arr2.shape[1]): yield arr2[:, i].ravel()
-    
+            for i in range(arr2.shape[1]):
+                yield arr2[:, i].ravel()
+
         s2_vals = []
         for c in _iter_roots(civecs):
             c = np.asarray(c).ravel()
@@ -623,11 +629,11 @@ class SpinPenaltyGBCISolver:
             den = (np.vdot(c, c)).real  # assumes orthonormal working space
             s2  = (np.vdot(c, Sc) / den).real
             s2_vals.append(s2)
-    
+
         s2_vals = np.asarray(s2_vals, dtype=float)
         dists   = np.abs(s2_vals - target)
         idx     = [int(i) for i, d in enumerate(dists) if np.isfinite(d) and d <= tol]
-    
+
         if dbg:
             logger.debug(self, "[select_spin_roots] target ss=%.3f, tol=%.2f",
                          target, tol)
@@ -636,4 +642,3 @@ class SpinPenaltyGBCISolver:
             logger.debug(self, "[select_spin_roots] chosen idx: %s", idx)
 
         return (idx, s2_vals) if also_return_s2 else idx
-

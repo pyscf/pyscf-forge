@@ -438,12 +438,12 @@ def make_rdm2s_mo(ci, data):
     # core-core part (batched)
     # ------------------------------------------------------------
     w_diag = np.abs(ci.reshape(-1))**2
-    
+
     # conf_info_list maps (str0a,str0b) -> p
     # build Ddiag in the same order as ci.reshape(-1)
     plist = conf_info_list.reshape(-1)
     Ddiag = dcore_mo[plist, plist]   # shape (nconf_used, nmo, nmo)
-    
+
     core_dir = lib.einsum('p,pij,pkl->ijkl', w_diag, Ddiag, Ddiag)
     core_exc = lib.einsum('p,pil,pkj->ijkl', w_diag, Ddiag, Ddiag)
     rdm2ab += core_dir
@@ -522,23 +522,23 @@ def make_rdm2s_mo(ci, data):
     # ------------------------------------------------------------
     Ta = t1a_mo.reshape(nmo, nmo, na*na)
     Da = Deff_a.reshape(na*na, nmo, nmo).transpose(1, 2, 0)
-    
+
     mix_a_dir = lib.einsum('ijx,klx->ijkl', Ta, Da)
     mix_a_exc = lib.einsum('ilx,kjx->ijkl', Ta, Da)
-    
+
     rdm2ab += mix_a_dir
     rdm2ba += lib.einsum('klx,ijx->ijkl', Ta, Da)
     rdm2aa += mix_a_dir + lib.einsum('klx,ijx->ijkl', Ta, Da) - mix_a_exc - lib.einsum('kjx,ilx->ijkl', Ta, Da)
 
     Tb = t1b_mo.reshape(nmo, nmo, nb*nb)
     Db = Deff_b.reshape(nb*nb, nmo, nmo).transpose(1, 2, 0)
-    
+
     mix_b_dir = lib.einsum('ijx,klx->ijkl', Tb, Db)
     mix_b_exc = lib.einsum('ilx,kjx->ijkl', Tb, Db)
-    
+
     rdm2ba += mix_b_dir
     rdm2ab += lib.einsum('klx,ijx->ijkl', Tb, Db)
-    rdm2bb += mix_b_dir + lib.einsum('klx,ijx->ijkl', Tb, Db) - mix_b_exc - lib.einsum('kjx,ilx->ijkl', Tb, Db)    
+    rdm2bb += mix_b_dir + lib.einsum('klx,ijx->ijkl', Tb, Db) - mix_b_exc - lib.einsum('kjx,ilx->ijkl', Tb, Db)
 
     return rdm2aa, rdm2ab, rdm2ba, rdm2bb
 
@@ -554,8 +554,6 @@ def make_rdm2s_mo_slow(S, mo_coeff, ci, ncas, nelecas, ncore,
     """
 
     nao, nmo = mo_coeff.shape
-    mo_cas = mo_coeff[:, ncore:ncore+ncas]
-
     # final MO 2-RDMs
     dtype = numpy.result_type(ci, dmet_core_list, mo_coeff)
     rdm2aa = numpy.zeros((nmo, nmo, nmo, nmo), dtype=dtype)
@@ -564,8 +562,6 @@ def make_rdm2s_mo_slow(S, mo_coeff, ci, ncas, nelecas, ncore,
     rdm2bb = numpy.zeros((nmo, nmo, nmo, nmo), dtype=dtype)
 
     # CI string info
-    stringsa = cistring.make_strings(range(ncas), nelecas[0])
-    stringsb = cistring.make_strings(range(ncas), nelecas[1])
     link_indexa = cistring.gen_linkstr_index(range(ncas), nelecas[0])
     link_indexb = cistring.gen_linkstr_index(range(ncas), nelecas[1])
     na = cistring.num_strings(ncas, nelecas[0])
@@ -600,7 +596,7 @@ def make_rdm2s_mo_slow(S, mo_coeff, ci, ncas, nelecas, ncore,
     # D_mo = C^\dagger S D_ao S C
     nconf = ov_list.shape[0]
     dcore_mo = numpy.empty((nconf, nconf, nmo, nmo), dtype=dtype)
-    
+
     for p1 in range(nconf):
         for p2 in range(nconf):
             dcore_mo[p1, p2] = lib.einsum(
@@ -730,8 +726,6 @@ def get_core_density(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_in
     N = mo_coeff.shape[0]
     stringsa = cistring.make_strings(range(ncas),nelecas[0])
     stringsb = cistring.make_strings(range(ncas),nelecas[1])
-    link_indexa = cistring.gen_linkstr_index(range(ncas),nelecas[0])
-    link_indexb = cistring.gen_linkstr_index(range(ncas),nelecas[1])
     na = cistring.num_strings(ncas,nelecas[0])
     nb = cistring.num_strings(ncas,nelecas[1])
     rdm1c = numpy.zeros((N,N))
@@ -744,4 +738,3 @@ def get_core_density(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_in
             unit = coeff_T * coeff * dmet_core_list[p,p]
             rdm1c += unit
     return rdm1c
-

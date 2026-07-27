@@ -36,7 +36,7 @@ from pyscf.fci import cistring
 from pyscf.lib import logger
 from pyscf.scf import rohf
 from pyscf.soscf import ciah, newton_ah
-from pyscf.gbci.gbci import str2occ, group_info_list
+from pyscf.gbci.gbci import str2occ
 
 
 TIGHT_GRAD_CONV_TOL = getattr(
@@ -781,7 +781,7 @@ class FASSCF(rohf.ROHF):
                 dump_chk=dump_chk,
             )
         return result
-        
+
 
     def prepare_orbitals(
         self,
@@ -1748,4 +1748,3 @@ def state_average_soscf_kernel(fasscf, target_group, group_info_list, **kwargs):
         group_info_list=group_info_list,
         **kwargs,
     ).as_tuple()
-

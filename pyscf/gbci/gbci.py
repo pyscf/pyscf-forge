@@ -463,7 +463,7 @@ def normalize_group_a(group_a):
 
 
 def fragment_aos_by_atoms(mol, atom_ids):
-    sl = mol.aoslice_by_atom()  
+    sl = mol.aoslice_by_atom()
     aos = []
     for a in atom_ids:
         if a < 0 or a >= mol.natm:
@@ -471,7 +471,7 @@ def fragment_aos_by_atoms(mol, atom_ids):
                 f"Atom group references atom index {a}, but mol has "
                 f"{mol.natm} atoms."
             )
-        p0, p1 = sl[a, 2], sl[a, 3] 
+        p0, p1 = sl[a, 2], sl[a, 3]
         aos.extend(range(p0, p1))
     return aos
 
@@ -526,7 +526,7 @@ def optimize_mo(gbci, mo_coeff=None, ncas=None, nelecas=None, ncore=None,
     if ncore is None : ncore = gbci.ncore
     log = logger.new_logger(gbci)
     group_spec = normalize_group_a(group_a)
-    
+
     po_list = possible_occ(ncas, nelecas)
 
     N=mo_coeff.shape[0]
@@ -609,7 +609,7 @@ def h1e_for_gbci(gbci, dmet_act_list=None, mo_list=None, dmet_core_list=None,
     p = dmet_core_list.shape[0]
     mo_cas = mo_list[0][:,ncore:ncore+ncas]
     hcore = gbci.get_hcore()
-    
+
     h1e = numpy.zeros((p,p,ncas,ncas))
     ecore_list = numpy.zeros(p)
     energy_nuc = gbci.energy_nuc()
@@ -750,7 +750,7 @@ class GBCI(CASBase):
         assert x is None or x >= 0
         self._ncore = x
         self._clear_gbci_intermediates()
-   
+
 
     @property
     def group_a(self):
@@ -778,7 +778,7 @@ class GBCI(CASBase):
             return self.mol.spin
         else:
             return self._spin
-    
+
     @spin.setter
     def spin(self,x):
         assert x is None or isinstance(x, (int, numpy.integer))
@@ -929,7 +929,7 @@ class GBCI(CASBase):
         mixed_options.setdefault('max_cycle2', max_cycle)
         result = fasscf.mixed_routine(target=target, **mixed_options)
         return result.as_tuple()
- 
+
     def fix_spin_(self, ss=0, shift=1):
         r'''Use level shift to control FCI solver spin.
 
@@ -946,7 +946,7 @@ class GBCI(CASBase):
         fix_spin_(self.fcisolver, shift, ss)
         return self
     fix_spin = fix_spin_
- 
+
     def optimize_mo(self, mo_coeff=None, group_a=None, debug=False,
                     conv_tol=1e-10, max_cycle=100):
         if mo_coeff is None:
@@ -1033,7 +1033,7 @@ class GBCI(CASBase):
                 log.info('GBCI not converged')
         else:
             self.converged = True
-        return self.e_tot, self.e_cas, self.ci  
+        return self.e_tot, self.e_cas, self.ci
 
     def _prepare_noci_intermediates(self, mo_coeff, ncas, nelecas, debug=False):
         mo_list, mo_energy, po_list, group = self.optimize_mo(mo_coeff, debug=debug)
@@ -1252,7 +1252,7 @@ class GBCI(CASBase):
         rdm2ab = np.einsum('pa, qb, abcd, cr,ds->pqrs', A,A, rdm_ao_ab,B,B,optimize=True)
         rdm2ba = np.einsum('pa, qb, abcd, cr,ds->pqrs', A,A, rdm_ao_ba,B,B,optimize=True)
         rdm2bb = np.einsum('pa, qb, abcd, cr,ds->pqrs', A,A, rdm_ao_bb,B,B,optimize=True)
-        
+
         return rdm2aa, rdm2ab, rdm2ba, rdm2bb
 
     def make_rdm2_mo_slow(self, ci, mo_coeff=None, ncas=None, nelecas=None,
@@ -1271,7 +1271,7 @@ class GBCI(CASBase):
 
         rdm2aa, rdm2ab, rdm2ba, rdm2bb = self.make_rdm2s_mo_slow(ci,mo_coeff, ncas, nelecas,
                                          ncore, dmet_core_list, conf_info_list, ov_list)
-        
+
         return rdm2aa + rdm2ab + rdm2ba + rdm2bb
 
     def precompute_rdm2s_mo(self, mo_coeff=None, ncas=None, nelecas=None,
@@ -1291,7 +1291,7 @@ class GBCI(CASBase):
         s1e = self._scf.get_ovlp(self.mol)
         precompute_data = rdm.precompute_rdm2s_mo_data(s1e, mo_coeff, ncas, nelecas,
                           ncore, dmet_core_list, conf_info_list, ov_list)
-        
+
         return precompute_data
 
     def make_rdm2s_mo(self, ci, data=None, mo_coeff=None, ncas=None, nelecas=None,
@@ -1309,9 +1309,9 @@ class GBCI(CASBase):
                 if dmet_core_list is None or ov_list is None:
                     dmet_core_list, ov_list = self.get_svd_matrices(mo_list, svd_basis)
             data = self.precompute_rdm2s_mo(mo_coeff, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
-        
+
         rdm2aa, rdm2ab, rdm2ba, rdm2bb = rdm.make_rdm2s_mo(ci, data)
-        
+
         return rdm2aa, rdm2ab, rdm2ba, rdm2bb
 
     def make_rdm2_mo(self, ci, data=None, mo_coeff=None, ncas=None, nelecas=None,
@@ -1329,12 +1329,14 @@ class GBCI(CASBase):
                 if dmet_core_list is None or ov_list is None:
                     dmet_core_list, ov_list = self.get_svd_matrices(mo_list, svd_basis)
             data = self.precompute_rdm2s_mo(mo_coeff, ncas, nelecas, ncore, dmet_core_list, conf_info_list, ov_list)
-        
+
         rdm2aa, rdm2ab, rdm2ba, rdm2bb = self.make_rdm2s_mo(ci, data)
-        
+
         return rdm2aa + rdm2ab + rdm2ba + rdm2bb
 
-    def get_core_density(self, ci, mo_coeff=None, ncas=None, nelecas=None, ncore=None, dmet_core_list=None, conf_info_list=None, ov_list=None, debug=False):
+    def get_core_density(self, ci, mo_coeff=None, ncas=None, nelecas=None,
+                         ncore=None, dmet_core_list=None,
+                         conf_info_list=None, ov_list=None, debug=False):
         if ncas is None : ncas = self.ncas
         if nelecas is None : nelecas = self.nelecas
         if ncore is None : ncore = self.ncore
