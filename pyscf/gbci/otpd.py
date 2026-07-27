@@ -39,7 +39,7 @@ References:
 import ctypes
 import numpy as np
 from pyscf import lib
-from pyscf.dft.numint import _dot_ao_dm
+from pyscf.mcpdft.otpd import _grid_ao2mo
 from pyscf.gbci import rdm as gbci_rdm
 
 libgbpdft = lib.load_library("libgbpdft")
@@ -77,24 +77,6 @@ def _as_real_contiguous(arr, name, dtype=np.float64):
         raise NotImplementedError(
             "C GBPDFT kernels currently support real-valued arrays only")
     return np.ascontiguousarray(arr, dtype=dtype)
-
-
-def _grid_ao2mo(mol, ao, mo_coeff, non0tab=None, shls_slice=None, ao_loc=None):
-    """Transform AO values on a grid to MO values."""
-    nderiv, ngrid, _ = ao.shape
-    nmo = mo_coeff.shape[-1]
-    mo = np.empty((nderiv, nmo, ngrid), dtype=mo_coeff.dtype, order='C')
-    mo = mo.transpose(0, 2, 1)
-    if shls_slice is None:
-        shls_slice = (0, mol.nbas)
-    if ao_loc is None:
-        ao_loc = mol.ao_loc_nr()
-    for ideriv in range(nderiv):
-        ao_i = ao[ideriv, :, :]
-        mo[ideriv] = _dot_ao_dm(
-            mol, ao_i, mo_coeff, non0tab, shls_slice, ao_loc,
-            out=mo[ideriv])
-    return mo
 
 
 def make_otpd_intermediates(S, mo_coeff, ncas, nelecas, ncore,
