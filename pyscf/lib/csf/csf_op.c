@@ -1021,7 +1021,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 for (q=p; q<norb; q++){
                     if (_get_occ(&bra, q) != 1){ continue ; }
                     ihop = p*((norb*norb*norb) + 1) + q*(norb+1)*norb;
-                    // fac = csf_EaiEbj (&bra, &ket, p, q, q, p);
+                    fac = csf_EaiEbj (&bra, &ket, p, q, q, p);
                     hmat[ihmat] += fac * g2e[ihop];
                 }
             }
