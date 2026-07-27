@@ -1015,7 +1015,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 if (_get_occ(&bra, p) != 1){ continue ; }
                 // Sz
                 ihop = p * (norb+1);
-                // fac = csf_Sai (&bra, &ket, p, p, twoM);
+                fac = csf_Sai (&bra, &ket, p, p, twoM);
                 hmat[ihmat] += fac * h1e_s[ihop];
                 // eri exchange
                 for (q=p; q<norb; q++){
