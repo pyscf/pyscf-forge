@@ -1014,6 +1014,7 @@ void FCICSFpspace_h0tril(double *hmat,
                     hmat[ihmat] += fac * g2e[ihop];
                 }
             }
+            break;
         case 1:
             exc1_sort (&bra, &ket, p, t, &a, &i);
             // E^a_i
@@ -1044,6 +1045,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 // fac = csf_EaiEbj (&bra, &ket, a, p, p, i);
                 hmat[ihmat] += g2e[ihop] * fac;
             }
+            break;
         case 2:
             exc2_sort (&bra, &ket, p, r, q, t, &a, &i, &b, &j);
             // E^a_i E^b_j
@@ -1054,6 +1056,7 @@ void FCICSFpspace_h0tril(double *hmat,
             ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
             // fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
             hmat[ihmat] += g2e[ihop] * fac;
+            break;
     }
     }
     }
