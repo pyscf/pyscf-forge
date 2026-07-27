@@ -174,6 +174,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
     npsp_csf = len(csf_addr)
 
     dconfstrs, sconfstrs, spinstrs = transformer.csfaddrs2str (csf_addr)
+    dconfstrs[dconfstrs<0] = 0
     h1e_c, h1e_s = unpack_h1e_cs (h1e)
     h0 = np.zeros ((npsp_csf, npsp_csf), dtype=float)
     spin = neleca-nelecb
