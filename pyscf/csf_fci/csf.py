@@ -192,7 +192,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
     h0 += h0.T
     idx = np.diag_indices_from (h0)
     h0[idx] = hdiag_csf[csf_addr]
-    return h0
+    return csf_addr, h0
 
 def kernel(fci, h1e, eri, norb, nelec, smult=None, idx_sym=None, ci0=None,
            tol=None, lindep=None, max_cycle=None, max_space=None,

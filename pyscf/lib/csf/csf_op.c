@@ -25,14 +25,14 @@ static int first1(uint64_t r)
 #elif defined(HAVE_FFS)
         return ffsll(r) - 1;
 #else
-        // I think this branch is wrong. It looks like the opposite of the other branches!
+        if (r==0ULL){ return -1; }
         int n = 0;
-        if (r >> (n + 32)) n += 32;
-        if (r >> (n + 16)) n += 16;
-        if (r >> (n +  8)) n +=  8;
-        if (r >> (n +  4)) n +=  4;        
-        if (r >> (n +  2)) n +=  2;
-        if (r >> (n +  1)) n +=  1;
+        if ((((1ULL<<32)-1) & (r>>n)) == 0){ n += 32; }
+        if ((((1ULL<<16)-1) & (r>>n)) == 0){ n += 16; }
+        if ((((1ULL<<8)-1) & (r>>n)) == 0){ n += 8; }
+        if ((((1ULL<<4)-1) & (r>>n)) == 0){ n += 4; }
+        if ((((1ULL<<2)-1) & (r>>n)) == 0){ n += 2; }
+        if ((((1ULL<<1)-1) & (r>>n)) == 0){ n += 1; }
         return n;
 #endif
 }
@@ -266,7 +266,7 @@ int Str3_link (Str3 * bra, Str3 * ket,
     unsigned int nc2 = _count_set_bits (c2sig);
     unsigned int nc1 = _count_set_bits (c1sig);
     assert ((nc1%2) == 0);
-    unsigned int n = (2*nc2 + nc1) / 2;
+    int n = (2*nc2 + nc1) / 2;
     if (n>2){ n = -1; }
     if (n>0){
         switch (nc2){
@@ -604,19 +604,6 @@ void exc1_sort (Str3 * bra, Str3 * ket,
     }
 }
 
-void _exc2_sort_iter (unsigned int * as, unsigned int * is,
-                     unsigned int * aidx, unsigned int * iidx,
-                     unsigned int p, unsigned int np)
-{
-    if (np > 0){
-        is[*iidx] = p;
-        (*iidx)++;
-    } else {
-        as[*aidx] = p;
-        (*aidx)++;
-    }
-}
-
 void exc2_sort (Str3 * bra, Str3 * ket, 
                unsigned int p, unsigned int q,
                unsigned int r, unsigned int s,
@@ -628,13 +615,37 @@ void exc2_sort (Str3 * bra, Str3 * ket,
     unsigned int aidx = 0;
     unsigned int iidx = 0;
     int n = _get_occ (ket, p) - _get_occ (bra, p);
-    _exc2_sort_iter (as, is, &aidx, &iidx, p, n);
+    if (n > 0){
+        is[iidx] = p;
+        iidx++;
+    } else {
+        as[aidx] = p;
+        aidx++;
+    }
     n = _get_occ (ket, q) - _get_occ (bra, q);
-    _exc2_sort_iter (as, is, &aidx, &iidx, q, n);
+    if (n > 0){
+        is[iidx] = q;
+        iidx++;
+    } else {
+        as[aidx] = q;
+        aidx++;
+    }
     n = _get_occ (ket, r) - _get_occ (bra, r);
-    _exc2_sort_iter (as, is, &aidx, &iidx, r, n);
+    if (n > 0){
+        is[iidx] = r;
+        iidx++;
+    } else {
+        as[aidx] = r;
+        aidx++;
+    }
     n = _get_occ (ket, s) - _get_occ (bra, s);
-    _exc2_sort_iter (as, is, &aidx, &iidx, s, n);
+    if (n > 0){
+        is[iidx] = s;
+        iidx++;
+    } else {
+        as[aidx] = s;
+        aidx++;
+    }
     assert (aidx == 2);
     assert (iidx == 2);
     (*a) = as[0];
