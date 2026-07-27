@@ -1,3 +1,21 @@
+#!/usr/bin/env python
+# Copyright 2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Yi Deng <yideng@uchicago.edu>
+#
+
 """Private ctypes bridge for the GAS FCI C kernels."""
 
 import ctypes
@@ -234,14 +252,12 @@ def _configure_library(lib):
 
 
 def _candidate_library_paths():
-    for key in ("PYSCF_GAS_LIB", "GASSCF_LIBGAS"):
-        value = os.environ.get(key)
-        if value:
-            yield Path(value)
+    value = os.environ.get("PYSCF_GAS_LIB")
+    if value:
+        yield Path(value)
 
     pyscf_dir = Path(__file__).resolve().parents[1]
     yield pyscf_dir / "lib" / "libfci_gas.so"
-    yield pyscf_dir / "lib" / "libfci_gas.dylib"
 
 
 _LIB = None
@@ -250,8 +266,8 @@ _LIB = None
 def load_library(path=None, reload=False):
     """Load and configure libfci_gas.
 
-    The explicit path and environment variables are intended for HPC
-    development.  The final fallback uses PySCF's native library loader.
+    An explicit path or ``PYSCF_GAS_LIB`` can select a development build.
+    The final fallback uses PySCF's native library loader.
     """
 
     global _LIB

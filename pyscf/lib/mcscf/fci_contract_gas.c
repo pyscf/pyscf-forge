@@ -1,3 +1,21 @@
+/* Copyright 2026 The PySCF Developers. All Rights Reserved.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+ *
+ * Author: Yi Deng <yideng@uchicago.edu>
+ */
+
 #include "fci_gas.h"
 
 #include <stdlib.h>
@@ -10,12 +28,15 @@
 #include <omp.h>
 #endif
 
+/* ========================================================================== */
+/* 1. Configuration and low-level utilities                                   */
+/* ========================================================================== */
+
 enum {
         BB_ALPHA_BLOCK = 64,
         BB_TRANSPOSE_MIN_DIM = 4,
         BB_TRANSPOSE_TILE = 32,
         ABBA_WRITEBACK_TILE = 32,
-        ABBA_OP_FUSE = 8,
         OMP_TASK_FACTOR = 32,
         OMP_MAX_ALPHA_SPLIT = 64,
         OMP_MIN_ALPHA_TILE = 4
@@ -71,11 +92,16 @@ static double *build_abba_gos(const double *restrict eri, uint32_t nnorb)
         return gos;
 }
 
+/* Consecutive beta link tables b0->b1 and b1->b2. */
 typedef struct {
         gas_tid_t first;
         gas_tid_t second;
 } gas_tid_pair_t;
 
+/*
+ * Alpha link landing in the current destination tile [a0,a1).
+ * rel_addr is relative to a0; op_index selects the active alpha operator.
+ */
 typedef struct {
         uint32_t src_row;
         uint32_t rel_addr;
@@ -95,8 +121,8 @@ typedef struct {
 
         size_t arena_zeroed_upto;
 
-        /* A hit is an alpha link whose
-         * destination address lies inside the current alpha tile [a0,a1).
+        /* A hit is an alpha link whose destination address lies inside the
+         * current alpha tile [a0,a1).
          * Building the list once per ABBA batch lets each beta tile reuse it
          * instead of rescanning mostly-missing alpha links. */
         gas_alpha_hit_t *alpha_hit;
@@ -231,7 +257,9 @@ static inline void contract_axpy2(double *restrict y0,
                 y1[i] += a1 * xi;
         }
 }
-/* Stable ABBA beta microkernels: width-eight AVX2 with scalar fallback. */
+/* ========================================================================== */
+/* 2. ABBA microkernels and workspace helpers                                 */
+/* ========================================================================== */
 
 static inline void abba_beta_kernel1(double *restrict y,
                                         const double *restrict t0,
@@ -733,7 +761,7 @@ static gas_tid_t find_table_in_row(gas_sid_t dst,
 #endif
 
 /* ========================================================================== */
-/* 3. two-electron path kernels                                               */
+/* 3. Two-electron path kernels                                               */
 /* ========================================================================== */
 
 static void contract_aa_path_rows(const gas_space_t *gas,
@@ -1221,7 +1249,7 @@ static void contract_abba_path(const gas_space_t *gas,
 }
 
 /* ========================================================================== */
-/* 4. destination-driven two-electron traversal                               */
+/* 4. Destination-driven two-electron traversal                               */
 /* ========================================================================== */
 
 static uint32_t aa_forward_scan_cost(const gas_space_t *gas,
@@ -1777,7 +1805,7 @@ static void contract_2e_block(const gas_space_t *gas,
 }
 
 /* ========================================================================== */
-/* 5. destination alpha-sector traversal                                     */
+/* 5. Destination alpha-sector traversal                                      */
 /* ========================================================================== */
 
 uint32_t fci_contract_gas_parallel_units(const gas_space_t *gas)
@@ -2359,7 +2387,7 @@ static int contract_validate(const gas_space_t *gas,
 }
 
 /* ========================================================================== */
-/* 6. public entry points                                                     */
+/* 6. Public entry points                                                     */
 /* ========================================================================== */
 
 int fci_contract_gas_2e(const gas_space_t *gas,
@@ -2396,7 +2424,7 @@ int fci_contract_gas_2e(const gas_space_t *gas,
 }
 
 /* ========================================================================== */
-/* 7. reusable contraction plan                                               */
+/* 7. Reusable contraction plan                                               */
 /* ========================================================================== */
 
 static int contract_plan_config_matches(const gas_contract_plan_t *plan)

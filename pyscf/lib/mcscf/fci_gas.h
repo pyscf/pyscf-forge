@@ -1,3 +1,21 @@
+/* Copyright 2026 The PySCF Developers. All Rights Reserved.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+ *
+ * Author: Yi Deng <yideng@uchicago.edu>
+ */
+
 #ifndef FCI_GAS_H
 #define FCI_GAS_H
 
@@ -28,17 +46,28 @@ typedef enum {
         GAS_LINK_COMPRESSED = 1
 } gas_link_format_t;
 
+/*
+ * A legal determinant block couples one alpha sector to one beta sector.
+ * Determinants occupy one contiguous alpha-major rectangle in the flattened
+ * CI vector: offset + ia * nstr(beta) + ib.
+ */
 typedef struct {
         uint32_t offset;
         gas_sid_t sa;
         gas_sid_t sb;
 } gas_block_t;
 
+/* Slice [off, off+n) in a packed index array. */
 typedef struct {
         uint32_t off;
         uint32_t n;
 } gas_row_t;
 
+/*
+ * Index D for the legal block set.  Alpha rows address gas->block directly;
+ * beta rows use the packed sector-ID and block-ID arrays because canonical
+ * block order is alpha-major.
+ */
 typedef struct {
         gas_row_t *by_alpha_row;
         gas_row_t *by_beta_row;
@@ -46,17 +75,28 @@ typedef struct {
         gas_bid_t *by_beta_bid;
 } gas_block_index_t;
 
+/* Forward table index T: source sector -> packed destination sectors. */
 typedef struct {
         gas_row_t *row;
         gas_sid_t *dst;
 } gas_table_index_t;
 
+/*
+ * Reverse table index R: destination sector -> packed (source sector,
+ * link-table ID) entries.
+ */
 typedef struct {
         gas_row_t *row;
         gas_sid_t *src;
         gas_tid_t *tid;
 } gas_table_rev_index_t;
 
+/*
+ * One spin-string excitation.  addr is the destination string address and
+ * sign is the fermionic phase.  In a raw table, op packs creation orbital p
+ * in the low byte and destruction orbital q in the high byte.  In a
+ * compressed table, op is the lower-triangular pair index for (p,q).
+ */
 typedef struct {
         uint32_t addr;
         uint16_t op;
@@ -64,6 +104,10 @@ typedef struct {
         uint8_t padding;             /* completes the 8-byte entry */
 } gas_link_entry_t;
 
+/*
+ * Directed source-sector -> destination-sector link table.  active_op is the
+ * sorted list of triangular operator-pair indices present in the table.
+ */
 typedef struct {
         gas_link_entry_t *link;
         uint16_t *active_op;
@@ -97,14 +141,14 @@ typedef struct {
 
         uint32_t nblock;
         gas_block_t *block;
-        gas_block_index_t D;
+        gas_block_index_t D;          /* legal determinant-block index */
 
         uint32_t ntable;
         uint8_t link_format;
         uint8_t link_format_padding[3]; /* 1 + 3 bytes align table */
         gas_link_table_t *table;
-        gas_table_index_t T;
-        gas_table_rev_index_t R;
+        gas_table_index_t T;          /* forward link-table index */
+        gas_table_rev_index_t R;      /* reverse link-table index */
 } gas_space_t;
 
 typedef struct {
@@ -189,6 +233,14 @@ int fci_make_hdiag_gas(const gas_space_t *gas,
 /* ABBA workspace target; the production default is 64 MiB. */
 void fci_contract_gas_set_abba_t1_bytes(uint64_t bytes);
 uint32_t fci_contract_gas_omp_task_count(const gas_space_t *gas);
+
+/*
+ * Contract the spin-free Hamiltonian after absorbing h1e into the
+ * two-electron tensor.  eri_tril is a row-major (npair,npair) array in
+ * PySCF's four-fold pair-matrix layout; each orbital pair uses
+ * gas_link_pair_index.  ci0 and ci1 follow gas->block determinant order.
+ * Contraction requires compressed link tables.
+ */
 int fci_contract_gas_2e(const gas_space_t *gas, const double *eri_tril,
                        const double *ci0, double *ci1);
 int fci_contract_gas_plan_create(gas_contract_plan_t **out,

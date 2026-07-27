@@ -1,3 +1,21 @@
+#!/usr/bin/env python
+# Copyright 2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Yi Deng <yideng@uchicago.edu>
+#
+
 """GAS-aware FCISolver bindings for the frozen GAS FCI C kernels."""
 
 import ctypes
@@ -597,7 +615,7 @@ class FCISolver(direct_spin1.FCISolver):
         self.spin_penalty_method = None
 
     def _space_spec(self, norb, nelec):
-        nelec = addons_gas.as_nelec_tuple(nelec)
+        nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
         if self.gas_orbs is None:
             gas_orbs = (int(norb),)
             gas_orbs, blocks = addons_gas.normalize_gas_spec(
@@ -871,7 +889,7 @@ class FCISolver(direct_spin1.FCISolver):
                 "orbital and wavefunction symmetry filtering is not implemented")
 
         self.norb = int(norb)
-        self.nelec = addons_gas.as_nelec_tuple(nelec)
+        self.nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
         spin_penalty = _spin_penalty_parameters(self, norb, self.nelec)
         self.e_spin_penalty = None
         self.e_physical = None
@@ -1166,7 +1184,7 @@ class FCISolver(direct_spin1.FCISolver):
     def spin_square(self, ci, norb, nelec, *args, **kwargs):
         """Return ``(<S^2>, 2S+1)`` from spin-resolved GAS RDMs."""
 
-        nelec = addons_gas.as_nelec_tuple(nelec)
+        nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
         (dm1a, dm1b), (dm2aa, dm2ab, dm2bb) = self.make_rdm12s(
             ci, norb, nelec)
         return spin_square_from_rdm12s((dm1a, dm1b), (dm2aa, dm2ab, dm2bb),

@@ -1,3 +1,21 @@
+/* Copyright 2026 The PySCF Developers. All Rights Reserved.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+ *
+ * Author: Yi Deng <yideng@uchicago.edu>
+ */
+
 #include "fci_gas.h"
 
 #include <stdlib.h>
@@ -8,7 +26,7 @@ static const uint64_t LINK_BUILD_PARALLEL_MIN = 1048576u;
 #endif
 
 /* ========================================================================== */
-/* 1. low-level utilities                                                     */
+/* 1. Low-level utilities                                                     */
 /* ========================================================================== */
 
 static inline int popcnt64(uint64_t x)
@@ -27,7 +45,7 @@ static inline uint64_t lowbits(int n)
 }
 
 /*
- * branchless C(n,k) lookup; valid for 0 <= n,k <= GAS_MAX_LOCAL_ORB
+ * Branchless C(n,k) lookup; valid for 0 <= n,k <= GAS_MAX_LOCAL_ORB
  */
 static uint32_t binom_tab[(GAS_MAX_LOCAL_ORB + 1) * 32];
 static int binom_ready = 0;
@@ -58,7 +76,7 @@ static inline uint32_t binom(int n, int k)
 }
 
 /*
- * fermion sign for a_cre^+ a_des |I> = sign |J>
+ * Fermion sign for a_cre^+ a_des |I> = sign |J>
  */
 static inline int8_t cd_sign(int p, int q, uint64_t str)
 {
@@ -69,7 +87,7 @@ static inline int8_t cd_sign(int p, int q, uint64_t str)
 }
 
 /*
- * lexical address of a spin string using Cantor expansion
+ * Lexical address of a spin string using Cantor expansion
  */
 static inline uint32_t str2addr_local(int nelec, uint64_t str)
 {
@@ -84,7 +102,7 @@ static inline uint32_t str2addr_local(int nelec, uint64_t str)
 }
 
 /*
- * spin string from lexical address using inverse Cantor expansion
+ * Spin string from lexical address using inverse Cantor expansion
  */
 static inline uint64_t addr2str_local(int norb, int nelec, uint32_t addr)
 {
@@ -157,11 +175,11 @@ static int cmp_u32(const void *pa, const void *pb)
 }
 
 /* ========================================================================== */
-/* 2. temporary row-list helpers                                              */
+/* 2. Temporary row-list helpers                                              */
 /* ========================================================================== */
 
 /*
- * dynamic array for temporary storage and sort
+ * Dynamic array for temporary storage and sort
  */
 typedef struct {
         uint8_t *data;
@@ -267,7 +285,7 @@ static void sort_unique_occ_rows(gas_u8_rows_t *R)
 }
 
 /* ========================================================================== */
-/* 3. public address and lookup routines                                      */
+/* 3. Public address and lookup routines                                      */
 /* ========================================================================== */
 
 uint32_t gas_str2addr_sector(const gas_space_t *gas, gas_sid_t s, uint64_t str)
@@ -391,7 +409,7 @@ const gas_link_table_t *gas_get_link_table(const gas_space_t *gas,
 }
 
 /* ========================================================================== */
-/* 4. raw block generation from D                                             */
+/* 4. Raw block generation from D                                             */
 /* ========================================================================== */
 
 static int build_raw_blocks_from_input(gas_space_t *gas, int nblock,
@@ -439,7 +457,7 @@ static int build_raw_blocks_from_input(gas_space_t *gas, int nblock,
 }
 
 /* ========================================================================== */
-/* 5. sector collection and initialization                                    */
+/* 5. Sector collection and initialization                                    */
 /* ========================================================================== */
 
 static int append_sector_neighbors_occ(const gas_space_t *gas,
@@ -562,7 +580,7 @@ static int find_sector_occ(const gas_space_t *gas, const uint8_t *occ)
 }
 
 /* ========================================================================== */
-/* 6. legal block set D and two D indices                                     */
+/* 6. Legal block set D and two D indices                                     */
 /* ========================================================================== */
 
 static int fill_blocks_from_raw(gas_space_t *gas, const gas_u8_rows_t *blocks)
@@ -650,7 +668,7 @@ static int build_block_index(gas_space_t *gas)
 }
 
 /* ========================================================================== */
-/* 7. temporary sector-neighbor rows                                          */
+/* 7. Temporary sector-neighbor rows                                          */
 /* ========================================================================== */
 
 typedef struct {
@@ -764,7 +782,7 @@ done:
 }
 
 /* ========================================================================== */
-/* 8. required table pair marker and table index                              */
+/* 8. Required table pair marker and table index                              */
 /* ========================================================================== */
 
 typedef struct {
@@ -1001,7 +1019,7 @@ static int build_table_index(gas_space_t *gas, gas_pair_marker_t *M)
 }
 
 /* ========================================================================== */
-/* 9. sector-pair spin-string link tables                                     */
+/* 9. Sector-pair spin-string link tables                                     */
 /* ========================================================================== */
 
 static int sector_transfer(const gas_space_t *gas, gas_sid_t src, gas_sid_t dst,
@@ -1356,7 +1374,7 @@ int gas_space_links_are_compressed(const gas_space_t *gas)
 }
 
 /* ========================================================================== */
-/* 10. memory reporting                                                       */
+/* 10. Memory reporting                                                       */
 /* ========================================================================== */
 
 void gas_memory_report(const gas_space_t *gas, gas_memory_report_t *r)
@@ -1402,7 +1420,7 @@ uint64_t gas_memory_bytes(const gas_space_t *gas)
 }
 
 /* ========================================================================== */
-/* 11. constructors and destructor                                            */
+/* 11. Constructors and destructor                                            */
 /* ========================================================================== */
 
 static int init_common(gas_space_t *gas, int ngas,

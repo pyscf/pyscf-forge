@@ -1,3 +1,21 @@
+#!/usr/bin/env python
+# Copyright 2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Author: Yi Deng <yideng@uchicago.edu>
+#
+
 """Small GAS helpers shared by the GASCI Python layer."""
 
 import math
@@ -197,9 +215,8 @@ class StateAverageFCISolver(addons.StateAverageFCISolver):
 class StateAverageGASCI(addons.StateAverageMCSCFSolver):
     """GAS multistate object carrying weights and root-resolved results.
 
-    For GASCI, weights define fixed-orbital RDM/Fock postprocessing.  For
-    GASSCF, the same wrapper supplies the state-averaged orbital-energy
-    functional through weighted one- and two-particle density matrices.
+    The weights define fixed-orbital RDM and generalized-Fock
+    postprocessing.  Individual root energies remain unchanged.
     """
 
     __name_mixin__ = "StateAverage"
@@ -238,10 +255,11 @@ class StateAverageGASCI(addons.StateAverageMCSCFSolver):
 
 
 def state_average(mc, weights=(0.5, 0.5), wfnsym=None):
-    """Attach PySCF-style state weights to a GASCI or GASSCF calculation.
+    """Attach PySCF-style state weights to a GASCI calculation.
 
-    In GASCI the orbitals remain fixed and the individual root energies are
-    unchanged.  In GASSCF the weighted RDMs define the orbital objective.
+    GASCI orbitals remain fixed, and the individual root energies are
+    unchanged.  The weights define averaged RDMs and generalized Fock
+    matrices for postprocessing.
     """
 
     if wfnsym is not None:
@@ -271,19 +289,40 @@ def state_average_(mc, weights=(0.5, 0.5), wfnsym=None):
     return mc
 
 
-def as_nelec_tuple(nelec):
+def as_nelec_tuple(nelec, spin=None):
+    """Return ``(Nalpha, Nbeta)`` using PySCF's ``spin=Nalpha-Nbeta`` rule.
+
+    When ``spin`` is given, only the total number of electrons in ``nelec``
+    is used, matching the convention of PySCF FCI solvers.
+    """
+
     arr = _exact_integer_array(nelec, "nelec")
     if arr.ndim == 0:
-        value = int(arr)
-        if value < 0:
-            raise ValueError("nelec must be non-negative")
-        return (value + 1) // 2, value // 2
-    if arr.ndim != 1 or arr.size != 2:
+        nelectron = int(arr)
+        values = None
+    elif arr.ndim == 1 and arr.size == 2:
+        values = int(arr[0]), int(arr[1])
+        nelectron = sum(values)
+    else:
         raise ValueError("nelec must be an integer or a two-element sequence")
-    values = int(arr[0]), int(arr[1])
-    if min(values) < 0:
+
+    if nelectron < 0 or (values is not None and min(values) < 0):
         raise ValueError("alpha and beta electron counts must be non-negative")
-    return values
+    if spin is None:
+        if values is not None:
+            return values
+        return (nelectron + 1) // 2, nelectron // 2
+
+    spin_arr = _exact_integer_array(spin, "spin")
+    if spin_arr.ndim != 0:
+        raise ValueError("spin must be an integer")
+    spin = int(spin_arr)
+    if abs(spin) > nelectron:
+        raise ValueError("abs(spin) cannot exceed nelec")
+    if (nelectron - spin) % 2:
+        raise ValueError("nelec and spin must have the same parity")
+    nbeta = (nelectron - spin) // 2
+    return nelectron - nbeta, nbeta
 
 
 def _integer_rows_with_info(values, ncolumn, label):
@@ -880,4 +919,3 @@ def pair_index(p, q):
     hi = max(int(p), int(q))
     lo = min(int(p), int(q))
     return hi * (hi + 1) // 2 + lo
-

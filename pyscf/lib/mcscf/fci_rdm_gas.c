@@ -1,3 +1,21 @@
+/* Copyright 2026 The PySCF Developers. All Rights Reserved.
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+
+ *
+ * Author: Yi Deng <yideng@uchicago.edu>
+ */
+
 #include "fci_gas.h"
 
 #include <stdlib.h>
@@ -23,11 +41,19 @@ enum {
 static const size_t RDM_WORKSPACE_MAX_ELEMS = 67108864u;
 static size_t rdm_abba_t1_target_bytes = 16u * 1024u * 1024u;
 
+/*
+ * BB kernels store consecutive link-table IDs.  AB kernels reuse the buffer
+ * for (destination block ID, beta link-table ID).
+ */
 typedef struct {
         gas_tid_t first;
         gas_tid_t second;
 } rdm_tid_pair_t;
 
+/*
+ * Alpha link landing in the current destination tile [a0,a1).
+ * rel_addr is relative to a0; op_index selects the plan's active operator.
+ */
 typedef struct {
         uint32_t src_row;
         uint32_t rel_addr;
