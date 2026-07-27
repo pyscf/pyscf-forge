@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2014-2022 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,13 @@
 # limitations under the License.
 #
 
-import numpy
 import unittest
-from pyscf import gto
-from pyscf import scf
-from pyscf import lib
+
+import numpy
+
+from pyscf import gto, lib, scf
 from pyscf.pv.energy import Epv_molecule
+
 
 def setUpModule():
     global mol, mf
@@ -56,7 +56,15 @@ def tearDownModule():
 class KnownValues(unittest.TestCase):
     def test_pv(self):
 #       Reference results (for PV) compared with DIRAC24
-        Epv = Epv_molecule(mol, mf)
+        Epv = Epv_molecule(mol, mf, dm=None)
+        Epv_Oxigen = numpy.sum(Epv, axis=1)[0]
+        self.assertAlmostEqual(Epv_Oxigen, -2.745821e-21, 5)
+        self.assertAlmostEqual(mf.e_tot,-317.831176378,8)
+
+    def test_pv_dm(self):
+#       Reference results (for PV) compared with DIRAC24, using the density matrix
+        density_matrix = mf.make_rdm1()
+        Epv = Epv_molecule(mol, mf, dm=density_matrix)
         Epv_Oxigen = numpy.sum(Epv, axis=1)[0]
         self.assertAlmostEqual(Epv_Oxigen, -2.745821e-21, 5)
         self.assertAlmostEqual(mf.e_tot,-317.831176378,8)
