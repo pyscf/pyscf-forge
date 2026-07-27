@@ -18,6 +18,7 @@
 
 """Tests for GAS restriction handling, the GAS FCI solver, and GASCI."""
 
+import io
 import unittest
 
 import numpy
@@ -28,6 +29,7 @@ from pyscf import scf
 from pyscf.fci import addons as fci_addons
 from pyscf.fci import cistring
 from pyscf.fci import direct_spin1
+from pyscf.lib import logger
 from pyscf.mcscf import addons_gas
 from pyscf.mcscf import fci_gas
 from pyscf.mcscf import gasci
@@ -232,6 +234,19 @@ class TestGASCI(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         del cls.mol, cls.mf
+
+    def test_kernel_log_label(self):
+        output = io.StringIO()
+        mc = gasci.GASCI(
+            self.mf, 4, (2, 2), ncore=5)
+        mc.stdout = output
+        mc.verbose = logger.DEBUG
+        mc.canonicalization = False
+        mc.kernel()
+
+        text = output.getvalue()
+        self.assertIn("Start GASCI", text)
+        self.assertNotIn("Start CASCI", text)
 
     def test_gas_as_cas(self):
         reference = mcscf.CASCI(

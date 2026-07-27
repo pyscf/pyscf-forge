@@ -50,6 +50,39 @@ def h1e_for_gas(mc, mo_coeff=None, ncas=None, ncore=None):
     return casci.h1e_for_cas(mc, mo_coeff, ncas, ncore)
 
 
+def kernel(mc, mo_coeff=None, ci0=None, verbose=logger.NOTE):
+    """Run the fixed-orbital GASCI solver."""
+
+    if mo_coeff is None:
+        mo_coeff = mc.mo_coeff
+    if ci0 is None:
+        ci0 = mc.ci
+
+    log = logger.new_logger(mc, verbose)
+    t0 = (logger.process_clock(), logger.perf_counter())
+    log.debug("Start GASCI")
+
+    eri_gas = mc.get_h2eff(mo_coeff)
+    t1 = log.timer("integral transformation to GAS space", *t0)
+
+    h1eff, energy_core = mc.get_h1eff(mo_coeff)
+    log.debug("core energy = %.15g", energy_core)
+    t1 = log.timer("effective h1e in GAS space", *t1)
+
+    if h1eff.shape[0] != mc.ncas:
+        raise RuntimeError(
+            "Active space size error. nmo=%d ncore=%d ncas=%d" %
+            (mo_coeff.shape[1], mc.ncore, mc.ncas))
+
+    max_memory = max(400, mc.max_memory - lib.current_memory()[0])
+    e_tot, ci = mc.fcisolver.kernel(
+        h1eff, eri_gas, mc.ncas, mc.nelecas,
+        ci0=ci0, verbose=log, max_memory=max_memory, ecore=energy_core)
+
+    log.timer("GASCI solver", *t1)
+    return e_tot, e_tot - energy_core, ci
+
+
 def as_scanner(mc):
     """Return a GASCI potential-energy-surface scanner.
 
@@ -447,7 +480,7 @@ class GASCI(casci.CASCI):
                 ci0 = self.ci
             else:
                 self._clear_ci_guess()
-        self.e_tot, self.e_cas, self.ci = casci.kernel(
+        self.e_tot, self.e_cas, self.ci = kernel(
             self, mo_coeff, ci0=ci0, verbose=log)
         self._gas_ci_signature = signature
 
