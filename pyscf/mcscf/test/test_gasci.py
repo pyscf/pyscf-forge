@@ -248,6 +248,31 @@ class TestGASCI(unittest.TestCase):
                 reference.ci, 4, (2, 2)),
             atol=1e-9, rtol=0)
 
+    def test_fcisolver_spin_propagation(self):
+        mc = gasci.GASCI(
+            self.mf, 4, 4, ncore=5)
+        mc.verbose = 0
+        mc.canonicalization = False
+        mc.fcisolver.spin = 2
+        mc.kernel()
+
+        info = mc.gas_space_info()["core"]
+        self.assertEqual(info["nelec"], (3, 1))
+        self.assertEqual(info["ndet"], 16)
+        self.assertEqual(mc._gas_problem_signature()[1], (3, 1))
+
+        dm1a, dm1b = mc.make_gasdm1s()
+        self.assertAlmostEqual(numpy.trace(dm1a), 3.0, places=10)
+        self.assertAlmostEqual(numpy.trace(dm1b), 1.0, places=10)
+        self.assertAlmostEqual(
+            mc.spin_square()[0],
+            mc.fcisolver.spin_square(mc.ci, 4, mc.nelecas)[0],
+            places=10)
+
+        spin_signature = mc._gas_problem_signature()
+        mc.fcisolver.spin = 0
+        self.assertNotEqual(spin_signature, mc._gas_problem_signature())
+
     def test_restricted_multiroot_rdms(self):
         mc = gasci.GASCI(
             self.mf, 4, (2, 2), ncore=5,

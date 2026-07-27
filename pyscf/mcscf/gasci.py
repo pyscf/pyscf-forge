@@ -171,10 +171,18 @@ class GASCI(casci.CASCI):
         self.fcisolver.gas_restr = self.gas_restr
         self.fcisolver.gas_restr_type = self.gas_restr_type
 
+    def _effective_nelecas(self, nelecas=None):
+        """Return active alpha/beta counts after applying ``fcisolver.spin``."""
+
+        if nelecas is None:
+            nelecas = self.nelecas
+        return addons_gas.as_nelec_tuple(nelecas, self.fcisolver.spin)
+
     def _normalized_restriction(self, return_info=False):
         gas_orbs = (int(self.ncas),) if self.gas_orbs is None else self.gas_orbs
         return addons_gas.normalize_gas_spec(
-            gas_orbs, self.nelecas, self.gas_restr, self.gas_restr_type,
+            gas_orbs, self._effective_nelecas(),
+            self.gas_restr, self.gas_restr_type,
             return_info=return_info)
 
     def gas_space_info(self):
@@ -211,7 +219,7 @@ class GASCI(casci.CASCI):
         user_gas_orbs = ((int(self.ncas),) if self.gas_orbs is None else
                          tuple(int(value) for value in self.gas_orbs))
         with fci_gas.GasSpace(
-                gas_orbs, self.nelecas, blocks,
+                gas_orbs, self._effective_nelecas(), blocks,
                 lib=self.fcisolver.lib) as space:
             core = space.core_info()
         return {
@@ -230,12 +238,13 @@ class GASCI(casci.CASCI):
 
         gas_orbs, gas_restr = self._normalized_restriction()
         gas_restr = numpy.ascontiguousarray(gas_restr, dtype=numpy.int32)
+        nelecas = self._effective_nelecas()
         limits = addons_gas.check_kernel_limits(
-            gas_orbs, self.nelecas, gas_restr)
+            gas_orbs, nelecas, gas_restr)
         digest = hashlib.sha256(gas_restr.tobytes()).digest()
         nroots = int(getattr(self.fcisolver, "nroots", 1))
         return (
-            int(self.ncas), tuple(int(value) for value in self.nelecas),
+            int(self.ncas), tuple(int(value) for value in nelecas),
             tuple(int(value) for value in gas_orbs),
             addons_gas.GAS_RESTR_SPIN_SUPERGROUP,
             tuple(int(value) for value in gas_restr.shape), digest,
@@ -289,8 +298,9 @@ class GASCI(casci.CASCI):
         log.info("******** %s ********", self.__class__)
         ncore = self.ncore
         nvir = self.mo_coeff.shape[1] - ncore - self.ncas
+        nelecas = self._effective_nelecas()
         log.info("GAS (%de+%de, %do), ncore = %d, nvir = %d",
-                 self.nelecas[0], self.nelecas[1], self.ncas, ncore, nvir)
+                 nelecas[0], nelecas[1], self.ncas, ncore, nvir)
         if self.frozen is not None:
             log.info("frozen orbitals %s", str(self.frozen))
         if self.extrasym is not None:
@@ -301,7 +311,7 @@ class GASCI(casci.CASCI):
             gas_orbs, gas_restr, restr_info = self._normalized_restriction(
                 return_info=True)
             limits = addons_gas.check_kernel_limits(
-                gas_orbs, self.nelecas, gas_restr)
+                gas_orbs, nelecas, gas_restr)
             log.info("number of kernel GAS spaces = %d", limits["ngas"])
             if self.gas_restr_type == addons_gas.GAS_RESTR_SPIN_SUPERGROUP:
                 log.info("spin-supergroup ordering = alpha-sector "
@@ -369,7 +379,8 @@ class GASCI(casci.CASCI):
                 "implemented; use get_gas_natorb or "
                 "get_gas_pseudo_natorb for analysis")
         gas_orbs, gas_restr = self._normalized_restriction()
-        addons_gas.check_kernel_limits(gas_orbs, self.nelecas, gas_restr)
+        addons_gas.check_kernel_limits(
+            gas_orbs, self._effective_nelecas(), gas_restr)
         return self
 
     def _check_mo_orthonormality(self, mo_coeff=None, verbose=None):
@@ -576,8 +587,9 @@ class GASCI(casci.CASCI):
 
         self._sync_fcisolver()
         gas_orbs, gas_restr = self._normalized_restriction()
+        nelecas = self._effective_nelecas()
         if not addons_gas.is_spin_complete(
-                gas_orbs, self.nelecas, gas_restr):
+                gas_orbs, nelecas, gas_restr):
             raise ValueError(
                 "fix_spin_ requires a spin-complete GAS restriction")
         fci.addons.fix_spin_(self.fcisolver, shift, ss)
@@ -658,6 +670,7 @@ class GASCI(casci.CASCI):
             [ci], ncas, nelecas)[0]
 
     def _spin_square_for_roots(self, roots, ncas, nelecas):
+        nelecas = self._effective_nelecas(nelecas)
         values = []
         with self.fcisolver.make_rdm_plan(ncas, nelecas) as plan:
             for ci in roots:
@@ -724,7 +737,8 @@ class GASCI(casci.CASCI):
                 self.e_tot_physical, dtype=numpy.float64).reshape(-1)
             target = getattr(self.fcisolver, "ss_value", None)
             if target is None:
-                sz = 0.5 * abs(self.nelecas[0] - self.nelecas[1])
+                nelecas = self._effective_nelecas()
+                sz = 0.5 * abs(nelecas[0] - nelecas[1])
                 target = sz * (sz + 1.0)
             state = getattr(self.fcisolver, "state", None)
             for i, (penalty, e_physical) in enumerate(

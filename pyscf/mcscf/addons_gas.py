@@ -188,6 +188,7 @@ class StateAverageFCISolver(addons.StateAverageFCISolver):
     def states_spin_square(self, ci0, norb, nelec, *args, **kwargs):
         from pyscf.mcscf import fci_gas
 
+        nelec = as_nelec_tuple(nelec, self.spin)
         values = []
         with self.make_rdm_plan(norb, nelec) as plan:
             for ci in ci0:
