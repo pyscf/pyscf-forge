@@ -987,6 +987,7 @@ void FCICSFpspace_h0tril(double *hmat,
     size_t ihmat, ihop;
     double fac = 1.0;
     double hop;
+#pragma omp for schedule(dynamic)
     for (size_t ibra=0; ibra<np; ibra++){
     bra.dconf = dconfstrs[ibra];
     bra.sconf = sconfstrs[ibra];
@@ -1003,7 +1004,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 if (_get_occ(&bra, p) != 1){ continue ; }
                 // Sz
                 ihop = p * (norb+1);
-                fac = csf_Sai (&bra, &ket, p, p, twoM);
+                // fac = csf_Sai (&bra, &ket, p, p, twoM);
                 hmat[ihmat] += fac * h1e_s[ihop];
                 // eri exchange
                 for (q=p; q<norb; q++){
@@ -1031,11 +1032,11 @@ void FCICSFpspace_h0tril(double *hmat,
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
                 hop -= g2e[ihop];
             }
-            fac = csf_Eai (&bra, &ket, a, i);
+            // fac = csf_Eai (&bra, &ket, a, i);
             hmat[ihmat] += fac * hop;
             // S^a_i
             ihop = (a*norb) + i;
-            fac = csf_Sai (&bra, &ket, a, i, twoM);
+            // fac = csf_Sai (&bra, &ket, a, i, twoM);
             hmat[ihmat] += fac * h1e_s[ihop];
             // E^a_p E^p_i
             for (p=0; p<norb; p++){
