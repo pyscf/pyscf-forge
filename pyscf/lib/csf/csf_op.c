@@ -1044,7 +1044,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
                 hop -= g2e[ihop];
             }
-            // fac = csf_Eai (&bra, &ket, a, i);
+            fac = csf_Eai (&bra, &ket, a, i);
             hmat[ihmat] += fac * hop;
             // S^a_i
             ihop = (a*norb) + i;
