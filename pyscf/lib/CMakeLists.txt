@@ -12,65 +12,7 @@ option(
 
 option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
 
-function(add_gas_fci_library)
-  set(GAS_FCI_SOURCE_FILES
-      mcscf/fci_string_gas.c
-      mcscf/fci_contract_gas.c
-      mcscf/fci_hdiag_gas.c
-      mcscf/fci_rdm_gas.c
-  )
-
-  add_library(clib_fci_gas SHARED ${GAS_FCI_SOURCE_FILES})
-
-  target_include_directories(clib_fci_gas PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/mcscf
-  )
-
-  target_compile_features(clib_fci_gas PRIVATE c_std_11)
-
-  if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-    target_compile_options(clib_fci_gas PRIVATE
-        -Wall
-        -Wextra
-        -Wpedantic
-    )
-  endif()
-
-  target_link_libraries(clib_fci_gas PRIVATE m)
-
-  if(ENABLE_OPENMP AND TARGET OpenMP::OpenMP_C)
-    target_link_libraries(clib_fci_gas PRIVATE OpenMP::OpenMP_C)
-  endif()
-
-  set_target_properties(clib_fci_gas PROPERTIES
-      LINKER_LANGUAGE C
-      C_STANDARD 11
-      C_STANDARD_REQUIRED ON
-      C_EXTENSIONS OFF
-      CLEAN_DIRECT_OUTPUT 1
-      LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
-      OUTPUT_NAME "fci_gas"
-  )
-endfunction()
-
-if(BUILD_GAS_FCI_ONLY)
-  if(NOT ENABLE_OPENMP)
-    message(FATAL_ERROR
-        "BUILD_GAS_FCI_ONLY=ON requires ENABLE_OPENMP=ON"
-    )
-  endif()
-
-  find_package(OpenMP REQUIRED COMPONENTS C)
-
-  if(NOT TARGET OpenMP::OpenMP_C)
-    message(FATAL_ERROR
-        "OpenMP was reported as found, but OpenMP::OpenMP_C is unavailable"
-    )
-  endif()
-
-  add_gas_fci_library()
-  return()
-endif()
+if(NOT BUILD_GAS_FCI_ONLY)
 
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 if (NOT CMAKE_BUILD_TYPE)
@@ -182,9 +124,6 @@ else ()
   set(CMAKE_INSTALL_RPATH "\$ORIGIN:\$ORIGIN/deps/lib:\$ORIGIN/deps/lib64")
 endif ()
 
-# Build the GAS FCI kernel library as part of the normal PySCF-forge build.
-add_gas_fci_library()
-
 # Build the occri library (optional - depends on availability of FFTW, OpenMP)
 option(BUILD_OCCRI "Build OCCRI C extension (requires FFTW, OpenMP)" ON)
 
@@ -274,3 +213,22 @@ set_target_properties (clib_csf PROPERTIES
 add_subdirectory(sfnoci)
 add_subdirectory(pwscf)
 
+else()
+
+  if(NOT ENABLE_OPENMP)
+    message(FATAL_ERROR
+        "BUILD_GAS_FCI_ONLY=ON requires ENABLE_OPENMP=ON"
+    )
+  endif()
+
+  find_package(OpenMP REQUIRED COMPONENTS C)
+
+  if(NOT TARGET OpenMP::OpenMP_C)
+    message(FATAL_ERROR
+        "OpenMP was reported as found, but OpenMP::OpenMP_C is unavailable"
+    )
+  endif()
+
+endif()
+
+add_subdirectory(mcscf)

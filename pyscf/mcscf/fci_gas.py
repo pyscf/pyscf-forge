@@ -50,7 +50,11 @@ def _lowest_hdiag_addresses(hdiag, count):
     if count == hdiag.size:
         selected = numpy.arange(hdiag.size, dtype=numpy.intp)
     else:
-        selected = numpy.argpartition(hdiag, count - 1)[:count]
+        cutoff = numpy.partition(hdiag, count - 1)[count - 1]
+        selected = numpy.flatnonzero(hdiag < cutoff)
+        ntied = count - selected.size
+        tied = numpy.flatnonzero(hdiag == cutoff)[:ntied]
+        selected = numpy.concatenate((selected, tied))
     order = numpy.lexsort((selected, hdiag[selected]))
     return numpy.asarray(selected[order], dtype=numpy.intp)
 

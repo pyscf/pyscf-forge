@@ -125,6 +125,11 @@ class TestGASRestrictions(unittest.TestCase):
 
 class TestGASFCISolver(unittest.TestCase):
 
+    def test_lowest_hdiag_addresses_tie_ordering(self):
+        hdiag = numpy.asarray([1.0, 0.0, 1.0, 0.0, 0.0, 2.0])
+        addresses = fci_gas._lowest_hdiag_addresses(hdiag, 2)
+        numpy.testing.assert_array_equal(addresses, [1, 3])
+
     @classmethod
     def setUpClass(cls):
         cls.norb = 4

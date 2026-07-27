@@ -18,6 +18,7 @@
 
 #include "fci_gas.h"
 
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -48,26 +49,37 @@ static inline uint64_t lowbits(int n)
  * Branchless C(n,k) lookup; valid for 0 <= n,k <= GAS_MAX_LOCAL_ORB
  */
 static uint32_t binom_tab[(GAS_MAX_LOCAL_ORB + 1) * 32];
-static int binom_ready = 0;
+/* 0 = uninitialized, 1 = initializing, 2 = ready */
+static atomic_int binom_state = ATOMIC_VAR_INIT(0);
 
 static void init_binom(void)
 {
-        if (binom_ready) {
+        if (atomic_load_explicit(&binom_state, memory_order_acquire) == 2) {
                 return;
         }
 
-        for (int n = 0; n <= GAS_MAX_LOCAL_ORB; n++) {
-                binom_tab[(n << 5)] = 1;
-                binom_tab[(n << 5) + n] = 1;
+        int expected = 0;
+        if (atomic_compare_exchange_strong_explicit(
+                    &binom_state, &expected, 1,
+                    memory_order_acq_rel, memory_order_acquire)) {
+                for (int n = 0; n <= GAS_MAX_LOCAL_ORB; n++) {
+                        binom_tab[(n << 5)] = 1;
+                        binom_tab[(n << 5) + n] = 1;
 
-                for (int k = 1; k < n; k++) {
-                        binom_tab[(n << 5) + k] =
-                                binom_tab[((n - 1) << 5) + (k - 1)] +
-                                binom_tab[((n - 1) << 5) + k];
+                        for (int k = 1; k < n; k++) {
+                                binom_tab[(n << 5) + k] =
+                                        binom_tab[((n - 1) << 5) + (k - 1)] +
+                                        binom_tab[((n - 1) << 5) + k];
+                        }
+                }
+
+                atomic_store_explicit(
+                        &binom_state, 2, memory_order_release);
+        } else {
+                while (atomic_load_explicit(
+                               &binom_state, memory_order_acquire) != 2) {
                 }
         }
-
-        binom_ready = 1;
 }
 
 static inline uint32_t binom(int n, int k)
