@@ -235,6 +235,53 @@ class TestGASCI(unittest.TestCase):
     def tearDownClass(cls):
         del cls.mol, cls.mf
 
+    def test_o2_triplet_energy(self):
+        mol = gto.M(
+            atom="O 0 0 0; O 0 0 1.21",
+            basis="sto-3g",
+            spin=2,
+            symmetry=False,
+            verbose=0,
+        )
+
+        mf = scf.ROHF(mol)
+        mf.conv_tol = 1e-12
+        mf.kernel()
+        self.assertTrue(mf.converged)
+
+        mc = gasci.GASCI(
+            mf,
+            8,
+            (7, 5),
+            ncore=2,
+            gas_orbs=(2, 4, 2),
+            gas_restr=(
+                (2, 4),
+                (8, 10),
+                (12, 12),
+            ),
+            gas_restr_type="cumulative-occ",
+        )
+        mc.verbose = 0
+        mc.canonicalization = False
+        mc.fcisolver.spin = 2
+        mc.fcisolver.nroots = 1
+        mc.fcisolver.max_cycle = 300
+        mc.fcisolver.conv_tol = 1e-12
+        mc.kernel()
+        self.assertTrue(mc.converged)
+
+        numpy.testing.assert_allclose(
+            mc.e_tot,
+            -147.5163002382864,
+            atol=1e-9,
+            rtol=0,
+        )
+        ss, multiplicity = mc.spin_square()
+        self.assertAlmostEqual(ss, 2.0, places=9)
+        self.assertAlmostEqual(multiplicity, 3.0, places=9)
+        self.assertEqual(mc.gas_space_info()["core"]["ndet"], 424)
+
     def test_kernel_log_label(self):
         output = io.StringIO()
         mc = gasci.GASCI(
