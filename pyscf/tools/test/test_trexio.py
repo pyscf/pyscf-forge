@@ -417,6 +417,7 @@ def test_mf_k_general_uhf_ae_6_31g(cart):
 
 ## PBC, k=grid, segment contraction (6-31g), all-electron, UHF
 @pytest.mark.parametrize("cart", [False, True], ids=["cart=false", "cart=true"])
+@pytest.mark.skipif(pyscf.__version__=='2.14.0', reason="PySCF issue #3342 breaks this test")
 def test_mf_k_single_grid_uhf_ae_6_31g(cart):
     with tempfile.TemporaryDirectory() as d:
         kmesh = (1, 1, 1)

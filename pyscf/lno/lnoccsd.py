@@ -874,7 +874,7 @@ if __name__ == '__main__':
     mlo = lo.PipekMezey(mol, orbocc)
     lo_coeff = mlo.kernel()
     while True: # always performing jacobi sweep to avoid trapping in local minimum/saddle point
-        lo_coeff1 = mlo.stability_jacobi()[1]
+        lo_coeff1 = mlo.stability_jacobi()
         if lo_coeff1 is lo_coeff:
             break
         mlo = lo.PipekMezey(mf.mol, lo_coeff1).set(verbose=4)
