@@ -3,7 +3,7 @@
 # Author: Yi Deng <yideng@uchicago.edu>
 #
 
-"""Fixed-orbital GASCI validation against OpenMolcas for triplet O2."""
+"""Fixed-orbital multiroot GASCI example using OpenMolcas orbitals."""
 
 from pathlib import Path
 
@@ -219,11 +219,34 @@ print()
 print(f"Compared roots   : {ncompare}")
 print(f"max |difference| : {max_diff:.3e} Eh")
 
-numpy.testing.assert_allclose(
-    pyscf_triplet_energies,
-    reference_energies,
-    atol=1e-8,
-    rtol=0,
-)
-
-print("Validation passed")
+# Example output (final comparison section only):
+#
+# Numerical values in the last few digits may depend on the platform.
+#
+# GASCI converged
+#
+# OpenMolcas/PySCF GASCI comparison
+# root       E(OpenMolcas) / Eh       E(PySCF) / Eh         diff / Eh
+#    1       -149.765053630000       -149.765053626447   3.553e-09
+#    2       -149.537037340000       -149.537037344145  -4.145e-09
+#    3       -149.537037340000       -149.537037343830  -3.830e-09
+#    4       -149.532153750000       -149.532153753145  -3.145e-09
+#    5       -149.385765640000       -149.385765640052  -5.247e-11
+#    6       -149.285817750000       -149.285817749263   7.374e-10
+#    7       -149.285817220000       -149.285817220731  -7.307e-10
+#    8       -149.153949250000       -149.153949254242  -4.242e-09
+#    9       -149.110229250000       -149.110229248524   1.476e-09
+#   10       -149.110229080000       -149.110229082511  -2.511e-09
+#   11       -149.073159140000       -149.073159141160  -1.160e-09
+#   12       -149.073156790000       -149.073156787594   2.406e-09
+#   13       -149.027679030000       -149.027679032858  -2.858e-09
+#   14       -149.027679030000       -149.027679032856  -2.856e-09
+#   15       -149.017207800000       -149.017207802629  -2.629e-09
+#   16       -149.017203830000       -149.017203833468  -3.468e-09
+#   17       -149.003452340000       -149.003452343080  -3.080e-09
+#   18       -149.003452340000       -149.003452342985  -2.985e-09
+#   19       -148.997477400000       -148.997477403623  -3.623e-09
+#   20       -148.997474110000       -148.997474109395   6.051e-10
+#
+# Compared roots   : 20
+# max |difference| : 4.242e-09 Eh

@@ -3,7 +3,7 @@
 # Author: Yi Deng <yideng@uchicago.edu>
 #
 
-"""Fixed-orbital GASCI validation against OpenMolcas for undecet AlFe2O4+."""
+"""Fixed-orbital single-root GASCI example for undecet AlFe2O4+."""
 
 from pathlib import Path
 
@@ -160,17 +160,15 @@ print(
     f"{ss:12.8f}"
 )
 
-numpy.testing.assert_allclose(
-    pyscf_energy,
-    openmolcas_energy,
-    atol=1e-8,
-    rtol=0,
-)
-numpy.testing.assert_allclose(
-    ss,
-    30.0,
-    atol=1e-3,
-    rtol=0,
-)
-
-print("Validation passed")
+# Example output (final comparison section only):
+#
+# Numerical values in the last few digits may depend on the platform.
+#
+# GASCI converged
+# GASCI E = -3064.32294249369
+# E(CI) = -179.331711827401
+# S^2 = 30.0000000
+#
+# OpenMolcas/PySCF GASCI comparison
+# E(OpenMolcas) / Eh       E(PySCF) / Eh         diff / Eh          <S^2>
+#   -3064.322942490000    -3064.322942493695  -3.695e-09   30.00000000
