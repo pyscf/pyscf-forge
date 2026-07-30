@@ -50,22 +50,20 @@ def _as_ci_list(ci):
     return [ci]
 
 
-def _get_rdm1s_data(mc, mo_coeff=None, data=None, debug=False):
+def _get_rdm1s_data(mc, mo_coeff=None, data=None):
     if data is not None:
         return data
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
-    intermediates = mc.get_gbci_intermediates(mo_coeff, debug=debug)
+    intermediates = mc.get_gbci_intermediates(mo_coeff)
     return mc.precompute_rdm1s(
         mo_coeff=mo_coeff,
         dmet_core_list=intermediates["dmet_core_list"],
         conf_info_list=intermediates["conf_info_list"],
-        ov_list=intermediates["ov_list"],
-        debug=debug)
+        ov_list=intermediates["ov_list"])
 
 
-def make_weighted_rdm1s(mc, mo_coeff=None, ci=None, weights=None, data=None,
-                        debug=False):
+def make_weighted_rdm1s(mc, mo_coeff=None, ci=None, weights=None, data=None):
     """Build the state-averaged spin-separated AO 1-RDM."""
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
@@ -76,11 +74,11 @@ def make_weighted_rdm1s(mc, mo_coeff=None, ci=None, weights=None, data=None,
         weights = getattr(mc, "weights", None)
     if weights is None:
         weights = np.ones(len(ci_list)) / len(ci_list)
-    weights = np.asarray(weights, dtype=float)
+    weights = np.asarray(weights, dtype=np.double)
     if len(weights) != len(ci_list):
         raise ValueError("weights and ci must have the same number of roots")
 
-    data = _get_rdm1s_data(mc, mo_coeff=mo_coeff, data=data, debug=debug)
+    data = _get_rdm1s_data(mc, mo_coeff=mo_coeff, data=data)
     dtype = np.result_type(mo_coeff, *(np.asarray(c) for c in ci_list))
     dm1s_sa = np.zeros((2, mo_coeff.shape[0], mo_coeff.shape[0]), dtype=dtype)
     for weight, ci_root in zip(weights, ci_list):
@@ -89,22 +87,19 @@ def make_weighted_rdm1s(mc, mo_coeff=None, ci=None, weights=None, data=None,
     return dm1s_sa
 
 
-def make_safock_ao(mc, mo_coeff=None, ci=None, weights=None, data=None,
-                   debug=False):
+def make_safock_ao(mc, mo_coeff=None, ci=None, weights=None, data=None):
     """Build the spin-free state-averaged AO Fock matrix."""
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
     dm1s_sa = make_weighted_rdm1s(
-        mc, mo_coeff=mo_coeff, ci=ci, weights=weights, data=data,
-        debug=debug)
+        mc, mo_coeff=mo_coeff, ci=ci, weights=weights, data=data)
     dm_sa = dm1s_sa[0] + dm1s_sa[1]
     hcore = mc._scf.get_hcore(mc.mol)
     vj, vk = mc._scf.get_jk(dm=dm_sa)
     return hcore + vj - 0.5 * vk
 
 
-def make_fock_gbpdft(mc, mo_coeff=None, ci=None, weights=None, data=None,
-                     debug=False):
+def make_fock_gbci(mc, mo_coeff=None, ci=None, weights=None, data=None):
     """Compute the XMS state-averaged Fock matrix in root space.
 
     The matrix elements are ``<I|F^SA|J>``.  For GBCI the transition density is
@@ -121,10 +116,9 @@ def make_fock_gbpdft(mc, mo_coeff=None, ci=None, weights=None, data=None,
     if weights is None:
         weights = np.ones(len(ci_list)) / len(ci_list)
 
-    data = _get_rdm1s_data(mc, mo_coeff=mo_coeff, data=data, debug=debug)
+    data = _get_rdm1s_data(mc, mo_coeff=mo_coeff, data=data)
     fock_ao = make_safock_ao(
-        mc, mo_coeff=mo_coeff, ci=ci_list, weights=weights, data=data,
-        debug=debug)
+        mc, mo_coeff=mo_coeff, ci=ci_list, weights=weights, data=data)
 
     nroots = len(ci_list)
     dtype = np.result_type(fock_ao, *(np.asarray(c) for c in ci_list))
@@ -132,19 +126,19 @@ def make_fock_gbpdft(mc, mo_coeff=None, ci=None, weights=None, data=None,
     for i, ci_bra in enumerate(ci_list):
         for j, ci_ket in enumerate(ci_list):
             tdm1 = mc.trans_rdm1(
-                ci_bra, ci_ket, mo_coeff=mo_coeff, data=data, debug=debug)
+                ci_bra, ci_ket, mo_coeff=mo_coeff, data=data)
             safock[i, j] = lib.einsum("pq,pq->", fock_ao, tdm1)
     return 0.5 * (safock + safock.conj().T)
 
 
-def diagonalize_safock(mc, mo_coeff=None, ci=None, data=None, debug=False):
+def diagonalize_safock(mc, mo_coeff=None, ci=None, data=None):
     """Diagonalize the XMS state-averaged Fock matrix."""
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
     if ci is None:
         ci = mc.ci
-    fock = make_fock_gbpdft(
-        mc, mo_coeff=mo_coeff, ci=ci, data=data, debug=debug)
+    fock = make_fock_gbci(
+        mc, mo_coeff=mo_coeff, ci=ci, data=data)
     return linalg.eigh(fock)
 
 
@@ -155,7 +149,7 @@ def safock_energy(mc, mo_coeff=None, ci=None, **kwargs):
     nroots = len(_as_ci_list(ci))
     dsa_fock = np.zeros(nroots * (nroots - 1) // 2)
     e_states, _ = diagonalize_safock(
-        mc, mo_coeff=mo_coeff, ci=ci, debug=kwargs.get("debug", False))
+        mc, mo_coeff=mo_coeff, ci=ci)
     return np.dot(e_states, mc.weights), dsa_fock, None
 
 
@@ -167,8 +161,7 @@ def solve_safock(mc, mo_coeff=None, ci=None, **kwargs):
         ci = mc.ci
     ci_list = _as_ci_list(ci)
     data = kwargs.get("data", None)
-    debug = kwargs.get("debug", False)
     _, si_pdft = diagonalize_safock(
-        mc, mo_coeff=mo_coeff, ci=ci_list, data=data, debug=debug)
+        mc, mo_coeff=mo_coeff, ci=ci_list, data=data)
     ci_rot = np.tensordot(si_pdft.T, np.asarray(ci_list), axes=1)
     return True, list(ci_rot)

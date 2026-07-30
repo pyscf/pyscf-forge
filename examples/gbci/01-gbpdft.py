@@ -43,7 +43,7 @@ mc.fcisolver.spin = 0
 mc.fix_spin_(ss=TARGET_S2)
 
 mo = addons.sort_mo(mc, mf.mo_coeff, CAS_LIST, 1)
-e_tot, e_ot, e_gbci, e_cas, ci = mc.kernel(mo)
+e_tot, e_ot, e_gbci, e_cas, ci, mo_coeff, mo_energy = mc.kernel(mo)
 
 print("GBPDFT total energies:")
 print(np.asarray(e_tot))

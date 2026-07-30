@@ -33,10 +33,9 @@ References:
 '''
 
 import numpy as np
-from pyscf import __config__, lib
+from pyscf import __config__
 from pyscf.lib import logger
-from pyscf.dft import gen_grid
-from pyscf.mcpdft.otfnal import get_transfnal
+from pyscf.mcpdft import mcpdft
 
 from pyscf.gbci import rdm as gbci_rdm
 from pyscf.gbci import otpd
@@ -60,6 +59,12 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, dm1s=None,
 
     log = logger.new_logger(mc, verbose=verbose)
     hyb_x, hyb_c = ot._numint.rsh_and_hybrid_coeff(ot.otxc, mc.mol.spin)[2]
+    if abs(hyb_x - hyb_c) > 1e-10:
+        log.warn("exchange and correlation hybridization differ")
+        log.warn(
+            "may lead to unphysical results, see "
+            "https://github.com/pyscf/pyscf-forge/issues/128")
+
     hcore = mc._scf.get_hcore()
     dm1 = dm1s[0] + dm1s[1]
     if log.verbose >= logger.DEBUG or abs(hyb_x) > 1e-10:
@@ -79,9 +84,10 @@ def energy_mcwfn(mc, mo_coeff=None, ci=None, ot=None, dm1s=None,
         e_x = -0.5 * (
             np.tensordot(vk[0], dm1s[0]) + np.tensordot(vk[1], dm1s[1]))
 
+    e_c = 0.0
     if abs(hyb_c) > 1e-10:
-        return (1 - hyb_c) * e_classical + (hyb_x - hyb_c) * e_x + hyb_c * e_gbci
-    return e_classical + hyb_x * e_x
+        e_c = e_gbci - e_classical - e_x
+    return e_classical + hyb_x * e_x + hyb_c * e_c
 
 
 def energy_dft(mc, mo_coeff=None, ci=None, ot=None, dm1s=None,
@@ -126,19 +132,7 @@ class _BPDFT:
         if my_ot is not None:
             self._init_ot_grids(my_ot, grids_attr=grids_attr)
 
-    def _init_ot_grids(self, my_ot, grids_attr=None):
-        if grids_attr is None:
-            grids_attr = {}
-        old_grids = getattr(self, 'grids', None)
-        if isinstance(my_ot, (str, np.bytes_)):
-            self.otfnal = get_transfnal(self.mol, my_ot)
-        else:
-            self.otfnal = my_ot
-        if isinstance(old_grids, gen_grid.Grids):
-            self.otfnal.grids = old_grids
-        self.grids.__dict__.update(grids_attr)
-        self.otfnal.verbose = self.verbose
-        self.otfnal.stdout = self.stdout
+    _init_ot_grids = mcpdft._PDFT._init_ot_grids
 
     @property
     def grids(self):
@@ -171,21 +165,19 @@ class _BPDFT:
             return values
         return values[root]
 
-    def make_otpd_intermediates(self, mo_coeff=None, intermediates=None,
-                                debug=False):
+    def make_otpd_intermediates(self, mo_coeff=None, intermediates=None):
         """Build CI-independent intermediates for the on-top pair density."""
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
         if intermediates is None:
-            intermediates = self.get_gbci_intermediates(mo_coeff, debug=debug)
+            intermediates = self.get_gbci_intermediates(mo_coeff)
         return otpd.make_otpd_intermediates(
             self._scf.get_ovlp(self.mol), mo_coeff, self.ncas, self.nelecas,
             self.ncore, intermediates["dmet_core_list"],
             intermediates["conf_info_list"], intermediates["ov_list"])
 
     def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
-                             grids_level=None, grids_attr=None, debug=False,
-                             **kwargs):
+                             grids_level=None, grids_attr=None, **kwargs):
         """Compute GBPDFT energies with the GBCI wave function fixed."""
         if mo_coeff is not None:
             self.mo_coeff = mo_coeff
@@ -202,9 +194,9 @@ class _BPDFT:
         if grids_attr:
             self.grids.__dict__.update(grids_attr)
 
-        intermediates = self.get_gbci_intermediates(self.mo_coeff, debug=debug)
+        intermediates = self.get_gbci_intermediates(self.mo_coeff)
         otpd_data = self.make_otpd_intermediates(
-            self.mo_coeff, intermediates=intermediates, debug=debug)
+            self.mo_coeff, intermediates=intermediates)
 
         nroots = getattr(self.fcisolver, 'nroots', 1)
         ci_list = self.ci if nroots > 1 else [self.ci]
@@ -235,64 +227,21 @@ class _BPDFT:
         return self.e_tot, self.e_ot, self.e_states
 
     def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_attr=None,
-               grids_level=None, debug=False, **kwargs):
-        self.optimize_gbci_(mo_coeff=mo_coeff, ci0=ci0, debug=debug, **kwargs)
+               grids_level=None, **kwargs):
+        self.optimize_gbci_(mo_coeff=mo_coeff, ci0=ci0, **kwargs)
         self.compute_pdft_energy_(
-            otxc=otxc, grids_attr=grids_attr, grids_level=grids_level,
-            debug=debug)
-        return self.e_tot, self.e_ot, self.e_gbci, self.e_cas, self.ci
+            otxc=otxc, grids_attr=grids_attr, grids_level=grids_level)
+        return (self.e_tot, self.e_ot, self.e_gbci, self.e_cas, self.ci,
+                self.mo_coeff, self.mo_energy)
 
     energy_mcwfn = energy_mcwfn
     energy_dft = energy_dft
 
-    def multi_state(self, weights=(0.5, 0.5), method="XMS",
-                    diabatization=None):
+    def multi_state(self, weights=(0.5, 0.5), method="XMS"):
         """Build a multi-state GBPDFT object."""
-        if diabatization is None:
-            diabatization = method
         from pyscf.gbci import msgbpdft
-        return msgbpdft.multi_state(
-            self, weights=weights, diabatization=diabatization)
-
-    def state_interaction(self, weights=(0.5, 0.5), diabatization="XMS"):
-        """Build a state-interaction GBPDFT object."""
-        return self.multi_state(weights=weights, diabatization=diabatization)
-
-    def trans_moment(self, unit='Debye', origin='Coord_Center', state=None,
-                     **kwargs):
-        from pyscf.prop.trans_dip_moment import gbpdft as tdm
-        return tdm.trans_moment(
-            self, state=state, unit=unit, origin=origin, **kwargs)
-
-    def transition_dipole(self, state=None, unit='AU',
-                          origin='Coord_Center', **kwargs):
-        from pyscf.prop.trans_dip_moment import gbpdft as tdm
-        return tdm.transition_dipole(
-            self, state=state, unit=unit, origin=origin, **kwargs)
-
-    def transition_dipoles(self, ref_state=0, states=None, unit='AU',
-                           origin='Coord_Center', **kwargs):
-        from pyscf.prop.trans_dip_moment import gbpdft as tdm
-        return tdm.transition_dipoles(
-            self, ref_state=ref_state, states=states, unit=unit,
-            origin=origin, **kwargs)
-
-    def excitation_energy(self, state=None, e_states=None):
-        from pyscf.prop.trans_dip_moment import gbpdft as tdm
-        return tdm.excitation_energy(self, state=state, e_states=e_states)
-
-    def oscillator_strength(self, state=None, e=None,
-                            origin='Coord_Center', **kwargs):
-        from pyscf.prop.trans_dip_moment import gbpdft as tdm
-        return tdm.oscillator_strength(
-            self, state=state, e=e, origin=origin, **kwargs)
-
-    def oscillator_strengths(self, ref_state=0, states=None,
-                             origin='Coord_Center', **kwargs):
-        from pyscf.prop.trans_dip_moment import gbpdft as tdm
-        return tdm.oscillator_strengths(
-            self, ref_state=ref_state, states=states, origin=origin,
-            **kwargs)
+        return msgbpdft.multi_state(self, weights=weights,
+                                    diabatization=method)
 
 
 def _attach_gbpdft_class(mc, ot, **kwargs):

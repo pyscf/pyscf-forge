@@ -108,7 +108,7 @@ pdft = gbpdft.GBCI(
 
 pdft.fcisolver.nroots = 1
 
-e_tot, e_ot, e_gbci, e_cas, ci = pdft.kernel()
+e_tot, e_ot, e_gbci, e_cas, ci, mo_coeff, mo_energy = pdft.kernel()
 
 print("GBPDFT total energy:", e_tot)
 print("on-top energy:", e_ot)
@@ -135,7 +135,7 @@ mc.fcisolver.nroots = 1
 
 pdft = gbpdft.gbci(mc, "tPBE")
 
-e_tot, e_ot, e_gbci, e_cas, ci = pdft.kernel()
+e_tot, e_ot, e_gbci, e_cas, ci, mo_coeff, mo_energy = pdft.kernel()
 
 print("GBPDFT total energy:", e_tot)
 ```
@@ -181,13 +181,13 @@ print("XMS-GBPDFT effective Hamiltonian:", xms.get_heff_pdft())
 Example input files are available in:
 
 ```text
-pyscf/gbci/examples/
+examples/gbci/
 ```
 
 For example:
 
 ```bash
-python pyscf/gbci/examples/00-GBCI.py
-python pyscf/gbci/examples/01-GBPDFT.py
-python pyscf/gbci/examples/02-XMSGBPDFT.py
+python examples/gbci/00-gbci.py
+python examples/gbci/01-gbpdft.py
+python examples/gbci/02-xmsgbpdft.py
 ```

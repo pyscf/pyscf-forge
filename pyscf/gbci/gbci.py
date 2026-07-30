@@ -48,7 +48,7 @@ from pyscf.gbci import rdm
 
 TIGHT_GRAD_CONV_TOL = getattr(__config__, 'scf_hf_kernel_tight_grad_conv_tol', True)
 
-def kernel(gbci, mo_coeff=None, ci0=None, verbose=logger.NOTE, debug=False):
+def kernel(gbci, mo_coeff=None, ci0=None, verbose=logger.NOTE):
     '''GBCI solver.
 
     With ``group_a=None`` this follows the original GBCI bath construction.
@@ -86,7 +86,7 @@ def kernel(gbci, mo_coeff=None, ci0=None, verbose=logger.NOTE, debug=False):
     nelecas = gbci.nelecas
 
     # FASSCF
-    mo_list, mo_energy, po_list, group = gbci.optimize_mo(mo_coeff, debug=debug)
+    mo_list, mo_energy, po_list, group = gbci.optimize_mo(mo_coeff)
     log.debug('GBCI bath groups: %s', group)
     if grouped:
         conf_info_list = group_info_list(ncas, nelecas, po_list, group)
@@ -100,7 +100,7 @@ def kernel(gbci, mo_coeff=None, ci0=None, verbose=logger.NOTE, debug=False):
     dmet_core_list, ov_list = gbci.get_svd_matrices(mo_list, svd_basis)
     t1 = log.timer('SVD and core density matrix', *t1)
     gbci._cache_gbci_intermediates(
-        mo_coeff, ncas, nelecas, gbci.ncore, debug,
+        mo_coeff, ncas, nelecas, gbci.ncore,
         {
             "mo_list": mo_list,
             "mo_energy": mo_energy,
@@ -519,7 +519,7 @@ def group_by_atom(mol, ac_mo_coeff, po_list, atom_groups, thres=0.2):
     return groups
 
 def optimize_mo(gbci, mo_coeff=None, ncas=None, nelecas=None, ncore=None,
-                group_a=None, debug=False):
+                group_a=None):
     if mo_coeff is None : mo_coeff = gbci.mo_coeff
     if ncas is None : ncas = gbci.ncas
     if nelecas is None : nelecas = gbci.nelecas
@@ -535,22 +535,18 @@ def optimize_mo(gbci, mo_coeff=None, ncas=None, nelecas=None, ncore=None,
         group = [[i] for i in range(len(po_list))]
         optimized_mo = numpy.zeros((len(po_list), N, N))
         optimized_mo_energy = numpy.zeros((len(po_list), N))
-        fasscf = None if debug else gbci._get_fasscf(
+        fasscf = gbci._get_fasscf(
             group_spec, mo_coeff, ncas, nelecas, ncore)
         for i, occ in enumerate(po_list):
-            if debug:
-                optimized_mo[i] = mo_coeff
-                optimized_mo_energy[i] = gbci.mo_energy
-            else:
-                result = fasscf.mixed_routine(
-                    target=occ, **gbci._mixed_routine_options(fasscf))
-                conv, et, moe, moce, moocc = result.as_tuple()
-                log.debug("occupation pattern index: %d", i)
-                log.debug("FASSCF converged=%s energy=%s", conv, et)
-                optimized_mo[i] = moce
-                if moe is None:
-                    moe = gbci.mo_energy
-                optimized_mo_energy[i] = moe
+            result = fasscf.mixed_routine(
+                target=occ, **gbci._mixed_routine_options(fasscf))
+            conv, et, moe, moce, moocc = result.as_tuple()
+            log.debug("occupation pattern index: %d", i)
+            log.debug("FASSCF converged=%s energy=%s", conv, et)
+            optimized_mo[i] = moce
+            if moe is None:
+                moe = gbci.mo_energy
+            optimized_mo_energy[i] = moe
         return optimized_mo, optimized_mo_energy, po_list, group
 
     if group_spec["kind"] == "atom":
@@ -567,23 +563,19 @@ def optimize_mo(gbci, mo_coeff=None, ncas=None, nelecas=None, ncore=None,
     group_info_flat = group_info_list(ncas, nelecas, po_list, group).reshape(-1)
     optimized_mo = numpy.zeros((g,N,N))
     optimized_mo_energy = numpy.zeros((g,N))
-    fasscf = None if debug else gbci._get_fasscf(
+    fasscf = gbci._get_fasscf(
         group_spec, mo_coeff, ncas, nelecas, ncore)
     for i in range(0,g):
-        if debug:
-            optimized_mo[i] = mo_coeff
-            optimized_mo_energy[i] = gbci.mo_energy
-        else:
-            result = fasscf.mixed_routine(
-                target_group=i, group_info_list=group_info_flat,
-                **gbci._mixed_routine_options(fasscf))
-            conv, et, moe, moce = result.as_tuple()
-            optimized_mo[i]=moce
-            if moe is None:
-                moe = gbci.mo_energy
-            optimized_mo_energy[i]=moe
-            log.debug("group index: %d", i)
-            log.debug("state_average_fasscf converged=%s energy=%s", conv, et)
+        result = fasscf.mixed_routine(
+            target_group=i, group_info_list=group_info_flat,
+            **gbci._mixed_routine_options(fasscf))
+        conv, et, moe, moce = result.as_tuple()
+        optimized_mo[i]=moce
+        if moe is None:
+            moe = gbci.mo_energy
+        optimized_mo_energy[i]=moe
+        log.debug("group index: %d", i)
+        log.debug("state_average_fasscf converged=%s energy=%s", conv, et)
 
     return optimized_mo, optimized_mo_energy, po_list, group
 
@@ -799,28 +791,26 @@ class GBCI(CASBase):
             self._gbci_intermediates = None
             self._gbci_intermediates_cache = None
 
-    def _gbci_intermediates_key(self, mo_coeff, ncas, nelecas, ncore, debug):
+    def _gbci_intermediates_key(self, mo_coeff, ncas, nelecas, ncore):
         return (
             tuple(mo_coeff.shape), str(mo_coeff.dtype), int(ncas),
-            tuple(nelecas), int(ncore), repr(self._group_a), bool(debug))
+            tuple(nelecas), int(ncore), repr(self._group_a))
 
     def _cache_gbci_intermediates(self, mo_coeff, ncas, nelecas, ncore,
-                                  debug, intermediates):
+                                  intermediates):
         self._gbci_intermediates = intermediates
         self._gbci_intermediates_cache = {
             "key": self._gbci_intermediates_key(
-                mo_coeff, ncas, nelecas, ncore, debug),
+                mo_coeff, ncas, nelecas, ncore),
             "mo_coeff": numpy.array(mo_coeff, copy=True),
             "data": intermediates,
         }
 
-    def _get_cached_gbci_intermediates(self, mo_coeff, ncas, nelecas, ncore,
-                                       debug):
+    def _get_cached_gbci_intermediates(self, mo_coeff, ncas, nelecas, ncore):
         cache = getattr(self, '_gbci_intermediates_cache', None)
         if cache is None:
             return None
-        key = self._gbci_intermediates_key(
-            mo_coeff, ncas, nelecas, ncore, debug)
+        key = self._gbci_intermediates_key(mo_coeff, ncas, nelecas, ncore)
         if cache.get("key") != key:
             return None
         if not numpy.array_equal(cache.get("mo_coeff"), mo_coeff):
@@ -947,14 +937,14 @@ class GBCI(CASBase):
         return self
     fix_spin = fix_spin_
 
-    def optimize_mo(self, mo_coeff=None, group_a=None, debug=False,
-                    conv_tol=1e-10, max_cycle=100):
+    def optimize_mo(self, mo_coeff=None, group_a=None, conv_tol=1e-10,
+                    max_cycle=100):
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
         if group_a is None:
             group_a = self._group_a
         mo_list, mo_energy, po_list, group = optimize_mo(
-            self, mo_coeff, self.ncas, self.nelecas, self.ncore, group_a, debug)
+            self, mo_coeff, self.ncas, self.nelecas, self.ncore, group_a)
         return mo_list, mo_energy, po_list, group
 
     def get_svd_matrices(self, mo_list=None, po_list=None):
@@ -1003,7 +993,7 @@ class GBCI(CASBase):
         '''
         return CASCI.get_h2eff(self,mo_coeff)
 
-    def kernel(self, mo_coeff=None, ci0=None, verbose=None, debug=False):
+    def kernel(self, mo_coeff=None, ci0=None, verbose=None):
         '''
         Returns:
           Three elements:
@@ -1023,7 +1013,7 @@ class GBCI(CASBase):
         log = logger.new_logger(self, verbose)
 
         self.e_tot, self.e_cas, self.ci = \
-              kernel(self, mo_coeff, ci0=ci0, verbose=log, debug=debug)
+              kernel(self, mo_coeff, ci0=ci0, verbose=log)
 
         if getattr(self.fcisolver, 'converged', None) is not None:
             self.converged = numpy.all(self.fcisolver.converged)
@@ -1035,8 +1025,8 @@ class GBCI(CASBase):
             self.converged = True
         return self.e_tot, self.e_cas, self.ci
 
-    def _prepare_noci_intermediates(self, mo_coeff, ncas, nelecas, debug=False):
-        mo_list, mo_energy, po_list, group = self.optimize_mo(mo_coeff, debug=debug)
+    def _prepare_noci_intermediates(self, mo_coeff, ncas, nelecas):
+        mo_list, mo_energy, po_list, group = self.optimize_mo(mo_coeff)
         if getattr(self, '_group_a', None) is None:
             conf_info_list = group_info_list(ncas, nelecas, po_list)
             svd_basis = po_list
@@ -1046,19 +1036,18 @@ class GBCI(CASBase):
         return mo_list, svd_basis, conf_info_list
 
 
-    def get_gbci_intermediates(self, mo_coeff=None, ncas=None, nelecas=None,
-                               debug=False):
+    def get_gbci_intermediates(self, mo_coeff=None, ncas=None, nelecas=None):
         """Build GBCI intermediates for downstream methods such as GBPDFT."""
         if ncas is None : ncas = self.ncas
         if nelecas is None : nelecas = self.nelecas
         if mo_coeff is None : mo_coeff = self.mo_coeff
 
         cached = self._get_cached_gbci_intermediates(
-            mo_coeff, ncas, nelecas, self.ncore, debug)
+            mo_coeff, ncas, nelecas, self.ncore)
         if cached is not None:
             return cached
 
-        mo_list, mo_energy, po_list, group = self.optimize_mo(mo_coeff, debug=debug)
+        mo_list, mo_energy, po_list, group = self.optimize_mo(mo_coeff)
         if getattr(self, '_group_a', None) is None:
             conf_info_list = group_info_list(ncas, nelecas, po_list)
             svd_basis = po_list
@@ -1077,20 +1066,20 @@ class GBCI(CASBase):
             "ov_list": ov_list,
         }
         self._cache_gbci_intermediates(
-            mo_coeff, ncas, nelecas, self.ncore, debug, intermediates)
+            mo_coeff, ncas, nelecas, self.ncore, intermediates)
         return intermediates
 
 
     def precompute_rdm1s(self, mo_coeff=None, ncas=None, nelecas=None,
                 ncore=None, dmet_core_list=None, conf_info_list=None,
-                ov_list=None, debug=False):
+                ov_list=None):
         if ncas is None : ncas = self.ncas
         if nelecas is None : nelecas = self.nelecas
         if ncore is None : ncore = self.ncore
         if mo_coeff is None : mo_coeff = self.mo_coeff
         if conf_info_list is None or dmet_core_list is None or ov_list is None:
             mo_list, svd_basis, default_conf_info = self._prepare_noci_intermediates(
-                mo_coeff, ncas, nelecas, debug=debug)
+                mo_coeff, ncas, nelecas)
             if conf_info_list is None:
                 conf_info_list = default_conf_info
             if dmet_core_list is None or ov_list is None:
@@ -1103,11 +1092,11 @@ class GBCI(CASBase):
 
     def make_rdm1s(self, ci, mo_coeff=None, ncas=None, nelecas=None,
                  ncore=None, dmet_core_list=None, conf_info_list=None,
-                 ov_list=None, debug=False, data=None):
+                 ov_list=None, data=None):
         if data is None:
             data = self.precompute_rdm1s(
                 mo_coeff, ncas, nelecas, ncore, dmet_core_list,
-                conf_info_list, ov_list, debug=debug)
+                conf_info_list, ov_list)
         rdm1a, rdm1b = rdm.make_rdm1s_precomputed(
             ci, data, dmet_core_list=dmet_core_list, mo_coeff=mo_coeff)
 
@@ -1123,11 +1112,11 @@ class GBCI(CASBase):
 
     def trans_rdm1s(self, ci_bra, ci_ket, mo_coeff=None, ncas=None,
                  nelecas=None, ncore=None, dmet_core_list=None,
-                 conf_info_list=None, ov_list=None, debug=False, data=None):
+                 conf_info_list=None, ov_list=None, data=None):
         if data is None:
             data = self.precompute_rdm1s(
                 mo_coeff, ncas, nelecas, ncore, dmet_core_list,
-                conf_info_list, ov_list, debug=debug)
+                conf_info_list, ov_list)
         rdm1a, rdm1b = rdm.trans_rdm1s_precomputed(
             ci_bra, ci_ket, data, dmet_core_list=dmet_core_list,
             mo_coeff=mo_coeff)
@@ -1135,10 +1124,10 @@ class GBCI(CASBase):
 
     def trans_rdm1(self, ci_bra, ci_ket, mo_coeff=None, ncas=None,
                 nelecas=None, ncore=None, dmet_core_list=None,
-                conf_info_list=None, ov_list=None, debug=False, data=None):
+                conf_info_list=None, ov_list=None, data=None):
         rdm1a, rdm1b = self.trans_rdm1s(
             ci_bra, ci_ket, mo_coeff, ncas, nelecas, ncore,
-            dmet_core_list, conf_info_list, ov_list, debug=debug, data=data)
+            dmet_core_list, conf_info_list, ov_list, data=data)
         return rdm1a + rdm1b
 
     def make_rdm1s_mo(self, ci, mo_coeff=None, ncas=None, nelecas=None,
@@ -1168,11 +1157,11 @@ class GBCI(CASBase):
 
     def trans_rdm1s_mo(self, ci_bra, ci_ket, mo_coeff=None, ncas=None,
                 nelecas=None, ncore=None, dmet_core_list=None,
-                conf_info_list=None, ov_list=None, debug=False, data=None):
+                conf_info_list=None, ov_list=None, data=None):
         if data is None:
             data = self.precompute_rdm1s(
                 mo_coeff, ncas, nelecas, ncore, dmet_core_list,
-                conf_info_list, ov_list, debug=debug)
+                conf_info_list, ov_list)
         if mo_coeff is None:
             mo_coeff = data["mo_coeff"]
         rdm_ao_a, rdm_ao_b = rdm.trans_rdm1s_precomputed(
@@ -1186,10 +1175,10 @@ class GBCI(CASBase):
 
     def trans_rdm1_mo(self, ci_bra, ci_ket, mo_coeff=None, ncas=None,
                 nelecas=None, ncore=None, dmet_core_list=None,
-                conf_info_list=None, ov_list=None, debug=False, data=None):
+                conf_info_list=None, ov_list=None, data=None):
         rdm_a, rdm_b = self.trans_rdm1s_mo(
             ci_bra, ci_ket, mo_coeff, ncas, nelecas, ncore,
-            dmet_core_list, conf_info_list, ov_list, debug=debug, data=data)
+            dmet_core_list, conf_info_list, ov_list, data=data)
         return rdm_a + rdm_b
 
     def make_rdm2s(self, ci, mo_coeff=None , ncas=None, nelecas=None,
@@ -1336,7 +1325,7 @@ class GBCI(CASBase):
 
     def get_core_density(self, ci, mo_coeff=None, ncas=None, nelecas=None,
                          ncore=None, dmet_core_list=None,
-                         conf_info_list=None, ov_list=None, debug=False):
+                         conf_info_list=None, ov_list=None):
         if ncas is None : ncas = self.ncas
         if nelecas is None : nelecas = self.nelecas
         if ncore is None : ncore = self.ncore
@@ -1344,7 +1333,7 @@ class GBCI(CASBase):
             mo_coeff = self.mo_coeff
         if conf_info_list is None or dmet_core_list is None or ov_list is None:
             mo_list, svd_basis, default_conf_info = self._prepare_noci_intermediates(
-                mo_coeff, ncas, nelecas, debug=debug)
+                mo_coeff, ncas, nelecas)
             if conf_info_list is None:
                 conf_info_list = default_conf_info
             if dmet_core_list is None or ov_list is None:

@@ -37,10 +37,10 @@ References:
 '''
 
 import numpy as np
-from scipy import linalg
 
 from pyscf import lib
 from pyscf.fci import cistring
+from pyscf.mcpdft import mspdft
 from pyscf.gbci import direct_gbci
 
 
@@ -51,10 +51,6 @@ def _as_ci_list(ci):
     if arr.ndim >= 3:
         return [arr[i] for i in range(arr.shape[0])]
     return [ci]
-
-
-def _as_real_vector(values):
-    return np.asarray(values, dtype=float).reshape(-1)
 
 
 def _contract_hamiltonian(solver, erieff, civec, ncas, nelecas,
@@ -78,7 +74,7 @@ def _contract_hamiltonian(solver, erieff, civec, ncas, nelecas,
         ecore_list, link_index, ts, t_nonzero)
 
 
-def make_heff_gbci(mc, mo_coeff=None, ci=None, debug=False):
+def make_heff_gbci(mc, mo_coeff=None, ci=None):
     """Build the GBCI Hamiltonian matrix in the provided CI basis."""
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
@@ -86,7 +82,7 @@ def make_heff_gbci(mc, mo_coeff=None, ci=None, debug=False):
         ci = mc.ci
     ci_list = _as_ci_list(ci)
 
-    intermediates = mc.get_gbci_intermediates(mo_coeff, debug=debug)
+    intermediates = mc.get_gbci_intermediates(mo_coeff)
     dmet_act_list = mc.get_active_dm(mo_coeff)
     h1e, ecore_list = mc.get_h1cas(
         dmet_act_list, intermediates["mo_list"],
@@ -127,133 +123,85 @@ def get_diabfns(obj):
     raise RuntimeError("Only XMS-GBPDFT is currently implemented")
 
 
-class _MSGBPDFT:
+class _MSGBPDFT(mspdft._MSPDFT):
     """Multi-state GBPDFT mixin for GBCI-based references."""
 
     def __init__(self, mc, diabatizer, diabatize, diabatization, weights):
-        self.__dict__.update(mc.__dict__)
-        self._diabatizer = diabatizer
-        self._diabatize = diabatize
-        self.diabatization = diabatization
-        self.weights = np.asarray(weights, dtype=float)
-        self._e_states = None
-        self.si_gbci = None
-        self.si_pdft = None
-        self.heff_gbci = None
+        super().__init__(mc, diabatizer, diabatize, diabatization)
+        self.weights = np.asarray(weights, dtype=np.double)
+        self.heff_mcscf = None
         self.hdiag_pdft = None
         self.diabatic_e_ot = None
+        self._in_mcscf_env = False
+        self._keys = set(getattr(self, "_keys", ())).union((
+            "e_gbci", "heff_gbci", "si_gbci", "diabatic_e_ot"))
 
     @property
-    def e_states(self):
-        return self._e_states
+    def e_mcscf(self):
+        if self.e_gbci is None:
+            return None
+        return np.asarray(self.e_gbci)
 
-    @e_states.setter
-    def e_states(self, value):
-        self._e_states = value
+    @e_mcscf.setter
+    def e_mcscf(self, value):
+        self.e_gbci = value
 
     @property
-    def si(self):
-        return self.si_pdft
+    def heff_gbci(self):
+        return self.heff_mcscf
 
-    @si.setter
-    def si(self, value):
-        self.si_pdft = value
+    @heff_gbci.setter
+    def heff_gbci(self, value):
+        self.heff_mcscf = value
 
-    def _eig_si(self, heff):
-        return linalg.eigh(heff)
+    @property
+    def si_gbci(self):
+        return self.si_mcscf
 
-    def get_heff_offdiag(self):
-        heff_offdiag = self.heff_gbci.copy()
-        heff_offdiag[np.diag_indices_from(heff_offdiag)] = 0.0
-        return heff_offdiag
-
-    def get_heff_pdft(self):
-        heff_pdft = self.heff_gbci.copy()
-        heff_pdft[np.diag_indices_from(heff_pdft)] = self.hdiag_pdft
-        return 0.5 * (heff_pdft + heff_pdft.conj().T)
+    @si_gbci.setter
+    def si_gbci(self, value):
+        self.si_mcscf = value
 
     def get_ci_adiabats(self, ci=None, uci="MSGBPDFT"):
-        si_dict = {"GBCI": self.si_gbci, "MSGBPDFT": self.si_pdft}
         if isinstance(uci, (str, np.bytes_)):
             key = uci.upper()
-            if key not in si_dict:
-                raise RuntimeError("valid uci : 'GBCI', 'MSGBPDFT', or ndarray")
-            uci = si_dict[key]
-        if ci is None:
-            ci = self.ci
-        return list(np.tensordot(uci.T, np.asarray(_as_ci_list(ci)), axes=1))
+            uci = {
+                "GBCI": "MCSCF",
+                "MSGBPDFT": "MSPDFT",
+            }.get(key, key)
+        if ci is not None:
+            ci = _as_ci_list(ci)
+        return super().get_ci_adiabats(ci=ci, uci=uci)
 
     get_ci_basis = get_ci_adiabats
 
-    def diabatize(self, ci=None, ci0=None, **kwargs):
-        if ci is None:
-            ci = self.ci
-        ci_list = _as_ci_list(ci)
-        if ci0 is not None:
-            ci0_list = _as_ci_list(ci0)
-            ovlp = np.tensordot(
-                np.asarray(ci_list).conj(), np.asarray(ci0_list),
-                axes=((1, 2), (1, 2)))
-            u, _, vh = linalg.svd(ovlp)
-            ci_list = self.get_ci_basis(ci=ci_list, uci=np.dot(u, vh))
-        return self._diabatize(self, ci=ci_list, **kwargs)
+    def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
+        return self.optimize_gbci_(mo_coeff=mo_coeff, ci0=ci0, **kwargs)
 
-    def diabatizer(self, mo_coeff=None, ci=None, **kwargs):
-        if mo_coeff is None:
-            mo_coeff = self.mo_coeff
-        if ci is None:
-            ci = self.ci
-        return self._diabatizer(self, mo_coeff=mo_coeff, ci=ci, **kwargs)
-
-    def _compute_diabatic_pdft_diag(self, otxc=None, grids_level=None,
-                                    grids_attr=None, debug=False):
+    def compute_pdft_energy_(self, *args, **kwargs):
         old_e_gbci = self.e_gbci
-        self.e_gbci = np.asarray(self.heff_gbci.diagonal()).real
+        if getattr(self, "heff_mcscf", None) is not None:
+            self.e_gbci = np.asarray(self.heff_mcscf.diagonal()).real
         try:
-            _, e_ot, hdiag = self.compute_pdft_energy_(
-                otxc=otxc, grids_level=grids_level, grids_attr=grids_attr,
-                debug=debug)
+            results = super().compute_pdft_energy_(*args, **kwargs)
         finally:
             self.e_gbci = old_e_gbci
-        self.diabatic_e_ot = e_ot
-        return np.asarray(hdiag, dtype=float)
+        self.diabatic_e_ot = results[1]
+        return results
 
-    def kernel(self, mo_coeff=None, ci0=None, otxc=None, grids_level=None,
-               grids_attr=None, debug=False, **kwargs):
-        reset = getattr(self.otfnal, "reset", None)
-        if callable(reset):
-            reset(mol=self.mol)
-        if ci0 is None and isinstance(getattr(self, "ci", None), list):
-            ci0 = [c.copy() for c in self.ci]
+    def nuc_grad_method(self):
+        raise NotImplementedError("MS-GBPDFT nuclear gradients")
 
-        self.optimize_gbci_(mo_coeff=mo_coeff, ci0=ci0, debug=debug)
-        diab_conv, self.ci = self.diabatize(
-            ci=self.ci, ci0=ci0, debug=debug)
-        self.converged = bool(getattr(self, "converged", True) and diab_conv)
+    def nac_method(self):
+        raise NotImplementedError("MS-GBPDFT nonadiabatic couplings")
 
-        self.heff_gbci = self.make_heff_gbci(debug=debug)
-        e_gbci, si_gbci = self._eig_si(self.heff_gbci)
-        ref_e = _as_real_vector(self.e_gbci)
-        if len(ref_e) == len(e_gbci):
-            err = linalg.norm(np.sort(ref_e) - np.sort(e_gbci))
-            if err > 1e-7:
-                lib.logger.warn(
-                    self, "XMS-GBPDFT heff_gbci eigenvalues differ from "
-                    "GBCI root energies by %.3g", err)
-        self.e_gbci = e_gbci
-        self.si_gbci = si_gbci
+    def dip_moment(self, *args, **kwargs):
+        raise NotImplementedError("MS-GBPDFT dipole moments")
 
-        self.hdiag_pdft = self._compute_diabatic_pdft_diag(
-            otxc=otxc, grids_level=grids_level, grids_attr=grids_attr,
-            debug=debug)
-        self.e_states, self.si_pdft = self._eig_si(self.get_heff_pdft())
-        self.e_tot = np.dot(self.e_states, self.weights)
-        self.e_ot = self.diabatic_e_ot
-        self._log_diabats()
-        self._log_adiabats()
-        return (self.e_tot, self.e_ot, self.e_gbci, self.e_cas, self.ci,
-                self.mo_coeff, getattr(self, "mo_energy", None))
+    def trans_moment(self, *args, **kwargs):
+        raise NotImplementedError("MS-GBPDFT transition dipole moments")
 
+    make_heff_mcscf = make_heff_gbci
     make_heff_gbci = make_heff_gbci
 
     def _log_diabats(self):
@@ -280,7 +228,7 @@ def multi_state(mc, weights=(0.5, 0.5), diabatization="XMS"):
     """Build a multi-state GBPDFT object."""
     if isinstance(mc, _MSGBPDFT):
         raise RuntimeError("already a multi-state GBPDFT solver")
-    weights = np.asarray(weights, dtype=float)
+    weights = np.asarray(weights, dtype=np.double)
     if weights.ndim != 1 or len(weights) < 2:
         raise ValueError("MS-GBPDFT requires at least two state weights")
     if abs(np.sum(weights) - 1.0) > 1e-8:
