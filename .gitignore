@@ -132,6 +132,7 @@ dmypy.json
 # IDEs
 .idea
 .vscode
+.cortexkit
 
 # MacOS
 .DS_Store

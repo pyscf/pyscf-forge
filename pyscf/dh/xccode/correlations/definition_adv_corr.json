@@ -1,0 +1,63 @@
+{
+    "MP2": {
+        "type": "MP2",
+        "ref": "10.1103/PhysRev.46.618"
+    },
+    "RS_MP2": {
+        "type": "RSMP2",
+        "ref": "10.1002/qua.560560417",
+        "supported": false
+    },
+    "SR_MP2": {
+        "type": "RSMP2",
+        "ref": "10.1002/qua.560560417",
+        "supported": false
+    },
+    "IEPA": {
+        "type": "IEPA",
+        "ref": [
+            "10.1002/9780470143520.ch7",
+            "10.1002/9780470143551.ch4"
+        ],
+        "supported": false
+    },
+    "MP2CR": {
+        "type": "IEPA",
+        "ref": "10.1002/(SICI)1097-461X(2000)78:4<226::AID-QUA4>3.0.CO;2-N",
+        "supported": false
+    },
+    "MP2CR2": {
+        "type": "IEPA",
+        "ref": "10.1002/(SICI)1097-461X(2000)78:4<226::AID-QUA4>3.0.CO;2-N",
+        "supported": false
+    },
+    "SIEPA": {
+        "type": "IEPA",
+        "ref": "10.1103/PhysRevLett.117.133002",
+        "supported": false
+    },
+    "RS_RING_CCD": {
+        "type": "RS_RING_CCD",
+        "ref": "10.1063/1.3043729",
+        "supported": false
+    },
+    "DFTD3": {
+        "type": "DFTD3",
+        "ref": [
+            "10.1063/1.3382344",
+            "10.1002/jcc.21759"
+        ]
+    },
+    "DFTD4": {
+        "type": "DFTD4",
+        "ref": [
+            "10.1063/1.4993215",
+            "10.1063/1.5090222",
+            "10.1039/D0CP00502A"
+        ]
+    },
+    "VV10": {
+        "type": "VDW",
+        "ref": "10.1063/1.3521275"
+    }
+}
