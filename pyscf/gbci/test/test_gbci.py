@@ -10,18 +10,18 @@ import unittest
 import warnings
 
 import numpy as np
-from pyscf import gto, scf
+from pyscf import gto, mcscf, scf
 from pyscf import gbci
 from pyscf.gbci import direct_gbci
 
 
-H2_GBCI_ENERGY = -1.137283834488503
+H2_CASCI_ENERGY = -1.137283834488503
 
-GROUP_CASES = (
-    ("none", None),
-    ("mo", {"mo": [[0], [1]]}),
-    ("atom", {"atom": [[0], [1]]}),
-    ("occ", {"occ": [[0], [1], [2]]}),
+LIH_GROUP_CASES = (
+    ("none", None, -7.862129687670069),
+    ("mo", {"mo": [[0], [1]]}, -7.862129687582131),
+    ("atom", {"atom": [[0], [1]]}, -7.862129687582131),
+    ("occ", {"occ": [[0], [1], [2]]}, -7.862129687582131),
 )
 
 RDM_CASES = (
@@ -107,10 +107,17 @@ def tearDownModule():
         close_mol_stdout(mf.mol)
 
 
-def check_gbci_kernel(testcase, e_tot, e_cas, ci):
-    testcase.assertAlmostEqual(first_energy(e_tot), H2_GBCI_ENERGY, 9)
+def check_gbci_kernel(testcase, e_tot, e_cas, ci, expected_e_tot):
+    testcase.assertAlmostEqual(first_energy(e_tot), expected_e_tot, 9)
     testcase.assertTrue(np.all(np.isfinite(e_cas)))
     testcase.assertIsNotNone(ci)
+
+
+def check_h2_casci(testcase, mf, e_tot):
+    mc = mcscf.CASCI(mf, 2, (1, 1))
+    e_casci = first_energy(mc.kernel(mf.mo_coeff)[0])
+    testcase.assertAlmostEqual(e_casci, H2_CASCI_ENERGY, 9)
+    testcase.assertAlmostEqual(first_energy(e_tot), e_casci, 9)
 
 
 def check_deprecation(testcase, caught, text):
@@ -210,16 +217,20 @@ def check_rdm2(testcase, mc, ci, kwargs):
 
 
 class KnownValues(unittest.TestCase):
-    def test_h2_gbci(self):
-        mc = track_mc(gbci.gbci(build_h2_mf(), 2, (1, 1)))
-        check_gbci_kernel(self, *mc.kernel())
+    def test_h2_gbci_parity(self):
+        mf = build_h2_mf()
+        mc = track_mc(gbci.gbci(mf, 2, (1, 1)))
+        e_tot, e_cas, ci = mc.kernel(mf.mo_coeff)
+        check_gbci_kernel(self, e_tot, e_cas, ci, H2_CASCI_ENERGY)
+        check_h2_casci(self, mf, e_tot)
 
-    def test_h2_grouping_modes(self):
-        for label, group_a in GROUP_CASES:
+    def test_lih_gbci(self):
+        mf = build_lih_mf()
+        for label, group_a, expected in LIH_GROUP_CASES:
             with self.subTest(group_a=label):
                 mc = track_mc(
-                    gbci.gbci(build_h2_mf(), 2, (1, 1), group_a=group_a))
-                check_gbci_kernel(self, *mc.kernel())
+                    gbci.gbci(mf, 2, (1, 1), group_a=group_a))
+                check_gbci_kernel(self, *mc.kernel(mf.mo_coeff), expected)
 
     def test_lih_rdm(self):
         for label, group_a in RDM_CASES:

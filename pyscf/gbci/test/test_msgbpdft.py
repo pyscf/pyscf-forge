@@ -8,17 +8,17 @@ import sys
 import unittest
 
 import numpy as np
-from pyscf import gto, scf
+from pyscf import gto, mcpdft, scf
 from pyscf.gbci import gbpdft
 
 
 OTXCS = ("tPBE", "tPBE0")
 
-GROUP_CASES = (
-    ("none", None),
-    ("mo", {"mo": [[0], [1]]}),
-    ("atom", {"atom": [[0], [1]]}),
-    ("occ", {"occ": [[0], [1], [2]]}),
+LIH_XMS_GROUP_CASES = (
+    ("none", None, -7.82530158785605),
+    ("mo", {"mo": [[0], [1]]}, -7.825301573668855),
+    ("atom", {"atom": [[0], [1]]}, -7.825301573668856),
+    ("occ", {"occ": [[0], [1], [2]]}, -7.825301573668856),
 )
 
 _MCS = []
@@ -55,6 +55,19 @@ def close_mol_stdout(mol):
 def build_mf():
     mol = gto.M(
         atom="H 0 0 0; H 0 0 0.74",
+        basis="sto-3g",
+        output="/dev/null",
+        verbose=0,
+    )
+    mf = scf.RHF(mol)
+    close_scf_resources(mf)
+    _MFS.append(mf)
+    return mf.run()
+
+
+def build_lih_mf():
+    mol = gto.M(
+        atom="Li 0 0 0; H 0 0 1.6",
         basis="sto-3g",
         output="/dev/null",
         verbose=0,
@@ -102,17 +115,40 @@ def check_msgbpdft_kernel(testcase, xms, result):
     testcase.assertIsNotNone(e_cas)
 
 
+def check_h2_mspdft(testcase, mf, otxc, result, xms):
+    mc = track_mc(mcpdft.CASCI(mf, otxc, 2, (1, 1), grids_level=0))
+    ref_xms = track_mc(mc.multi_state([0.5, 0.5], method="xms"))
+    ref = ref_xms.kernel(mf.mo_coeff)
+    np.testing.assert_allclose(result[0], ref[0], atol=1e-9)
+    np.testing.assert_allclose(result[1], ref[1], atol=1e-9)
+    np.testing.assert_allclose(result[2], ref[2], atol=1e-9)
+    np.testing.assert_allclose(xms.e_states, ref_xms.e_states, atol=1e-9)
+
+
 class KnownValues(unittest.TestCase):
-    def test_h2_xms_gbpdft(self):
+    def test_h2_xms_gbpdft_parity(self):
         for otxc in OTXCS:
-            for label, group_a in GROUP_CASES:
-                with self.subTest(otxc=otxc, group_a=label):
-                    mc = track_mc(
-                        gbpdft.GBCI(
-                            build_mf(), otxc, 2, (1, 1),
-                            group_a=group_a, grids_level=0))
-                    xms = track_mc(mc.multi_state([0.5, 0.5], "xms"))
-                    check_msgbpdft_kernel(self, xms, xms.kernel())
+            with self.subTest(otxc=otxc):
+                mf = build_mf()
+                mc = track_mc(
+                    gbpdft.GBCI(mf, otxc, 2, (1, 1), grids_level=0))
+                xms = track_mc(mc.multi_state([0.5, 0.5], "xms"))
+                result = xms.kernel(mf.mo_coeff)
+                check_msgbpdft_kernel(self, xms, result)
+                check_h2_mspdft(self, mf, otxc, result, xms)
+
+    def test_lih_xms_gbpdft(self):
+        mf = build_lih_mf()
+        for label, group_a, expected in LIH_XMS_GROUP_CASES:
+            with self.subTest(group_a=label):
+                mc = track_mc(
+                    gbpdft.GBCI(
+                        mf, "tPBE0", 2, (1, 1),
+                        group_a=group_a, grids_level=0))
+                xms = track_mc(mc.multi_state([0.5, 0.5], "xms"))
+                result = xms.kernel(mf.mo_coeff)
+                check_msgbpdft_kernel(self, xms, result)
+                self.assertAlmostEqual(float(result[0]), expected, 9)
 
 
 if __name__ == "__main__":
