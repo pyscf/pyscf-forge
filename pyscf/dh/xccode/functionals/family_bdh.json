@@ -1,0 +1,271 @@
+{
+    "B2GP_PLYP": {
+        "code": "0.65*HF + 0.35*B88, 0.64*LYP + 0.36*MP2",
+        "ref": "10.1021/jp801805p"
+    },
+    "B2GP_PLYP_D3BJ": {
+        "code": "0.65*HF + 0.35*B88, 0.64*LYP + 0.36*MP2 + DFTD3(BJ, xc=B2GPPLYP)",
+        "ref": [
+            "10.1021/jp801805p",
+            "10.1021/acs.jpclett.6b00780"
+        ],
+        "tested": "MRCC 2022-03-18",
+        "alias": [
+            "B2GPPLYP_D3BJ"
+        ]
+    },
+    "B2PLYP": {
+        "code": "0.53*HF + 0.47*B88, 0.73*LYP + 0.27*MP2",
+        "ref": "10.1063/1.2148954",
+        "tested": "MRCC 2022-03-18"
+    },
+    "B2PLYP_D3BJ": {
+        "code": "0.53*HF + 0.47*B88, 0.73*LYP + 0.27*MP2 + DFTD3(BJ, xc=B2PLYP)",
+        "ref": [
+            "10.1063/1.2148954",
+            "10.1021/acs.jpclett.6b00780"
+        ],
+        "tested": "Gaussian 16, Rev B.01"
+    },
+    "B2PLYP_D4": {
+        "code": "0.53*HF + 0.47*B88, 0.73*LYP + 0.27*MP2 + DFTD4(xc=B2PLYP)",
+        "ref": [
+            "10.1063/1.2148954",
+            "10.1063/1.5090222"
+        ]
+    },
+    "DSD_BLYP_D3BJ": {
+        "code": "0.71*HF + 0.29*B88, 0.54*LYP + 0.47*MP2_OS + 0.40*MP2_SS + DFTD3(BJ)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "ORCA 5.0.4"
+    },
+    "DSD_PBEB95_D3BJ": {
+        "code": "0.66*HF + 0.34*PBE, 0.55*BC95 + 0.46*MP2_OS + 0.09*MP2_SS + DFTD3(BJ)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1"
+    },
+    "DSD_PBEP86": {
+        "code": "0.72*HF + 0.28*PBE, 0.44*P86 + 0.51*MP2_OS + 0.36*MP2_SS",
+        "ref": "10.1002/jcc.23391"
+    },
+    "DSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.44*P86 + 0.52*MP2_OS + 0.22*MP2_SS + DFTD3(BJ, xc=dsdpbep86)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "MRCC 2022-03-18"
+    },
+    "DSD_PBEPBE_D3BJ": {
+        "code": "0.68*HF + 0.32*PBE, 0.49*PBE + 0.55*MP2_OS + 0.13*MP2_SS + DFTD3(BJ, XC=dsdpbe)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1"
+    },
+    "LS1DH_PBE": {
+        "code": "0.75*HF + 0.25*PBE, 0.578125*PBE + 0.421875*MP2",
+        "ref": "10.1063/1.3640019",
+        "tested": "QChem 5.1.1"
+    },
+    "PBE0_2": {
+        "code": "0.793701*HF + 0.206299*PBE, 0.5*PBE + 0.5*MP2",
+        "ref": "10.1016/j.cplett.2012.04.045",
+        "tested": "QChem 5.1.1"
+    },
+    "PBE0_DH": {
+        "code": "0.5*HF + 0.5*PBE, 0.875*PBE + 0.125*MP2",
+        "ref": "10.1063/1.3604569"
+    },
+    "PBE0_DH_Gaussian": {
+        "code": "0.5*HF + 0.5*GGA_X_PBE_GAUSSIAN, 0.875*GGA_C_PBE_GAUSSIAN + 0.125*MP2",
+        "ref": "10.1063/1.3604569",
+        "tested": "Gaussian 16, Rev B.01"
+    },
+    "PBE_CIDH": {
+        "code": "0.55*HF + 0.45*PBE, 0.83*PBE + 0.17*MP2",
+        "ref": "10.1007/s00214-015-1689-4"
+    },
+    "PBE_QIDH": {
+        "code": "0.6933612744*HF + 0.3066387256*PBE, 0.6666666667*PBE + 0.3333333333*MP2",
+        "ref": "10.1063/1.4890314",
+        "tested": "QChem 5.1.1",
+        "notes": "This implementation should be the same to rhetoric of original paper (rounded at 1e-10).",
+        "alias": [
+            "PBE_QIDH_QCHEM"
+        ]
+    },
+    "PBE_QIDH_Gaussian": {
+        "code": "0.69*HF + 0.31*GGA_X_PBE_GAUSSIAN, 0.6666*GGA_C_PBE_GAUSSIAN + 0.3334*MP2",
+        "ref": "10.1063/1.4890314",
+        "tested": "Gaussian 16, Rev B.01",
+        "notes": "This implementation gives results of Gaussian."
+    },
+    "PTPSS_D3Zero": {
+        "code": "0.5*HF + 0.5*MGGA_X_TPSS(0.15, 0.88491, 0.047, 0.872, 0.16952, 2, 0), 0.625*MGGA_C_TPSS(0.06080, 6.3, 0.53, 0.87, 0.50, 2.26) + 0.375*MP2_OS + DFTD3(Zero)",
+        "ref": "10.1021/ct100466k",
+        "tested": "QChem 5.1.1",
+        "alias": [
+            "PTPSS"
+        ]
+    },
+    "PWPB95_D3Zero": {
+        "code": "0.5*HF + 0.5*GGA_X_MPW91(0.00444, 19.823391, 3.7868), 0.731*MGGA_C_BC95(0.03241, 0.00250) + 0.269*MP2_OS + DFTD3(Zero)",
+        "ref": "10.1021/ct100466k",
+        "tested": "QChem 5.1.1",
+        "alias": [
+            "PWPB95"
+        ]
+    },
+    "QCHEM_DSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.44*P86_FT + 0.52*MP2_OS + 0.22*MP2_SS + DFTD3(BJ, xc=dsdpbep86)",
+        "ref": "10.1002/jcc.23391",
+        "tested": "QChem 5.1.1",
+        "notes": "P86_FT used in Gaussian/QChem instead of P86; see https://github.com/pyscf/pyscf/issues/1004"
+    },
+    "REVDSD_PBEP86_D3BJ": {
+        "code": "0.69*HF + 0.31*PBE, 0.4296*P86 + 0.5785*MP2_OS + 0.0799*MP2_SS + DFTD3(BJ)",
+        "ref": "10.1002/jcc.23391"
+    },
+    "RSX_0DH": {
+        "code": "0.5*HF + 0.5*LR_HF(0.33) + 0.5*GGA_X_ITYH_PBE, 0.875*PBE + 0.125*MP2",
+        "ref": "10.1063/1.5097164",
+        "tested": "ORCA 5.0.4",
+        "alias": [
+            "RSX_PBE0_DH"
+        ]
+    },
+    "RSX_QIDH": {
+        "code": "0.69*HF + 0.31*LR_HF(0.27) + 0.31*GGA_X_ITYH_PBE, 0.67*PBE + 0.33*MP2",
+        "ref": "10.1021/acs.jctc.8b00261",
+        "tested": "ORCA 5.0.4",
+        "alias": [
+            "RSX_PBE_QIDH"
+        ]
+    },
+    "RS_B88_LYP": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_B88, 0.7), 0.75*SSR(GGA_C_LYP, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18",
+        "supported": false
+    },
+    "RS_PBE_P86": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PBE, 0.7), 0.75*SSR(GGA_C_P86, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18",
+        "supported": false
+    },
+    "RS_PBE_PBE": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PBE, 0.7), 0.75*SSR(GGA_C_PBE, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18",
+        "supported": false
+    },
+    "RS_PW91_PW91": {
+        "code": "LR_HF(0.7) + 0.5*SR_HF(0.7) + 0.5*SSR(GGA_X_PW91, 0.7), 0.75*SSR(GGA_C_PW91, 0.7) + 0.5*MP2(1, 1) - 0.25*SR_MP2(0.7) + 0.5*LR_MP2(0.7)",
+        "ref": "10.1021/acs.jctc.0c01135",
+        "tested": "MRCC 2022-03-18",
+        "supported": false
+    },
+    "SOS0_PBE0_DH": {
+        "code": "0.5*HF + 0.5*PBE, 0.875*PBE + 0.1666666667*MP2_OS",
+        "ref": "10.1021/acs.jpca.6b03406",
+        "alias": [
+            "SOS_PBE0_DH"
+        ]
+    },
+    "SOS0_PBE_QIDH": {
+        "code": "0.6933612744*HF + 0.3066387256*PBE, 0.6666666667*PBE + 0.4444444444*MP2_OS",
+        "ref": "10.1021/acs.jpca.6b03406",
+        "alias": [
+            "SOS_PBE_QIDH"
+        ]
+    },
+    "SOS_RSX_PBE0_DH": {
+        "code": "0.5*HF + 0.5*LR_HF(0.33) + 0.5*GGA_X_ITYH_PBE, 0.875*PBE + 0.1666666667*MP2_OS",
+        "ref": "10.1021/acs.jctc.1c00271",
+        "note": "This may have the same name to functionals in 10.1021/acs.jctc.1c00535.",
+        "alias": [
+            "SOS_RSX_0DH"
+        ]
+    },
+    "SOS_RSX_PBE_QIDH": {
+        "code": "0.69*HF + 0.31*LR_HF(0.27) + 0.31*GGA_X_ITYH_PBE, 0.67*PBE + 0.4444444444*MP2_OS",
+        "ref": "10.1021/acs.jctc.1c00271",
+        "note": "This may have the same name to functionals in 10.1021/acs.jctc.1c00535.",
+        "alias": [
+            "SOS_RSX_QIDH"
+        ]
+    },
+    "TPSS0_DH": {
+        "code": "0.5*HF + 0.5*TPSS, 0.875*TPSS + 0.125*MP2",
+        "ref": "10.1021/ct4003527"
+    },
+    "TPSS_CIDH": {
+        "code": "0.55*HF + 0.45*TPSS, 0.83*TPSS + 0.17*MP2",
+        "ref": "10.1007/s00214-015-1689-4"
+    },
+    "TPSS_QIDH": {
+        "code": "0.6933612744*HF + 0.3066387256*TPSS, 0.6666666667*TPSS + 0.3333333333*MP2",
+        "ref": "10.1063/1.4890314"
+    },
+    "mPW2PLYP": {
+        "code": "0.55*HF + 0.45*mPW91, 0.75*LYP + 0.25*MP2",
+        "ref": "10.1039/b608478h",
+        "tested": "Gaussian 16, Rev B.01"
+    },
+    "revDSD_PBEP86_D4": {
+        "code": "0.69*HF + 0.31*PBE, 0.4210*P86_FT + 0.5922*MP2_OS + 0.0636*MP2_SS + DFTD4(xc=revdsdpbep86)",
+        "ref": "10.1021/acs.jpca.9b03157"
+    },
+    "revPBE0_DH": {
+        "code": "0.5*HF + 0.5*revPBE, 0.875*PBE + 0.125*MP2",
+        "ref": "10.1021/ct4003527"
+    },
+    "wB2GP_PLYP": {
+        "code": "0.65*HF + 0.35*LR_HF(0.27) + 0.35*GGA_X_ITYH, 0.64*LYP + 0.36*MP2",
+        "ref": "10.1021/acs.jctc.9b00013",
+        "tested": "ORCA 5.0.4",
+        "alias": [
+            "\u03c9B2GP_PLYP"
+        ]
+    },
+    "wB2PLYP": {
+        "code": "0.53*HF + 0.47*LR_HF(0.3) + 0.47*GGA_X_ITYH, 0.73*LYP + 0.27*MP2",
+        "ref": "10.1021/acs.jctc.9b00013",
+        "tested": "ORCA 5.0.4",
+        "alias": [
+            "\u03c9B2PLYP"
+        ]
+    },
+    "wB88PP86": {
+        "code": "0.65*HF + 0.35*LR_HF(0.2) + 0.35*GGA_X_ITYH, 0.58*GGA_C_P86VWN + 0.42*MP2",
+        "ref": "10.1021/acs.jctc.1c00535",
+        "tested": "ORCA 5.0.4",
+        "alias": [
+            "\u03c9B88PP86"
+        ]
+    },
+    "wB97X_2_LP": {
+        "code": "HYB_GGA_XC_WB97X(_alpha=1, _beta=-0.321208, _omega=0.3, _cx0=0.251767, _cx1=1.57375, _cx2=-5.26624, _cx3=6.74313, _cx4=0, _css0=1.15698, _css1=-3.31669, _css2=6.27265, _css3=-4.51464, _css4=0, _cos0=0.553261, _cos1=-1.16626, _cos2=6.84409, _cos3=-8.90640, _cos4=0), 0.581569*MP2_SS + 0.477992*MP2_OS",
+        "ref": "10.1063/1.3244209",
+        "tested": "QChem 5.1.1",
+        "alias": [
+            "\u03c9B97X_2_LP"
+        ]
+    },
+
+    "wB97X_2_TQZ": {
+        "code": "HYB_GGA_XC_WB97X(_alpha=1, _beta=-0.363842, _omega=0.3, _cx0=0.315503, _cx1=1.04772, _cx2=-2.33506, _cx3=3.19909, _cx4=0, _css0=0.908460, _css1=-2.80936, _css2=6.02676, _css3=-4.56981, _css4=0, _cos0=0.518198, _cos1=-0.585956, _cos2=4.27080, _cos3=-6.48897, _cos4=0), 0.529319*MP2_SS + 0.447105*MP2_OS",
+        "ref": "10.1063/1.3244209",
+        "tested": "QChem 5.1.1",
+        "alias": [
+            "\u03c9B97X_2_TQZ",
+            "wB97X_2",
+            "\u03c9B97X_2"
+        ]
+    },
+    "wPBEPP86": {
+        "code": "0.70*HF + 0.30*LR_HF(0.18) + 0.30*GGA_X_ITYH_PBE, 0.68*GGA_C_P86VWN + 0.48*MP2",
+        "ref": "10.1021/acs.jctc.1c00535",
+        "tested": "ORCA 5.0.4",
+        "alias": [
+            "\u03c9PBEPP86"
+        ]
+    }
+}
