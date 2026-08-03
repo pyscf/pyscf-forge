@@ -1,4 +1,4 @@
-"""Deprecated compatibility wrapper for :mod:`pyscf.gbci.gbci`."""
+"""Deprecated compatibility namespace for :mod:`pyscf.gbci`."""
 
 import warnings
 
@@ -6,7 +6,7 @@ from pyscf import lib
 from pyscf.gbci.gbci import GBCI
 
 warnings.warn(
-    "pyscf.sfnoci.sfnoci is deprecated; use pyscf.gbci.gbci instead.",
+    "pyscf.sfnoci is deprecated; use pyscf.gbci instead.",
     lib.exceptions.DeprecationWarning,
     stacklevel=2,
 )
