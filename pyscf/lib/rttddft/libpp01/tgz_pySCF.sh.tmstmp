@@ -1,0 +1,30 @@
+#pyscf_csrc_20210831.tgz Tue, Aug 31, 2021  9:33:11 PM : 
+-------------------------------
+-rwx------+ 1 khana khana 123K Aug 31 20:55 xgaussope.c
+-rw-r--r--+ 1 khana khana 15K Aug 31 02:20 xgaussope.h
+-rwx------+ 1 khana khana 15K Apr  1 15:03 Gaussian.c
+-rwx------+ 1 khana khana 2.6K Mar  1  2021 Gaussian.h
+-rwxr-xr-x+ 1 khana khana 25K Jul 24 15:55 dalloc.c
+-rwxr-xr-x+ 1 khana khana 3.3K Jan 21  2021 dalloc.h
+-rwx------+ 1 khana khana 23K Jan 18  2021 mathfn.c
+-rwx------+ 1 khana khana 1.3K Jan 12  2021 mathfn.h
+-rwxr-xr-x+ 1 khana khana 3.6K Jul 28 03:37 cmplx.c
+-rwx------+ 1 khana khana 30K Aug 31 20:52 govlp.c
+-rw-r--r--+ 1 khana khana 1.4K Aug 31 09:36 govlp.h
+-rwx------+ 1 khana khana 15K Jul 18 18:22 cstrutil.c
+-rw-r--r--+ 1 khana khana 762 Jul 18 18:22 cstrutil.h
+-rwx------+ 1 khana khana 3.7K Mar  1  2021 Properties.c
+-rwx------+ 1 khana khana 593 Mar  1  2021 Properties.h
+-rwx------+ 1 khana khana 893 Jul 28 03:37 dcmplx.h
+-rwx------+ 1 khana khana 84 Jan  8  2021 ushort.h
+-rwx------+ 1 khana khana 2.6K Mar  1  2021 Gaussian.h
+-rw-r--r--+ 1 khana khana 762 Jul 18 18:22 cstrutil.h
+-rw-r--r--+ 1 khana khana 15K Aug 31 02:20 xgaussope.h
+-rwx------+ 1 khana khana 15K Jul 18 18:27 macro_util.h
+-rwxr-xr-x+ 1 khana khana 3.3K Jan 21  2021 dalloc.h
+-rwx------+ 1 khana khana 1.3K Jan 12  2021 mathfn.h
+-rwx------+ 1 khana khana 2.7K Nov 24  2020 cConstants.h
+-rw-r--r--+ 1 khana khana 1.4K Aug 31 09:36 govlp.h
+-rwx------+ 1 khana khana 593 Mar  1  2021 Properties.h
+-rwx------+ 1 khana khana 80 Aug 31 21:32 README_csrc_20210831
+-rwx------+ 1 khana khana 1.8K Aug 31 16:02 makefile
