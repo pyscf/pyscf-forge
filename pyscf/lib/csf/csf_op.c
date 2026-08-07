@@ -712,7 +712,8 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         parity = parity % 4;
     }
 
-    assert ((parity % 4) == 0);
+    assert ((parity % 2) == 0);
+    parity = parity / 2;
     if ((parity%2)==1){ xdiag = -xdiag; }
     return xdiag;
 }
