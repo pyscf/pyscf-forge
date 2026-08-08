@@ -24,6 +24,7 @@ EXTRAS = {
     'afqmc-cpu': ['jax'],
     'afqmc-cuda12': ['jax[cuda12]'],
     'afqmc-cuda13': ['jax[cuda13]'],
+    'msdft-ldma': ['torch>=2.0'],
 }
 VERSION = '1.1.1'
 
