@@ -26,4 +26,11 @@ max-line-length = 120
 #    pyscf/pbc/cc/kccsd_t.py: E501
 #    pyscf/pbc/mpicc/kccsd_rhf.py: E501
 #    pyscf/pbc/mpicc/kintermediates_rhf.py: E501
+per-file-ignores =
+    pyscf/dh/grad/udfdh.py: E501
+    pyscf/dh/grad/dfdh.py: E501
+    pyscf/dh/polar/udfdh.py: E501
+    pyscf/dh/udfdh.py: E501
+    pyscf/dh/rdfdh.py: E501
+    pyscf/dh/resp.py: E501
 #    pyscf/pbc/tools/pywannier90.py: E501

@@ -1,0 +1,22 @@
+{
+    "MP2_OS": "MP2(1, 0)",
+    "MP2_SS": "MP2(0, 1)",
+    "IEPA_OS": "IEPA(1, 0)",
+    "IEPA_SS": "IEPA(0, 1)",
+    "BGE2": "IEPA(1, 1)",
+    "BGE2_OS": "IEPA(1, 0)",
+    "BGE2_SS": "IEPA(0, 1)",
+    "MP2CR_OS": "MP2CR(1, 0)",
+    "MP2CR_SS": "MP2CR(0, 1)",
+    "MP2CR1": "MP2CR(1, 1)",
+    "MP2CR1_OS": "MP2CR(1, 0)",
+    "MP2CR1_SS": "MP2CR(0, 1)",
+    "MP2CR2_OS": "MP2CR(1, 0)",
+    "MP2CR2_SS": "MP2CR(0, 1)",
+    "SBGE2": "SIEPA(1, 1)",
+    "SBGE2_OS": "SIEPA(1, 0)",
+    "SBGE2_SS": "SIEPA(0, 1)",
+    "SIEPA_OS": "SIEPA(1, 0)",
+    "SIEPA_SS": "SIEPA(0, 1)",
+    "LR_MP2": "RS_MP2"
+}

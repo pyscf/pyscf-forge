@@ -12,3 +12,6 @@ include pyscf/lib/*.dylib
 # source code
 prune pyscf/lib/build
 recursive-include pyscf *.c *.h CMakeLists.txt
+
+# dh xccode JSON data
+recursive-include pyscf/dh *.json

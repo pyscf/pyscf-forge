@@ -1,0 +1,90 @@
+{
+    "HF_B3LYP": {
+        "code_scf": "HF",
+        "code": "B3LYP"
+    },
+    "HF_PBE0": {
+        "code_scf": "HF",
+        "code": "PBE0"
+    },
+    "XYG2": {
+        "code_scf": "B3LYPg",
+        "code": "0.8016*HF + 0.1984*B88, 0.6613*LYP + 0.3387*MP2",
+        "ref": [
+            "10.1021/prechem.5c00432"
+        ]
+    },
+    "XYG3": {
+        "code_scf": "B3LYPg",
+        "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2",
+        "ref": "10.1073/pnas.0901093106",
+        "tested": "MRCC 2022-03-18"
+    },
+    "XYG5": {
+        "code_scf": "B3LYPg",
+        "code": "0.9150*HF + 0.0612*LDA + 0.0238*B88, 0.4957*LYP + 0.4548*MP2_OS + 0.2764*MP2_SS",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "XYG6": {
+        "code_scf": "B3LYPg",
+        "code": "0.9105*HF + 0.1576*LDA - 0.0681*B88, 0.1800*VWN3 + 0.2244*LYP + 0.4695*MP2_OS + 0.2426*MP2_SS",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "XYG7": {
+        "code_scf": "B3LYPg",
+        "code": "0.8971*HF + 0.2055*LDA - 0.1408*B88, 0.4056*VWN3 + 0.1159*LYP + 0.4052*MP2_OS + 0.2589*MP2_SS",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "XYGJ_OS": {
+        "code_scf": "B3LYPg",
+        "code": "0.7731*HF + 0.2269*LDA, 0.2309*VWN3 + 0.2754*LYP + 0.4364*MP2_OS",
+        "ref": "10.1073/pnas.1115123108"
+    },
+    "XYGJ_OS5": {
+        "code_scf": "B3LYPg",
+        "code": "0.8928*HF + 0.3393*LDA - 0.2321*B88, 0.3268*VWN3 - 0.0635*LYP + 0.5574*MP2_OS",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "ZRPS@PBE": {
+        "code_scf": "PBE",
+        "code": "0.5*HF + 0.5*PBE, 0.75*PBE + 0.25*SIEPA_OS",
+        "ref": "10.1103/PhysRevLett.117.133002",
+        "family": "ZRPS",
+        "supported": false
+    },
+    "ZRPS@PBE0": {
+        "code_scf": "PBE0",
+        "code": "0.5*HF + 0.5*PBE, 0.75*PBE + 0.25*SIEPA_OS",
+        "ref": "10.1103/PhysRevLett.117.133002",
+        "family": "ZRPS",
+        "supported": false
+    },
+    "lrc_XYG3": {
+        "code_scf": "B3LYPg",
+        "code": "0.8033*HF - 0.0140*LDA + 0.2107*B88, 0.6789*LYP + 0.3211*MP2 + 0.4822*RS_MP2(0.2, 1, 1)",
+        "ref": "10.1021/jz400695u",
+        "tested": "QChem local",
+        "supported": false
+    },
+    "revXYG3": {
+        "code_scf": "B3LYPg",
+        "code": "0.9196*HF - 0.0222*LDA + 0.1026*B88, 0.6059*LYP + 0.3941*MP2",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "revXYGJ_OS": {
+        "code_scf": "B3LYPg",
+        "code": "0.8877*HF + 0.1123*LDA, -0.0697*VWN3 + 0.6167*LYP + 0.5485*MP2_OS",
+        "ref": "10.1021/acs.jpclett.1c00360",
+        "family": "xDH@B3LYP"
+    },
+    "xDH_PBE0": {
+        "code_scf": "PBE0",
+        "code": "0.8335*HF + 0.1665*PBE, 0.5292*PBE + 0.5428*MP2_OS",
+        "ref": "10.1063/1.3703893"
+    }
+}
