@@ -83,10 +83,10 @@ from pyscf.mcscf import gasci
 #
 # OpenMolcas output:
 #
-# :: RASSCF root number  1 Total energy: -2041.06956672
+# :: RASSCF root number  1 Total energy: -2045.01359885
 
 
-openmolcas_energy = -2041.06956672
+openmolcas_energy = -2045.01359885
 
 here = Path(__file__).resolve().parent
 data_file = here / "data" / "al2feo4_plus_rasci_mo.npz"
@@ -159,10 +159,10 @@ print(
 # Numerical values in the last few digits may depend on the platform.
 #
 # GASCI converged
-# GASCI E = -2041.06956671912
-# E(CI) = -374.127359765710
+# GASCI E = -2045.01359884909
+# E(CI) = -363.115477794565
 # S^2 = 8.7500000
 #
 # OpenMolcas/PySCF RASCI comparison
 # E(OpenMolcas) / Eh       E(PySCF) / Eh         diff / Eh          <S^2>
-#   -2041.069566720000    -2041.069566719117   8.829e-10    8.75000000
+#   -2045.013598850000    -2045.013598849092   9.081e-10    8.75000000
