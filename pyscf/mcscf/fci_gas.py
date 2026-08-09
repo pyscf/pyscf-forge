@@ -545,6 +545,76 @@ class GasSpace:
             pass
 
 
+class GasContractPlan:
+    """Reusable Hamiltonian contraction plan for one compressed GAS space.
+
+    The GAS space is retained but not closed by this object.  The normalized
+    ERI array is also retained because the C plan stores a borrowed pointer to
+    it for the full plan lifetime.
+    """
+
+    def __init__(self, gas, eri):
+        if not gas.links_are_compressed():
+            raise ValueError(
+                "Hamiltonian contraction planning requires compressed links")
+        self.lib = gas.lib
+        self.gas = gas
+        self.eri = _as_pair_matrix(eri, gas.norb_total)
+        self._plan = ctypes.c_void_p()
+        status = self.lib.fci_contract_gas_plan_create(
+            ctypes.byref(self._plan), gas.c_ptr, _gaslib.double_ptr(self.eri))
+        _check_status(status, "fci_contract_gas_plan_create")
+
+    @property
+    def ndet(self):
+        return self.gas.ndet
+
+    @property
+    def norb(self):
+        return self.gas.norb_total
+
+    @property
+    def nelec(self):
+        return self.gas.nelec
+
+    def contract(self, fcivec):
+        """Contract the fixed absorbed Hamiltonian with one GAS CI vector."""
+
+        if self._plan is None:
+            raise RuntimeError("Hamiltonian contraction plan is closed")
+        shape = numpy.asarray(fcivec).shape
+        ci0 = _as_c_double(numpy.asarray(fcivec).reshape(-1))
+        if ci0.size != self.ndet:
+            raise ValueError("CI vector size does not match GAS determinant count")
+        ci1 = numpy.zeros_like(ci0)
+        status = self.lib.fci_contract_gas_plan_execute(
+            self._plan, _gaslib.double_ptr(ci0), _gaslib.double_ptr(ci1))
+        _check_status(status, "fci_contract_gas_plan_execute")
+        return ci1.reshape(shape)
+
+    def close(self):
+        """Release the C plan; the borrowed GAS space remains caller-owned."""
+
+        plan = getattr(self, "_plan", None)
+        if plan is not None:
+            self.lib.fci_contract_gas_plan_free(plan)
+            self._plan = None
+        self.eri = None
+        self.gas = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
+    def __del__(self):
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
 class GasRDMPlan:
     """Reusable owner of a raw-link GAS space and its C RDM plan."""
 
@@ -772,18 +842,19 @@ class FCISolver(direct_spin1.FCISolver):
                     *args, **kwargs):
         """Contract an absorbed Hamiltonian with a GAS CI vector."""
 
+        plan = kwargs.pop("plan", None)
+        if plan is not None:
+            if not isinstance(plan, GasContractPlan):
+                raise TypeError("plan must be a GasContractPlan")
+            expected_nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
+            if int(norb) != plan.norb or expected_nelec != plan.nelec:
+                raise ValueError("contraction plan does not match norb/nelec")
+            return plan.contract(fcivec)
+
         compress_links = bool(kwargs.pop("compress_links", True))
         with self.make_space(norb, nelec, compress_links=compress_links) as gas:
-            eri = _as_pair_matrix(eri, gas.norb_total)
-            ci0 = _as_c_double(numpy.asarray(fcivec).reshape(-1))
-            if ci0.size != gas.ndet:
-                raise ValueError("CI vector size does not match GAS determinant count")
-            ci1 = numpy.zeros_like(ci0)
-            status = self.lib.fci_contract_gas_2e(
-                gas.c_ptr, _gaslib.double_ptr(eri), _gaslib.double_ptr(ci0),
-                _gaslib.double_ptr(ci1))
-            _check_status(status, "fci_contract_gas_2e")
-            return ci1.reshape(numpy.asarray(fcivec).shape)
+            with GasContractPlan(gas, eri) as plan:
+                return plan.contract(fcivec)
 
     def contract_1e(self, f1e, fcivec, norb, nelec, link_index=None,
                     **kwargs):
@@ -829,14 +900,8 @@ class FCISolver(direct_spin1.FCISolver):
 
             size = min(requested, gas.ndet, GAS_PSPACE_MATVEC_MAX)
             addresses = _lowest_hdiag_addresses(diagonal, size)
-            plan = ctypes.c_void_p()
-            status = self.lib.fci_contract_gas_plan_create(
-                ctypes.byref(plan), gas.c_ptr, _gaslib.double_ptr(h2e))
-            _check_status(status, "fci_contract_gas_plan_create")
-            try:
-                h0 = self._pspace_with_plan(plan, addresses, gas.ndet)
-            finally:
-                self.lib.fci_contract_gas_plan_free(plan)
+            with GasContractPlan(gas, h2e) as plan:
+                h0 = self._pspace_with_plan(plan, addresses)
         return addresses, h0
 
     def gen_linkstr(self, norb, nelec, tril=True, spin=None):
@@ -894,26 +959,17 @@ class FCISolver(direct_spin1.FCISolver):
                 result.append((ci[address], alpha_out, beta_out))
         return result
 
-    def _contract_with_plan(self, plan, fcivec, shape):
-        ci0 = _as_c_double(numpy.asarray(fcivec).reshape(-1))
-        ci1 = numpy.zeros_like(ci0)
-        status = self.lib.fci_contract_gas_plan_execute(
-            plan, _gaslib.double_ptr(ci0), _gaslib.double_ptr(ci1))
-        _check_status(status, "fci_contract_gas_plan_execute")
-        return ci1.reshape(shape)
-
-    def _pspace_with_plan(self, plan, addresses, ndet):
+    def _pspace_with_plan(self, plan, addresses):
         """Construct H over selected compact GAS determinant addresses."""
 
         addresses = numpy.asarray(addresses, dtype=numpy.intp).reshape(-1)
         h0 = numpy.empty((addresses.size, addresses.size),
                          dtype=numpy.float64)
-        basis = numpy.zeros(int(ndet), dtype=numpy.float64)
+        basis = numpy.zeros(plan.ndet, dtype=numpy.float64)
         for column, address in enumerate(addresses):
             basis.fill(0.0)
             basis[int(address)] = 1.0
-            product = self._contract_with_plan(
-                plan, basis, (int(ndet),)).reshape(-1)
+            product = plan.contract(basis).reshape(-1)
             h0[:, column] = product[addresses]
         # Roundoff in independently accumulated columns can leave tiny
         # antisymmetric components.  LAPACK receives an explicitly symmetric H.
@@ -993,12 +1049,8 @@ class FCISolver(direct_spin1.FCISolver):
                  spin_eigenvalues) = spin_penalty
                 linear_spin_penalty = spin_target < spin_minimum + 0.1
 
-            plan = ctypes.c_void_p()
-            status = self.lib.fci_contract_gas_plan_create(
-                ctypes.byref(plan), gas.c_ptr, _gaslib.double_ptr(h2e))
-            _check_status(status, "fci_contract_gas_plan_create")
+            plan = GasContractPlan(gas, h2e)
             try:
-                shape = (gas.ndet,)
                 full_pspace = (
                     spin_penalty is None and ci0 is None and
                     not davidson_only and
@@ -1010,7 +1062,7 @@ class FCISolver(direct_spin1.FCISolver):
                     gas.ndet <= GAS_SPIN_PSPACE_MATVEC_MAX)
                 if full_pspace or full_spin_pspace:
                     addresses = _lowest_hdiag_addresses(hdiag, gas.ndet)
-                    h0 = self._pspace_with_plan(plan, addresses, gas.ndet)
+                    h0 = self._pspace_with_plan(plan, addresses)
                     if full_spin_pspace:
                         s2 = spin_plan.matrix()
                         s2 = s2[numpy.ix_(addresses, addresses)]
@@ -1100,8 +1152,8 @@ class FCISolver(direct_spin1.FCISolver):
                         guess = guess[0]
 
                     def hop(vec):
-                        result = self._contract_with_plan(
-                            plan, vec, shape).reshape(-1)
+                        result = self.contract_2e(
+                            h2e, vec, norb, nelec, plan=plan).reshape(-1)
                         if spin_penalty is None:
                             return result
                         ss_vector = numpy.asarray(
@@ -1147,7 +1199,7 @@ class FCISolver(direct_spin1.FCISolver):
                         verbose=verbose, tol_residual=conv_tol_residual,
                         follow_state=spin_penalty is None)
             finally:
-                self.lib.fci_contract_gas_plan_free(plan)
+                plan.close()
 
         e = numpy.asarray(e, dtype=numpy.float64).reshape(-1) + float(ecore)
         if isinstance(c, (list, tuple)):

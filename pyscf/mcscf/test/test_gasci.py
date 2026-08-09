@@ -169,6 +169,33 @@ class TestGASFCISolver(unittest.TestCase):
             self.h1e, self.eri, self.ci, self.norb, self.nelec)
         self.assertAlmostEqual(energy, numpy.dot(self.ci, hc), places=11)
 
+    def test_contract_plan_reuse(self):
+        solver = fci_gas.FCISolver(
+            gas_orbs=(1, 2, 1),
+            gas_restr=[[1, 2, 1], [2, 1, 1], [1, 1, 2]],
+            gas_restr_type="supergroup")
+        h2e = fci_gas.absorb_h1e(
+            self.h1e, self.eri, self.norb, self.nelec, fac=0.5)
+
+        with solver.make_space(
+                self.norb, self.nelec, compress_links=True) as gas:
+            rng = numpy.random.default_rng(31)
+            vectors = (
+                rng.normal(size=gas.ndet),
+                rng.normal(size=gas.ndet),
+            )
+            with fci_gas.GasContractPlan(gas, h2e) as plan:
+                for ci in vectors:
+                    planned = plan.contract(ci)
+                    through_solver = solver.contract_2e(
+                        h2e, ci, self.norb, self.nelec, plan=plan)
+                    one_shot = solver.contract_2e(
+                        h2e, ci, self.norb, self.nelec)
+                    numpy.testing.assert_allclose(
+                        planned, through_solver, atol=1e-12, rtol=0)
+                    numpy.testing.assert_allclose(
+                        planned, one_shot, atol=1e-12, rtol=0)
+
     def test_gas_fci_vector_converters(self):
         gas_orbs = (2, 2)
         nelec = (2, 1)
