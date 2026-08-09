@@ -25,6 +25,7 @@ from functools import lru_cache
 import numpy
 
 from pyscf import lib
+from pyscf.fci import addons as fci_addons
 from pyscf.lib import logger
 from pyscf.mcscf import addons
 
@@ -188,7 +189,7 @@ class StateAverageFCISolver(addons.StateAverageFCISolver):
     def states_spin_square(self, ci0, norb, nelec, *args, **kwargs):
         from pyscf.mcscf import fci_gas
 
-        nelec = as_nelec_tuple(nelec, self.spin)
+        nelec = fci_addons._unpack_nelec(nelec, self.spin)
         values = []
         with self.make_rdm_plan(norb, nelec) as plan:
             for ci in ci0:
@@ -290,42 +291,6 @@ def state_average_(mc, weights=(0.5, 0.5), wfnsym=None):
     return mc
 
 
-def as_nelec_tuple(nelec, spin=None):
-    """Return ``(Nalpha, Nbeta)`` using PySCF's ``spin=Nalpha-Nbeta`` rule.
-
-    When ``spin`` is given, only the total number of electrons in ``nelec``
-    is used, matching the convention of PySCF FCI solvers.
-    """
-
-    arr = _exact_integer_array(nelec, "nelec")
-    if arr.ndim == 0:
-        nelectron = int(arr)
-        values = None
-    elif arr.ndim == 1 and arr.size == 2:
-        values = int(arr[0]), int(arr[1])
-        nelectron = sum(values)
-    else:
-        raise ValueError("nelec must be an integer or a two-element sequence")
-
-    if nelectron < 0 or (values is not None and min(values) < 0):
-        raise ValueError("alpha and beta electron counts must be non-negative")
-    if spin is None:
-        if values is not None:
-            return values
-        return (nelectron + 1) // 2, nelectron // 2
-
-    spin_arr = _exact_integer_array(spin, "spin")
-    if spin_arr.ndim != 0:
-        raise ValueError("spin must be an integer")
-    spin = int(spin_arr)
-    if abs(spin) > nelectron:
-        raise ValueError("abs(spin) cannot exceed nelec")
-    if (nelectron - spin) % 2:
-        raise ValueError("nelec and spin must have the same parity")
-    nbeta = (nelectron - spin) // 2
-    return nelectron - nbeta, nbeta
-
-
 def _integer_rows_with_info(values, ncolumn, label):
     """Return canonical integer rows and their normalization metadata."""
 
@@ -388,7 +353,7 @@ def _integer_scalar(value, label):
 
 
 def cas_blocks(norb, nelec):
-    na, nb = as_nelec_tuple(nelec)
+    na, nb = fci_addons._unpack_nelec(nelec)
     return numpy.array([[na, nb]], dtype=numpy.int32)
 
 
@@ -424,7 +389,7 @@ def blocks_from_supergroups(gas_orbs, nelec, supergroups):
     """Expand a spin-free supergroup set G into canonical block set D."""
 
     gas_orbs = _integer_vector(gas_orbs, "gas_orbs")
-    na, nb = as_nelec_tuple(nelec)
+    na, nb = fci_addons._unpack_nelec(nelec)
     ngas = len(gas_orbs)
     if ngas <= 0 or ngas > GAS_MAX_NGAS:
         raise ValueError("number of GAS spaces exceeds C kernel limit")
@@ -509,7 +474,7 @@ def supergroups_from_cumulative_occ(gas_orbs, nelec, bounds,
     if sum(gas_orbs) > GAS_MAX_ORB:
         raise ValueError("total active orbitals exceed 63")
 
-    na, nb = as_nelec_tuple(nelec)
+    na, nb = fci_addons._unpack_nelec(nelec)
     nelectron = na + nb
     if na < 0 or nb < 0 or na > sum(gas_orbs) or nb > sum(gas_orbs):
         raise ValueError("invalid alpha/beta electron count")
@@ -636,7 +601,7 @@ def _ras_spec(gas_orbs, nelec, gas_restr):
     if max_particles > 2 * nras3:
         raise ValueError("max_particles exceeds the RAS3 electron capacity")
 
-    nelectron = sum(as_nelec_tuple(nelec))
+    nelectron = sum(fci_addons._unpack_nelec(nelec))
     cumulative = numpy.array([
         [max(0, 2 * nras1 - max_holes), min(2 * nras1, nelectron)],
         [max(0, nelectron - max_particles),
@@ -864,7 +829,7 @@ def check_kernel_limits(norb, nelec, blocks):
     """Preflight the public C-kernel limits before allocating gas_space_t."""
 
     norb = _integer_vector(norb, "gas_orbs")
-    na, nb = as_nelec_tuple(nelec)
+    na, nb = fci_addons._unpack_nelec(nelec)
     ngas = len(norb)
     if ngas <= 0 or ngas > GAS_MAX_NGAS:
         raise ValueError("number of GAS spaces exceeds C kernel limit")

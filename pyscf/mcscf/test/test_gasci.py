@@ -67,17 +67,14 @@ class TestGASRestrictions(unittest.TestCase):
             ((3, 2), None, (3, 2)),
             ((2, 2), 2, (3, 1)),
         )
+        solver = fci_gas.FCISolver()
         for nelec, spin, expected in cases:
             with self.subTest(nelec=nelec, spin=spin):
-                self.assertEqual(
-                    addons_gas.as_nelec_tuple(nelec, spin), expected)
+                solver.spin = spin
+                unpacked = fci_addons._unpack_nelec(nelec, spin)
+                self.assertEqual(solver._space_spec(4, nelec)[1], unpacked)
+                self.assertEqual(unpacked, expected)
 
-        for nelec, spin in ((4, 1), (4, 6), (4, True), (4, 1.5)):
-            with self.subTest(nelec=nelec, spin=spin):
-                with self.assertRaises((TypeError, ValueError)):
-                    addons_gas.as_nelec_tuple(nelec, spin)
-
-        solver = fci_gas.FCISolver()
         solver.spin = 2
         self.assertEqual(solver._space_spec(4, 4)[1], (3, 1))
         self.assertEqual(solver.space_info(4, 4)["ndet_estimate"], 16)

@@ -27,6 +27,7 @@ from pyscf import __config__
 from pyscf import fci
 from pyscf import gto
 from pyscf import lib
+from pyscf.fci import addons as fci_addons
 from pyscf.lib import logger
 from pyscf.mcscf import addons
 from pyscf.mcscf import casci
@@ -209,7 +210,7 @@ class GASCI(casci.CASCI):
 
         if nelecas is None:
             nelecas = self.nelecas
-        return addons_gas.as_nelec_tuple(nelecas, self.fcisolver.spin)
+        return fci_addons._unpack_nelec(nelecas, self.fcisolver.spin)
 
     def _normalized_restriction(self, return_info=False):
         gas_orbs = (int(self.ncas),) if self.gas_orbs is None else self.gas_orbs

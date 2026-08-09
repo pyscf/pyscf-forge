@@ -24,6 +24,7 @@ import numpy
 
 from pyscf import ao2mo
 from pyscf import lib as pyscf_lib
+from pyscf.fci import addons as fci_addons
 from pyscf.fci import cistring
 from pyscf.fci import direct_spin1
 from pyscf.lib import logger
@@ -218,7 +219,7 @@ def _spin_penalty_parameters(solver, norb, nelec):
     shift = float(solver.ss_penalty)
     if not numpy.isfinite(shift) or shift < 0.0:
         raise ValueError("spin penalty shift must be finite and nonnegative")
-    na, nb = addons_gas.as_nelec_tuple(nelec)
+    na, nb = fci_addons._unpack_nelec(nelec)
     sz = 0.5 * abs(na - nb)
     minimum = sz * (sz + 1.0)
     target_value = getattr(solver, "ss_value", None)
@@ -405,7 +406,7 @@ class GasSpace:
 
     def __init__(self, norb, nelec, blocks=None, lib=None, compress_links=False):
         self.norb = tuple(int(x) for x in norb)
-        self.nelec = addons_gas.as_nelec_tuple(nelec)
+        self.nelec = fci_addons._unpack_nelec(nelec)
         if blocks is None:
             if len(self.norb) != 1:
                 raise ValueError("blocks are required for multi-space GAS")
@@ -757,7 +758,7 @@ class FCISolver(direct_spin1.FCISolver):
         self.spin_penalty_method = None
 
     def _space_spec(self, norb, nelec):
-        nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
+        nelec = fci_addons._unpack_nelec(nelec, self.spin)
         if self.gas_orbs is None:
             gas_orbs = (int(norb),)
             gas_orbs, blocks = addons_gas.normalize_gas_spec(
@@ -843,7 +844,7 @@ class FCISolver(direct_spin1.FCISolver):
         if plan is not None:
             if not isinstance(plan, GasContractPlan):
                 raise TypeError("plan must be a GasContractPlan")
-            expected_nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
+            expected_nelec = fci_addons._unpack_nelec(nelec, self.spin)
             if int(norb) != plan.norb or expected_nelec != plan.nelec:
                 raise ValueError("contraction plan does not match norb/nelec")
             return plan.contract(fcivec)
@@ -1017,7 +1018,7 @@ class FCISolver(direct_spin1.FCISolver):
                 "orbital and wavefunction symmetry filtering is not implemented")
 
         self.norb = int(norb)
-        self.nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
+        self.nelec = fci_addons._unpack_nelec(nelec, self.spin)
         spin_penalty = _spin_penalty_parameters(self, norb, self.nelec)
         self.e_spin_penalty = None
         self.e_physical = None
@@ -1308,7 +1309,7 @@ class FCISolver(direct_spin1.FCISolver):
     def spin_square(self, ci, norb, nelec, *args, **kwargs):
         """Return ``(<S^2>, 2S+1)`` from spin-resolved GAS RDMs."""
 
-        nelec = addons_gas.as_nelec_tuple(nelec, self.spin)
+        nelec = fci_addons._unpack_nelec(nelec, self.spin)
         (dm1a, dm1b), (dm2aa, dm2ab, dm2bb) = self.make_rdm12s(
             ci, norb, nelec)
         return spin_square_from_rdm12s((dm1a, dm1b), (dm2aa, dm2ab, dm2bb),
@@ -1322,7 +1323,7 @@ def spin_square_from_rdm12s(dm1s, dm2s, nelec):
     for fixed (Nalpha, Nbeta) CI vectors in a common spatial orbital basis.
     """
 
-    na, nb = addons_gas.as_nelec_tuple(nelec)
+    na, nb = fci_addons._unpack_nelec(nelec)
     dm2ab = dm2s[1]
     sz = 0.5 * (na - nb)
     trans = numpy.einsum("pqqp->", dm2ab)
