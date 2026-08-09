@@ -197,6 +197,25 @@ class TestGASFCISolver(unittest.TestCase):
             self.h1e, self.eri, self.ci, self.norb, self.nelec)
         self.assertAlmostEqual(energy, numpy.dot(self.ci, hc), places=11)
 
+    def test_init_guess_reuses_existing_gas_space(self):
+        solver = fci_gas.FCISolver(
+            gas_orbs=(1, 2, 1),
+            gas_restr=[[1, 2, 1], [2, 1, 1], [1, 1, 2]],
+            gas_restr_type="supergroup")
+        hdiag = solver.make_hdiag(
+            self.h1e, self.eri, self.norb, self.nelec)
+
+        reference = solver.get_init_guess(
+            self.norb, self.nelec, 2, hdiag)
+        with solver.make_space(
+                self.norb, self.nelec, compress_links=False) as gas:
+            reused = solver.get_init_guess(
+                self.norb, self.nelec, 2, hdiag, gas=gas)
+
+        self.assertEqual(len(reference), len(reused))
+        for expected, actual in zip(reference, reused):
+            numpy.testing.assert_allclose(actual, expected, atol=0, rtol=0)
+
     def test_contract_plan_reuse(self):
         solver = fci_gas.FCISolver(
             gas_orbs=(1, 2, 1),

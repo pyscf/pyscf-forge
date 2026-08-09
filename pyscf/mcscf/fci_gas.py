@@ -796,11 +796,13 @@ class FCISolver(direct_spin1.FCISolver):
 
         return GasRDMPlan(self, norb, nelec)
 
-    def get_init_guess(self, norb, nelec, nroots, hdiag):
+    def get_init_guess(self, norb, nelec, nroots, hdiag, gas=None):
         """Build PySCF-style determinant guesses in the GAS vector layout."""
 
         hdiag = _as_c_double(numpy.asarray(hdiag).reshape(-1))
-        if hdiag.size != self.space_info(norb, nelec)["ndet_estimate"]:
+        ndet = (self.space_info(norb, nelec)["ndet_estimate"]
+                if gas is None else gas.ndet)
+        if hdiag.size != ndet:
             raise ValueError("hdiag size does not match GAS determinant count")
         nroots = int(nroots)
         if nroots < 1 or nroots > hdiag.size:
@@ -1080,7 +1082,7 @@ class FCISolver(direct_spin1.FCISolver):
                         guess_count = min(
                             gas.ndet, max(4 * nroots, nroots + 4))
                     default_guess = self.get_init_guess(
-                        norb, nelec, guess_count, hdiag)
+                        norb, nelec, guess_count, hdiag, gas=gas)
                     if ci0 is None:
                         guess = default_guess
                     else:
