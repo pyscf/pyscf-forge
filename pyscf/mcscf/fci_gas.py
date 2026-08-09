@@ -549,8 +549,8 @@ class GasContractPlan:
     """Reusable Hamiltonian contraction plan for one compressed GAS space.
 
     The GAS space is retained but not closed by this object.  The normalized
-    ERI array is also retained because the C plan stores a borrowed pointer to
-    it for the full plan lifetime.
+    ERI and opposite-spin arrays are retained because the C plan stores
+    borrowed pointers to them for the full plan lifetime.
     """
 
     def __init__(self, gas, eri):
@@ -560,9 +560,12 @@ class GasContractPlan:
         self.lib = gas.lib
         self.gas = gas
         self.eri = _as_pair_matrix(eri, gas.norb_total)
+        self.gos = numpy.ascontiguousarray(
+            self.eri + self.eri.T, dtype=numpy.float64)
         self._plan = ctypes.c_void_p()
         status = self.lib.fci_contract_gas_plan_create(
-            ctypes.byref(self._plan), gas.c_ptr, _gaslib.double_ptr(self.eri))
+            ctypes.byref(self._plan), gas.c_ptr,
+            _gaslib.double_ptr(self.eri), _gaslib.double_ptr(self.gos))
         _check_status(status, "fci_contract_gas_plan_create")
 
     @property
@@ -600,6 +603,7 @@ class GasContractPlan:
             self.lib.fci_contract_gas_plan_free(plan)
             self._plan = None
         self.eri = None
+        self.gos = None
         self.gas = None
 
     def __enter__(self):

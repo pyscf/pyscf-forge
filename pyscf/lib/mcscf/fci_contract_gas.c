@@ -75,23 +75,6 @@ static inline double abba_gvalue(const double *restrict g,
         return g[(uint64_t)opb * nnorb + opa];
 }
 
-static double *build_abba_gos(const double *restrict eri, uint32_t nnorb)
-{
-        size_t n = (size_t)nnorb * (size_t)nnorb;
-        double *gos = malloc(n * sizeof(*gos));
-        if (gos == 0) {
-                return 0;
-        }
-        for (uint32_t opb = 0; opb < nnorb; opb++) {
-                for (uint32_t opa = 0; opa < nnorb; opa++) {
-                        gos[(uint64_t)opb * nnorb + opa] =
-                                eri[(uint64_t)opb * nnorb + opa] +
-                                eri[(uint64_t)opa * nnorb + opb];
-                }
-        }
-        return gos;
-}
-
 /* Consecutive beta link tables b0->b1 and b1->b2. */
 typedef struct {
         gas_tid_t first;
@@ -160,7 +143,7 @@ static int cmp_omp_task_desc(const void *pa, const void *pb)
 struct gas_contract_plan {
         const gas_space_t *gas;
         const double *eri;
-        double *gos;
+        const double *gos;
         size_t abba_t1_target_bytes;
         gas_contract_ws_t *workspace;
         uint32_t nworkspace;
@@ -1821,22 +1804,6 @@ uint32_t fci_contract_gas_parallel_units(const gas_space_t *gas)
         return n;
 }
 
-static void contract_gas_2e_serial(const gas_space_t *gas,
-                                   const double *eri,
-                                   const double *gos,
-                                   const double *ci0,
-                                   double *ci1,
-                                   uint32_t nnorb)
-{
-        gas_contract_ws_t ws;
-        contract_ws_init(&ws);
-
-        for (gas_bid_t b = 0; b < gas->nblock; b++) {
-                contract_2e_block(gas, eri, gos, ci0, ci1, nnorb, b, &ws);
-        }
-        contract_ws_free(&ws);
-}
-
 #ifdef _OPENMP
 static uint64_t cost_add_sat(uint64_t a, uint64_t b)
 {
@@ -2326,41 +2293,6 @@ static void contract_2e_alpha_range(const gas_space_t *gas,
                                   adst, q0, q1, a0, a1, ws);
 }
 
-static int contract_gas_2e_parallel(const gas_space_t *gas,
-                                    const double *eri,
-                                    const double *gos,
-                                    const double *ci0,
-                                    double *ci1,
-                                    uint32_t nnorb)
-{
-        uint32_t ntask = 0;
-        gas_omp_task_t *task = build_omp_tasks(gas, &ntask);
-
-        if (task == 0 && gas->nblock != 0u) {
-                return GAS_ERR_MEMORY;
-        }
-#pragma omp parallel
-        {
-                gas_contract_ws_t ws;
-                contract_ws_init(&ws);
-
-#pragma omp for schedule(dynamic, 1)
-                for (int64_t tt = 0; tt < (int64_t)ntask; tt++) {
-                        gas_sid_t adst = task[tt].adst;
-                        uint32_t q0 = task[tt].q0;
-                        uint32_t q1 = task[tt].q1;
-                        uint32_t a0 = task[tt].a0;
-                        uint32_t a1 = task[tt].a1;
-                        zero_alpha_range(gas, ci1, adst, q0, q1, a0, a1);
-                        contract_2e_alpha_range(gas, eri, gos, ci0, ci1,
-                                                nnorb, adst, q0, q1,
-                                                a0, a1, &ws);
-                }
-                contract_ws_free(&ws);
-        }
-        free(task);
-        return GAS_SUCCESS;
-}
 #endif
 
 #ifndef _OPENMP
@@ -2371,60 +2303,8 @@ uint32_t fci_contract_gas_omp_task_count(const gas_space_t *gas)
 }
 #endif
 
-static int contract_validate(const gas_space_t *gas,
-                             const double *eri,
-                             const double *ci0,
-                             double *ci1)
-{
-        if (gas == 0 || ci0 == 0 || ci1 == 0 || ci0 == ci1) {
-                return GAS_ERR_INVALID;
-        }
-        if (eri == 0 ||
-            gas->link_format != GAS_LINK_COMPRESSED) {
-                return GAS_ERR_INVALID;
-        }
-        return GAS_SUCCESS;
-}
-
 /* ========================================================================== */
-/* 6. Public entry points                                                     */
-/* ========================================================================== */
-
-int fci_contract_gas_2e(const gas_space_t *gas,
-                       const double *eri, const double *ci0, double *ci1)
-{
-        if (contract_validate(gas, eri, ci0, ci1) != GAS_SUCCESS) {
-                return GAS_ERR_INVALID;
-        }
-
-        uint32_t nnorb = (uint32_t)(gas->norb_tot * (gas->norb_tot + 1) / 2);
-        double *gos = build_abba_gos(eri, nnorb);
-        if (gos == 0) {
-                return GAS_ERR_MEMORY;
-        }
-
-#ifdef _OPENMP
-        if (omp_get_max_threads() > 1) {
-                int status = contract_gas_2e_parallel(
-                        gas, eri, gos, ci0, ci1, nnorb);
-                if (status != GAS_SUCCESS) {
-                        free(gos);
-                        return status;
-                }
-        } else {
-                contract_zero(ci1, gas->ndet);
-                contract_gas_2e_serial(gas, eri, gos, ci0, ci1, nnorb);
-        }
-#else
-        contract_zero(ci1, gas->ndet);
-        contract_gas_2e_serial(gas, eri, gos, ci0, ci1, nnorb);
-#endif
-        free(gos);
-        return GAS_SUCCESS;
-}
-
-/* ========================================================================== */
-/* 7. Reusable contraction plan                                               */
+/* 6. Reusable contraction plan                                               */
 /* ========================================================================== */
 
 static int contract_plan_config_matches(const gas_contract_plan_t *plan)
@@ -2503,9 +2383,10 @@ static void contract_gas_2e_parallel_plan(gas_contract_plan_t *plan,
 
 int fci_contract_gas_plan_create(gas_contract_plan_t **out,
                                 const gas_space_t *gas,
-                                const double *eri)
+                                const double *eri,
+                                const double *gos)
 {
-        if (out == 0 || gas == 0 || eri == 0 ||
+        if (out == 0 || gas == 0 || eri == 0 || gos == 0 ||
             gas->link_format != GAS_LINK_COMPRESSED) {
                 return GAS_ERR_INVALID;
         }
@@ -2517,14 +2398,8 @@ int fci_contract_gas_plan_create(gas_contract_plan_t **out,
         }
         plan->gas = gas;
         plan->eri = eri;
+        plan->gos = gos;
         plan->abba_t1_target_bytes = gas_abba_t1_target_bytes;
-
-        uint32_t nnorb = (uint32_t)(gas->norb_tot * (gas->norb_tot + 1) / 2);
-        plan->gos = build_abba_gos(eri, nnorb);
-        if (plan->gos == 0) {
-                fci_contract_gas_plan_free(plan);
-                return GAS_ERR_MEMORY;
-        }
 
 #ifdef _OPENMP
         if (contract_plan_rebuild_tasks(plan) != GAS_SUCCESS) {
@@ -2581,7 +2456,6 @@ void fci_contract_gas_plan_free(gas_contract_plan_t *plan)
                 contract_ws_free(plan->workspace + i);
         }
         free(plan->workspace);
-        free(plan->gos);
 #ifdef _OPENMP
         free(plan->task);
 #endif

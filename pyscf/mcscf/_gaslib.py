@@ -182,10 +182,9 @@ def _configure_library(lib):
     lib.fci_contract_gas_parallel_units.argtypes = [gas_p]
     lib.fci_contract_gas_parallel_units.restype = ctypes.c_uint32
 
-    lib.fci_contract_gas_2e.argtypes = [gas_p, double_p, double_p, double_p]
-    lib.fci_contract_gas_2e.restype = ctypes.c_int
-
-    lib.fci_contract_gas_plan_create.argtypes = [gas_plan_pp, gas_p, double_p]
+    lib.fci_contract_gas_plan_create.argtypes = [
+        gas_plan_pp, gas_p, double_p, double_p,
+    ]
     lib.fci_contract_gas_plan_create.restype = ctypes.c_int
 
     lib.fci_contract_gas_plan_execute.argtypes = [

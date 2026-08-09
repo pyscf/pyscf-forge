@@ -119,7 +119,8 @@ typedef struct {
 /*
  * Reusable H*c execution plan.  A plan caches Hamiltonian-dependent data,
  * OpenMP tasks and per-thread workspaces across Davidson iterations.
- * The referenced gas space and eri array must outlive the plan.  A single
+ * The referenced gas space, eri array and opposite-spin array must outlive
+ * the plan.  A single
  * plan must not be executed concurrently by multiple host threads.
  */
 typedef struct gas_contract_plan gas_contract_plan_t;
@@ -241,11 +242,10 @@ uint32_t fci_contract_gas_omp_task_count(const gas_space_t *gas);
  * gas_link_pair_index.  ci0 and ci1 follow gas->block determinant order.
  * Contraction requires compressed link tables.
  */
-int fci_contract_gas_2e(const gas_space_t *gas, const double *eri_tril,
-                       const double *ci0, double *ci1);
 int fci_contract_gas_plan_create(gas_contract_plan_t **out,
                                 const gas_space_t *gas,
-                                const double *eri_tril);
+                                const double *eri_tril,
+                                const double *gos);
 int fci_contract_gas_plan_execute(gas_contract_plan_t *plan,
                                  const double *ci0, double *ci1);
 void fci_contract_gas_plan_free(gas_contract_plan_t *plan);
@@ -256,7 +256,7 @@ uint32_t fci_contract_gas_parallel_units(const gas_space_t *gas);
 /*
  * GAS reduced density matrices.  These entry points require raw link tables;
  * rebuild the gas space after the Davidson contraction stage rather than
- * passing a space that has been compressed for fci_contract_gas_2e.
+ * passing a space that has been compressed for Hamiltonian contraction.
  *
  * All arrays are row-major.  The conventions match PySCF's public RDMs:
  *
