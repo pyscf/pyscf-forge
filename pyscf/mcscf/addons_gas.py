@@ -334,15 +334,6 @@ def normalize_cumulative_occ(bounds, ngas):
     return numpy.ascontiguousarray(arr, dtype=numpy.int32)
 
 
-def spin_supergroup_blocks(gas_orbs, nelec, rows):
-    """Validate and canonicalize an explicit legal block set D."""
-
-    gas_orbs = _integer_vector(gas_orbs, "gas_orbs")
-    blocks = normalize_blocks(rows, len(gas_orbs))
-    check_kernel_limits(gas_orbs, nelec, blocks)
-    return blocks
-
-
 def _supergroup_block_count(gas_orbs, na, row):
     """Count alpha partitions of one supergroup without materializing D."""
 
