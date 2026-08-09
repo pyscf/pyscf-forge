@@ -29,6 +29,7 @@ from pyscf import scf
 from pyscf.fci import addons as fci_addons
 from pyscf.fci import cistring
 from pyscf.fci import direct_spin1
+from pyscf.fci import spin_op
 from pyscf.lib import logger
 from pyscf.mcscf import addons_gas
 from pyscf.mcscf import fci_gas
@@ -167,6 +168,139 @@ class TestGASFCISolver(unittest.TestCase):
         energy = solver.energy(
             self.h1e, self.eri, self.ci, self.norb, self.nelec)
         self.assertAlmostEqual(energy, numpy.dot(self.ci, hc), places=11)
+
+    def test_gas_fci_vector_converters(self):
+        gas_orbs = (2, 2)
+        nelec = (2, 1)
+        blocks = numpy.asarray([[1, 1, 1, 0]], dtype=numpy.int32)
+        solver = fci_gas.FCISolver(
+            gas_orbs=gas_orbs,
+            gas_restr=blocks,
+            gas_restr_type="spin-supergroup")
+
+        with solver.make_space(self.norb, nelec) as gas:
+            nstr_alpha = cistring.num_strings(self.norb, nelec[0])
+            nstr_beta = cistring.num_strings(self.norb, nelec[1])
+            self.assertLess(gas.ndet, nstr_alpha * nstr_beta)
+
+            rng = numpy.random.default_rng(19)
+            gas_ci = rng.normal(size=gas.ndet)
+            fci_ci = fci_gas.gas2fci(gas_ci, gas)
+            self.assertEqual(fci_ci.shape, (nstr_alpha, nstr_beta))
+            numpy.testing.assert_array_equal(
+                fci_gas.fci2gas(fci_ci, gas), gas_ci)
+
+            full_ci = numpy.arange(
+                1, nstr_alpha * nstr_beta + 1, dtype=numpy.float64
+            ).reshape(nstr_alpha, nstr_beta)
+            projected = fci_gas.gas2fci(
+                fci_gas.fci2gas(full_ci, gas), gas)
+            projected_twice = fci_gas.gas2fci(
+                fci_gas.fci2gas(projected, gas), gas)
+            numpy.testing.assert_array_equal(projected_twice, projected)
+            self.assertEqual(numpy.count_nonzero(projected), gas.ndet)
+
+    def test_restricted_hamiltonian_projection(self):
+        cases = (
+            {
+                "name": "spin-supergroup",
+                "gas_orbs": (2, 2),
+                "nelec": (2, 1),
+                "gas_restr": numpy.asarray(
+                    [[1, 1, 1, 0]], dtype=numpy.int32),
+                "gas_restr_type": "spin-supergroup",
+            },
+            {
+                "name": "supergroup",
+                "gas_orbs": (1, 2, 1),
+                "nelec": (2, 2),
+                "gas_restr": [[1, 2, 1], [2, 1, 1], [1, 1, 2]],
+                "gas_restr_type": "supergroup",
+            },
+            {
+                "name": "ras",
+                "gas_orbs": (1, 2, 1),
+                "nelec": (2, 2),
+                "gas_restr": {"max_holes": 1, "max_particles": 1},
+                "gas_restr_type": "ras",
+            },
+        )
+
+        rng = numpy.random.default_rng(23)
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                nelec = case["nelec"]
+                solver = fci_gas.FCISolver(
+                    gas_orbs=case["gas_orbs"],
+                    gas_restr=case["gas_restr"],
+                    gas_restr_type=case["gas_restr_type"])
+                h1e, eri = make_integrals(self.norb)
+                h2e = fci_gas.absorb_h1e(
+                    h1e, eri, self.norb, nelec, fac=0.5)
+
+                with solver.make_space(self.norb, nelec) as gas:
+                    nstr_alpha = cistring.num_strings(self.norb, nelec[0])
+                    nstr_beta = cistring.num_strings(self.norb, nelec[1])
+                    self.assertLess(gas.ndet, nstr_alpha * nstr_beta)
+
+                    gas_ci = rng.normal(size=gas.ndet)
+                    gas_ci /= numpy.linalg.norm(gas_ci)
+                    fci_ci = fci_gas.gas2fci(gas_ci, gas)
+
+                    gas_hc = solver.contract_2e(
+                        h2e, gas_ci, self.norb, nelec)
+                    fci_hc = direct_spin1.contract_2e(
+                        h2e, fci_ci, self.norb, nelec)
+                    projected_hc = fci_gas.fci2gas(fci_hc, gas)
+                    numpy.testing.assert_allclose(
+                        gas_hc, projected_hc, atol=1e-11, rtol=0)
+
+    def test_spin_square_projection(self):
+        cases = (
+            {
+                "name": "supergroup",
+                "gas_orbs": (1, 2, 1),
+                "nelec": (2, 2),
+                "gas_restr": [[1, 2, 1], [2, 1, 1], [1, 1, 2]],
+                "gas_restr_type": "supergroup",
+            },
+            {
+                "name": "ras",
+                "gas_orbs": (1, 2, 1),
+                "nelec": (2, 2),
+                "gas_restr": {"max_holes": 1, "max_particles": 1},
+                "gas_restr_type": "ras",
+            },
+        )
+
+        rng = numpy.random.default_rng(29)
+        for case in cases:
+            with self.subTest(case=case["name"]):
+                nelec = case["nelec"]
+                solver = fci_gas.FCISolver(
+                    gas_orbs=case["gas_orbs"],
+                    gas_restr=case["gas_restr"],
+                    gas_restr_type=case["gas_restr_type"])
+
+                with solver.make_space(self.norb, nelec) as gas:
+                    self.assertTrue(addons_gas.is_spin_complete(
+                        gas.norb, nelec, gas.blocks))
+
+                    gas_ci = rng.normal(size=gas.ndet)
+                    gas_ci /= numpy.linalg.norm(gas_ci)
+                    fci_ci = fci_gas.gas2fci(gas_ci, gas)
+
+                    gas_sc = solver.contract_ss(
+                        gas_ci, self.norb, nelec)
+                    fci_sc = spin_op.contract_ss(
+                        fci_ci, self.norb, nelec)
+                    projected_sc = fci_gas.fci2gas(fci_sc, gas)
+                    numpy.testing.assert_allclose(
+                        gas_sc, projected_sc, atol=1e-12, rtol=0)
+
+                    embedded_sc = fci_gas.gas2fci(gas_sc, gas)
+                    numpy.testing.assert_allclose(
+                        embedded_sc, fci_sc, atol=1e-12, rtol=0)
 
     def test_gas_as_cas_rdms(self):
         solver = fci_gas.FCISolver()

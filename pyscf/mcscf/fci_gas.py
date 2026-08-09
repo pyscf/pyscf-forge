@@ -24,6 +24,7 @@ import numpy
 
 from pyscf import ao2mo
 from pyscf import lib as pyscf_lib
+from pyscf.fci import cistring
 from pyscf.fci import direct_spin1
 from pyscf.lib import logger
 
@@ -137,6 +138,76 @@ def absorb_h1e(h1e, eri, norb, nelec, fac=0.5):
     eri = _as_pair_matrix(eri, norb)
     h2e = direct_spin1.absorb_h1e(h1e, eri, norb, nelec, fac)
     return _as_pair_matrix(h2e, norb)
+
+
+def _fci_block_addresses(gas, block):
+    """Return full-FCI alpha/beta addresses for one GAS block."""
+
+    alpha_strings = numpy.fromiter(
+        (gas.addr2str(block["sa"], address)
+         for address in range(block["na"])),
+        dtype=numpy.int64, count=block["na"])
+    beta_strings = numpy.fromiter(
+        (gas.addr2str(block["sb"], address)
+         for address in range(block["nb"])),
+        dtype=numpy.int64, count=block["nb"])
+    alpha_addresses = cistring.strs2addr(
+        gas.norb_total, gas.nelec[0], alpha_strings)
+    beta_addresses = cistring.strs2addr(
+        gas.norb_total, gas.nelec[1], beta_strings)
+    return alpha_addresses, beta_addresses
+
+
+def gas2fci(fcivec, gas):
+    """Embed a packed GAS CI vector in the full-FCI determinant tensor.
+
+    The returned array uses the standard ``direct_spin1`` rectangular
+    ``(nstr_alpha, nstr_beta)`` ordering.  Determinants outside the GAS space
+    are represented by zero coefficients.
+
+    This conversion is intended for interoperability and validation when the
+    corresponding full-FCI tensor is small enough to construct explicitly.
+    """
+
+    ci = numpy.asarray(fcivec)
+    if ci.size != gas.ndet:
+        raise ValueError("CI vector size does not match GAS determinant count")
+    ci = ci.reshape(-1)
+
+    nstr_alpha = cistring.num_strings(gas.norb_total, gas.nelec[0])
+    nstr_beta = cistring.num_strings(gas.norb_total, gas.nelec[1])
+    fci = numpy.zeros((nstr_alpha, nstr_beta), dtype=ci.dtype)
+    for block in gas.block_descriptors():
+        alpha_addresses, beta_addresses = _fci_block_addresses(gas, block)
+        size = block["na"] * block["nb"]
+        gas_block = ci[block["offset"]:block["offset"] + size].reshape(
+            block["na"], block["nb"])
+        fci[numpy.ix_(alpha_addresses, beta_addresses)] = gas_block
+    return fci
+
+
+def fci2gas(fcivec, gas):
+    """Project a full-FCI determinant tensor into packed GAS ordering.
+
+    Coefficients belonging to determinants outside the GAS space are
+    discarded.  The returned array is one-dimensional and follows the
+    canonical GAS block ordering used by the C kernels.
+    """
+
+    nstr_alpha = cistring.num_strings(gas.norb_total, gas.nelec[0])
+    nstr_beta = cistring.num_strings(gas.norb_total, gas.nelec[1])
+    ci = numpy.asarray(fcivec)
+    if ci.size != nstr_alpha * nstr_beta:
+        raise ValueError("CI vector size does not match full FCI determinant count")
+    ci = ci.reshape(nstr_alpha, nstr_beta)
+
+    gas_ci = numpy.empty(gas.ndet, dtype=ci.dtype)
+    for block in gas.block_descriptors():
+        alpha_addresses, beta_addresses = _fci_block_addresses(gas, block)
+        size = block["na"] * block["nb"]
+        gas_ci[block["offset"]:block["offset"] + size] = ci[
+            numpy.ix_(alpha_addresses, beta_addresses)].reshape(-1)
+    return gas_ci
 
 
 def _spin_penalty_parameters(solver, norb, nelec):
