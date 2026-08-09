@@ -45,10 +45,7 @@ MO_ORTH_ERROR_TOL = getattr(
     __config__, "mcscf_gasci_mo_orth_error_tol", 1e-5)
 
 
-def h1e_for_gas(mc, mo_coeff=None, ncas=None, ncore=None):
-    """Return the effective one-electron Hamiltonian and core energy."""
-
-    return casci.h1e_for_cas(mc, mo_coeff, ncas, ncore)
+h1e_for_gas = casci.h1e_for_cas
 
 
 def kernel(mc, mo_coeff=None, ci0=None, verbose=logger.NOTE):
