@@ -410,7 +410,7 @@ class GasSpace:
         if blocks is None:
             if len(self.norb) != 1:
                 raise ValueError("blocks are required for multi-space GAS")
-            blocks = addons_gas.cas_blocks(self.norb[0], self.nelec)
+            blocks = numpy.asarray([self.nelec], dtype=numpy.int32)
         self.blocks = addons_gas.normalize_blocks(blocks, len(self.norb))
         self.limits = addons_gas.check_kernel_limits(self.norb, self.nelec,
                                                      self.blocks)

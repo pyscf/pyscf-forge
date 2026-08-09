@@ -334,11 +334,6 @@ def normalize_cumulative_occ(bounds, ngas):
     return numpy.ascontiguousarray(arr, dtype=numpy.int32)
 
 
-def cas_blocks(norb, nelec):
-    na, nb = fci_addons._unpack_nelec(nelec)
-    return numpy.array([[na, nb]], dtype=numpy.int32)
-
-
 def spin_supergroup_blocks(gas_orbs, nelec, rows):
     """Validate and canonicalize an explicit legal block set D."""
 
@@ -688,7 +683,8 @@ def normalize_gas_spec(gas_orbs, nelec, gas_restr=None,
             if len(user_gas_orbs) != 1:
                 raise ValueError("gas_restr is required for multi-space GAS")
             gas_orbs = user_gas_orbs
-            blocks = cas_blocks(gas_orbs[0], nelec)
+            blocks = numpy.asarray(
+                [fci_addons._unpack_nelec(nelec)], dtype=numpy.int32)
             check_kernel_limits(gas_orbs, nelec, blocks)
             info.update({
                 "kernel_gas_orbs": gas_orbs,
