@@ -334,15 +334,6 @@ def normalize_cumulative_occ(bounds, ngas):
     return numpy.ascontiguousarray(arr, dtype=numpy.int32)
 
 
-def _integer_scalar(value, label):
-    """Return one exact non-boolean integer scalar."""
-
-    arr = _exact_integer_array(value, label)
-    if arr.ndim != 0:
-        raise ValueError("%s must be one integer scalar" % label)
-    return int(arr)
-
-
 def cas_blocks(norb, nelec):
     na, nb = fci_addons._unpack_nelec(nelec)
     return numpy.array([[na, nb]], dtype=numpy.int32)
@@ -565,9 +556,14 @@ def _normalize_ras_restr(gas_restr):
     if extra:
         raise ValueError("unknown RAS restriction keys: %s" %
                          ", ".join(sorted(extra)))
-    max_holes = _integer_scalar(gas_restr["max_holes"], "max_holes")
-    max_particles = _integer_scalar(
-        gas_restr["max_particles"], "max_particles")
+    max_holes = gas_restr["max_holes"]
+    max_particles = gas_restr["max_particles"]
+    if not lib.isinteger(max_holes):
+        raise TypeError("max_holes must be an integer")
+    if not lib.isinteger(max_particles):
+        raise TypeError("max_particles must be an integer")
+    max_holes = int(max_holes)
+    max_particles = int(max_particles)
     if max_holes < 0 or max_particles < 0:
         raise ValueError("RAS hole and particle limits must be non-negative")
     return max_holes, max_particles
@@ -721,7 +717,9 @@ def normalize_gas_spec(gas_orbs, nelec, gas_restr=None,
 def _normalize_gaslst(gaslst, gas_orbs, nmo, base):
     """Validate nested GAS orbital indices and return a zero-based flat list."""
 
-    base = _integer_scalar(base, "base")
+    if not lib.isinteger(base):
+        raise TypeError("base must be an integer")
+    base = int(base)
     if base not in (0, 1):
         raise ValueError("base must be 0 or 1")
     if not isinstance(gaslst, (tuple, list)):

@@ -109,6 +109,12 @@ class TestGASRestrictions(unittest.TestCase):
                            [2, 0, 0, 2]], dtype=numpy.int32),
         )
 
+        for base in (0.0, True):
+            with self.subTest(base=base):
+                with self.assertRaises(TypeError):
+                    addons_gas._normalize_gaslst(
+                        [[0], [1]], (1, 1), 2, base)
+
     def test_equivalent_restriction_types(self):
         gas_orbs = (2, 2)
         nelec = (2, 2)
