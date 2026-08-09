@@ -79,6 +79,36 @@ class TestGASRestrictions(unittest.TestCase):
         self.assertEqual(solver._space_spec(4, 4)[1], (3, 1))
         self.assertEqual(solver.space_info(4, 4)["ndet_estimate"], 16)
 
+    def test_integer_inputs_reject_floats(self):
+        nelec = (2, 2)
+
+        invalid = (
+            ((2.0, 2), [[2, 2]], "supergroup"),
+            ((2, 2), [[2.0, 2]], "supergroup"),
+            ((2, 2), [[2, 2], [4, 4.0]], "cumulative-occ"),
+            ((1, 2, 1), {"max_holes": 1.0, "max_particles": 1}, "ras"),
+            ((2, True), [[2, 2]], "supergroup"),
+        )
+        for gas_orbs, gas_restr, gas_restr_type in invalid:
+            with self.subTest(
+                    gas_orbs=gas_orbs, gas_restr_type=gas_restr_type):
+                with self.assertRaises(TypeError):
+                    addons_gas.normalize_gas_restr(
+                        gas_orbs, nelec, gas_restr, gas_restr_type)
+
+        blocks = addons_gas.normalize_gas_restr(
+            numpy.asarray([2, 2], dtype=numpy.int64),
+            nelec,
+            numpy.asarray([[2, 2]], dtype=numpy.int64),
+            "supergroup",
+        )
+        numpy.testing.assert_array_equal(
+            blocks,
+            numpy.asarray([[0, 2, 2, 0],
+                           [1, 1, 1, 1],
+                           [2, 0, 0, 2]], dtype=numpy.int32),
+        )
+
     def test_equivalent_restriction_types(self):
         gas_orbs = (2, 2)
         nelec = (2, 2)

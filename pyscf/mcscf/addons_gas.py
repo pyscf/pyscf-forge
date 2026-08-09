@@ -66,9 +66,8 @@ def gas_restr_usage(gas_restr_type=None):
             "{'max_holes': integer, 'max_particles': integer}."),
     }
     numeric = (
-        "All occupations, bounds, orbital counts, and electron counts must "
-        "be exact integers; integral values such as 4.0 are accepted, but "
-        "non-integral, Boolean, non-finite, and negative values are rejected.")
+        "All occupations, bounds, orbital counts, and orbital indices must "
+        "be integers; floating-point and Boolean values are rejected.")
     if gas_restr_type in rules:
         return "\n".join((header, rules[gas_restr_type], numeric))
     return "\n".join((header,) + tuple(rules[key] for key in (
@@ -77,20 +76,12 @@ def gas_restr_usage(gas_restr_type=None):
 
 
 def _exact_integer_array(values, label):
-    """Convert numeric values only when every value is an exact integer."""
+    """Require integer input and convert it to the C-kernel int32 dtype."""
 
+    raw = numpy.asarray(values, dtype=object)
+    if not all(lib.isinteger(value) for value in raw.flat):
+        raise TypeError("%s must contain integers" % label)
     arr = numpy.asarray(values)
-    if arr.dtype.kind == "b":
-        raise TypeError("%s must contain integers, not Boolean values" % label)
-    if arr.dtype.kind in "iu":
-        pass
-    elif arr.dtype.kind == "f":
-        if not numpy.all(numpy.isfinite(arr)):
-            raise ValueError("%s must contain finite integers" % label)
-        if not numpy.all(arr == numpy.floor(arr)):
-            raise ValueError("%s must contain exact integers" % label)
-    else:
-        raise TypeError("%s must contain numeric integer values" % label)
     info = numpy.iinfo(numpy.int32)
     if numpy.any(arr < info.min) or numpy.any(arr > info.max):
         raise ValueError("%s values exceed int32 range" % label)
