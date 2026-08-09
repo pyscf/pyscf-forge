@@ -43,22 +43,18 @@ GAS_INIT_NOISE_CHUNK = 1 << 20
 
 
 def _lowest_hdiag_addresses(hdiag, count):
-    """Return the lowest diagonal addresses with deterministic tie ordering."""
+    """Return addresses of the lowest Hamiltonian diagonal elements."""
 
     hdiag = numpy.asarray(hdiag).reshape(-1)
     count = int(count)
     if count < 1 or count > hdiag.size:
         raise ValueError("count must be between 1 and the diagonal size")
-    if count == hdiag.size:
-        selected = numpy.arange(hdiag.size, dtype=numpy.intp)
-    else:
-        cutoff = numpy.partition(hdiag, count - 1)[count - 1]
-        selected = numpy.flatnonzero(hdiag < cutoff)
-        ntied = count - selected.size
-        tied = numpy.flatnonzero(hdiag == cutoff)[:ntied]
-        selected = numpy.concatenate((selected, tied))
-    order = numpy.lexsort((selected, hdiag[selected]))
-    return numpy.asarray(selected[order], dtype=numpy.intp)
+    if hdiag.size <= count:
+        return numpy.arange(hdiag.size, dtype=numpy.intp)
+    try:
+        return numpy.argpartition(hdiag, count - 1)[:count].copy()
+    except AttributeError:
+        return numpy.argsort(hdiag)[:count].copy()
 
 
 def _add_distributed_noise(vector, root, noise_norm=GAS_INIT_NOISE_NORM):
