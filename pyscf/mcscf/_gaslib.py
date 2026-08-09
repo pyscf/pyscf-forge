@@ -196,25 +196,6 @@ def _configure_library(lib):
     lib.fci_contract_gas_plan_free.argtypes = [ctypes.c_void_p]
     lib.fci_contract_gas_plan_free.restype = None
 
-    lib.fci_rdm_gas_make_rdm1s.argtypes = [
-        gas_p, double_p, double_p, double_p, double_p,
-    ]
-    lib.fci_rdm_gas_make_rdm1s.restype = ctypes.c_int
-
-    lib.fci_rdm_gas_make_rdm1.argtypes = [gas_p, double_p, double_p, double_p]
-    lib.fci_rdm_gas_make_rdm1.restype = ctypes.c_int
-
-    lib.fci_rdm_gas_make_rdm12s.argtypes = [
-        gas_p, double_p, double_p, double_p, double_p,
-        double_p, double_p, double_p,
-    ]
-    lib.fci_rdm_gas_make_rdm12s.restype = ctypes.c_int
-
-    lib.fci_rdm_gas_make_rdm12.argtypes = [
-        gas_p, double_p, double_p, double_p, double_p,
-    ]
-    lib.fci_rdm_gas_make_rdm12.restype = ctypes.c_int
-
     lib.fci_rdm_gas_plan_create.argtypes = [rdm_plan_pp, gas_p]
     lib.fci_rdm_gas_plan_create.restype = ctypes.c_int
 
@@ -223,21 +204,11 @@ def _configure_library(lib):
     ]
     lib.fci_rdm_gas_plan_make_rdm1s.restype = ctypes.c_int
 
-    lib.fci_rdm_gas_plan_make_rdm1.argtypes = [
-        ctypes.c_void_p, double_p, double_p, double_p,
-    ]
-    lib.fci_rdm_gas_plan_make_rdm1.restype = ctypes.c_int
-
     lib.fci_rdm_gas_plan_make_rdm12s.argtypes = [
         ctypes.c_void_p, double_p, double_p, double_p, double_p,
         double_p, double_p, double_p,
     ]
     lib.fci_rdm_gas_plan_make_rdm12s.restype = ctypes.c_int
-
-    lib.fci_rdm_gas_plan_make_rdm12.argtypes = [
-        ctypes.c_void_p, double_p, double_p, double_p, double_p,
-    ]
-    lib.fci_rdm_gas_plan_make_rdm12.restype = ctypes.c_int
 
     lib.fci_rdm_gas_plan_free.argtypes = [ctypes.c_void_p]
     lib.fci_rdm_gas_plan_free.restype = None

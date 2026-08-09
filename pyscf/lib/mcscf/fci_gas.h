@@ -264,23 +264,9 @@ uint32_t fci_contract_gas_parallel_units(const gas_space_t *gas);
  *   dm2[p,q,r,s]   = <bra| p^+ r^+ s q |ket>
  *
  * dm2ab has alpha spin on the (p,q) operator pair and beta spin on
- * the (r,s) pair.  The spin-free two-particle density matrix is
- * dm2aa + dm2bb + dm2ab + dm2ab.transpose(2,3,0,1).
+ * the (r,s) pair.  Spin-free RDMs are assembled from these arrays in
+ * the Python layer.
  */
-int fci_rdm_gas_make_rdm1s(const gas_space_t *gas,
-                           const double *bra, const double *ket,
-                           double *dm1a, double *dm1b);
-int fci_rdm_gas_make_rdm1(const gas_space_t *gas,
-                          const double *bra, const double *ket,
-                          double *dm1);
-int fci_rdm_gas_make_rdm12s(const gas_space_t *gas,
-                            const double *bra, const double *ket,
-                            double *dm1a, double *dm1b,
-                            double *dm2aa, double *dm2ab, double *dm2bb);
-int fci_rdm_gas_make_rdm12(const gas_space_t *gas,
-                           const double *bra, const double *ket,
-                           double *dm1, double *dm2);
-
 /*
  * Target size for each thread's tiled opposite-spin T1 workspace
  * (16 MiB production default).
@@ -297,16 +283,10 @@ int fci_rdm_gas_plan_create(gas_rdm_plan_t **out, const gas_space_t *gas);
 int fci_rdm_gas_plan_make_rdm1s(gas_rdm_plan_t *plan,
                                 const double *bra, const double *ket,
                                 double *dm1a, double *dm1b);
-int fci_rdm_gas_plan_make_rdm1(gas_rdm_plan_t *plan,
-                               const double *bra, const double *ket,
-                               double *dm1);
 int fci_rdm_gas_plan_make_rdm12s(gas_rdm_plan_t *plan,
                                  const double *bra, const double *ket,
                                  double *dm1a, double *dm1b,
                                  double *dm2aa, double *dm2ab, double *dm2bb);
-int fci_rdm_gas_plan_make_rdm12(gas_rdm_plan_t *plan,
-                                const double *bra, const double *ket,
-                                double *dm1, double *dm2);
 void fci_rdm_gas_plan_free(gas_rdm_plan_t *plan);
 uint32_t fci_rdm_gas_plan_task_count(const gas_rdm_plan_t *plan);
 uint64_t fci_rdm_gas_plan_workspace_bytes(const gas_rdm_plan_t *plan);

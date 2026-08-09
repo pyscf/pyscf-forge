@@ -352,6 +352,26 @@ class TestGASFCISolver(unittest.TestCase):
         numpy.testing.assert_allclose(
             tdm2, reference_tdm2, atol=1e-12, rtol=0)
 
+    def test_spin_free_rdm_assembly(self):
+        solver = fci_gas.FCISolver()
+        with solver.make_rdm_plan(self.norb, self.nelec) as plan:
+            dm1a, dm1b = plan.make_rdm1s(self.ci, self.ket)
+            dm1 = plan.make_rdm1(self.ci, self.ket)
+            numpy.testing.assert_allclose(
+                dm1, dm1a + dm1b, atol=1e-12, rtol=0)
+
+            (dm1a, dm1b), (dm2aa, dm2ab, dm2bb) = plan.make_rdm12s(
+                self.ci, self.ket)
+            dm1, dm2 = plan.make_rdm12(self.ci, self.ket)
+            expected_dm1 = dm1a + dm1b
+            expected_dm2 = dm2aa + dm2bb
+            expected_dm2 += dm2ab
+            expected_dm2 += dm2ab.transpose(2, 3, 0, 1)
+            numpy.testing.assert_allclose(
+                dm1, expected_dm1, atol=1e-12, rtol=0)
+            numpy.testing.assert_allclose(
+                dm2, expected_dm2, atol=1e-12, rtol=0)
+
     def test_restricted_space_and_spin_guards(self):
         gas_orbs = (2, 2)
         nelec = (2, 1)

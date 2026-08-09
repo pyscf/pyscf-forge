@@ -668,13 +668,8 @@ class GasRDMPlan:
     def make_rdm1(self, cibra, ciket):
         """Return the spin-summed active-space transition 1-RDM."""
 
-        bra, ket = self._vectors(cibra, ciket)
-        dm1 = numpy.zeros((self.norb, self.norb), dtype=numpy.float64)
-        status = self.lib.fci_rdm_gas_plan_make_rdm1(
-            self._plan, _gaslib.double_ptr(bra), _gaslib.double_ptr(ket),
-            _gaslib.double_ptr(dm1))
-        _check_status(status, "fci_rdm_gas_plan_make_rdm1")
-        return dm1
+        dm1a, dm1b = self.make_rdm1s(cibra, ciket)
+        return dm1a + dm1b
 
     def make_rdm12s(self, cibra, ciket):
         """Return spin-resolved active-space transition 1- and 2-RDMs."""
@@ -698,14 +693,12 @@ class GasRDMPlan:
     def make_rdm12(self, cibra, ciket):
         """Return spin-summed active-space transition 1- and 2-RDMs."""
 
-        bra, ket = self._vectors(cibra, ciket)
-        shape1 = (self.norb, self.norb)
-        dm1 = numpy.zeros(shape1, dtype=numpy.float64)
-        dm2 = numpy.zeros(shape1 + shape1, dtype=numpy.float64)
-        status = self.lib.fci_rdm_gas_plan_make_rdm12(
-            self._plan, _gaslib.double_ptr(bra), _gaslib.double_ptr(ket),
-            _gaslib.double_ptr(dm1), _gaslib.double_ptr(dm2))
-        _check_status(status, "fci_rdm_gas_plan_make_rdm12")
+        (dm1a, dm1b), (dm2aa, dm2ab, dm2bb) = self.make_rdm12s(
+            cibra, ciket)
+        dm1 = dm1a + dm1b
+        dm2 = dm2aa + dm2bb
+        dm2 += dm2ab
+        dm2 += dm2ab.transpose(2, 3, 0, 1)
         return dm1, dm2
 
     def close(self):
