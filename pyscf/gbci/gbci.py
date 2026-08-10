@@ -38,6 +38,7 @@ from itertools import product
 
 from pyscf import __config__
 from pyscf import lib
+from pyscf import gto
 from pyscf.lib import logger
 from pyscf.scf import rohf
 from pyscf.mcscf.casci import CASBase, CASCI
@@ -99,23 +100,24 @@ def kernel(gbci, mo_coeff=None, ci0=None, verbose=logger.NOTE):
     # SVD and core density matrix
     dmet_core_list, ov_list = gbci.get_svd_matrices(mo_list, svd_basis)
     t1 = log.timer('SVD and core density matrix', *t1)
-    gbci._cache_gbci_intermediates(
-        mo_coeff, ncas, nelecas, gbci.ncore,
-        {
-            "mo_list": mo_list,
-            "mo_energy": mo_energy,
-            "po_list": po_list,
-            "group": group,
-            "svd_basis": svd_basis,
-            "conf_info_list": conf_info_list,
-            "dmet_core_list": dmet_core_list,
-            "ov_list": ov_list,
-        })
 
     # 1e
     dmet_act_list = gbci.get_active_dm(mo_coeff)
     h1e, ecore_list = gbci.get_h1cas(dmet_act_list, mo_list, dmet_core_list)
     t1 = log.timer('effective 1e hamiltonians and core energies', *t1)
+    gbci._cache_gbci_intermediates(
+            mo_coeff, ncas, nelecas, gbci.ncore,
+            {
+                "mo_list": mo_list,
+                "mo_energy": mo_energy,
+                "po_list": po_list,
+                "group": group,
+                "svd_basis": svd_basis,
+                "conf_info_list": conf_info_list,
+                "dmet_core_list": dmet_core_list,
+                "ov_list": ov_list,
+                "ecore_list": ecore_list,
+            })
 
     # 2e
     eri = gbci.get_h2eff(mo_coeff)
@@ -538,6 +540,8 @@ def optimize_mo(gbci, mo_coeff=None, ncas=None, nelecas=None, ncore=None,
         fasscf = gbci._get_fasscf(
             group_spec, mo_coeff, ncas, nelecas, ncore)
         for i, occ in enumerate(po_list):
+            fasscf.mo_coeff = mo_coeff
+            fasscf.mo_energy = gbci.mo_energy
             result = fasscf.mixed_routine(
                 target=occ, **gbci._mixed_routine_options(fasscf))
             conv, et, moe, moce, moocc = result.as_tuple()
@@ -566,6 +570,8 @@ def optimize_mo(gbci, mo_coeff=None, ncas=None, nelecas=None, ncore=None,
     fasscf = gbci._get_fasscf(
         group_spec, mo_coeff, ncas, nelecas, ncore)
     for i in range(0,g):
+        fasscf.mo_coeff = mo_coeff
+        fasscf.mo_energy = gbci.mo_energy
         result = fasscf.mixed_routine(
             target_group=i, group_info_list=group_info_flat,
             **gbci._mixed_routine_options(fasscf))
@@ -629,6 +635,79 @@ def spin_square(gbci, rdm1, rdm2ab,rdm2ba):
     rdm2mo = lib.einsum('ai,bj,ck,dl,ap,bq,cr,ds,pqrs',mo,mo,mo,mo,s1e,s1e,s1e,s1e,rdm2ab+rdm2ba)
 
     return M_s**2 + 0.5*lib.einsum('ii ->',rdm1mo) - 0.5*lib.einsum('ijji ->', rdm2mo)
+
+def as_scanner(mc):
+    '''Generating a scanner for GBCI PES.
+
+    The returned solver is a function. This function requires one argument
+    "mol" as input and returns total GBCI energy.
+
+    The solver will automatically use the results of last calculation as the
+    initial guess of the new calculation.  All parameters of MCSCF object
+    are automatically applied in the solver.
+
+    Note scanner has side effects.  It may change many underlying objects
+    (_scf, with_df, with_x2c, ...) during calculation.
+
+    Examples:
+
+    >>> from pyscf import gto, scf, mcscf
+    >>> mf = scf.RHF(gto.Mole().set(verbose=0))
+    >>> mc_scanner = mcscf.CASCI(mf, 4, 4).as_scanner()
+    >>> mc_scanner(gto.M(atom='N 0 0 0; N 0 0 1.1'))
+    >>> mc_scanner(gto.M(atom='N 0 0 0; N 0 0 1.5'))
+    '''
+    if isinstance(mc, lib.SinglePointScanner):
+        return mc
+
+    logger.info(mc, 'Create scanner for %s', mc.__class__)
+    name = mc.__class__.__name__ + GBCI_Scanner.__name_mixin__
+    return lib.set_class(GBCI_Scanner(mc), (GBCI_Scanner, mc.__class__), name)
+
+class GBCI_Scanner(lib.SinglePointScanner):
+    def __init__(self, mc):
+        self.__dict__.update(mc.__dict__)
+        self._scf = mc._scf.as_scanner()
+
+    def __call__(self, mol_or_geom, mo_coeff=None, ci0=None, for_grad = False):
+        if isinstance(mol_or_geom, gto.MoleBase):
+            mol = mol_or_geom
+        else:
+            mol = self.mol.set_geom_(mol_or_geom, inplace=False)
+
+        self.reset(mol)
+        self._clear_gbci_intermediates()
+
+        for key in ('with_df', 'with_x2c', 'with_solvent', 'with_dftd3'):
+            sub_mod = getattr(self, key, None)
+            if sub_mod:
+                sub_mod.reset(mol)
+
+        fasscf = getattr(self, '_fasscf', None)
+        if fasscf is not None:
+            fasscf.reset(mol)
+
+        if mo_coeff is None:
+            mf_scanner = self._scf
+            mf_scanner(mol)
+            mo_coeff = mf_scanner.mo_coeff
+            self.mo_energy = numpy.array(mf_scanner.mo_energy, copy=True)
+            self.mo_occ = numpy.array(mf_scanner.mo_occ, copy=True)
+
+        self.mo_coeff = numpy.array(mo_coeff, copy=True)
+        self.mol = mol
+
+        if ci0 is None:
+            ci0 = self.ci
+
+        e_tot = self.kernel(mo_coeff, ci0)[0]
+        if for_grad:
+            intermediates = self._gbci_intermediates
+            if intermediates is None:
+                raise RuntimeError(
+                    'GBCI intermediates were not generated')
+            return e_tot, intermediates
+        return e_tot
 
 class GBCI(CASBase):
     '''GBCI
@@ -1342,3 +1421,11 @@ class GBCI(CASBase):
         core_density  = rdm.get_core_density(mo_coeff, ci, ncas, nelecas, ncore, dmet_core_list, conf_info_list)
 
         return core_density
+
+    def nuc_grad_method(self):
+        # Dispatch by orbital source.  HF-CASCI and KS-CASCI have different
+        # orbital-response equations.
+        from pyscf.grad import gbci
+        return gbci.Gradients(self)
+
+    as_scanner = as_scanner

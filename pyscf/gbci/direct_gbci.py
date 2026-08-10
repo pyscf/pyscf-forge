@@ -350,6 +350,17 @@ def kernel(gbci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecore_list,
             return x0
     if ci0 is None:
         ci0 = init_guess
+    elif not callable(ci0):
+        if isinstance(ci0, numpy.ndarray):
+            ci0 = [ci0.ravel()]
+        else:
+            ci0 = [x.ravel() for x in ci0]
+        # If provided initial guess ci0 are accidentally the eigenvectors of the
+        # system, Davidson solver may be failed to find enough roots as it is
+        # unable to generate more subspace basis from ci0. Adding vectors so
+        # initial guess to help Davidson solver generate enough basis.
+        if len(ci0) < nroots:
+            ci0.extend(init_guess()[len(ci0):])
     if tol is None: tol = gbci.conv_tol
     if lindep is None: lindep = gbci.lindep
     if max_cycle is None: max_cycle = gbci.max_cycle

@@ -15,7 +15,7 @@ from pyscf.gbci import gbpdft
 OTXCS = ("tPBE", "tPBE0")
 
 LIH_XMS_GROUP_CASES = (
-    ("none", None, -7.82530158785605),
+    ("none", None, -7.825301573668843),
     ("mo", {"mo": [[0], [1]]}, -7.825301573668855),
     ("atom", {"atom": [[0], [1]]}, -7.825301573668856),
     ("occ", {"occ": [[0], [1], [2]]}, -7.825301573668856),
