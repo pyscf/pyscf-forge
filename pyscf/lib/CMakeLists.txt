@@ -1,6 +1,19 @@
 cmake_minimum_required (VERSION 3.5)
 project (pyscf_forge)
 
+# Build only the GAS FCI kernel library.  This mode is intended for
+# reproducible local kernel builds and deliberately bypasses unrelated
+# dependencies such as BLAS, FFTW, and the other PySCF-forge extensions.
+option(
+  BUILD_GAS_FCI_ONLY
+  "Configure only the GAS FCI shared library"
+  OFF
+)
+
+option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
+
+if(NOT BUILD_GAS_FCI_ONLY)
+
 set(CMAKE_VERBOSE_MAKEFILE OFF)
 if (NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE RELWITHDEBINFO)
@@ -71,7 +84,6 @@ find_package(BLAS REQUIRED)
 #find_package (LAPACK REQUIRED)
 
 # OpenMP
-option(ENABLE_OPENMP "Compiling C extensions with openmp" ON)
 set(OPENMP_C_PROPERTIES "")
 if(ENABLE_OPENMP)
   find_package(OpenMP)
@@ -200,3 +212,23 @@ set_target_properties (clib_csf PROPERTIES
 
 add_subdirectory(gbci)
 add_subdirectory(pwscf)
+
+else()
+
+  if(NOT ENABLE_OPENMP)
+    message(FATAL_ERROR
+        "BUILD_GAS_FCI_ONLY=ON requires ENABLE_OPENMP=ON"
+    )
+  endif()
+
+  find_package(OpenMP REQUIRED COMPONENTS C)
+
+  if(NOT TARGET OpenMP::OpenMP_C)
+    message(FATAL_ERROR
+        "OpenMP was reported as found, but OpenMP::OpenMP_C is unavailable"
+    )
+  endif()
+
+endif()
+
+add_subdirectory(mcscf)
