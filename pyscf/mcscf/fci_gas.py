@@ -546,8 +546,8 @@ class GasContractPlan:
     """Reusable Hamiltonian contraction plan for one compressed GAS space.
 
     The GAS space is retained but not closed by this object.  The normalized
-    ERI and opposite-spin arrays are retained because the C plan stores
-    borrowed pointers to them for the full plan lifetime.
+    ERI and gos arrays are retained because the C plan stores borrowed
+    pointers to them for the full plan lifetime.
     """
 
     def __init__(self, gas, eri):

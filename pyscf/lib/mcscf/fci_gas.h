@@ -119,9 +119,8 @@ typedef struct {
 /*
  * Reusable H*c execution plan.  A plan caches Hamiltonian-dependent data,
  * OpenMP tasks and per-thread workspaces across Davidson iterations.
- * The referenced gas space, eri array and opposite-spin array must outlive
- * the plan.  A single
- * plan must not be executed concurrently by multiple host threads.
+ * The referenced gas space, eri array and gos array must outlive the plan.
+ * A single plan must not be executed concurrently by multiple host threads.
  */
 typedef struct gas_contract_plan gas_contract_plan_t;
 typedef struct gas_rdm_plan gas_rdm_plan_t;
@@ -267,6 +266,7 @@ uint32_t fci_contract_gas_parallel_units(const gas_space_t *gas);
  * the (r,s) pair.  Spin-free RDMs are assembled from these arrays in
  * the Python layer.
  */
+
 /*
  * Target size for each thread's tiled opposite-spin T1 workspace
  * (16 MiB production default).

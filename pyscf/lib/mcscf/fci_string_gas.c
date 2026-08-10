@@ -239,7 +239,6 @@ static const uint32_t binom_tab[(GAS_MAX_LOCAL_ORB + 1) * 32] = {
         7888725u, 20160075u, 44352165u, 84672315u, 141120525u, 206253075u, 265182525u, 300540195u,
         300540195u, 265182525u, 206253075u, 141120525u, 84672315u, 44352165u, 20160075u, 7888725u,
         2629575u, 736281u, 169911u, 31465u, 4495u, 465u, 31u, 1u,
-
 };
 
 static inline uint32_t binom(int n, int k)
@@ -539,6 +538,7 @@ gas_bid_t gas_find_block(const gas_space_t *gas, gas_sid_t sa, gas_sid_t sb)
         }
         return GAS_INVALID_BID;
 }
+
 gas_tid_t gas_find_table(const gas_space_t *gas, gas_sid_t src, gas_sid_t dst)
 {
         if (src >= gas->nsector) {
@@ -573,6 +573,7 @@ gas_tid_t gas_find_table(const gas_space_t *gas, gas_sid_t src, gas_sid_t dst)
         }
         return GAS_INVALID_TID;
 }
+
 const gas_link_table_t *gas_get_link_table(const gas_space_t *gas,
                                            gas_sid_t src, gas_sid_t dst)
 {
@@ -1185,7 +1186,6 @@ static int build_table_index(gas_space_t *gas, gas_pair_marker_t *M)
                 gas->R.src[rpos] = src;
                 gas->R.tid[rpos] = tid;
                 rrow->n++;
-
         }
         return 0;
 }

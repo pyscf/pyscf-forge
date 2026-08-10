@@ -20,6 +20,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+
 #if defined(__AVX2__)
 #include <immintrin.h>
 #endif
@@ -92,6 +93,7 @@ typedef struct {
         int8_t sign;
         uint8_t pad;
 } gas_alpha_hit_t;
+
 typedef struct {
         double *arena;
         size_t arena_cap;
@@ -111,7 +113,6 @@ typedef struct {
         gas_alpha_hit_t *alpha_hit;
         size_t alpha_hit_cap;
         uint32_t alpha_hit_n;
-
 } gas_contract_ws_t;
 
 typedef enum {
@@ -240,6 +241,7 @@ static inline void contract_axpy2(double *restrict y0,
                 y1[i] += a1 * xi;
         }
 }
+
 /* ========================================================================== */
 /* 2. ABBA microkernels and workspace helpers                                 */
 /* ========================================================================== */
@@ -715,6 +717,7 @@ static int reserve_ops(gas_contract_ws_t *ws, size_t n)
         ws->op_cap = cap;
         return GAS_SUCCESS;
 }
+
 #ifdef _OPENMP
 static gas_tid_t find_table_in_row(gas_sid_t dst,
                                    const gas_sid_t *restrict sid,
@@ -1037,49 +1040,49 @@ static int contract_bb_blockpair_transpose_rows(
                  * reset cost proportional to the number of destinations reached,
                  * not to nb2. */
                 for (uint32_t ib0 = 0; ib0 < nb0; ib0++) {
-                                const double *src_vec = src_t + (uint64_t)ib0 * nat;
-                                uint32_t ntouch = 0;
+                        const double *src_vec = src_t + (uint64_t)ib0 * nat;
+                        uint32_t ntouch = 0;
 
-                                for (uint32_t ip = 0; ip < npair; ip++) {
-                                        const gas_link_table_t *t1 = gas->table + pair[ip].first;
-                                        const gas_link_table_t *t2 = gas->table + pair[ip].second;
-                                        if (ib0 >= t1->nsrc) {
-                                                continue;
-                                        }
-                                        const gas_link_entry_t *r1 = t1->link +
-                                                (uint64_t)ib0 * t1->nlink;
-                                        for (uint32_t k1 = 0; k1 < t1->nlink; k1++) {
-                                                const gas_link_entry_t *e1 = r1 + k1;
-                                                const gas_link_entry_t *r2 = t2->link +
-                                                        (uint64_t)e1->addr * t2->nlink;
-                                                uint16_t op1 = gas_link_ia(e1);
-                                                int s1 = e1->sign;
-                                                for (uint32_t k2 = 0; k2 < t2->nlink; k2++) {
-                                                        const gas_link_entry_t *e2 = r2 + k2;
-                                                        uint32_t ib2 = e2->addr;
-                                                        double fac = (double)(s1 * e2->sign) *
-                                                                eri[(uint64_t)gas_link_ia(e2) *
-                                                                    nnorb + op1];
-                                                        int32_t pos = ws->op_map[ib2];
-                                                        if (pos < 0) {
-                                                                pos = (int32_t)ntouch;
-                                                                ws->op_map[ib2] = pos;
-                                                                ws->op[ntouch++] = (uint16_t)ib2;
-                                                                acc[ib2] = fac;
-                                                        } else {
-                                                                acc[ib2] += fac;
-                                                        }
+                        for (uint32_t ip = 0; ip < npair; ip++) {
+                                const gas_link_table_t *t1 = gas->table + pair[ip].first;
+                                const gas_link_table_t *t2 = gas->table + pair[ip].second;
+                                if (ib0 >= t1->nsrc) {
+                                        continue;
+                                }
+                                const gas_link_entry_t *r1 = t1->link +
+                                        (uint64_t)ib0 * t1->nlink;
+                                for (uint32_t k1 = 0; k1 < t1->nlink; k1++) {
+                                        const gas_link_entry_t *e1 = r1 + k1;
+                                        const gas_link_entry_t *r2 = t2->link +
+                                                (uint64_t)e1->addr * t2->nlink;
+                                        uint16_t op1 = gas_link_ia(e1);
+                                        int s1 = e1->sign;
+                                        for (uint32_t k2 = 0; k2 < t2->nlink; k2++) {
+                                                const gas_link_entry_t *e2 = r2 + k2;
+                                                uint32_t ib2 = e2->addr;
+                                                double fac = (double)(s1 * e2->sign) *
+                                                        eri[(uint64_t)gas_link_ia(e2) *
+                                                            nnorb + op1];
+                                                int32_t pos = ws->op_map[ib2];
+                                                if (pos < 0) {
+                                                        pos = (int32_t)ntouch;
+                                                        ws->op_map[ib2] = pos;
+                                                        ws->op[ntouch++] = (uint16_t)ib2;
+                                                        acc[ib2] = fac;
+                                                } else {
+                                                        acc[ib2] += fac;
                                                 }
                                         }
                                 }
-
-                                for (uint32_t it = 0; it < ntouch; it++) {
-                                        uint32_t ib2 = ws->op[it];
-                                        contract_axpy(dst_t + (uint64_t)ib2 * nat,
-                                                     src_vec, acc[ib2], nat);
-                                        ws->op_map[ib2] = -1;
-                                }
                         }
+
+                        for (uint32_t it = 0; it < ntouch; it++) {
+                                uint32_t ib2 = ws->op[it];
+                                contract_axpy(dst_t + (uint64_t)ib2 * nat,
+                                             src_vec, acc[ib2], nat);
+                                ws->op_map[ib2] = -1;
+                        }
+                }
         } else {
                 for (uint32_t ip = 0; ip < npair; ip++) {
                         const gas_link_table_t *t1 = gas->table + pair[ip].first;
@@ -1127,6 +1130,7 @@ static void contract_bb_path_list_rows(const gas_space_t *gas,
                                       pair[i].first, pair[i].second, a0, a1);
         }
 }
+
 static void contract_bb_blockpair_rows(const gas_space_t *gas,
                                        const double *restrict eri,
                                        const double *restrict ci0,
