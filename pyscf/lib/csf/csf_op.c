@@ -341,12 +341,16 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     switch (nq) {
         case -2:
             twoS0 = twoSk[q-1];
+            break;
         case -1:
             twoS0 = twoSb[q-1];
+            break;
         case 1:
             twoS0 = twoSk[q-1];
+            break;
         case 2:
             twoS0 = twoSb[q-1];
+            break;
     }
     parity += twoSk[q] + twoS0 + 1; // graph signs
     parity = parity % 4; // remember everything is *2 until the very end
@@ -356,8 +360,10 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     switch (nq) {
         case -2:
             parity += twoSk[q] + 3*twoSb[q-1] - 1;
+            break;
         case 2:
             parity += twoSb[q] + 3*twoSk[q-1] - 1;
+            break;
     }
     parity = parity % 4;
 
@@ -387,12 +393,16 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     switch (nr) {
         case -2:
             twoS0 = twoSk[r];
+            break;
         case -1:
             twoS0 = twoSb[r];
+            break;
         case 1:
             twoS0 = twoSk[r];
+            break;
         case 2:
             twoS0 = twoSb[r];
+            break;
     }
     xdiag *= _get_wigner_6j_j41h (twoSb[r-1], twoSk[r-1], 2, 1, twoS0);
     parity += twoS0 + twoSb[r-1] - 1; // graph signs
@@ -402,8 +412,10 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     switch (nr) {
         case -2:
             parity += twoSk[r] + 3*twoSb[r-1] - 1;
+            break;
         case 2:
             parity += twoSb[r] + 3*twoSk[r-1] - 1;
+            break;
     }
     parity = parity % 4;
 
@@ -1050,7 +1062,7 @@ void FCICSFpspace_h0tril(double *hmat,
             hmat[ihmat] += fac * hop;
             // S^a_i
             ihop = (a*norb) + i;
-            // fac = csf_Sai (&bra, &ket, a, i, twoM); // parity failure
+            fac = csf_Sai (&bra, &ket, a, i, twoM);
             hmat[ihmat] += fac * h1e_s[ihop];
             // E^a_p E^p_i
             for (p=0; p<norb; p++){
