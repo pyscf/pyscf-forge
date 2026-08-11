@@ -1107,11 +1107,11 @@ void FCICSFpspace_h0tril(double *hmat,
             exc2_sort (&bra, &ket, p, r, q, t, &a, &i, &b, &j);
             // E^a_i E^b_j
             ihop = (a*norb*norb*norb) + (i*norb*norb) + (b*norb) + j;
-            // fac = csf_EaiEbj (&bra, &ket, a, i, b, j); // nspin_bra != nspin_ket
+            // fac = csf_EaiEbj (&bra, &ket, a, i, b, j); // abs (np+nr) < 3
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
             ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
-            // fac = csf_EaiEbj (&bra, &ket, a, j, b, i); // (abs (np) + abs (nr)) >= 4
+            // fac = csf_EaiEbj (&bra, &ket, a, j, b, i); // abs (np+nr) < 3
             hmat[ihmat] += g2e[ihop] * fac;
             break;
     }
