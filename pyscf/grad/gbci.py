@@ -277,22 +277,11 @@ def get_X(gbci, h1eff, ov_list, ordm_list, trdm_list, um_list, H_list, group_pro
     M_list = None
     return Xa, Xx
 
-def _solve_bath_cphf(
-    fvind,
-    mo_energy,
-    mo_occ,
-    h1,
-    tol=1e-10,
-    lindep=1e-20,
-    max_cycle=100,
-    level_shift=1e-5,
-):
+def _solve_bath_cphf(fvind, mo_energy, mo_occ, h1, tol=1e-10, lindep=1e-20, max_cycle=100, level_shift=1e-5):
     """Solve the bath CPHF equation with an explicit Krylov lindep."""
     e_vir = mo_energy[mo_occ == 0]
     e_occ = mo_energy[mo_occ > 0]
-    e_ai = 1.0 / (
-        e_vir[:, None] + level_shift - e_occ
-    )
+    e_ai = 1.0 / (e_vir[:, None] + level_shift - e_occ)
 
     mo1base = -numpy.asarray(h1) * e_ai
     nvir, nocc = e_ai.shape
@@ -306,13 +295,8 @@ def _solve_bath_cphf(
         v *= e_ai
         return v.reshape(-1, nvir * nocc)
 
-    mo1 = lib.krylov(
-        vind_vo,
-        mo1base.reshape(-1, nvir * nocc),
-        tol=tol,
-        max_cycle=max_cycle,
-        lindep=lindep,
-    )
+    mo1 = lib.krylov(vind_vo, mo1base.reshape(-1, nvir * nocc), tol=tol,
+        max_cycle=max_cycle, lindep=lindep)
 
     return mo1.reshape(h1.shape)
 
