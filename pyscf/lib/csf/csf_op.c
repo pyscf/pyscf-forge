@@ -1050,12 +1050,12 @@ void FCICSFpspace_h0tril(double *hmat,
             hmat[ihmat] += fac * hop;
             // S^a_i
             ihop = (a*norb) + i;
-            // fac = csf_Sai (&bra, &ket, a, i, twoM);
+            // fac = csf_Sai (&bra, &ket, a, i, twoM); // parity failure
             hmat[ihmat] += fac * h1e_s[ihop];
             // E^a_p E^p_i
             for (p=0; p<norb; p++){
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
-                // fac = csf_EaiEbj (&bra, &ket, a, p, p, i);
+                // fac = csf_EaiEbj (&bra, &ket, a, p, p, i); // nspin_bra != nspin_ket
                 hmat[ihmat] += g2e[ihop] * fac;
             }
             break;
@@ -1063,11 +1063,11 @@ void FCICSFpspace_h0tril(double *hmat,
             exc2_sort (&bra, &ket, p, r, q, t, &a, &i, &b, &j);
             // E^a_i E^b_j
             ihop = (a*norb*norb*norb) + (i*norb*norb) + (b*norb) + j;
-            // fac = csf_EaiEbj (&bra, &ket, a, i, b, j);
+            // fac = csf_EaiEbj (&bra, &ket, a, i, b, j); // nspin_bra != nspin_ket
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
             ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
-            // fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
+            // fac = csf_EaiEbj (&bra, &ket, a, j, b, i); // (abs (np) + abs (nr)) >= 4
             hmat[ihmat] += g2e[ihop] * fac;
             break;
     }
