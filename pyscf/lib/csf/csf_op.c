@@ -438,8 +438,8 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     //  1: singly-occupied in the ket
     //  2: doubly-occupied in the ket
 
-    assert ((t!=q) || ((nt+nq)==0));
-    assert ((r!=p) || ((nr+np)==0));
+    assert ((t!=q) || (abs(nt+nq)<(abs(nt)+abs(nq))));
+    assert ((r!=p) || (abs(nr+np)<(abs(nr)+abs(np))));
     double xdiag = 1.0;
     unsigned int twoS0b, twoS0k;
     int offk = 0;
@@ -755,6 +755,7 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
 {
     if (p > q){
         _get_spinindices2 (addr, q, p, nspin, twoS, sq, sp);
+        return;
     }
     unsigned int nspin0 = _count_set_bits (addr->sconf);
     _get_spinindices1 (addr, q, nspin, twoS, sq);
@@ -763,10 +764,11 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
     int nq = _get_occ (addr, q);
     if (nq==2){ *sp += (2 - ((int) (p==q))); }
     if ((p!=q) && (np==2)){
-        for (unsigned int r=nspin0+2; r>*sp; r--){
-            assert (r < nspin+1);
-            twoS[r] = twoS[r-2];
+        for (int r=nspin0; r>=((int) (*sp)); r--){
+            assert ((int) (r+2) < (int) (nspin+1));
+            twoS[r+2] = twoS[r];
         }
+        (*sp)++;
     } 
 }
 
@@ -924,24 +926,46 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     uint64_t ket_rq = ((ket->spin) & ((1ULL<<r)-1)) >> q;
     bool unlinked_orth = (bra_rq!=ket_rq);
 
+    //printf ("\ncsf_EaiEbj\n");
+    //printf ("bra = %lu,%lu,%lu\n", bra->dconf, bra->sconf, bra->spin);
+    //printf ("ket = %lu,%lu,%lu\n", ket->dconf, ket->sconf, ket->spin);
+    //printf ("a,b,i,j = %u,%u,%u,%u\n", a, b, i, j);
     int ni = _get_occ (ket, i);
     int nj = _get_occ (ket, j);
     int na = -_get_occ (bra, a);
     int nb = -_get_occ (bra, b);
+    //printf ("occ = %d,%d,%d,%d\n", na, nb, ni, nj);
+    //printf ("p,r,q,t = %u,%u,%u,%u\n", p, r, q, t);
     unsigned int nspin_ket = _count_set_bits (ket->sconf);
     unsigned int nspin_bra = _count_set_bits (bra->sconf);
-    nspin_ket += (ni-1)*2;
-    nspin_ket += (nj-1)*2;
-    nspin_bra += (abs(na)-1)*2;
-    nspin_bra += (abs(nb)-1)*2;
+    //printf ("nspin_bra = %u, nspin_ket = %u\n", nspin_bra, nspin_ket);
+    if (i==j){
+        nspin_ket += 2;
+        assert (ni == 2);
+        assert (nj == 2);
+    } else {
+        nspin_ket += (ni-1)*2;
+        nspin_ket += (nj-1)*2;
+    }
+    if (a==b){
+        nspin_bra += 2;
+        assert (na == -2);
+        assert (nb == -2);
+    } else {
+        nspin_bra += (abs(na)-1)*2;
+        nspin_bra += (abs(nb)-1)*2;
+    }
     assert (nspin_bra==nspin_ket);
     unsigned int nspin=nspin_ket;
+    //printf ("nspin = %u\n", nspin);
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa, sj, sb;
     _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
     if (abs (na) == 2){ sa++; }
+    //printf ("sa,sb,si,sj = %u,%u,%u,%u\n", sa, sb, si, sj);
+    //fflush (stdout);
     int np = na;
     unsigned int sp=sa;
     int nr,nq,nt;
@@ -978,6 +1002,8 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         facu = -facu;
     }
 
+    //printf ("sp,sr,sq,st = %u,%u,%u,%u\n", sp,sr,sq,st);
+    //printf ("np,nr,nq,nt = %d,%d,%d,%d\n", np,nr,nq,nt);
     // linked term
     if (i!=r){
         facl *= CGC_2e_X (twoSk, twoSb, st, sq, sr, sp, nt, nq, nr, np, nspin);
@@ -1066,8 +1092,14 @@ void FCICSFpspace_h0tril(double *hmat,
             hmat[ihmat] += fac * h1e_s[ihop];
             // E^a_p E^p_i
             for (p=0; p<norb; p++){
+                // TODO: are these continues all correct? Am I missing something?
+                if (_get_occ(&ket, p) == 2){ continue ; }
+                if (_get_occ(&ket, p) == 0){ continue ; }
+                if (p==a){ continue; }
+                if (p==i){ continue; }
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
-                // fac = csf_EaiEbj (&bra, &ket, a, p, p, i); // nspin_bra != nspin_ket
+                //printf ("\na,p,p,i = %u,%u,%u,%u\n", a, p, p, i);
+                fac = csf_EaiEbj (&bra, &ket, a, p, p, i); // nspin_bra != nspin_ket
                 hmat[ihmat] += g2e[ihop] * fac;
             }
             break;
