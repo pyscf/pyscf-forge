@@ -49,6 +49,29 @@ FOCK_ERROR = (
 )
 
 
+def _inactive_orbital_gradient(mf, mo_coeff, mo_occ, fock, active_idx):
+    """Project the ROHF orbital gradient onto FASSCF rotations."""
+    g_full = np.asarray(mf.get_grad(mo_coeff, mo_occ, fock))
+
+    active_mask = np.zeros(mo_occ.size, dtype=bool)
+    active_mask[active_idx] = True
+    occidxa = mo_occ > 0
+    occidxb = mo_occ == 2
+    viridxa = ~occidxa
+    viridxb = ~occidxb
+    uniq_var_a = viridxa[:, None] & occidxa[None, :]
+    uniq_var_b = viridxb[:, None] & occidxb[None, :]
+    uniq_ab = uniq_var_a | uniq_var_b
+    inactive_rotation = (~active_mask[:, None]) & (~active_mask[None, :])
+    inactive_var = inactive_rotation[uniq_ab]
+
+    if inactive_var.size != g_full.size:
+        raise RuntimeError(
+            "Unable to map FASSCF orbital gradient to inactive-only space."
+        )
+    return g_full[inactive_var]
+
+
 class FASSCFResult:
     """Container returned by FASSCF kernels."""
 
@@ -284,10 +307,12 @@ class FASSCF(rohf.ROHF):
                 e_tot = mf.energy_tot(dm, h1e, vhf)
 
                 fock_last = fock
-                fock_plain = np.asarray(mf.get_fock(h1e, s1e, vhf, dm))
-                if fock_plain.ndim != 2:
+                fock_plain = mf.get_fock(h1e, s1e, vhf, dm)
+                if np.asarray(fock_plain).ndim != 2:
                     raise ValueError(FOCK_ERROR)
-                norm_gorb = np.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock_plain))
+                g_inact = _inactive_orbital_gradient(
+                    mf, mo_coeff, mo_occ, fock_plain, active_idx)
+                norm_gorb = np.linalg.norm(g_inact)
                 if not TIGHT_GRAD_CONV_TOL:
                     norm_gorb /= np.sqrt(norm_gorb.size)
                 norm_ddm = np.linalg.norm(np.asarray(dm) - np.asarray(dm_last))
@@ -303,7 +328,8 @@ class FASSCF(rohf.ROHF):
 
                 if callable(getattr(mf, "check_convergence", None)):
                     scf_conv = mf.check_convergence(locals())
-                elif abs(e_tot - last_hf_e) < conv_tol and norm_ddm < np.sqrt(conv_tol):
+                elif (abs(e_tot - last_hf_e) < conv_tol and
+                      norm_gorb < conv_tol_grad):
                     scf_conv = True
 
                 if dump_chk:
@@ -339,10 +365,12 @@ class FASSCF(rohf.ROHF):
                 dm = mf.make_rdm1(mo_coeff, mo_occ)
                 vhf = mf.get_veff(mol, dm, dm_last=dm_last, vhf_last=vhf)
                 e_tot = mf.energy_tot(dm, h1e, vhf)
-                fock = np.asarray(mf.get_fock(h1e, s1e, vhf, dm))
-                if fock.ndim != 2:
+                fock = mf.get_fock(h1e, s1e, vhf, dm)
+                if np.asarray(fock).ndim != 2:
                     raise ValueError(FOCK_ERROR)
-                norm_gorb = np.linalg.norm(mf.get_grad(mo_coeff, mo_occ, fock))
+                g_inact = _inactive_orbital_gradient(
+                    mf, mo_coeff, mo_occ, fock, active_idx)
+                norm_gorb = np.linalg.norm(g_inact)
                 if not TIGHT_GRAD_CONV_TOL:
                     norm_gorb /= np.sqrt(norm_gorb.size)
                 norm_ddm = np.linalg.norm(np.asarray(dm) - np.asarray(dm_last))
@@ -545,7 +573,7 @@ class FASSCF(rohf.ROHF):
 
                 logger.info(
                     mf,
-                    "SOSCF cycle= %d E= %.15g  delta_E= %4.3g  |g_inact|= %4.3g  |ddm|= %4.3g",
+                    "SOSCF cycle= %d E= %.15g  delta_E= %4.3g  |g_bath|= %4.3g  |ddm|= %4.3g",
                     cycles,
                     e_tot,
                     e_tot - last_hf_e,
@@ -1099,18 +1127,29 @@ class GroupAverageFASSCF(FASSCF):
                 e_tot = mf.energy_tot(dm, h1e, vhf)
                 fock_last = fock
 
+                fock_plain = mf.get_fock(h1e, s1e, vhf, dm)
+                if np.asarray(fock_plain).ndim != 2:
+                    raise ValueError(FOCK_ERROR)
+                g_inact = _inactive_orbital_gradient(
+                    mf, mo_coeff, mo_occ, fock_plain, active_idx)
+                norm_gorb = np.linalg.norm(g_inact)
+                if not TIGHT_GRAD_CONV_TOL:
+                    norm_gorb /= np.sqrt(norm_gorb.size)
                 norm_ddm = np.linalg.norm(np.asarray(dm) - np.asarray(dm_last))
                 logger.info(
                     mf,
-                    "cycle= %d E= %.15g  delta_E= %4.3g |ddm|= %4.3g",
+                    "cycle= %d E= %.15g  delta_E= %4.3g "
+                    "|g_bath|= %4.3g |ddm|= %4.3g",
                     cycles,
                     e_tot,
                     e_tot - last_hf_e,
+                    norm_gorb,
                     norm_ddm,
                 )
                 if callable(getattr(mf, "check_convergence", None)):
                     scf_conv = mf.check_convergence(locals())
-                elif abs(e_tot - last_hf_e) < conv_tol and norm_ddm < np.sqrt(conv_tol):
+                elif (abs(e_tot - last_hf_e) < conv_tol and
+                      norm_gorb < conv_tol_grad):
                     scf_conv = True
 
                 if dump_chk:
@@ -1149,14 +1188,29 @@ class GroupAverageFASSCF(FASSCF):
                 )
                 vhf = mf.get_veff(mol, dm, dm_last=dm_last, vhf_last=vhf)
                 e_tot = mf.energy_tot(dm, h1e, vhf)
+                fock_plain = mf.get_fock(h1e, s1e, vhf, dm)
+                if np.asarray(fock_plain).ndim != 2:
+                    raise ValueError(FOCK_ERROR)
+                g_inact = _inactive_orbital_gradient(
+                    mf, mo_coeff, mo_occ, fock_plain, active_idx)
+                norm_gorb = np.linalg.norm(g_inact)
+                if not TIGHT_GRAD_CONV_TOL:
+                    norm_gorb /= np.sqrt(norm_gorb.size)
                 norm_ddm = np.linalg.norm(np.asarray(dm) - np.asarray(dm_last))
-                if abs(e_tot - last_hf_e) < conv_tol or norm_ddm < conv_tol_grad:
-                    scf_conv = True
+                loose_e_tol = conv_tol * 10
+                loose_g_tol = conv_tol_grad * 3
+                if callable(getattr(mf, "check_convergence", None)):
+                    scf_conv = mf.check_convergence(locals())
+                else:
+                    scf_conv = (abs(e_tot - last_hf_e) < loose_e_tol or
+                                norm_gorb < loose_g_tol)
                 logger.info(
                     mf,
-                    "Extra cycle  E= %.15g  delta_E= %4.3g |ddm|= %4.3g",
+                    "Extra cycle  E= %.15g  delta_E= %4.3g "
+                    "|g_bath|= %4.3g |ddm|= %4.3g",
                     e_tot,
                     e_tot - last_hf_e,
+                    norm_gorb,
                     norm_ddm,
                 )
                 if dump_chk:
@@ -1441,7 +1495,7 @@ class GroupAverageFASSCF(FASSCF):
 
                 logger.info(
                     mf,
-                    "group-average SOSCF cycle= %d E= %.15g  delta_E= %4.3g  |g_inact|= %4.3g  |ddm|= %4.3g",
+                    "group-average SOSCF cycle= %d E= %.15g  delta_E= %4.3g  |g_bath|= %4.3g  |ddm|= %4.3g",
                     cycles,
                     e_tot,
                     e_tot - last_hf_e,

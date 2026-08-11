@@ -274,8 +274,47 @@ def get_X(gbci, h1eff, ov_list, ordm_list, trdm_list, um_list, H_list, group_pro
                                                :ncore].T, M_list[p1,p2][:,:ncore], W_list[p2,p1], W_list[p2,p1])
                 Xx[p1][:,:ncore] += H_list[p1,p2] * M_list[p1,p2][:,:ncore] @ W_list[p1,p2].T * 4
 
-    D_list = M_list = None
+    M_list = None
     return Xa, Xx
+
+def _solve_bath_cphf(
+    fvind,
+    mo_energy,
+    mo_occ,
+    h1,
+    tol=1e-10,
+    lindep=1e-20,
+    max_cycle=100,
+    level_shift=1e-5,
+):
+    """Solve the bath CPHF equation with an explicit Krylov lindep."""
+    e_vir = mo_energy[mo_occ == 0]
+    e_occ = mo_energy[mo_occ > 0]
+    e_ai = 1.0 / (
+        e_vir[:, None] + level_shift - e_occ
+    )
+
+    mo1base = -numpy.asarray(h1) * e_ai
+    nvir, nocc = e_ai.shape
+
+    def vind_vo(mo1):
+        mo1 = mo1.reshape(-1, nvir, nocc)
+        v = fvind(mo1).reshape(-1, nvir, nocc)
+        if level_shift != 0:
+            v -= mo1 * level_shift
+
+        v *= e_ai
+        return v.reshape(-1, nvir * nocc)
+
+    mo1 = lib.krylov(
+        vind_vo,
+        mo1base.reshape(-1, nvir * nocc),
+        tol=tol,
+        max_cycle=max_cycle,
+        lindep=lindep,
+    )
+
+    return mo1.reshape(h1.shape)
 
 def _bath_rotation_zvec(mc, ref_mo_coeff, num_group, bath, mo_list, moe_list, um_list, conf_info_list, Xx):
     mol = mc.mol
@@ -334,7 +373,7 @@ def _bath_rotation_zvec(mc, ref_mo_coeff, num_group, bath, mo_list, moe_list, um
             return v * 2
         mo_occ = numpy.zeros((len(bath)))
         mo_occ[:ncore] = 2
-        dm1resp = cphf.solve(fvind, moe_list[p][bath], mo_occ, xvo, max_cycle=30, level_shift = 1e-5)[0]
+        dm1resp = _solve_bath_cphf(fvind, moe_list[p][bath], mo_occ, xvo, max_cycle=30, level_shift = 1e-5)
 
         xzvec[p][ncore:,:ncore] = dm1resp
 
@@ -437,7 +476,7 @@ def grad_elec(
         return v * 2
     mo_occ = numpy.zeros((nao))
     mo_occ[:neleca] = 2
-    dm1resp = cphf.solve(fvind, ref_mo_energy, mo_occ, xvo, level_shift = 1e-5, max_cycle = 30)[0]
+    dm1resp = _solve_bath_cphf(fvind, ref_mo_energy, mo_occ, xvo, level_shift = 1e-5, max_cycle = 30)
     azvec[neleca:, :neleca] = dm1resp
 
     zeta = numpy.einsum('ij,j->ij', azvec, ref_mo_energy)
@@ -713,12 +752,12 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     import pandas as pd
     lib.num_threads(1)
-    delta = 1e-4
+    delta = 1e-5
     i = 1.5
     mol = gto.Mole()
     mol.verbose = 5
     mol.output = None
-    mol.atom = [['Li', (0,0,0)], ['F',(0,0,i - delta)]]
+    mol.atom = [['Li', (0,0,0)], ['Cl',(0,0,i - delta)]]
     mol.basis = 'ccpvdz'
     mol.build()
     mol.set_common_orig([0,0,0])
@@ -729,7 +768,7 @@ if __name__ == '__main__':
     e_hf = mf.e_tot
 
     mygbci = GBCI(mf, 4, (2,2), group_a = {"atom": [0]})
-    mygbci.fcisolver.conv_tol = 1e-10
+    mygbci.fcisolver.conv_tol = 1e-12
     gbci_grad = Gradients(mygbci)
     mygbci.mo_coeff = mo_coeff
     mo = mo_coeff
@@ -752,7 +791,7 @@ if __name__ == '__main__':
     mol = gto.Mole()
     mol.verbose = 5
     mol.output = None
-    mol.atom = [['Li', (0,0,0)], ['F',(0,0,i + delta)]]
+    mol.atom = [['Li', (0,0,0)], ['Cl',(0,0,i + delta)]]
     mol.basis = 'ccpvdz'
     mol.build()
     mol.set_common_orig([0,0,0])
@@ -764,7 +803,7 @@ if __name__ == '__main__':
     e_hf_new = mf.e_tot
     mo_coeff = mf.mo_coeff
     mygbci = GBCI(mf, 4, (2,2), group_a = {"atom": [0]})
-    mygbci.fcisolver.conv_tol = 1e-10
+    mygbci.fcisolver.conv_tol = 1e-12
     mygbci.mo_coeff = mo_coeff
     mo = mo_coeff
     mo_list, moe_list, po_list, group = optimize_mo(mygbci, mo,  group_a = {"atom": [0]})
@@ -784,7 +823,7 @@ if __name__ == '__main__':
     mol = gto.Mole()
     mol.verbose = 5
     mol.output = None
-    mol.atom = [['Li', (0,0,0)], ['F',(0,0,i)]]
+    mol.atom = [['Li', (0,0,0)], ['Cl',(0,0,i)]]
     mol.basis = 'ccpvdz'
     mol.build()
     mol.set_common_orig([0,0,0])
@@ -796,7 +835,7 @@ if __name__ == '__main__':
     mo_coeff = mf.mo_coeff
 
     mygbci = GBCI(mf, 4, (2,2), group_a = {"atom": [0]})
-    mygbci.fcisolver.conv_tol = 1e-10
+    mygbci.fcisolver.conv_tol = 1e-12
     gbci_grad = Gradients(mygbci)
     mygbci.kernel(mo_coeff)
     de = gbci_grad.kernel()
