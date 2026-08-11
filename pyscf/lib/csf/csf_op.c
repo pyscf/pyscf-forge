@@ -728,10 +728,11 @@ void _get_spinindices1 (Str3 * addr, unsigned int p, unsigned int nspin,
     *sp = nspin0 - _get_spinindex (addr, p);
     int np = _get_occ (addr, p);
     if (np==2){
-        for (unsigned int r=nspin0+2; r>*sp; r--){
-            assert (r < nspin+1);
-            twoS[r] = twoS[r-2];
+        for (int r=nspin0; r>=((int) (*sp)); r--){
+            assert ((int) (r+2) < (int) (nspin+1));
+            twoS[r+2] = twoS[r];
         }
+        (*sp)++;
     }
 }
 
