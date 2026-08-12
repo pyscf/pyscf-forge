@@ -210,6 +210,16 @@ set_target_properties (clib_csf PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "csf")
 
+# Build the SISOhelper shared library
+set (SISO_SOURCE_FILES "siso/sisohelper.c")
+add_library (clib_siso SHARED ${SISO_SOURCE_FILES})
+target_link_libraries (clib_siso ${OPENMP_C_PROPERTIES})
+set_target_properties (clib_siso PROPERTIES
+    LINKER_LANGUAGE C
+    CLEAN_DIRECT_OUTPUT 1
+    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_NAME "siso")
+
 add_subdirectory(gbci)
 add_subdirectory(pwscf)
 
