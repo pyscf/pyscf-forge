@@ -314,6 +314,16 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     unsigned int twoS0;
     unsigned int i;
 
+    printf ("\nCGC_2e_X_core\n");
+    printf ("(r,nr), (q,nq), pphh = (%u,%d), (%u,%d), %d",
+            r, nr, q, nq, pphh);
+    printf ("\ntwoSk =");
+    for (unsigned int i=q-2; i<=r+1; i++){ printf (" %u", twoSk[i]); }
+    printf ("\ntwoSb =");
+    for (unsigned int i=q-2; i<=r+1; i++){ printf (" %u", twoSb[i]); }
+    printf ("\n");
+    fflush (stdout);
+
     // TODO: check that this still works for t = 1, q = 2 case
     if (q>0){
     if (pphh){
@@ -1012,7 +1022,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
     assert (nspin_bra==nspin_ket);
     unsigned int nspin=nspin_ket;
-    //printf ("nspin = %u\n", nspin);
+    printf ("nspin = %u\n", nspin);
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa, sj, sb;
@@ -1057,7 +1067,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         sq = sx;
         nq = nx;
         if (abs (nq) == 2){ sq++; }
-        printf ("uh-oh ambiguerios\n");
+        assert (sr >= sq);
     }
 
     int parity = sp + sr + sq + st + (int) (i>j);
