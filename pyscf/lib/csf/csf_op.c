@@ -239,10 +239,10 @@ int Str3_link (Str3 * bra, Str3 * ket,
                unsigned int * q, unsigned int * t)
 {
     /* Return value:
-        -1 : determinants are guaranteed unlinked by a 2-body Hamiltonian
-         0 : determinants are identical
-         1 : determinants linked by a single excitation
-         2 : determinants are linked by a double excitation
+        -1 : CSFs are guaranteed unlinked by a 2-body Hamiltonian
+         0 : CSFs are identical
+         1 : CSFs linked by a single excitation
+         2 : CSFs are linked by a double excitation
         On return, arguments "p","t"/"q","r" are set to the indices of the particle/hole operators
         as relevant depending on the return value (i.e., "p" and "t" are undefined for return value
         < 1, and "r" and "q" are only defined for return value 2). Only counts charge hops as
@@ -447,6 +447,15 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     int parity = 0;
     unsigned int i;
 
+    printf ("\nCGC_2e_X\n");
+    printf ("(p,np), (r,nr), (q,nq), (t,nt), nspin = (%u,%d), (%u,%d), (%u,%d), (%u,%d), %u",
+            p, np, r, nr, q, nq, t, nt, nspin);
+    printf ("\ntwoSk =");
+    for (unsigned int i=0; i<=nspin; i++){ printf (" %u", twoSk[i]); }
+    printf ("\ntwoSb =");
+    for (unsigned int i=0; i<=nspin; i++){ printf (" %u", twoSb[i]); }
+    printf ("\n");
+    fflush (stdout);
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
     assert ((t>0) || abs (nt) == 1); // undefined to have doubly-occupied dummy orbital
@@ -538,6 +547,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         } else { // T'(i)
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
         }
+        printf ("T(%u) ", i); fflush (stdout);
         parity += 2 + twoSk[i] + twoSb[i];
         parity = parity % 4;
     }
@@ -552,6 +562,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         }
         assert (q>=t+(abs(nt)+abs(nq))-1);
     }
+    printf ("Xcore(%u,%u) ", r, q); fflush (stdout);
     xdiag *= CGC_2e_X_core (twoSk+offk, twoSb+offb,
                             r, q,
                             nr, nq,
@@ -577,7 +588,9 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         }
         parity += 2 + twoSk[i] + twoSb[i];
         parity = parity % 4;
+        printf ("T(%u) ", i); fflush (stdout);
     }
+    printf ("\n"); fflush (stdout);
 
     // p
     //
@@ -674,27 +687,59 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     if (p < q){
         return CGC_1e (twoSk, twoSb, q, p, nq, np, nspin);
     }
+    printf ("\nCGC_1e\n");
+    printf ("(p,np), (q,nq), nspin = (%u,%d), (%u,%d), %u",
+            p, np, q, nq, nspin);
+    printf ("\ntwoSk =");
+    for (unsigned int i=0; i<=nspin; i++){ printf (" %u", twoSk[i]); }
+    printf ("\ntwoSb =");
+    for (unsigned int i=0; i<=nspin; i++){ printf (" %u", twoSb[i]); }
+    printf ("\n");
+    fflush (stdout);
     int parity = 0;
     double xdiag = 1.0;
     unsigned int twoS0;
-
-    // pp, hh case
-    if ((np>0) == (nq>0)){
-        p = p - 2;
-        if (np>0){
-            parity += twoSk[p] + 3*twoSb[p-1] + 1;
-        } else {
-            parity += twoSb[p] + 3*twoSk[p-1] + 1;
-        }
-        parity = parity % 4;
-    }
+    unsigned int * twoSp1;
+    unsigned int * twoSp0;
+    bool pphh = false;
 
     // B(q) nq = 2
     if (abs (nq) == 2){
         twoS0 = nq < 0 ? twoSk[q] : twoSb[q];
         parity += twoS0 + 3*twoSk[q-1] + 1;
-        parity = parity % 4;
+        // parity = parity % 4;
     }
+
+    // pp, hh case
+    if ((np>0) == (nq>0)){
+        pphh = true;
+        if (nq>0){
+            parity += twoSb[q] + 3*twoSk[q+1] + 1;
+        } else {
+            parity += twoSk[q] + 3*twoSb[q+1] + 1;
+        }
+        // parity = parity % 4;
+        twoSp1 = malloc (nspin * sizeof (unsigned int));
+        twoSp0 = nq>0 ? twoSb : twoSk;
+        for (unsigned int i=(q-1); i<=p-2; i++){
+            twoSp1[i+2] = twoSp0[i];
+        }
+        if (nq>0){
+            twoSb = twoSp1;
+        } else {
+            twoSk = twoSp1;
+        }
+        q++;
+    }
+
+    printf ("(p,np), (q,nq), nspin = (%u,%d), (%u,%d), %u",
+            p, np, q, nq, nspin);
+    printf ("\ntwoSk =");
+    for (unsigned int i=0; i<=nspin; i++){ printf (" %u", twoSk[i]); }
+    printf ("\ntwoSb =");
+    for (unsigned int i=0; i<=nspin; i++){ printf (" %u", twoSb[i]); }
+    printf ("\ncurrent parity = %d\n", parity);
+    fflush (stdout);
 
     // T(i) and T'(i) strings
     //     T'(i) =
@@ -705,13 +750,13 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     for (unsigned int i=q; i<p; i++){
         if ((i==q) && (abs (nq) == 2)){ continue; }
         if ((i==(p-1)) && (abs (np) == 2)){ continue; }
-        if (nq < 0){
+        if (np > 0){
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSb[i+1], twoSb[i], twoSk[i-1]);
         } else {
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
         }
         parity += 2 + twoSk[i] + twoSb[i];
-        parity = parity % 4;
+        // parity = parity % 4;
     }
 
     // A(p) np = 2
@@ -721,9 +766,12 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         } else {
             parity += twoSk[p-1] + 3*twoSb[p] + 1;
         }
-        parity = parity % 4;
+        // parity = parity % 4;
     }
 
+    if (pphh){ free (twoSp1); }
+    printf ("parity = %d, xdiag = %f\n", parity, xdiag);
+    fflush (stdout);
     assert ((parity % 2) == 0);
     parity = parity / 2;
     if ((parity%2)==1){ xdiag = -xdiag; }
@@ -864,6 +912,8 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     if (i > j){
         return csf_EaiEaj (bra, ket, j, i);
     }
+    printf ("\ncsf_EaiEaj\n");
+    fflush (stdout);
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
@@ -886,8 +936,14 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sj;
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
+    if (abs (ni) == 2){ si++; }
+    for (unsigned int r=0; r <= nspin_bra; r++){
+        twoSb[r] = _get_twoS_running (bra->spin, r, nspin_bra);
+    }
     int parity = si + sj + 1;
     double fac = CGC_1e (twoSk, twoSb, si, sj, ni, nj, nspin);
+    printf ("exiting CGC_1e\n");
+    fflush (stdout);
     if ((parity%2)==1){ fac = -fac; }
     return fac;
 
@@ -897,11 +953,11 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
                    unsigned int a, unsigned int i,
                    unsigned int b, unsigned int j)
 {
-    //if (a==b){
-    //    return csf_EaiEaj (bra, ket, i, j);
-    //} else if (i==j){
-    //    return csf_EaiEaj (ket, bra, a, b);
-    //}
+    if (a==b){
+        return csf_EaiEaj (bra, ket, i, j);
+    } else if (i==j){
+        return csf_EaiEaj (ket, bra, a, b);
+    }
     if (MIN (a,b) > MIN (i,j)){
         return csf_EaiEbj (ket, bra, i, a, j, b);
     }
@@ -926,15 +982,14 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     uint64_t ket_rq = ((ket->spin) & ((1ULL<<r)-1)) >> q;
     bool unlinked_orth = (bra_rq!=ket_rq);
 
-    //printf ("\ncsf_EaiEbj\n");
-    //printf ("bra = %lu,%lu,%lu\n", bra->dconf, bra->sconf, bra->spin);
-    //printf ("ket = %lu,%lu,%lu\n", ket->dconf, ket->sconf, ket->spin);
-    //printf ("a,b,i,j = %u,%u,%u,%u\n", a, b, i, j);
     int ni = _get_occ (ket, i);
     int nj = _get_occ (ket, j);
     int na = -_get_occ (bra, a);
     int nb = -_get_occ (bra, b);
-    //printf ("occ = %d,%d,%d,%d\n", na, nb, ni, nj);
+    printf ("\ncsf_EaiEbj\n");
+    printf ("a,i,b,j = %d,%d,%d,%d\n", a, i, b, j);
+    printf ("na,ni,nb,nj = %d,%d,%d,%d\n", na, ni, nb, nj);
+    fflush (stdout);
     //printf ("p,r,q,t = %u,%u,%u,%u\n", p, r, q, t);
     unsigned int nspin_ket = _count_set_bits (ket->sconf);
     unsigned int nspin_bra = _count_set_bits (bra->sconf);
@@ -964,8 +1019,8 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
     if (abs (na) == 2){ sa++; }
-    //printf ("sa,sb,si,sj = %u,%u,%u,%u\n", sa, sb, si, sj);
-    //fflush (stdout);
+    printf ("sa,si,sb,sj = %u,%u,%u,%u\n", sa, si, sb, sj);
+    fflush (stdout);
     int np = na;
     unsigned int sp=sa;
     int nr,nq,nt;
@@ -993,6 +1048,17 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
     if (abs (nq) == 2){ sq++; }
+    if (sq > sr){
+        if (abs (nq) == 2){ sq--; }
+        unsigned int sx = sr;
+        int nx = nr;
+        sr = sq;
+        nr = nq;
+        sq = sx;
+        nq = nx;
+        if (abs (nq) == 2){ sq++; }
+        printf ("uh-oh ambiguerios\n");
+    }
 
     int parity = sp + sr + sq + st + (int) (i>j);
     double facl = (i==r) ? 0.0 : 3.0;
@@ -1002,8 +1068,10 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         facu = -facu;
     }
 
-    //printf ("sp,sr,sq,st = %u,%u,%u,%u\n", sp,sr,sq,st);
-    //printf ("np,nr,nq,nt = %d,%d,%d,%d\n", np,nr,nq,nt);
+    printf ("sp,sr,sq,st = %u,%u,%u,%u\n", sp,sr,sq,st);
+    printf ("np,nr,nq,nt = %d,%d,%d,%d\n", np,nr,nq,nt);
+    printf ("linked term\n");
+    fflush (stdout);
     // linked term
     if (i!=r){
         facl *= CGC_2e_X (twoSk, twoSb, st, sq, sr, sp, nt, nq, nr, np, nspin);
@@ -1012,7 +1080,11 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
 
     // unlinked term
     if (!unlinked_orth){
+        printf ("unlinked term: (%u,%d), (%u,%d)\n", sp, np, sr, nr);
+        fflush (stdout);
         facu *= CGC_1e (twoSk, twoSb, sp, sr, np, nr, nspin);
+        printf ("unlinked term: (%u,%d), (%u,%d)\n", sq, nq, st, nt);
+        fflush (stdout);
         facu *= CGC_1e (twoSk, twoSb, sq, st, nq, nt, nspin);
     }
 
@@ -1098,8 +1170,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 if (p==a){ continue; }
                 if (p==i){ continue; }
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
-                //printf ("\na,p,p,i = %u,%u,%u,%u\n", a, p, p, i);
-                fac = csf_EaiEbj (&bra, &ket, a, p, p, i); // nspin_bra != nspin_ket
+                fac = csf_EaiEbj (&bra, &ket, a, p, p, i);
                 hmat[ihmat] += g2e[ihop] * fac;
             }
             break;
@@ -1107,7 +1178,12 @@ void FCICSFpspace_h0tril(double *hmat,
             exc2_sort (&bra, &ket, p, r, q, t, &a, &i, &b, &j);
             // E^a_i E^b_j
             ihop = (a*norb*norb*norb) + (i*norb*norb) + (b*norb) + j;
-            // fac = csf_EaiEbj (&bra, &ket, a, i, b, j); // abs (np+nr) < 3
+            printf ("\nmain loop\n");
+            printf ("bra = %lu,%lu,%lu\n", bra.dconf, bra.sconf, bra.spin);
+            printf ("ket = %lu,%lu,%lu\n", ket.dconf, ket.sconf, ket.spin);
+            printf ("a,i,b,j = %u,%u,%u,%u\n", a, i, b, j);
+            fflush (stdout);
+            fac = csf_EaiEbj (&bra, &ket, a, i, b, j); // abs (np+nr) < 3
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
             ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
