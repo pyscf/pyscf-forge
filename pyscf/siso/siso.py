@@ -113,16 +113,31 @@ def assemble_civecs(siso):
     twoslst = siso.twoslst
     statelst = siso.statelis
 
+    nroots = int(np.sum(statelst))
+    if isinstance(ci_mc, (list, tuple)):
+        ci_roots = list(ci_mc)
+    elif nroots == 1:
+        ci_roots = [ci_mc]
+    else:
+        ci_roots = list(ci_mc)
+
     cimat = []
 
-    for i in range(len(twoslst)):
-        start_idx = int(np.sum(statelst[:twoslst[i]]))
-        try:
-            end_idx = int(np.sum(statelst[:twoslst[i] + 1]))
-        except IndexError:
-            end_idx = int(np.sum(statelst))
-
-        cimat.append(np.asarray(ci_mc[start_idx:end_idx]))
+    nelec = sum(mc.nelecas)
+    for twos in twoslst:
+        start_idx = int(np.sum(statelst[:twos]))
+        end_idx = int(np.sum(statelst[:twos + 1]))
+        nelec_a = (nelec + twos) // 2
+        nelec_b = nelec - nelec_a
+        nstra = fci.cistring.num_strings(mc.ncas, nelec_a)
+        nstrb = fci.cistring.num_strings(mc.ncas, nelec_b)
+        # Symmetry-adapted solvers may return determinant vectors with
+        # different two-dimensional views for different irreps.  Restore the
+        # common determinant-string shape before stacking roots of one spin.
+        cimat.append(np.asarray([
+            np.asarray(ci).reshape(nstra, nstrb)
+            for ci in ci_roots[start_idx:end_idx]
+        ]))
 
     imds = siso.imds
     imds.c = cimat
@@ -362,16 +377,17 @@ def compute_dmat(siso):
 
     return d_col
 
-def compute_hamiltonian(siso):
+def compute_soc_hamiltonian(siso):
     """
-    Compute the Hamiltonian matrix for the spin-orbit coupling.
+    Compute the spin-orbit coupling Hamiltonian in the model-state basis.
 
     Args:
         siso:
             instance of class SISO
     Returns:
-        hamiltonian:
-            Hamiltonian matrix of dimension (nstates, nstates)
+        soc_hamiltonian:
+            SOC matrix of dimension (nstates, nstates), where nstates is the
+            sum of nroots * spin_multiplicity over the model space.
     """
     statelst = siso.statelis
     twoslst = siso.twoslst
@@ -379,7 +395,6 @@ def compute_hamiltonian(siso):
     stuples = siso.stuples
     imds = siso.imds
     d = imds.d
-    e = imds.e
     h_col = [[0] * totalspins for _ in range(totalspins)]
 
     for i in range(totalspins):
@@ -397,10 +412,6 @@ def compute_hamiltonian(siso):
                     coeff = 0.0
 
                 h = coeff * d[indt].reshape(nstates, nstates, order='C')
-
-                for ns in range(nstates):
-                    n1 = divmod(ns, S+1)[0]
-                    h[ns, ns] += e[i][n1]
 
             elif s1 + 2 == s2:
                 S = s1
@@ -423,6 +434,22 @@ def compute_hamiltonian(siso):
             h_col[i][j] = h
 
     return np.block(h_col)
+
+
+def compute_hamiltonian(siso):
+    """
+    Compute the total state-interaction Hamiltonian.
+
+    The diagonal spin-free model-state energies are added to the SOC
+    Hamiltonian returned by :func:`compute_soc_hamiltonian`.
+    """
+    soc_hamiltonian = compute_soc_hamiltonian(siso)
+    spin_free_energies = np.concatenate([
+        np.repeat(siso.imds.e[i], twos + 1)
+        for i, twos in enumerate(siso.twoslst)
+    ])
+    return soc_hamiltonian + np.diag(spin_free_energies)
+
 
 def build_imds(siso):
     imds = siso.imds
@@ -615,6 +642,9 @@ class SISO(lib.StreamObject):
 
     def compute_hamiltonian(self):
         return compute_hamiltonian(self)
+
+    def compute_soc_hamiltonian(self):
+        return compute_soc_hamiltonian(self)
 
     def kernel(self):
         return kernel(self)
