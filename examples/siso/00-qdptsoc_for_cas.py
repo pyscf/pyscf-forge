@@ -8,6 +8,8 @@ from pyscf import siso
 # calculation, and the second step is to perform the QDPT-SOC calculation using the
 # state-averaged CASSCF wave functions as the model space.
 
+# If you are using this code, please consider citing: J. Chem. Theory Comput. 2026, 22, 1, 318–333
+
 # 1. Define the molecule
 mol = gto.Mole(atom="Al 0 0 0",
                spin=1,
