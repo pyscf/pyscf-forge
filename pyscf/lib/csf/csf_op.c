@@ -326,21 +326,6 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
 
     // TODO: check that this still works for t = 1, q = 2 case
     if (q>0){
-    if (pphh){
-        if (nq > 0){
-            parity += twoSb[q-1] + (3*twoSk[q-2]) + 1;
-            printf ("hi parity = %d\n", parity);
-        } else {
-            parity += twoSk[q-1] + (3*twoSb[q-2]) - 1;
-        }
-        if (nr > 0){
-            parity += twoSk[r+1] + (3*twoSb[r]) + 1;
-        } else {
-            parity += twoSb[r+1] + (3*twoSk[r]) - 1;
-        }
-    }
-    // parity = parity % 4;
-    printf ("pphh parity = %d\n", parity);
 
     // q
     //     -1**[S(q) + S"(q-1) + 1/2]
@@ -582,8 +567,11 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     if (qt_pp){
         if (nq > 0){
             offb = -2;
+            parity += twoSk[r+1+abs(nr)-1] + (3*twoSb[r+abs(nr)-1]);
+            parity += twoSb[q-abs(nq)-1] + (3*twoSk[q-abs(nq)]);
         } else {
             offk = -2;
+            assert (false); // I haven't rederived this case but I think it doesn't appear?
         }
         // assert (q>=t+(abs(nt)+abs(nq))-1);
         // This can't be enforced because of the sr = sq, |nr| = |nq| = 2 problem.
