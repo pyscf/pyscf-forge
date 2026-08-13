@@ -19,7 +19,7 @@
 
 import numpy as np
 from pyscf import lib
-from pyscf.siso import anisoaddons
+from pyscf.siso import anisoaddons, socaddons
 
 # Register this function as an alias for generate_aniso_data, to
 # avoid confusion with the name "aniso" in the context of SISO calculations.
@@ -68,7 +68,7 @@ def _compute_total_angmom_in_so_basis(siso_data):
     ])
     return _compute_angmom_in_so_basis(siso_data) + spin_mat
 
-def _generate_degenerate_subblocks(energies, degeneracy_tol=1e-6):
+def _select_degenerate_subblocks(energies, degeneracy_tol=1e-6):
     """
     Generate energy-degenerate state subblocks in original-state order.
     """
@@ -103,7 +103,7 @@ def _diagonalize_degenerate_subblocks(operator, energies, degeneracy_tol=1e-6):
     # Making it hermitian and removing numerical residuals.
     operator = 0.5 * (operator + operator.conj().T)
 
-    blocks = _generate_degenerate_subblocks(energies, degeneracy_tol)
+    blocks = _select_degenerate_subblocks(energies, degeneracy_tol)
     rotation = np.eye(nstate, dtype=np.complex128)
     for block_indices in blocks:
         if block_indices.size == 1:
@@ -253,7 +253,6 @@ def _compute_soc_omega_values(siso_data, log, axis='z', degeneracy_tol=1e-6):
                 omega,
                 int(block_number_by_state[state])))
     return omega_matrix, omega_values
-
 
 def _compute_L_for_diatomics(siso_data, log, axis='z', degeneracy_tol=1e-6):
     r"""
@@ -436,14 +435,17 @@ class soc_analysis:
         self.ham = mysiso.ham if ham is None else ham
 
         if siso_data is None:
-            assert modelspace is not None, \
-                "modelspace must be provided and probably same as that of the SISO object " \
-                "if siso_data is not supplied"
-            self.modelspace = list(modelspace)
             mol = self.mc._scf.mol
-            assert self.modelspace == list(mysiso.modelspace), \
-                "modelspace must be the same as that of the SISO object " \
-                "if siso_data is not supplied"
+            if modelspace is None:
+                self.modelspace = list(mysiso.modelspace)
+            else:
+                self.modelspace = socaddons._validate_modelspace(
+                    modelspace, mol=mol, ncas=self.mc.ncas,
+                    nelecas=self.mc.nelecas)
+            if self.modelspace != list(mysiso.modelspace):
+                raise ValueError(
+                    "modelspace must match the SISO model space when "
+                    "siso_data is not supplied")
             siso_data = anisoaddons.generate_siso_data(
                 mol, self.mc, self.modelspace, mysiso,
                 origin=origin, ham=self.ham)
