@@ -19,12 +19,129 @@
 Helper Functions for SOC
 '''
 
+from numbers import Integral
+
 import numpy as np
-from pyscf import lib, mcscf
+from pyscf import lib, mcscf, symm
 from pyscf.csf_fci import csf_solver
 from pyscf.siso import amfi as amfIntegrals
 
 logger = lib.logger
+
+
+def _validate_modelspace(modelspace, mol=None, ncas=None, nelecas=None):
+    """Validate and normalize a SISO model-space specification."""
+    errmsg = ("modelspace must be a non-empty list of "
+              "(nroots, spin_multiplicity[, wfnsym]) entries")
+    if not isinstance(modelspace, (list, tuple)) or not modelspace:
+        raise TypeError(errmsg)
+
+    states = []
+    for index, state in enumerate(modelspace):
+        if not isinstance(state, (list, tuple)) or len(state) not in (2, 3):
+            raise TypeError(f"modelspace entry {index} must have two or three items")
+
+        nroots, spinmult = state[:2]
+        wfnsym = state[2] if len(state) == 3 else None
+        if isinstance(nroots, bool) or not isinstance(nroots, Integral):
+            raise TypeError(f"nroots in modelspace entry {index} must be an integer")
+        if nroots <= 0:
+            raise ValueError(f"nroots in modelspace entry {index} must be positive")
+        if isinstance(spinmult, bool) or not isinstance(spinmult, Integral):
+            raise TypeError(
+                f"spin multiplicity in modelspace entry {index} must be an integer")
+        if spinmult <= 0:
+            raise ValueError(
+                f"spin multiplicity in modelspace entry {index} must be positive")
+        if wfnsym is not None and not isinstance(wfnsym, (str, Integral)):
+            raise TypeError(
+                f"wfnsym in modelspace entry {index} must be a string or integer")
+
+        if wfnsym is not None and mol is not None:
+            if not mol.symmetry:
+                raise ValueError(
+                    "wfnsym was specified, but molecular symmetry is not enabled")
+            try:
+                if isinstance(wfnsym, str):
+                    symm.irrep_name2id(mol.groupname, wfnsym)
+                else:
+                    symm.irrep_id2name(mol.groupname, int(wfnsym))
+            except (KeyError, ValueError) as err:
+                raise ValueError(
+                    f"wfnsym {wfnsym!r} in modelspace entry {index} is not "
+                    f"valid for point group {mol.groupname}") from err
+
+        if isinstance(wfnsym, Integral):
+            wfnsym = int(wfnsym)
+        states.append((int(nroots), int(spinmult), wfnsym))
+
+    if len({spinmult % 2 for _, spinmult, _ in states}) != 1:
+        raise ValueError(
+            "modelspace cannot mix odd- and even-electron spin multiplicities")
+
+    for spinmult in {state[1] for state in states}:
+        spin_states = [state for state in states if state[1] == spinmult]
+        symmetries = [state[2] for state in spin_states]
+        if any(wfnsym is None for wfnsym in symmetries) and any(
+                wfnsym is not None for wfnsym in symmetries):
+            raise ValueError(
+                "modelspace cannot mix symmetry-qualified and unqualified "
+                f"entries for spin multiplicity {spinmult}")
+        specified_symmetries = [wfnsym for wfnsym in symmetries
+                                if wfnsym is not None]
+        if len(set(specified_symmetries)) != len(specified_symmetries):
+            raise ValueError(
+                "duplicate wfnsym entries were supplied for spin multiplicity "
+                f"{spinmult}; combine their roots into one entry")
+
+    if nelecas is not None:
+        nelec = int(np.sum(nelecas))
+        for _, spinmult, _ in states:
+            if (spinmult - 1) % 2 != nelec % 2:
+                raise ValueError(
+                    f"spin multiplicity {spinmult} is incompatible with "
+                    f"{nelec} active electrons")
+        if ncas is not None:
+            max_twos = min(nelec, 2 * int(ncas) - nelec)
+            for _, spinmult, _ in states:
+                if spinmult - 1 > max_twos:
+                    raise ValueError(
+                        f"spin multiplicity {spinmult} is not possible for "
+                        f"{nelec} electrons in {ncas} active orbitals")
+
+    # State-average solvers and SISO both require states to be grouped by spin.
+    # Python's stable sort preserves the user-specified irrep order within a spin.
+    return sorted(states, key=lambda state: state[1])
+
+
+def _validate_state_weights(weights, nstates):
+    if weights is None:
+        return np.ones(nstates) / nstates
+    try:
+        weights = np.asarray(weights, dtype=float)
+    except (TypeError, ValueError) as err:
+        raise TypeError("weights must be a one-dimensional numeric sequence") from err
+    if weights.ndim != 1 or weights.size != nstates:
+        raise ValueError(f"weights must contain one value for each of the {nstates} states")
+    if not np.all(np.isfinite(weights)):
+        raise ValueError("weights must be finite")
+    if np.any(weights < 0):
+        raise ValueError("weights cannot be negative")
+    if not np.isclose(weights.sum(), 1.0, atol=1e-10, rtol=0.0):
+        raise ValueError("weights must sum to one")
+    return weights
+
+
+def _aggregate_modelspace(modelspace):
+    """Combine symmetry sectors that have the same spin multiplicity."""
+    aggregated = []
+    for nroots, spinmult, _ in modelspace:
+        if aggregated and aggregated[-1][1] == spinmult:
+            aggregated[-1] = (aggregated[-1][0] + nroots, spinmult)
+        else:
+            aggregated.append((nroots, spinmult))
+    return aggregated
+
 
 def socintegrals(mol, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ham='DKH', dm=None):
     '''
@@ -55,21 +172,29 @@ def socintegrals(mol, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ha
     '''
 
     # Sanity checks
-    assert ham in ('BP', 'DKH'),\
-        "Only Breit-Pauli or Douglas-Kroll-Hess Hamiltonian are available."
-
-    assert somf, "Explicit 2e SOC integrals are implemented yet."
+    flags = {'somf': somf, 'amf': amf, 'mmf': mmf,
+             'soc1e': soc1e, 'soc2e': soc2e}
+    if any(not isinstance(value, (bool, np.bool_)) for value in flags.values()):
+        raise TypeError("somf, amf, mmf, soc1e, and soc2e must be boolean")
+    if not isinstance(ham, str) or ham.upper() not in ('BP', 'DKH'):
+        raise ValueError("ham must be 'BP' or 'DKH'")
+    ham = ham.upper()
+    if not somf:
+        raise NotImplementedError("Explicit 2e SOC integrals are not implemented yet")
 
     if mol.has_ecp():
         raise NotImplementedError("ECP is not supported yet.")
 
-    assert soc1e or soc2e, "Atleast one of the SOC integrals should be included."
+    if not soc1e and not soc2e:
+        raise ValueError("At least one of soc1e and soc2e must be enabled")
+    if amf == mmf:
+        raise ValueError("Exactly one of amf and mmf must be enabled")
+    if mmf and dm is None:
+        raise ValueError("dm is required when mmf=True")
 
     if amf:
         dm0 = amfIntegrals.compute_amfi_dm(mol)
     elif mmf:
-        assert dm is not None, \
-            "For mmf, the density matrix of the parent wavefunction must be provided."
         dm0 = dm
 
     log = logger.Logger(mol.stdout, mol.verbose)
@@ -113,24 +238,17 @@ def sacasscf_solver(mc, states, weights=None, ms=None):
         solver.spin = smult - 1
         return solver
 
-    if not isinstance(states, (list, tuple)):
-        raise TypeError("states must be a list of tuples (nroots, spinmult, wfnsym)")
+    if ms not in (None, 'lin'):
+        raise ValueError("ms must be None or 'lin'")
 
-    states= sorted(states, key=lambda x: x[1])
-
-    spin_mult = [x[1] for x in states]
-    assert len({m % 2 for m in spin_mult}) == 1,\
-          "Model space contains both odd and even spin multiplicities."
-
-    states = [state if len(state) > 2
-              else state + (None,) * (3 - len(state))
-              for state in states]
+    states = _validate_modelspace(states, mol=mol, ncas=mc.ncas,
+                                  nelecas=mc.nelecas)
 
     solvers = [_construct_solver(mol, smult, wfnsym, nroots)
                           for (nroots, smult, wfnsym) in states]
 
     statetot = sum(state[0] for state in states)
-    weights = np.ones(statetot) / statetot if weights is None else weights
+    weights = _validate_state_weights(weights, statetot)
 
     if ms == 'lin':
         return mc.multi_state_mix(solvers, weights, "lin")
@@ -152,4 +270,3 @@ if __name__ == "__main__":
 
     # MMFI Integrals
     # hso_mmfi = socintegrals(mol, amf=False, mmf=True, ham='DKH', dm=dm)
-
