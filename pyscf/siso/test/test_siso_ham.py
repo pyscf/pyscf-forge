@@ -133,7 +133,8 @@ class KnownValues(unittest.TestCase):
 
     # Build a four-state model from one singlet and the three components of one
     # triplet.  The test checks that singlet-triplet coupling and the internal
-    # triplet SOC block are scaled and assembled into the expected Hamiltonian.
+    # triplet SOC block are scaled and assembled before spin-free energies are
+    # added to form the total state-interaction Hamiltonian.
     def test_singlet_triplet_hamiltonian(self):
         coupling = np.asarray([[0.2 + 0.1j, -0.3j, 0.05]])
         triplet_soc = np.asarray([
@@ -158,6 +159,14 @@ class KnownValues(unittest.TestCase):
             stuples=[(0, 0), (0, 2), (2, 0), (2, 2)],
             imds=imds,
         )
+
+        soc_hamiltonian = siso.compute_soc_hamiltonian(my_siso)
+        soc_reference = np.block([
+            [np.zeros((1, 1)), coupling],
+            [coupling.conj().T, triplet_soc],
+        ])
+        self.assertEqual(soc_hamiltonian.shape, (4, 4))
+        assert_allclose(soc_hamiltonian, soc_reference, atol=1e-14)
 
         hamiltonian = siso.compute_hamiltonian(my_siso)
         reference = np.block([
