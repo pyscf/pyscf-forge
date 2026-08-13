@@ -170,16 +170,25 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
                                                        soc2e=soc2e, dm=dm), mo_cas)
     ints_dip = _basis_transformation(_get_dipole_integrals(mc._scf.mol, origin, pcc), mo_cas)
 
-    modelspace = sorted(modelspace, key=lambda x: x[1])
-    modelspace = [x[:2] for x in modelspace]  # Keep only nroots and imult
+    symmetry_modelspace = socaddons._validate_modelspace(
+        modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
+    modelspace = socaddons._aggregate_modelspace(symmetry_modelspace)
+
+    # A transition-density routine does not depend on the wfnsym used to obtain
+    # the CI vector. Use one solver for each spin group so that matrix elements
+    # between different irreps of the same spin are retained.
+    solver_by_spin = {}
+    for solver, (_, spinmult, _) in zip(
+            mc.fcisolver.fcisolvers, symmetry_modelspace):
+        solver_by_spin.setdefault(spinmult, solver)
 
     orbangmoment = []
     amfiinterac = []
     edipinterac = []
 
     nroot0 = 0
-    for i, (nroots, imult) in enumerate(modelspace):
-        solver = mc.fcisolver.fcisolvers[i]
+    for nroots, imult in modelspace:
+        solver = solver_by_spin[imult]
 
         orbLmat = np.zeros((3, nroots, nroots), dtype=ints_mo.dtype)
         amfimat = np.zeros((3, nroots, nroots), dtype=ints_mo.dtype)
@@ -200,7 +209,8 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
 
         nroot0 += nroots
 
-    assert sum([x[0] for x in modelspace]) == len(mc.ci), "Something went wrong."
+    if sum(x[0] for x in modelspace) != len(mc.ci):
+        raise ValueError("modelspace root count does not match mc.ci")
 
     return orbangmoment, amfiinterac, edipinterac
 
@@ -223,6 +233,10 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
         data: dict
             Dictionary containing the required data for ANISO calculations
     '''
+    modelspace = socaddons._validate_modelspace(
+        modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
+    aggregate_modelspace = socaddons._aggregate_modelspace(modelspace)
+
     # From the state vectors and energies construct the Hamiltonian
     # Spin-orbit Hamiltonian matrix
     hso = np.asarray(mysiso.si_vecs) @ \
@@ -246,7 +260,7 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     data['coords (in angstrom)'] = atom_list
 
     # Model space data
-    modelspacearr = np.array([x[:2] for x in modelspace], dtype=int)
+    modelspacearr = np.asarray(aggregate_modelspace, dtype=int)
     nroots, imult = modelspacearr.T
     szproj = np.concatenate([np.tile(get_ms_values(m), n) for n, m in modelspacearr], axis=0)
     multiplicity = np.array(np.repeat(imult, nroots), dtype=int)
@@ -268,7 +282,7 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     sos_spin = []
     sos_magmom = []
     sos_edipmat = []
-    for i, (nroots, mult) in enumerate(modelspace):
+    for i, (nroots, mult) in enumerate(modelspacearr):
         spinstates = [(mult-1)/2 for _ in range(nroots)]
         spininter = [np.stack(spin_operators(spin), axis=0) for spin in spinstates]
         lmatsos = generate_sos_basis(sfs_lmat[i], mult)
