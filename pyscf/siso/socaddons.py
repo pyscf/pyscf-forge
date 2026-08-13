@@ -47,10 +47,16 @@ def _validate_modelspace(modelspace, mol=None, ncas=None, nelecas=None):
         if isinstance(nroots, bool) or not isinstance(nroots, (int, np.integer)):
             msg = f"nroots in modelspace entry {index} must be an integer"
             raise TypeError(msg)
+        if nroots <= 0:
+            msg = f"nroots in modelspace entry {index} must be positive"
+            raise ValueError(msg)
         if isinstance(spinmult, bool) or not isinstance(
                 spinmult, (int, np.integer)):
             msg = f"spin multiplicity in modelspace entry {index} must be an integer"
             raise TypeError(msg)
+        if spinmult <= 0:
+            msg = f"spin multiplicity in modelspace entry {index} must be positive"
+            raise ValueError(msg)
         if (wfnsym is not None and
                 (isinstance(wfnsym, bool) or
                  not isinstance(wfnsym, (str, int, np.integer)))):
