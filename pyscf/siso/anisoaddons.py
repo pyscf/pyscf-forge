@@ -4,15 +4,22 @@ import numpy as np
 import sympy as sp
 from itertools import product
 from functools import reduce
+from numbers import Integral, Real
+from os import PathLike
 from scipy.linalg import block_diag
 
-from pyscf import lib
-from pyscf.x2c import sfx2c1e
+from pyscf.data import nist
 from pyscf.prop.dip_moment.mcpdft import get_guage_origin
 from pyscf.siso import socaddons
 
-# Constants
-ge = 2.00231930436182   # Taken from pyscf
+
+def _validate_component_matrix(mat, name='mat'):
+    mat = np.asarray(mat)
+    if mat.ndim != 3 or mat.shape[0] != 3 or mat.shape[1] != mat.shape[2]:
+        raise ValueError(f"{name} must have shape (3, n, n)")
+    if not np.issubdtype(mat.dtype, np.number):
+        raise TypeError(f"{name} must contain numeric values")
+    return mat
 
 def _basis_transformation(mat, sivec):
     '''
@@ -20,37 +27,46 @@ def _basis_transformation(mat, sivec):
     '''
     return np.array([reduce(np.dot, (sivec.conj().T, m, sivec)) for m in mat])
 
-def get_ms_values(mult):
-    '''
-    Get the magnetic quantum numbers for a given multiplicity.
-    args:
-        mult: int
-            Multiplicity of the state
-        returns: list
-            (-S, -S + 1, ..., S - 1, S)
-    '''
-    spin = (mult - 1)/2
-    return list(2*np.arange(-spin, spin + 1))
+def get_twice_ms_values(mult):
+    """Return integer ``2*M_S`` values for a spin multiplicity."""
+    return list(range(1 - mult, mult, 2))
 
 def unpack_sos_basis(mat):
-    orbang = np.stack([block_diag(*blk) for blk in [[x[i] for x in mat] for i in range(3)]])
-    return orbang
+    """Combine component matrices for different spin groups block-diagonally."""
+    if isinstance(mat, np.ndarray) and mat.ndim == 0:
+        raise TypeError("mat must be a non-empty sequence of component matrices")
+    try:
+        blocks = list(mat)
+    except TypeError as err:
+        raise TypeError(
+            "mat must be a non-empty sequence of component matrices") from err
+    if not blocks:
+        raise ValueError("mat must contain at least one component matrix")
+    blocks = [
+        _validate_component_matrix(block, f'mat[{index}]')
+        for index, block in enumerate(blocks)
+    ]
+    return np.stack([
+        block_diag(*(block[component] for block in blocks))
+        for component in range(3)
+    ])
 
 unpack_sfs_basis = unpack_sos_basis
 
 def generate_sos_basis(mat, mult):
     '''
-    It convert the NR matrix to the spin orbit basis.
+    Convert nonrelativistic component matrices to the spin-orbit basis.
     args:
         mat: np.ndarray
             Matrix containing the NR integrals
         mult: int
             Multiplicity of the state
     returns:
-        mat: np.ndarray of shspae (k, n*deg, n*deg)
+        mat: np.ndarray of shape (k, n*deg, n*deg)
             deg = multiplicity
             k = 3 (x, y, z components)
     '''
+    mat = _validate_component_matrix(mat)
     return np.array([np.kron(m, np.eye(mult)) for m in mat])
 
 def spin_operators(S_val):
@@ -58,7 +74,15 @@ def spin_operators(S_val):
     Return (Sx, Sy, Sz) as a numpy array of shape (3, n, n)
     for a given spin S (can be int or half-int).
     """
-    S = sp.Rational(S_val)
+    if isinstance(S_val, (bool, np.bool_)) or not isinstance(S_val, Real):
+        raise TypeError("S_val must be an integer or half-integer")
+    if not np.isfinite(S_val) or S_val < 0:
+        raise ValueError("S_val must be a nonnegative integer or half-integer")
+    twice_spin = round(2 * float(S_val))
+    if not np.isclose(2 * float(S_val), twice_spin, atol=1e-12, rtol=0.0):
+        raise ValueError("S_val must be an integer or half-integer")
+
+    S = sp.Rational(twice_spin, 2)
     hbar = sp.S(1)
     nstates = int(2 * S + 1)
     msvals = sorted([S - i for i in range(nstates)])
@@ -72,7 +96,7 @@ def spin_operators(S_val):
     for ms in msvals:
         i = ms_index[ms]
         Sz[i, i] = hbar * ms
-        for delta, sign in [(+1, 1), (-1, 1)]:
+        for delta in (+1, -1):
             ms_new = ms + delta
             if ms_new in ms_index:
                 j = ms_index[ms_new]
@@ -85,40 +109,17 @@ def spin_operators(S_val):
     Sz_np = np.array(Sz.evalf(), dtype=np.complex128)
     return Sx_np, Sy_np, Sz_np
 
-def _get_lxyz_integrals(mol, origin='CHARGE_CENTER', pcc=False):
+def _get_lxyz_integrals(mol, origin='CHARGE_CENTER'):
     '''
     Note these integrals are antisymm.
-    Picture change corrected integrals are not yet implemented.
     '''
     center = get_guage_origin(mol,origin)
-    # if pcc:
-    #     x2cobj = sfx2c1e.SpinFreeX2C(mol)
-    #     with mol.with_rinv_origin(center):
-    #         xmol = x2cobj.get_xmol()[0]
-    #         xint = xmol.intor('int1e_cg_irxp')
-    #         pxpint = xmol.intor('int1e_cg_pirxpp', hermi=2)
-    #         c1 = 0.5/lib.param.LIGHT_SPEED
-    #         ints = x2cobj.picture_change((xint, pxpint * c1**2))
-    # else:
     with mol.with_common_orig(center):
         ints = mol.intor('int1e_cg_irxp', comp=3)
     return ints
 
-def _get_dipole_integrals(mol, origin='CHARGE_CENTER', pcc=False):
-    '''
-    Picture change corrected integrals are not yet implemented.
-    '''
+def _get_dipole_integrals(mol, origin='CHARGE_CENTER'):
     center = get_guage_origin(mol,origin)
-    # if pcc:
-    #     x2cobj = sfx2c1e.SpinFreeX2C(mol)
-    #     with mol.with_rinv_origin(center):
-    #         xmol = x2cobj.get_xmol()[0]
-    #         nao = xmol.nao
-    #         rint = xmol.intor('int1e_r', hermi=2)
-    #         prpint = xmol.intor('int1e_sprsp', hermi=2).reshape(3,4,nao,nao)[:,3]
-    #         c1 = 0.5/lib.param.LIGHT_SPEED
-    #         ao_dip = x2cobj.picture_change((rint, prpint * c1**2))
-    # else:
     with mol.with_common_orig(center):
         ao_dip = mol.intor_symmetric('int1e_r', comp=3)
     return ao_dip
@@ -130,7 +131,7 @@ def _get_soc_integrals(mol, origin='CHARGE_CENTER', ham='DKH', somf=True,
     hso /= 1j
     return hso.real
 
-def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
+def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER'):
     """
     Get the one-electron properties for the given model space.
     Basically it computes r"<Psi_i|O|Psi_j>" for the one electron
@@ -143,7 +144,8 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
         mysiso: siso.SISO object
             SISO object containing sivec, sienergy, and ham
         origin: str
-            Origin for the gaude dependent integrals, default is 'CHARGE_CENTER'
+            Origin for the gauge-dependent integrals, default is
+            'CHARGE_CENTER'.
     returns:
         orbangmoment: list
             List of orbital angular momentum matrices for each multiplicity group
@@ -152,6 +154,9 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
         edipinterac: list
             List of electric dipole interaction matrices for each multiplicity group
     """
+    if getattr(mysiso, 'mc', None) is not mc:
+        raise ValueError("mysiso must be attached to mc")
+
     ncas = mc.ncas
     nelecas = mc.nelecas
     ham = mysiso.ham
@@ -164,22 +169,38 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
     if mmf:
         dm = mc.make_rdm1()
     mo_cas = mc.mo_coeff[:, mc.ncore:mc.ncas+mc.ncore]
-    ints_mo = _basis_transformation(_get_lxyz_integrals(mc._scf.mol, origin, pcc), mo_cas)
+    ints_mo = _basis_transformation(
+        _get_lxyz_integrals(mc._scf.mol, origin), mo_cas)
     ints_so = _basis_transformation(_get_soc_integrals(mc._scf.mol, origin, ham=ham,
                                                        somf=somf, amf=amf, mmf=mmf, soc1e=soc1e,
                                                        soc2e=soc2e, dm=dm), mo_cas)
-    ints_dip = _basis_transformation(_get_dipole_integrals(mc._scf.mol, origin, pcc), mo_cas)
+    ints_dip = _basis_transformation(
+        _get_dipole_integrals(mc._scf.mol, origin), mo_cas)
 
     symmetry_modelspace = socaddons._validate_modelspace(
         modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
     modelspace = socaddons._aggregate_modelspace(symmetry_modelspace)
 
+    expected_nroots = sum(state[0] for state in symmetry_modelspace)
+    if isinstance(mc.ci, (list, tuple)):
+        ci_roots = list(mc.ci)
+    elif expected_nroots == 1:
+        ci_roots = [mc.ci]
+    else:
+        raise ValueError("mc.ci must contain one CI vector per model-space root")
+    if len(ci_roots) != expected_nroots:
+        raise ValueError("modelspace root count does not match mc.ci")
+
+    solvers = getattr(mc.fcisolver, 'fcisolvers', None)
+    if solvers is None or len(solvers) != len(symmetry_modelspace):
+        raise ValueError(
+            "mc.fcisolver must contain one solver per modelspace entry")
+
     # A transition-density routine does not depend on the wfnsym used to obtain
     # the CI vector. Use one solver for each spin group so that matrix elements
     # between different irreps of the same spin are retained.
     solver_by_spin = {}
-    for solver, (_, spinmult, _) in zip(
-            mc.fcisolver.fcisolvers, symmetry_modelspace):
+    for solver, (_, spinmult, _) in zip(solvers, symmetry_modelspace):
         solver_by_spin.setdefault(spinmult, solver)
 
     orbangmoment = []
@@ -194,7 +215,7 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
         amfimat = np.zeros((3, nroots, nroots), dtype=ints_mo.dtype)
         edipmat = np.zeros((3, nroots, nroots), dtype=ints_mo.dtype)
 
-        ci_slice = mc.ci[nroot0:nroot0+nroots]
+        ci_slice = ci_roots[nroot0:nroot0+nroots]
 
         ijpairs = list(product(range(nroots), repeat=2))
         for i, j in ijpairs:
@@ -209,12 +230,10 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER', pcc=False):
 
         nroot0 += nroots
 
-    if sum(x[0] for x in modelspace) != len(mc.ci):
-        raise ValueError("modelspace root count does not match mc.ci")
-
     return orbangmoment, amfiinterac, edipinterac
 
-def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham='DKH'):
+def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER',
+                        ham=None):
     '''
     args:
         mol: instance of mol.gto
@@ -227,21 +246,48 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
             SISO object containing sivec, sienergy, and ham
         origin: str
             Origin for the integrals, default is 'CHARGE_CENTER'
-        ham: str
-            SOC Hamiltonian: 'BP' or 'DK'
+        ham: str or None
+            SOC Hamiltonian, 'BP' or 'DKH'. If None, use ``mysiso.ham``.
+            An explicitly supplied value must match ``mysiso.ham``.
     returns:
         data: dict
             Dictionary containing the required data for ANISO calculations
     '''
+    if mol is not mc._scf.mol:
+        raise ValueError("mol must be the molecule attached to mc._scf")
+    if getattr(mysiso, 'mc', None) is not mc:
+        raise ValueError("mysiso must be attached to mc")
+
     modelspace = socaddons._validate_modelspace(
         modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
     aggregate_modelspace = socaddons._aggregate_modelspace(modelspace)
 
+    nstate = sum(nroots for nroots, _, _ in modelspace)
+    nss = sum(nroots * spinmult for nroots, spinmult, _ in modelspace)
+    spin_free_energies = np.asarray(mc.e_states)
+    si_energies = np.asarray(mysiso.si_energies)
+    si_vecs = np.asarray(mysiso.si_vecs)
+    if spin_free_energies.shape != (nstate,):
+        raise ValueError(f"mc.e_states must have shape ({nstate},)")
+    if si_energies.shape != (nss,):
+        raise ValueError(f"mysiso.si_energies must have shape ({nss},)")
+    if si_vecs.shape != (nss, nss):
+        raise ValueError(f"mysiso.si_vecs must have shape ({nss}, {nss})")
+
+    if ham is None:
+        ham = mysiso.ham
+    elif not isinstance(ham, str) or ham.upper() not in ('BP', 'DKH'):
+        raise ValueError("ham must be 'BP' or 'DKH'")
+    else:
+        ham = ham.upper()
+    if ham != mysiso.ham:
+        raise ValueError(
+            f"ham={ham!r} does not match the SISO Hamiltonian "
+            f"{mysiso.ham!r}")
+
     # From the state vectors and energies construct the Hamiltonian
     # Spin-orbit Hamiltonian matrix
-    hso = np.asarray(mysiso.si_vecs) @ \
-        np.asarray(np.diag(mysiso.si_energies)) @ \
-            np.asarray(mysiso.si_vecs).conj().T
+    hso = si_vecs @ np.diag(si_energies) @ si_vecs.conj().T
     data = {}
 
     # Basic headings
@@ -253,7 +299,7 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     data['natoms'] =  int(mol.natm)
     atomlabels = [mol.atom_symbol(i) for i in range(mol.natm)]
     data['atomlbl'] =  atomlabels
-    coords = mol.atom_coords()
+    coords = mol.atom_coords(unit='Angstrom')
     atom_list = [[i, label, coord[0], coord[1], coord[2]]
         for i, (label, coord) in enumerate(zip(atomlabels, coords), 1)]
     atom_list.insert(0, [mol.natm])
@@ -262,10 +308,12 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     # Model space data
     modelspacearr = np.asarray(aggregate_modelspace, dtype=int)
     nroots, imult = modelspacearr.T
-    szproj = np.concatenate([np.tile(get_ms_values(m), n) for n, m in modelspacearr], axis=0)
+    szproj = np.concatenate([
+        np.tile(get_twice_ms_values(m), n) for n, m in modelspacearr
+    ])
     multiplicity = np.array(np.repeat(imult, nroots), dtype=int)
-    data['nss'] = int(np.sum(nroots * imult))
-    data['nstate'] = int(np.sum(nroots))
+    data['nss'] = nss
+    data['nstate'] = nstate
     data['nmult'] = int(len(modelspacearr))
     data['imult'] = [int(x) for x in imult]
     data['nroot'] = [int(r) for r in nroots]
@@ -273,8 +321,8 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     data['multiplicity'] = [int(x) for x in multiplicity]
 
     # Energy data
-    data['eso'] = mysiso.si_energies
-    data['esfs'] = np.array(mc.e_states)
+    data['eso'] = si_energies
+    data['esfs'] = spin_free_energies
 
     # Generate the required operators
     sfs_lmat, sfs_amfi, sfs_edip = get_1e_prop(mc, modelspace, mysiso, origin)
@@ -292,7 +340,9 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
 
         sos_spin.append(np.stack([block_diag(*[a[i] for a in spininter]) for i in range(3)], axis=0))
 
-        sos_magneticmoment_ =  -ge *np.stack([block_diag(*[a[i] for a in spininter]) for i in range(3)], axis=0)
+        sos_magneticmoment_ = -nist.G_ELECTRON * np.stack([
+            block_diag(*[a[i] for a in spininter]) for i in range(3)
+        ], axis=0)
         sos_magneticmoment_ -= 1j * lmatsos
         sos_magmom.append(sos_magneticmoment_)
 
@@ -312,7 +362,7 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     data['edmom_z'] = sfs_edip[2]
 
     # Spin orbit coupled data
-    sivec = mysiso.si_vecs
+    sivec = si_vecs
     sos_edipmat = unpack_sos_basis(sos_edipmat)
     sos_spin = unpack_sos_basis(sos_spin)
     sos_magneticmoment = unpack_sos_basis(sos_magmom)
@@ -341,8 +391,8 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER', ham
     data['edipm_zi'] = sos_edipmat[2].imag
 
     # Hamiltonian data
-    data['eigenr'] = mysiso.si_vecs.real
-    data['eigeni'] = mysiso.si_vecs.imag
+    data['eigenr'] = si_vecs.real
+    data['eigeni'] = si_vecs.imag
     data['hsor'] = hso.real
     data['hsoi'] = hso.imag
     return data
@@ -360,6 +410,10 @@ class ANISOFileWriter:
             data (dict): A dictionary containing the data to write.
                           The keys should match the expected ANISO file format.
         '''
+        if not isinstance(filename, (str, PathLike)):
+            raise TypeError("filename must be a string or path-like object")
+        if not isinstance(data, dict):
+            raise TypeError("data must be a dictionary")
         self.filename = filename
         self.data = data
 
@@ -372,26 +426,61 @@ class ANISOFileWriter:
             str: Formatted string in ASCII format.
         '''
 
-        if isinstance(val, int):
+        if not isinstance(ky, str) or not ky or '\n' in ky or ky.startswith('$'):
+            raise ValueError("ANISO keys must be non-empty strings without '$' or newlines")
+
+        if isinstance(val, (bool, np.bool_)):
+            raise TypeError(f"Unsupported boolean value for key: {ky}")
+        if isinstance(val, (Integral, np.integer)):
             return f"${ky}\n{val}\n\n"
 
-        elif isinstance(val, str):
+        if isinstance(val, Real):
+            if not np.isfinite(val):
+                raise ValueError(f"Non-finite value for key: {ky}")
             return f"${ky}\n{val}\n\n"
 
-        elif isinstance(val, list):
-            if all(isinstance(i, (int, float)) for i in val):
+        if isinstance(val, str):
+            return f"${ky}\n{val}\n\n"
+
+        if isinstance(val, list):
+            if not val:
+                raise ValueError(f"List for key {ky} must not be empty")
+            if all(isinstance(i, Real) and not isinstance(i, (bool, np.bool_))
+                   for i in val):
+                if not np.all(np.isfinite(val)):
+                    raise ValueError(f"Non-finite list value for key: {ky}")
                 return f"${ky}\n{len(val)}\n{' '.join(map(str, val))}\n\n"
 
-            elif all(isinstance(i, list) for i in val):
+            if all(isinstance(i, list) and i for i in val):
+                if not all(
+                        isinstance(item, (str, Real)) and
+                        not isinstance(item, (bool, np.bool_))
+                        for sublist in val for item in sublist):
+                    raise ValueError(f"Unsupported nested list for key: {ky}")
+                numeric_items = [
+                    item for sublist in val for item in sublist
+                    if isinstance(item, Real)
+                ]
+                if numeric_items and not np.all(np.isfinite(numeric_items)):
+                    raise ValueError(f"Non-finite list value for key: {ky}")
                 val_str = '\n'.join(' '.join(map(str, sublist)) for sublist in val)
                 return f"${ky}\n{val_str}\n\n"
 
-            elif all(isinstance(i, str) for i in val):
+            if all(isinstance(i, str) for i in val):
                 return f"${ky}\n{len(val)}\n{' '.join(val)}\n\n"
 
-            else:
-                raise ValueError(f"Unsupported list format for key: {ky}")
-        elif isinstance(val, np.ndarray):
+            raise ValueError(f"Unsupported list format for key: {ky}")
+
+        if isinstance(val, np.ndarray):
+            if val.ndim not in (1, 2):
+                raise ValueError(f"Unsupported ndarray dimension for key: {ky}")
+            if val.size == 0:
+                raise ValueError(f"Array for key {ky} must not be empty")
+            if (not np.issubdtype(val.dtype, np.number) or
+                    np.issubdtype(val.dtype, np.complexfloating)):
+                raise TypeError(f"Array for key {ky} must be real numeric data")
+            if not np.all(np.isfinite(val)):
+                raise ValueError(f"Non-finite array value for key: {ky}")
             shape = list(val.shape)
             lines = []
             arr = val
@@ -405,11 +494,9 @@ class ANISOFileWriter:
                     for i in range(0, len(row), 5):
                         row_strs.append(' '.join(f"{v:22.14E}" for v in row[i:i+5]))
                     lines.append('\n'.join(row_strs))
-            else:
-                raise ValueError(f"Unsupported ndarray dimension for key: {ky}")
             return f"${ky}\n{' '.join(map(str, shape))}\n" + '\n'.join(lines) + '\n\n'
-        else:
-            raise ValueError(f"Unsupported data type for key: {ky}")
+
+        raise TypeError(f"Unsupported data type for key: {ky}")
 
     def save_to_file(self):
         with open(self.filename, 'w', encoding='ascii') as f:
@@ -427,9 +514,10 @@ def write_aniso_file(filename, data, backend='OpenMolcas'):
         backend: str
             SINGLE_ANISO backend (OpenMolcas or Orca)
     '''
+    if not isinstance(backend, str):
+        raise TypeError("backend must be 'OpenMolcas' or 'Orca'")
     if backend == 'OpenMolcas':
-        writer = ANISOFileWriter(filename, data)
-        writer.save_to_file()
+        pass
     elif backend == 'Orca':
         rename_map = {"angmom_x": "angmom_xi", "angmom_y": "angmom_yi",
                       "angmom_z": "angmom_zi"}
