@@ -1,4 +1,20 @@
-# Generate the required data used by ANISO to compute the static magnetic properties.
+#!/usr/bin/env python
+# Copyright 2014-2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Author: Bhavnesh Jangid <jangidbhavnesh@uchicago.edu>
+
 
 import numpy as np
 import sympy as sp
@@ -12,6 +28,8 @@ from pyscf.data import nist
 from pyscf.prop.dip_moment.mcpdft import get_guage_origin
 from pyscf.siso import socaddons
 
+
+# Generate the required data used by ANISO to compute the static magnetic properties.
 
 def _validate_component_matrix(mat, name='mat'):
     mat = np.asarray(mat)

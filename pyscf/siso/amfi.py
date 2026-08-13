@@ -49,8 +49,7 @@ def _invsqrt(mat, tol=1e-15):
 
 def compute_amfi_dm(mol, atomic_configuration=elements.CONFIGURATION):
     '''
-    Source: mrh
-
+    Source: https://github.com/MatthewRHermes/mrh
     Generate AMFI density matrix, which is exactly like the
     "init_guess_by_atom" density matrix except that the orbitals
     of the atom hf's aren't optimized.

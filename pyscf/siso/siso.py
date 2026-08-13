@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2025 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2026 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,6 +27,7 @@ from itertools import product
 from functools import reduce
 from pyscf import scf, lib, fci, mcpdft
 from pyscf.siso import socaddons
+from pyscf.data import nist
 import ctypes
 
 libsiso = lib.load_library('libsiso')
@@ -45,7 +46,7 @@ for _contract_name in ('SISOcontract_same_spin',
 
 logger = lib.logger
 
-au2ev = 27.21138602
+au2ev = nist.HARTREE2EV #27.21138602
 au2cminv = 219474.6313705
 
 # Forked from: https://github.com/IrisA144/liblan_preview
