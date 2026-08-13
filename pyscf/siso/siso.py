@@ -30,9 +30,18 @@ from pyscf.siso import socaddons
 import ctypes
 
 libsiso = lib.load_library('libsiso')
-libsiso.SOCcompute_ss.restype = None
-libsiso.SOCcompute_ssp.restype = None
-libsiso.SOCcompute_ssm.restype = None
+
+_SISO_CONTRACT_ARGTYPES = (
+    [ctypes.c_void_p] * 3 +  # h1e, ci0, ci1
+    [ctypes.c_int] * 8 +    # orbital, root, string, and link dimensions
+    [ctypes.c_void_p] * 2   # alpha and beta link tables
+)
+for _contract_name in ('SISOcontract_same_spin',
+                       'SISOcontract_spin_plus',
+                       'SISOcontract_spin_minus'):
+    _contract_fn = getattr(libsiso, _contract_name)
+    _contract_fn.argtypes = _SISO_CONTRACT_ARGTYPES
+    _contract_fn.restype = None
 
 logger = lib.logger
 
@@ -218,6 +227,69 @@ def compute_cg_coefficients(S, Ms=0):
                                                      ss/2 + Ms, g2 - ss/2 - Ms).subs(ss,S).doit()
     return g
 
+
+def _contract_soc_ci(contract_fn, h1e, ci0, link_index):
+    """Contract an SOC operator with CI vectors through a C driver."""
+    h1e = np.asarray(h1e, dtype=np.complex128, order='C')
+    ci0 = np.asarray(ci0, dtype=np.complex128, order='C')
+    link_indexa = np.asarray(link_index[0], dtype=np.int32, order='C')
+    link_indexb = np.asarray(link_index[1], dtype=np.int32, order='C')
+
+    if h1e.ndim != 3 or h1e.shape[0] != 3 or h1e.shape[1] != h1e.shape[2]:
+        raise ValueError("SOC integrals must have shape (3, norb, norb)")
+    if ci0.ndim != 3:
+        raise ValueError("CI vectors must have shape (nroots, nstra, nstrb)")
+    if link_indexa.ndim != 3 or link_indexa.shape[2] != 4:
+        raise ValueError("alpha link table must have shape (nstra, nlinka, 4)")
+    if link_indexb.ndim != 3 or link_indexb.shape[2] != 4:
+        raise ValueError("beta link table must have shape (nstrb, nlinkb, 4)")
+
+    nroots, nstra0, nstrb0 = ci0.shape
+    nstra1, nlinka = link_indexa.shape[:2]
+    nstrb1, nlinkb = link_indexb.shape[:2]
+    ci1 = np.empty((3, nroots, nstra1, nstrb1), dtype=np.complex128)
+    contract_fn(
+        h1e.ctypes.data_as(ctypes.c_void_p),
+        ci0.ctypes.data_as(ctypes.c_void_p),
+        ci1.ctypes.data_as(ctypes.c_void_p),
+        ctypes.c_int(h1e.shape[1]),
+        ctypes.c_int(nroots),
+        ctypes.c_int(nstra1),
+        ctypes.c_int(nstrb1),
+        ctypes.c_int(nstra0),
+        ctypes.c_int(nstrb0),
+        ctypes.c_int(nlinka),
+        ctypes.c_int(nlinkb),
+        link_indexa.ctypes.data_as(ctypes.c_void_p),
+        link_indexb.ctypes.data_as(ctypes.c_void_p),
+    )
+    return ci1
+
+
+def contract_same_spin(h1e, ci0, link_index):
+    """
+    Contract SOC integrals between CI spaces with equal total spin.
+    """
+    return _contract_soc_ci(
+        libsiso.SISOcontract_same_spin, h1e, ci0, link_index)
+
+
+def contract_spin_plus(h1e, ci0, link_index):
+    """
+    Contract SOC integrals from a spin-S ket to a spin-(S+1) bra.
+    """
+    return _contract_soc_ci(
+        libsiso.SISOcontract_spin_plus, h1e, ci0, link_index)
+
+
+def contract_spin_minus(h1e, ci0, link_index):
+    """
+    Contract SOC integrals from a spin-S ket to a spin-(S-1) bra.
+    """
+    return _contract_soc_ci(
+        libsiso.SISOcontract_spin_minus, h1e, ci0, link_index)
+
+
 def compute_dmat(siso):
     '''
     '''
@@ -227,9 +299,6 @@ def compute_dmat(siso):
 
     d_col = []
 
-    def flatten_to_ptr(array, dtype):
-        return np.ascontiguousarray(array.flatten()).ctypes.data_as(ctypes.POINTER(dtype))
-
     for i, (s1,s2) in enumerate(stuples):
         if s1 == s2:  # SS part
             S = s1
@@ -238,37 +307,8 @@ def compute_dmat(siso):
             civecket = imds.c[iS].astype(np.complex128) # CI vectors
             civecbra = civecket
             alphamat, betamat = imds.a[i] # coupling coefficients
-            b = np.zeros((3, *civecket.shape), dtype='complex')
-
-            # Instead of passing all of these shapes, I am passing a single shape array
-            shapearray = np.array([*b.shape,
-                                   alphamat.shape[1],
-                                   betamat.shape[1],
-                                   zmat.shape[1],
-                                   civecket.shape[1],
-                                   civecket.shape[2]],
-                                   dtype=np.int32, order='C')
-
-            b = np.ascontiguousarray(b.flatten())
-
-            libsiso.SOCcompute_ss.argtypes = [
-                ctypes.POINTER(ctypes.c_double),  # zmat
-                ctypes.POINTER(ctypes.c_double),  # civecs
-                ctypes.POINTER(ctypes.c_double),  # bdata
-                ctypes.POINTER(ctypes.c_int),     # alphadet
-                ctypes.POINTER(ctypes.c_int),     # betadet
-                ctypes.POINTER(ctypes.c_int)      # shapearray
-            ]
-
-            libsiso.SOCcompute_ss(
-                flatten_to_ptr(zmat, ctypes.c_double),
-                flatten_to_ptr(civecket, ctypes.c_double),
-                b.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                flatten_to_ptr(alphamat, ctypes.c_int),
-                flatten_to_ptr(betamat, ctypes.c_int),
-                flatten_to_ptr(shapearray, ctypes.c_int))
-
-            b = b.reshape(3, *civecket.shape)
+            b = contract_same_spin(
+                zmat, civecket, (alphamat, betamat))
 
             # WE TDM
             w = np.einsum('kij, mnij->mnk', civecbra, b)
@@ -287,37 +327,8 @@ def compute_dmat(siso):
             civecket = imds.c[iS].astype(np.complex128) # CI vectors
             civecbra = imds.c[iSp].astype(np.complex128)
             alphamat, betamat = imds.a[i] # coupling coefficients
-            b = np.zeros((3, civecket.shape[0], civecbra.shape[1], civecbra.shape[2]), dtype='complex')
-
-            # Instead of passing all of these shapes, I am passing a single shape array
-            shapearray = np.array([*b.shape,
-                                   alphamat.shape[1],
-                                   betamat.shape[1],
-                                   zmat.shape[1],
-                                   civecket.shape[1],
-                                   civecket.shape[2]],
-                                   dtype=np.int32, order='C')
-
-            b = np.ascontiguousarray(b.flatten())
-
-            libsiso.SOCcompute_ssp.argtypes = [
-                ctypes.POINTER(ctypes.c_double),  # zmat
-                ctypes.POINTER(ctypes.c_double),  # civecs
-                ctypes.POINTER(ctypes.c_double),  # bdata
-                ctypes.POINTER(ctypes.c_int),     # alphadet
-                ctypes.POINTER(ctypes.c_int),     # betadet
-                ctypes.POINTER(ctypes.c_int)      # shapearray
-            ]
-
-            libsiso.SOCcompute_ssp(
-                flatten_to_ptr(zmat, ctypes.c_double),
-                flatten_to_ptr(civecket, ctypes.c_double),
-                b.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                flatten_to_ptr(alphamat, ctypes.c_int),
-                flatten_to_ptr(betamat, ctypes.c_int),
-                flatten_to_ptr(shapearray, ctypes.c_int))
-
-            b = b.reshape(3, civecket.shape[0], civecbra.shape[1], civecbra.shape[2])
+            b = contract_spin_plus(
+                zmat, civecket, (alphamat, betamat))
 
             # WE TDM
             w = np.einsum('kij, mnij->mnk', civecbra, b)
@@ -335,37 +346,8 @@ def compute_dmat(siso):
             civecket = imds.c[iS].astype(np.complex128) # CI vectors
             civecbra = imds.c[iSm].astype(np.complex128)
             alphamat, betamat = imds.a[i] # coupling coefficients
-
-            b = np.zeros((3, civecket.shape[0], civecbra.shape[1], civecbra.shape[2]), dtype='complex')
-
-            # Instead of passing all of these shapes, I am passing a single shape array
-            shapearray = np.array([*b.shape,
-                                   alphamat.shape[1],
-                                   betamat.shape[1],
-                                   zmat.shape[1],
-                                   civecket.shape[1],
-                                   civecket.shape[2]],
-                                   dtype=np.int32, order='C')
-
-            b = np.ascontiguousarray(b.flatten())
-
-            libsiso.SOCcompute_ssm.argtypes = [
-                ctypes.POINTER(ctypes.c_double),  # zmat
-                ctypes.POINTER(ctypes.c_double),  # civecs
-                ctypes.POINTER(ctypes.c_double),  # bdata
-                ctypes.POINTER(ctypes.c_int),     # alphadet
-                ctypes.POINTER(ctypes.c_int),     # betadet
-                ctypes.POINTER(ctypes.c_int)      # shapearray
-            ]
-            libsiso.SOCcompute_ssm(
-                flatten_to_ptr(zmat, ctypes.c_double),
-                flatten_to_ptr(civecket, ctypes.c_double),
-                b.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-                flatten_to_ptr(alphamat, ctypes.c_int),
-                flatten_to_ptr(betamat, ctypes.c_int),
-                flatten_to_ptr(shapearray, ctypes.c_int))
-
-            b = b.reshape(3, civecket.shape[0], civecbra.shape[1], civecbra.shape[2])
+            b = contract_spin_minus(
+                zmat, civecket, (alphamat, betamat))
 
             # WE TDM
             w = np.einsum('kij, mnij->mnk', civecbra, b)
@@ -389,7 +371,7 @@ def compute_hamiltonian(siso):
             instance of class SISO
     Returns:
         hamiltonian:
-            a list of Hamiltonian matrices for each state
+            Hamiltonian matrix of dimension (nstates, nstates)
     """
     statelst = siso.statelis
     twoslst = siso.twoslst
