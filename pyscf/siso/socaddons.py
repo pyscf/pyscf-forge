@@ -19,8 +19,6 @@
 Helper Functions for SOC
 '''
 
-from numbers import Integral
-
 import numpy as np
 from pyscf import lib, mcscf, symm
 from pyscf.csf_fci import csf_solver
@@ -28,9 +26,10 @@ from pyscf.siso import amfi as amfIntegrals
 
 logger = lib.logger
 
-
 def _validate_modelspace(modelspace, mol=None, ncas=None, nelecas=None):
-    """Validate and normalize a SISO model-space specification."""
+    """
+    Validate and normalize a SISO model-space specification.
+    """
     errmsg = ("modelspace must be a non-empty list of "
               "(nroots, spin_multiplicity[, wfnsym]) entries")
     if not isinstance(modelspace, (list, tuple)) or not modelspace:
@@ -39,60 +38,63 @@ def _validate_modelspace(modelspace, mol=None, ncas=None, nelecas=None):
     states = []
     for index, state in enumerate(modelspace):
         if not isinstance(state, (list, tuple)) or len(state) not in (2, 3):
-            raise TypeError(f"modelspace entry {index} must have two or three items")
+            msg = f"modelspace entry {index} must have number of roots \
+                and respective spin multiplicities"
+            raise TypeError(msg)
 
         nroots, spinmult = state[:2]
         wfnsym = state[2] if len(state) == 3 else None
-        if isinstance(nroots, bool) or not isinstance(nroots, Integral):
-            raise TypeError(f"nroots in modelspace entry {index} must be an integer")
-        if nroots <= 0:
-            raise ValueError(f"nroots in modelspace entry {index} must be positive")
-        if isinstance(spinmult, bool) or not isinstance(spinmult, Integral):
-            raise TypeError(
-                f"spin multiplicity in modelspace entry {index} must be an integer")
-        if spinmult <= 0:
-            raise ValueError(
-                f"spin multiplicity in modelspace entry {index} must be positive")
-        if wfnsym is not None and not isinstance(wfnsym, (str, Integral)):
-            raise TypeError(
-                f"wfnsym in modelspace entry {index} must be a string or integer")
+        if isinstance(nroots, bool) or not isinstance(nroots, (int, np.integer)):
+            msg = f"nroots in modelspace entry {index} must be an integer"
+            raise TypeError(msg)
+        if isinstance(spinmult, bool) or not isinstance(
+                spinmult, (int, np.integer)):
+            msg = f"spin multiplicity in modelspace entry {index} must be an integer"
+            raise TypeError(msg)
+        if (wfnsym is not None and
+                (isinstance(wfnsym, bool) or
+                 not isinstance(wfnsym, (str, int, np.integer)))):
+            msg = f"wfnsym in modelspace entry {index} must be a string or integer"
+            raise TypeError(msg)
 
         if wfnsym is not None and mol is not None:
             if not mol.symmetry:
-                raise ValueError(
-                    "wfnsym was specified, but molecular symmetry is not enabled")
+                msg = ("wfnsym was specified, but molecular symmetry is not enabled")
+                raise ValueError(msg)
             try:
                 if isinstance(wfnsym, str):
                     symm.irrep_name2id(mol.groupname, wfnsym)
                 else:
                     symm.irrep_id2name(mol.groupname, int(wfnsym))
             except (KeyError, ValueError) as err:
-                raise ValueError(
+                msg = (
                     f"wfnsym {wfnsym!r} in modelspace entry {index} is not "
-                    f"valid for point group {mol.groupname}") from err
+                    f"valid for point group {mol.groupname}")
+                raise ValueError(msg) from err
 
-        if isinstance(wfnsym, Integral):
+        if isinstance(wfnsym, (int, np.integer)):
             wfnsym = int(wfnsym)
         states.append((int(nroots), int(spinmult), wfnsym))
 
     if len({spinmult % 2 for _, spinmult, _ in states}) != 1:
-        raise ValueError(
-            "modelspace cannot mix odd- and even-electron spin multiplicities")
+        msg = ("modelspace cannot mix odd- and even-electron spin multiplicities")
+        raise ValueError(msg)
 
     for spinmult in {state[1] for state in states}:
         spin_states = [state for state in states if state[1] == spinmult]
         symmetries = [state[2] for state in spin_states]
         if any(wfnsym is None for wfnsym in symmetries) and any(
                 wfnsym is not None for wfnsym in symmetries):
-            raise ValueError(
-                "modelspace cannot mix symmetry-qualified and unqualified "
+            msg = ("modelspace cannot mix symmetry-qualified and unqualified "
                 f"entries for spin multiplicity {spinmult}")
+            raise ValueError(msg)
         specified_symmetries = [wfnsym for wfnsym in symmetries
                                 if wfnsym is not None]
         if len(set(specified_symmetries)) != len(specified_symmetries):
-            raise ValueError(
+            msg = (
                 "duplicate wfnsym entries were supplied for spin multiplicity "
                 f"{spinmult}; combine their roots into one entry")
+            raise ValueError(msg)
 
     if nelecas is not None:
         nelec = int(np.sum(nelecas))
@@ -110,11 +112,13 @@ def _validate_modelspace(modelspace, mol=None, ncas=None, nelecas=None):
                         f"{nelec} electrons in {ncas} active orbitals")
 
     # State-average solvers and SISO both require states to be grouped by spin.
-    # Python's stable sort preserves the user-specified irrep order within a spin.
     return sorted(states, key=lambda state: state[1])
 
 
 def _validate_state_weights(weights, nstates):
+    '''
+    Validate and normalize a SISO state weight specification.
+    '''
     if weights is None:
         return np.ones(nstates) / nstates
     try:
@@ -123,10 +127,6 @@ def _validate_state_weights(weights, nstates):
         raise TypeError("weights must be a one-dimensional numeric sequence") from err
     if weights.ndim != 1 or weights.size != nstates:
         raise ValueError(f"weights must contain one value for each of the {nstates} states")
-    if not np.all(np.isfinite(weights)):
-        raise ValueError("weights must be finite")
-    if np.any(weights < 0):
-        raise ValueError("weights cannot be negative")
     if not np.isclose(weights.sum(), 1.0, atol=1e-10, rtol=0.0):
         raise ValueError("weights must sum to one")
     return weights
