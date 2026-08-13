@@ -497,7 +497,8 @@ class SISO(lib.StreamObject):
     Quasi-Degenerate Perturbation Theory Based Spin-Orbit Coupling Treatment.:
     State interaction Spin-Orbit Coupling (SISO) class.
     """
-    _keys=['statelst', 'twoslst', 'stuples','si_energies', 'si_vecs']
+    _keys = ['modelspace', 'statelst', 'twoslst', 'stuples',
+             'si_energies', 'si_vecs']
 
     def __init__(self, mc, modelspace, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ham='DKH'):
         self.mc = mc
@@ -506,18 +507,21 @@ class SISO(lib.StreamObject):
         self.mmf = mmf
         self.soc1e = soc1e
         self.soc2e = soc2e
-        self.ham = ham
+        self.ham = ham.upper() if isinstance(ham, str) else ham
         self.imds = _IMDS()
         self.initialize_(modelspace)
         self.sanity_checks()
         self.dump_flags()
 
     def initialize_(self, modelspace):
-        statelis= sorted(modelspace, key=lambda x: x[1])
-        SMlst = [state[1] - 1 for state in statelis]
-        statelis_ = np.zeros(max(SMlst) + 1, dtype=int)
-        for state in statelis:
-            statelis_[state[1] - 1] = state[0]
+        self.modelspace = socaddons._validate_modelspace(
+            modelspace, mol=self.mc._scf.mol, ncas=self.mc.ncas,
+            nelecas=self.mc.nelecas)
+        spin_indices = [state[1] - 1 for state in self.modelspace]
+        statelis_ = np.zeros(max(spin_indices) + 1, dtype=int)
+        for nroots, spinmult, _ in self.modelspace:
+            # Multiple symmetry sectors can have the same spin multiplicity.
+            statelis_[spinmult - 1] += nroots
         self.statelis = statelis_.tolist()
         self.twoslst = np.nonzero(self.statelis)[0]
         self.stuples = [x for x in product(self.twoslst, self.twoslst)]
@@ -527,13 +531,76 @@ class SISO(lib.StreamObject):
         """
         Perform sanity checks on the input parameters.
         """
-        assert self.ham in ('BP', 'DKH'), "Only Breit-Pauli or Douglas-Kroll Hamiltonian are available."
-        assert self.somf, "Explicit 2e SOC integrals are not implemented yet."
+        flags = {'somf': self.somf, 'amf': self.amf, 'mmf': self.mmf,
+                 'soc1e': self.soc1e, 'soc2e': self.soc2e}
+        if any(not isinstance(value, (bool, np.bool_))
+               for value in flags.values()):
+            raise TypeError("somf, amf, mmf, soc1e, and soc2e must be boolean")
+        if self.ham not in ('BP', 'DKH'):
+            raise ValueError("ham must be 'BP' or 'DKH'")
+        if not self.somf:
+            raise NotImplementedError(
+                "Explicit 2e SOC integrals are not implemented yet")
         if self.mc._scf.mol.has_ecp():
             raise NotImplementedError("ECP is not supported yet.")
-        assert self.soc1e or self.soc2e, "At least one of the SOC integrals should be included."
+        if not self.soc1e and not self.soc2e:
+            raise ValueError("At least one of soc1e and soc2e must be enabled")
+        if self.amf == self.mmf:
+            raise ValueError("Exactly one of amf and mmf must be enabled")
+
         if isinstance(self.mc, mcpdft.MultiStateMCPDFTSolver):
             self.sort_eigenstates_forlpdft()
+
+        expected_nroots = sum(state[0] for state in self.modelspace)
+        solvers = getattr(self.mc.fcisolver, 'fcisolvers', None)
+        if solvers is not None:
+            if len(solvers) != len(self.modelspace):
+                raise ValueError(
+                    "modelspace must contain one entry for each state-average "
+                    f"FCI solver ({len(self.modelspace)} entries for "
+                    f"{len(solvers)} solvers)")
+            for index, (solver, state) in enumerate(zip(solvers, self.modelspace)):
+                nroots, spinmult, wfnsym = state
+                solver_nroots = int(getattr(solver, 'nroots', 1))
+                solver_spinmult = int(getattr(solver, 'spin', spinmult - 1)) + 1
+                if (solver_nroots, solver_spinmult) != (nroots, spinmult):
+                    raise ValueError(
+                        f"modelspace entry {index} requests ({nroots}, {spinmult}), "
+                        "but the corresponding FCI solver has "
+                        f"({solver_nroots}, {solver_spinmult})")
+                solver_wfnsym = getattr(solver, 'wfnsym', None)
+                if wfnsym is not None and solver_wfnsym != wfnsym:
+                    raise ValueError(
+                        f"modelspace entry {index} requests wfnsym {wfnsym!r}, "
+                        f"but the corresponding FCI solver uses {solver_wfnsym!r}")
+
+        if not hasattr(self.mc, 'e_states') or self.mc.e_states is None:
+            raise ValueError("mc must contain state energies before SISO is initialized")
+        actual_nroots = np.atleast_1d(self.mc.e_states).size
+        if actual_nroots != expected_nroots:
+            raise ValueError(
+                f"modelspace contains {expected_nroots} roots, but mc.e_states "
+                f"contains {actual_nroots}")
+        if isinstance(self.mc.ci, (list, tuple)) and len(self.mc.ci) != expected_nroots:
+            raise ValueError(
+                f"modelspace contains {expected_nroots} roots, but mc.ci "
+                f"contains {len(self.mc.ci)}")
+
+        ss = np.asarray(self.mc.fcisolver.states_spin_square(
+            self.mc.ci, self.mc.ncas, self.mc.nelecas)[0])
+        self.spin_contanimation_check(ss)
+        actual_spin_indices = np.rint(np.sqrt(1.0 + 4.0 * ss) - 1.0).astype(int)
+        expected_spin_indices = np.concatenate([
+            np.repeat(spinmult - 1, nroots)
+            for nroots, spinmult, _ in self.modelspace
+        ])
+        if not np.array_equal(actual_spin_indices, expected_spin_indices):
+            actual_mults = (actual_spin_indices + 1).tolist()
+            expected_mults = (expected_spin_indices + 1).tolist()
+            raise ValueError(
+                "modelspace spin multiplicities do not match the ordered mc states: "
+                f"expected {expected_mults}, found {actual_mults}")
+        self._state_s2 = ss
         return self
 
     def sort_eigenstates_forlpdft(self):
@@ -555,6 +622,7 @@ class SISO(lib.StreamObject):
         log.note("1e soc: %s", self.soc1e)
         log.note("2e soc: %s", self.soc2e)
         log.note("ham: %s", self.ham)
+        log.note("model space: %s", self.modelspace)
         log.note("speed of light: %.8f a.u.", lib.param.LIGHT_SPEED)
         log.note(" ")
         self._initialize()
@@ -574,10 +642,10 @@ class SISO(lib.StreamObject):
         '''
         Checking the spin-purity of the modeal state wave functions.
         '''
-        assertmsg = 'Model states are not spin-pure. Crashing the calculation.'
         sslookup = [s/2*(s/2+1) for s in range(max_spin)]
         for s2 in ss:
-            assert any(abs(s2 - ssideal) <= spinconttol for ssideal in sslookup), assertmsg
+            if not any(abs(s2 - ssideal) <= spinconttol for ssideal in sslookup):
+                raise ValueError("model states are not spin-pure")
 
     def _initialize(self):
         '''
@@ -589,7 +657,11 @@ class SISO(lib.StreamObject):
         e_states = np.array(mc.e_states)
         sortedindx = np.argsort(e_states)
         e_states = e_states[sortedindx]
-        ss = np.array(mc.fcisolver.states_spin_square(mc.ci, mc.ncas, mc.nelecas)[0])
+        ss = getattr(self, '_state_s2', None)
+        if ss is None:
+            ss = mc.fcisolver.states_spin_square(
+                mc.ci, mc.ncas, mc.nelecas)[0]
+        ss = np.asarray(ss)
         ss = ss[sortedindx]
 
         log.info('******** %s ********', "Spin Orbit Free Energetics")
@@ -635,5 +707,3 @@ class SISO(lib.StreamObject):
                 self.si_energies[i] - self.si_energies[0],
                 au2ev * (self.si_energies[i] - self.si_energies[0]),
                 au2cminv * (self.si_energies[i] - self.si_energies[0])))
-
-
