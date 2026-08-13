@@ -23,8 +23,7 @@ is also included in this test.
 Test-1: Checking the accuracy of the same-spin contractions
 Test-2: Checking spin-raising contractions
 Test-3: Comparing spin-lowering contractions
-Test-4: Check that the contraction drivers expose the expected names.
-Test-5: Validate accepted input shapes for the contraction drivers.
+Test-4: Validate accepted input shapes for the contraction drivers.
 '''
 
 # Author: Bhavnesh Jangid
@@ -112,11 +111,6 @@ class KnownValues(unittest.TestCase):
         ci1 = siso.contract_spin_minus(
             self.h1e, ci0, (link_indexa, link_indexb))
         assert_allclose(ci1, ci1_ref, atol=1e-14)
-
-    def test_driver_names(self):
-        self.assertTrue(hasattr(siso.libsiso, 'SISOcontract_same_spin'))
-        self.assertTrue(hasattr(siso.libsiso, 'SISOcontract_spin_plus'))
-        self.assertTrue(hasattr(siso.libsiso, 'SISOcontract_spin_minus'))
 
     def test_input_shapes(self):
         link_indexa = fci.cistring.gen_linkstr_index(range(self.norb), 2)

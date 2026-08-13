@@ -32,7 +32,8 @@ from pyscf.mcscf import avas
 
 
 class KnownValues(unittest.TestCase):
-    # These values are generated with this code only.
+    # These values are generated with Pyscf (v2.14, 14fb93158ec9c97ae1d67462ea47b5b27ce63aca) 
+    # PySCF-Forge (commit:cbc3808b92cbc4a5fff2c7343349770de845a93c)
     amfi_energies = {
         'BP': np.array([
             -24.189280508070294, -24.189280508070283,

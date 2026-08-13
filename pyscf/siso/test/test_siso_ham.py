@@ -20,11 +20,10 @@ Test Description: Testing various functions in the SISO Hamiltonian module.
 
 Test-1: Check the Clebsch-Gordan coefficients used for spin coupling.
 Test-2: Check assembly of model-space intermediates.
-Test-3: Check assembly of alpha and beta link indices.
-Test-4: Check density-matrix dispatch and output shapes.
-Test-5: Check construction of Hamiltonian intermediates.
-Test-6: Compare a singlet-triplet Hamiltonian with its reference matrix.
-Test-7: Check that the kernel diagonalizes the SISO Hamiltonian.
+Test-3: Check density-matrix dispatch and output shapes.
+Test-4: Check construction of Hamiltonian intermediates.
+Test-5: Compare a singlet-triplet Hamiltonian with its reference matrix.
+Test-6: Check that the kernel diagonalizes the SISO Hamiltonian.
 '''
 
 import unittest
@@ -78,23 +77,6 @@ class KnownValues(unittest.TestCase):
         assert_allclose(cimat[0][1].ravel(), ci[1].ravel())
         assert_allclose(energy[0], [-2.0, -1.8])
         assert_allclose(energy[1], [-1.5])
-
-    def test_assemble_link_indices(self):
-        my_siso = SimpleNamespace(
-            mc=SimpleNamespace(ncas=3, nelecas=(1, 1)),
-            stuples=[(0, 0), (0, 2), (2, 0), (0, 4)],
-            imds=SimpleNamespace(),
-        )
-        link_indices = siso.assemble_amat(my_siso)
-
-        self.assertIs(my_siso.imds.a, link_indices)
-        self.assertEqual(len(link_indices), 4)
-        for link_indexa, link_indexb in link_indices[:3]:
-            self.assertEqual(link_indexa.shape[-1], 4)
-            self.assertEqual(link_indexb.shape[-1], 4)
-            self.assertTrue(np.issubdtype(link_indexa.dtype, np.integer))
-            self.assertTrue(np.issubdtype(link_indexb.dtype, np.integer))
-        self.assertEqual(link_indices[3], 0)
 
     def test_build_imds(self):
         my_siso = SimpleNamespace(

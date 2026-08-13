@@ -31,6 +31,9 @@ GRID_LEVEL = 1
 
 # Absolute references generated with the small systems and fixed numerical
 # grid specified in the tests below.
+# These values are generated with Pyscf (v2.14, 14fb93158ec9c97ae1d67462ea47b5b27ce63aca) 
+# PySCF-Forge (commit:cbc3808b92cbc4a5fff2c7343349770de845a93c)
+
 LPDFT_REFERENCES = {
     'odd': np.array([
         -1.0272721697832456,

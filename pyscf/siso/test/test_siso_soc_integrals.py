@@ -38,6 +38,9 @@ from pyscf.siso import socaddons
 # in atomic units, and FIXED_DENSITY is the spin-summed ROHF density for the
 # triplet O/STO-3G test system.
 
+# These values are generated with Pyscf (v2.14, 14fb93158ec9c97ae1d67462ea47b5b27ce63aca) 
+# PySCF-Forge (commit:cbc3808b92cbc4a5fff2c7343349770de845a93c)
+
 LIGHT_SPEED = 137.03599967994
 FIXED_DENSITY = np.array([
     [2.1187086021338399, -0.50150666644447495, 0.0, 0.0, 0.0],
