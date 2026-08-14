@@ -144,16 +144,13 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
     until I write code than can evaluate Hamiltonian matrix elements of CSFs directly. On the other hand
     a pspace of determinants contains many redundant degrees of freedom for the same reason. Therefore I have
     reduced the default pspace size by a factor of 2.'''
-    m0 = lib.current_memory ()[0]
     if norb > 63:
         raise NotImplementedError('norb > 63')
     if max_memory is None: max_memory=fci.max_memory
 
-    t0 = (lib.logger.process_clock (), lib.logger.perf_counter ())
     neleca, nelecb = _unpack_nelec(nelec)
     h1e = np.ascontiguousarray(h1e)
     eri = ao2mo.restore(1, eri, norb)
-    nb = cistring.num_strings(norb, nelecb)
     if hdiag_det is None:
         hdiag_det = fci.make_hdiag(h1e, eri, norb, nelec)
     if hdiag_csf is None:
@@ -188,7 +185,7 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
                                 c_arr (spinstrs),
                                 ctypes.c_size_t (npsp_csf),
                                 ctypes.c_uint (norb),
-                                ctypes.c_int (spin)) 
+                                ctypes.c_int (spin))
     h0 += h0.T
     idx = np.diag_indices_from (h0)
     h0[idx] = hdiag_csf[csf_addr]
