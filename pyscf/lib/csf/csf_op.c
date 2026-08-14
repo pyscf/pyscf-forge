@@ -732,22 +732,12 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     if ((np>0) == (nq>0)){
         pphh = true;
         if (nq>0){
-            if ((abs (np) == 2) && (p < q+3)){
-                // twoSb[k+1] is undefined
-                parity += twoSb[q-1] + 3*twoSk[q] + 1;
-            } else {
-                parity += twoSb[q] + 3*twoSk[q+1] + 1;
-            }
+            parity += twoSb[q] + 3*twoSk[q+1] + 1;
         } else {
-            if ((abs (np) == 2) && (p < q+3)){
-                // twoSb[q+1] is undefined
-                parity += twoSk[q-1] + 3*twoSb[q] + 1;
-            } else {
-                parity += twoSk[q] + 3*twoSb[q+1] + 1;
-            }
+            parity += twoSk[q] + 3*twoSb[q+1] + 1;
         }
         // parity = parity % 4;
-        twoSp1 = malloc (nspin * sizeof (unsigned int));
+        twoSp1 = malloc ((nspin+1) * sizeof (unsigned int));
         twoSp0 = nq>0 ? twoSb : twoSk;
         for (unsigned int i=0; i<=(q-1); i++){
             twoSp1[i] = twoSp0[i];
@@ -756,10 +746,8 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
             twoSp1[i+2] = twoSp0[i];
         }
         if (nq>0){
-            twoSp0 = twoSb;
             twoSb = twoSp1;
         } else {
-            twoSp0 = twoSk;
             twoSk = twoSp1;
         }
         q++;
@@ -988,11 +976,17 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     for (unsigned int r=0; r <= nspin_bra; r++){
         twoSb[r] = _get_twoS_running (bra->spin, r, nspin_bra);
     }
+    // TODO: this seems random. Double-check the validity
+    // the pair spins in a'a
+    twoSb[nspin_bra+1] = 1;
+    twoSb[nspin_bra+2] = 0;
     int parity = si + sj + 1;
     double fac = CGC_1e (twoSk, twoSb, si, sj, ni, nj, nspin);
     printf ("exiting CGC_1e\n");
     fflush (stdout);
     if ((parity%2)==1){ fac = -fac; }
+    free (twoSk);
+    free (twoSb);
     return fac;
 
 }
@@ -1241,11 +1235,11 @@ void FCICSFpspace_h0tril(double *hmat,
             printf ("ket = %lu,%lu,%lu\n", ket.dconf, ket.sconf, ket.spin);
             printf ("a,i,b,j = %u,%u,%u,%u\n", a, i, b, j);
             fflush (stdout);
-            fac = csf_EaiEbj (&bra, &ket, a, i, b, j); // abs (np+nr) < 3
+            fac = csf_EaiEbj (&bra, &ket, a, i, b, j);
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
             ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
-            // fac = csf_EaiEbj (&bra, &ket, a, j, b, i); // abs (np+nr) < 3
+            fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
             hmat[ihmat] += g2e[ihop] * fac;
             break;
     }
