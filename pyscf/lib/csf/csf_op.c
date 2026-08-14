@@ -721,6 +721,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     if (abs (nq) == 2){
         twoS0 = nq < 0 ? twoSk[q] : twoSb[q];
         parity += twoS0 + 3*twoSk[q-1] + 1;
+        printf ("B(%d) parity = %d\n", q, parity);
         // parity = parity % 4;
     }
 
@@ -728,9 +729,19 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     if ((np>0) == (nq>0)){
         pphh = true;
         if (nq>0){
-            parity += twoSb[q] + 3*twoSk[q+1] + 1;
+            if ((abs (np) == 2) && (p < q+3)){
+                // twoSb[k+1] is undefined
+                parity += twoSb[q-1] + 3*twoSk[q] + 1;
+            } else {
+                parity += twoSb[q] + 3*twoSk[q+1] + 1;
+            }
         } else {
-            parity += twoSk[q] + 3*twoSb[q+1] + 1;
+            if ((abs (np) == 2) && (p < q+3)){
+                // twoSb[q+1] is undefined
+                parity += twoSk[q-1] + 3*twoSb[q] + 1;
+            } else {
+                parity += twoSk[q] + 3*twoSb[q+1] + 1;
+            }
         }
         // parity = parity % 4;
         twoSp1 = malloc (nspin * sizeof (unsigned int));
@@ -776,6 +787,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
         }
         parity += 2 + twoSk[i] + twoSb[i];
+        printf ("T(%d) parity = %d\n", i, parity);
         // parity = parity % 4;
     }
 
@@ -786,6 +798,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         } else {
             parity += twoSk[p-1] + 3*twoSb[p] + 1;
         }
+        printf ("A(%d) parity = %d\n", p, parity);
         // parity = parity % 4;
     }
 
