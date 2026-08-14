@@ -734,11 +734,6 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     }
 
     if (pphh){
-        if (nq>0){
-            twoSb = twoSp0;
-        } else {
-            twoSk = twoSp0;
-        }
         free (twoSp1); 
     }
     assert ((parity % 2) == 0);
