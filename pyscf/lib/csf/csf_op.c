@@ -835,6 +835,7 @@ void _get_spinindices1 (Str3 * addr, unsigned int p, unsigned int nspin,
             assert ((int) (r+2) < (int) (nspin+1));
             twoS[r+2] = twoS[r];
         }
+        twoS[(*sp)+1] = twoS[(*sp)]+1;
         (*sp)++;
     }
 }
@@ -862,6 +863,7 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
             assert ((int) (r+2) < (int) (nspin+1));
             twoS[r+2] = twoS[r];
         }
+        twoS[(*sp)+1] = twoS[(*sp)]+1;
         (*sp)++;
     } 
 }
@@ -1024,6 +1026,8 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     if ((brap.spin>>t) != (ketp.spin>>t)){
         return 0.0;
     }
+    // TODO: this part might be problematic, since pphh
+    // messes up the alignment
     uint64_t bra_rq = ((bra->spin) & ((1ULL<<r)-1)) >> q;
     uint64_t ket_rq = ((ket->spin) & ((1ULL<<r)-1)) >> q;
     bool unlinked_orth = (bra_rq!=ket_rq);
@@ -1097,6 +1101,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     // the difference is formally just a factor of -1 that is canceled by the "parity" line
     // down there. But I need to choose consistently: sp >= sr >= sq >= st and ~sq+1; ~sr
     // are mutually contradictory if ~sq = ~sr and |nq| = |nr| = 2. 
+    printf ("sp,sr,sq,st = %u,%u,%u,%u\n", sp,sr,sq,st);
     if (abs (nq) == 2){
         if (sr > sq){
             sq++; 
