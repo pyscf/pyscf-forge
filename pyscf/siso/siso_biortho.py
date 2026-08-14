@@ -1,5 +1,4 @@
 from functools import reduce
-import ctypes
 
 import numpy as np
 from scipy import linalg
@@ -50,27 +49,33 @@ def _mixed_scalar_integrals(mc, mo_left, mo_right):
     left_active = mo_left[:, ncore:ncore + ncas]
     right_active = mo_right[:, ncore:ncore + ncas]
 
-    # OpenMolcas DIMAT: D_inactive = 2 C_left C_right^T.
-    dm_core = 2.0 * left_core @ right_core.T
+    # Only possible because the left and right core orbitals are biorthonormal.
+    dm_core = 2.0 * left_core @ right_core.conj().T
     hcore = mf.get_hcore(mol)
     if ncore:
-        vj, vk = mf.get_jk(mol, dm_core, hermi=0)
+        # Follow the MCSCF integral path so that a DF-MCSCF object uses its
+        # own auxiliary basis even when the underlying SCF object does not.
+        vj, vk = mc.get_jk(mol, dm_core, hermi=0)
         veff = vj - 0.5 * vk
     else:
         veff = np.zeros_like(hcore)
 
     ecore = mol.energy_nuc()
     ecore += np.einsum("ij,ij->", hcore + 0.5 * veff, dm_core)
-    h1 = reduce(np.dot, (left_active.T, hcore + veff, right_active))
+    h1 = reduce(np.dot, (left_active.conj().T, hcore + veff, right_active))
 
-    eri_source = getattr(mf, "_eri", None)
-    if eri_source is None:
-        eri_source = mol
-    h2 = ao2mo.general(
-        eri_source,
-        (left_active, right_active, left_active, right_active),
-        compact=False,
-    ).reshape((ncas,) * 4)
+    active_orbitals = (
+        left_active, right_active, left_active, right_active)
+    with_df = getattr(mc, "with_df", None)
+    if with_df:
+        h2 = with_df.ao2mo(active_orbitals, compact=False)
+    else:
+        eri_source = getattr(mf, "_eri", None)
+        if eri_source is None:
+            eri_source = mol
+        h2 = ao2mo.general(
+            eri_source, active_orbitals, compact=False)
+    h2 = h2.reshape((ncas,) * 4)
 
     return ecore, h1, h2
 
@@ -95,20 +100,12 @@ def _spherical_soc(hso, mo_left, mo_right, ncore, ncas):
     '''
     left = mo_left[:, ncore:ncore + ncas]
     right = mo_right[:, ncore:ncore + ncas]
-    h1 = np.asarray([reduce(np.dot, (left.T, x, right)) for x in hso])
+    h1 = np.asarray([reduce(np.dot, (left.conj().T, x, right)) for x in hso])
     zsoc = np.empty((3, ncas, ncas), dtype=np.complex128)
     zsoc[0] = (h1[0] - 1j * h1[1]) / np.sqrt(2.0)
     zsoc[1] = h1[2]
     zsoc[2] = -(h1[0] + 1j * h1[1]) / np.sqrt(2.0)
     return zsoc
-
-
-def _flatten_to_ptr(array, dtype):
-    '''
-    Converting a NumPy array to a contiguous ctypes pointer.
-    '''
-    array = np.ascontiguousarray(array)
-    return array, array.ctypes.data_as(ctypes.POINTER(dtype))
 
 
 def _soc_action(mode, zmat, ciket, norb, nelec, twos):
@@ -138,62 +135,26 @@ def _soc_action(mode, zmat, ciket, norb, nelec, twos):
     if mode == "ss":
         alpha = cistring.gen_linkstr_index(orbitals, nalpha)
         beta = cistring.gen_linkstr_index(orbitals, nbeta)
-        output_shape = ciket.shape
-        function = _siso.libsiso.SOCcompute_ss
+        contract = _siso.contract_same_spin
     elif mode == "ssp":
         # Ket has S; output determinant space has S+1.
         alpha_high = nalpha + 1
         beta_high = nbeta - 1
         alpha = cistring.gen_des_str_index(orbitals, alpha_high)
         beta = cistring.gen_cre_str_index(orbitals, beta_high)
-        output_shape = (
-            cistring.num_strings(norb, alpha_high),
-            cistring.num_strings(norb, beta_high),
-        )
-        function = _siso.libsiso.SOCcompute_ssp
+        contract = _siso.contract_spin_plus
     elif mode == "ssm":
         # Ket has S; output determinant space has S-1.
         alpha_low = nalpha - 1
         beta_low = nbeta + 1
         alpha = cistring.gen_cre_str_index(orbitals, alpha_low)
         beta = cistring.gen_des_str_index(orbitals, beta_low)
-        output_shape = (
-            cistring.num_strings(norb, alpha_low),
-            cistring.num_strings(norb, beta_low),
-        )
-        function = _siso.libsiso.SOCcompute_ssm
+        contract = _siso.contract_spin_minus
     else:
         raise ValueError(f"Unknown SOC action mode {mode!r}")
 
-    ciket = np.asarray(ciket, dtype=np.complex128).reshape((1,) + ciket.shape)
-    b = np.zeros((3, 1) + output_shape, dtype=np.complex128)
-    shapes = np.array(
-        [
-            *b.shape,
-            alpha.shape[1],
-            beta.shape[1],
-            norb,
-            ciket.shape[1],
-            ciket.shape[2],
-        ],
-        dtype=np.int32,
-    )
-
-    zmat, zptr = _flatten_to_ptr(zmat, ctypes.c_double)
-    ciket, ciptr = _flatten_to_ptr(ciket, ctypes.c_double)
-    alpha, aptr = _flatten_to_ptr(alpha, ctypes.c_int)
-    beta, bptr = _flatten_to_ptr(beta, ctypes.c_int)
-    shapes, sptr = _flatten_to_ptr(shapes, ctypes.c_int)
-    function(
-        zptr,
-        ciptr,
-        b.ctypes.data_as(ctypes.POINTER(ctypes.c_double)),
-        aptr,
-        bptr,
-        sptr,
-    )
-
-    return b[:, 0]
+    ciket = np.asarray(ciket, dtype=np.complex128)[None]
+    return contract(zmat, ciket, (alpha, beta))[:, 0]
 
 
 def _soc_block(zmat, ci_row, ci_col, twos_row, twos_col, norb, nelec):
