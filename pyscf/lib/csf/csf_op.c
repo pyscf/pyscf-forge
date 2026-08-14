@@ -536,8 +536,9 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         } else {
             parity += twoSk[t] + 3*twoSk[t-1] + 1;
         }
+        printf ("A(%d) parity = %d\n", t, parity);
     }
-    parity = parity % 4;
+    // parity = parity % 4;
 
     // T(i) and T'(i) strings
     //     T(i) =
@@ -557,9 +558,9 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         } else { // T'(i)
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
         }
-        printf ("T(%u) ", i); fflush (stdout);
         parity += 2 + twoSk[i] + twoSb[i];
-        parity = parity % 4;
+        printf ("T(%u) parity = %d\n", i, parity); fflush (stdout);
+        // parity = parity % 4;
     }
     }
 
@@ -601,8 +602,8 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
         }
         parity += 2 + twoSk[i] + twoSb[i];
-        parity = parity % 4;
-        printf ("T(%u) ", i); fflush (stdout);
+        // parity = parity % 4;
+        printf ("T(%u) parity = %d\n", i, parity); fflush (stdout);
     }
     printf ("\n"); fflush (stdout);
 
@@ -617,8 +618,10 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         } else {
             parity += twoSk[p-1] + 3*twoSk[p] + 1;
         }
+        printf ("B(%d) parity = %d\n", p, parity);
+        fflush (stdout);
     }
-    parity = parity % 4;
+    // parity = parity % 4;
 
     // Final sign computation
     assert ((parity % 2)==0);
@@ -850,7 +853,10 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
     *sp = nspin0 - _get_spinindex (addr, p);
     int np = _get_occ (addr, p);
     int nq = _get_occ (addr, q);
-    if (nq==2){ *sp += (2 - ((int) (p==q))); }
+    if (nq==2){ 
+        *sp += (2 - ((int) (p==q))); 
+        nspin0 += 2;
+    }
     if ((p!=q) && (np==2)){
         for (int r=nspin0; r>=((int) (*sp)); r--){
             assert ((int) (r+2) < (int) (nspin+1));
