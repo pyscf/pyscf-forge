@@ -11,7 +11,12 @@ LU_THRESH = 1e-6
 # Author: Bhavnesh Jangid
 
 '''
-Malmqvist biorthogonal orbital and CI transformations
+Biorthogonalization of orbitals and the corresponding CI vectors:
+Implemented based on the following references:
+
+Malmqvist et. al. (Nonunitary CI transformations): DOI: 10.1002/qua.560300404
+Malmqvist et. al. (CASSI): DOI: 0009261489853473
+Roos et. al. (RASSI): DOI: 10.1002/9781119126171
 '''
 
 
@@ -25,6 +30,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
     right transformation is applied implicitly to both input matrices.  The
     transformation maximizes the usable pivots of both matrices before their
     coordinated LU updates.
+
     args:
         cxa, cyb: np.array
             mo_coeffs
@@ -37,12 +43,14 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
         cxa_t, cyb_t: np.array
             compact LU factors of the transformed matrices
     '''
-    cxa = np.asarray(cxa, dtype=np.float64, order="C")
-    cyb = np.asarray(cyb, dtype=np.float64, order="C")
+    dtype = np.result_type(cxa, cyb, np.float64)
+
+    cxa = np.asarray(cxa, dtype=dtype, order="C")
+    cyb = np.asarray(cyb, dtype=dtype, order="C")
     
-    matrices = np.stack((cxa, cyb),)
-    ndim = matrices.shape[1]
-    assert matrices.shape == (2, ndim, ndim), \
+    orb_pairs = np.stack((cxa, cyb),)
+    ndim = orb_pairs.shape[1]
+    assert orb_pairs.shape == (2, ndim, ndim), \
         "Input matrices must be square and have equal shapes"
     assert sum(block_sizes) == ndim, \
         "Block sizes do not span the MO space"
@@ -51,15 +59,17 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
     for size in block_sizes:
         end = start + size
         for i in range(start, end):
-            xa = matrices[0, i, i:end]
-            yb = matrices[1, i, i:end]
+            xa = orb_pairs[0, i, i:end]
+            yb = orb_pairs[1, i, i:end]
             s1 = np.dot(xa, xa)
             s2 = np.dot(yb, yb)
             s3 = np.dot(xa, yb)
             if s1 < threshold or s2 < threshold:
-                raise linalg.LinAlgError("The two orbital spaces are too dissimilar for the"
+                msg = ("The two orbital spaces are too dissimilar for the"
                                          "LU partitioning: squared pivot-tail norms are "
                                          f"{s1:.3e} and {s2:.3e} at orbital {i}")
+                raise linalg.LinAlgError(msg)
+            
             x1 = 1.0 / np.sqrt(s1)
             x2 = 1.0 / np.copysign(np.sqrt(s2), s3)
             work = x1 * xa + x2 * yb
@@ -68,8 +78,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
             alpha = 1.0 / (1.0 + work[0])
 
             # Householder-like right transformation
-
-            rows = matrices[:, :end, i:end]
+            rows = orb_pairs[:, :end, i:end]
             tail_dot = rows[:, :, 1:] @ work[1:]
             first = rows[:, :, 0].copy()
             rows[:, :, 0] = first * work[0] + tail_dot
@@ -77,18 +86,17 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
                                * work[None, None, 1:])
 
             if i + 1 < end:
-                # Coordinated rank-one LU updates.  Columns beyond the current
-                # orbital block must also be updated, as in OpenMolcas LU2.
-                multipliers = matrices[:, i + 1:end, i]
-                multipliers /= matrices[:, i, i, None]
-                matrices[:, i + 1:end, i + 1:] -= (
+                # Coordinated rank-one LU updates.
+                multipliers = orb_pairs[:, i + 1:end, i]
+                multipliers /= orb_pairs[:, i, i, None]
+                orb_pairs[:, i + 1:end, i + 1:] -= (
                     multipliers[:, :, None]
-                    * matrices[:, i, None, i + 1:]
+                    * orb_pairs[:, i, None, i + 1:]
                 )
         start = end
 
-    cxa_t = matrices[0]
-    cyb_t = matrices[1]
+    cxa_t = orb_pairs[0]
+    cyb_t = orb_pairs[1]
     return cxa_t, cyb_t
 
 def _compute_trans_mat(mat):
@@ -132,8 +140,8 @@ def compute_trans_mat(ovlp, block_sizes, lu_threshold=LU_THRESH):
     try:
         amat = linalg.inv(sxy)
     except linalg.LinAlgError as err:
-        raise linalg.LinAlgError("The inact+act orbital " \
-        "cross-overlap is singular") from err
+        msg = ("The inact+act orbital cross-overlap is singular")
+        raise linalg.LinAlgError(msg) from err
     
     bmat = np.eye(nocc)
 
@@ -161,10 +169,9 @@ def compute_trans_mat(ovlp, block_sizes, lu_threshold=LU_THRESH):
 
     return bmat, amat
 
-
 def orbital_transformation(tra):
     '''
-    Constructing the genuine orbital transformation matrix from the
+    Constructing the orbital transformation matrix from the
     sequential single-orbital transformation coefficients.
 
     args:
@@ -197,7 +204,6 @@ def orbital_transformation(tra):
         cmat[k:, k] = -rhs / diag
 
     return cmat
-
 
 def transform_ci(ci, tra, ncore, ncas, nelec):
     '''
@@ -314,9 +320,11 @@ def biorthogonalize(
         ci_left_bi, ci_right_bi: np.array
             counter-transformed CI vectors
     '''
-    mo_left = np.asarray(mo_left, dtype=np.float64, order="C")
-    mo_right = np.asarray(mo_right, dtype=np.float64, order="C")
-    ao_overlap = np.asarray(ao_overlap, dtype=np.float64, order="C")
+    dtype = np.result_type(mo_left, mo_right, ao_overlap, np.float64)
+
+    mo_left = np.asarray(mo_left, dtype=dtype, order="C")
+    mo_right = np.asarray(mo_right, dtype=dtype, order="C")
+    ao_overlap = np.asarray(ao_overlap, dtype=dtype, order="C")
     nocc = ncore + ncas
     assert mo_left.shape == mo_right.shape, \
         "All model states must use the same AO and MO dimensions"
@@ -352,7 +360,7 @@ def biorthogonalize(
                             mo_right_bi[:, :nocc]))
     if not np.allclose(cross, np.eye(nocc), atol=check_tol, rtol=check_tol):
         raise RuntimeError(
-            "Malmqvist orbital transformation failed the biorthonormality "
+            "Non-orthogonal transformation failed the biorthonormality "
             f"check; maximum error is "
             f"{np.max(np.abs(cross - np.eye(nocc))):.3e}")
 
