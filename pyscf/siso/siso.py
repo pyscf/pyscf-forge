@@ -234,13 +234,25 @@ def compute_cg_coefficients(S, Ms=0):
 
     g = np.zeros((3, sbra, sket), dtype='complex')
 
+    # Previous equivalent Wigner-3j form, retained for reference.  Its
+    # explicit phase converts the Wigner-3j convention to the CG convention.
+    # for g0 in range(3):
+    #     for g1 in range(sbra):
+    #         phase = (-1) ** (g0 + S / 2 - (g1 - S / 2))
+    #         for g2 in range(sket):
+    #             g[g0, g1, g2] += phase * cg.Wigner3j(
+    #                 ss/2, -(g1 - ss/2), 1, 1 - g0,
+    #                 ss/2 + Ms, g2 - ss/2 - Ms).subs(ss, S).doit()
+
+    # CG includes the Condon-Shortley phase; 1/sqrt(sket) retains the
+    # normalization of the equivalent Wigner-3j expression above.
     for g0 in range(3):
         for g1 in range(sbra):
-            phase = (-1) ** (g0 + S / 2 - (g1 - S / 2))
             for g2 in range(sket):
-                g[g0, g1, g2] += phase * cg.Wigner3j(ss/2, -(g1 - ss/2),
-                                                     1, 1 - g0,
-                                                     ss/2 + Ms, g2 - ss/2 - Ms).subs(ss,S).doit()
+                g[g0, g1, g2] = cg.CG(
+                    ss/2, -(g1 - ss/2), 1, 1 - g0,
+                    ss/2 + Ms, -(g2 - ss/2 - Ms)
+                ).subs(ss, S).doit() / np.sqrt(sket)
     return g
 
 
