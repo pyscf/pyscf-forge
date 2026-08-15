@@ -45,10 +45,6 @@ def _basis_transformation(mat, sivec):
     '''
     return np.array([reduce(np.dot, (sivec.conj().T, m, sivec)) for m in mat])
 
-def get_twice_ms_values(mult):
-    """Return integer ``2*M_S`` values for a spin multiplicity."""
-    return list(range(1 - mult, mult, 2))
-
 def unpack_sos_basis(mat):
     """Combine component matrices for different spin groups block-diagonally."""
     if isinstance(mat, np.ndarray) and mat.ndim == 0:
@@ -327,7 +323,8 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER',
     modelspacearr = np.asarray(aggregate_modelspace, dtype=int)
     nroots, imult = modelspacearr.T
     szproj = np.concatenate([
-        np.tile(get_twice_ms_values(m), n) for n, m in modelspacearr
+        np.tile(list(range(1 - mult, mult, 2)), nroots)
+        for nroots, mult in modelspacearr
     ])
     multiplicity = np.array(np.repeat(imult, nroots), dtype=int)
     data['nss'] = nss
