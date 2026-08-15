@@ -11,7 +11,6 @@ mol = gto.M(
     verbose=4,
 )
 
-# GBCI gradients currently require an RHF reference.
 mf = scf.RHF(mol).run()
 
 mc = gbci.gbci(
