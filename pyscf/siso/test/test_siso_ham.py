@@ -159,6 +159,8 @@ class KnownValues(unittest.TestCase):
         assert_allclose(hamiltonian, hamiltonian.conj().T, atol=1e-14)
 
     def test_kernel_diagonalizes_hamiltonian(self):
+        hso = np.asarray([[1.0, 0.2j], [-0.1j, 2.0]])
+
         class FakeSISO:
             def __init__(self):
                 self.finalized = False
@@ -168,15 +170,21 @@ class KnownValues(unittest.TestCase):
                 return self
 
             def compute_hamiltonian(self):
-                return np.asarray([[1.0, 0.2j], [-0.2j, 2.0]])
+                return hso
 
             def _finalize(self):
                 self.finalized = True
 
         my_siso = FakeSISO()
-        energies, si_vecs = siso.kernel(my_siso)
-        assert_allclose(energies, [0.9614835192865496, 2.0385164807134504])
+        hermitian_hso = 0.5 * (hso + hso.conj().T)
+        with mock.patch.object(siso.logger, 'warn') as warn:
+            energies, si_vecs = siso.kernel(my_siso)
+
+        reference_energies = np.linalg.eigvalsh(hermitian_hso)
+        assert_allclose(energies, reference_energies)
         assert_allclose(si_vecs.conj().T.dot(si_vecs), np.eye(2), atol=1e-14)
+        warn.assert_called_once()
+        self.assertIn('Symmetrizing before diagonalization', warn.call_args.args[1])
         self.assertTrue(my_siso.finalized)
 
 

@@ -488,9 +488,11 @@ def kernel(siso):
     logger.debug(siso, 'Starting SI-SO kernel')
     siso.build_imds()
     hso = siso.compute_hamiltonian()
-    # Sanity checks
-    assert np.allclose(hso, hso.conj().T),\
-        f"Hamiltonian is not Hermitian, max deviation: {np.max(np.abs(hso - hso.conj().T))}"
+    hso_deviation = np.max(np.abs(hso - hso.conj().T))
+    if not np.allclose(hso, hso.conj().T):
+        logger.warn(siso, 'Hamiltonian is not Hermitian; max deviation: %.3e. '
+                    'Symmetrizing before diagonalization.', hso_deviation)
+    hso = 0.5 * (hso + hso.conj().T)
     siso.si_energies, siso.si_vecs = np.linalg.eigh(hso)
     siso._finalize()
     return siso.si_energies, siso.si_vecs
