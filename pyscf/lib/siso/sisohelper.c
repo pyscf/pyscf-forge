@@ -25,6 +25,11 @@
 #define SOC_NCOMP 3
 #define LINK_STRIDE 4
 
+static inline int fermion_parity(int number_of_swaps)
+{
+        return (number_of_swaps & 1) ? -1 : 1;
+}
+
 static inline size_t h1e_addr(int component, int p, int q, int norb)
 {
         return ((size_t)component * norb + p) * norb + q;
@@ -108,6 +113,13 @@ void SISOcontract_spin_plus(const double complex *h1e,
                             const int *link_indexa,
                             const int *link_indexb)
 {
+        /* gen_des_str_index gives nlinka = N_alpha(ket) + 1.  Restore the
+         * phase from commuting the beta operator through the alpha string.
+         * This only rephases adjacent-spin blocks, so the SISO energy
+         * spectrum is unchanged, while eigenvectors retain PySCF's phase
+         * convention for use with independently constructed operators. */
+        const int spin_phase = fermion_parity(nlinka - 1);
+
 #pragma omp parallel for collapse(4) schedule(static)
         for (int component = 0; component < SOC_NCOMP; component++) {
                 for (int root = 0; root < nroots; root++) {
@@ -135,7 +147,8 @@ void SISOcontract_spin_plus(const double complex *h1e,
                                         }
 
                                         ci1[output_addr(component, root, stra, strb,
-                                                        nroots, nstra1, nstrb1)] = value;
+                                                        nroots, nstra1, nstrb1)]
+                                                = spin_phase * value;
                                 }
                         }
                 }
@@ -153,6 +166,12 @@ void SISOcontract_spin_minus(const double complex *h1e,
                              const int *link_indexa,
                              const int *link_indexb)
 {
+        /* gen_cre_str_index gives nlinka = norb - N_alpha(ket) + 1, so
+         * norb - nlinka is the number of alpha operators crossed by the
+         * created beta operator.  The resulting phase is the reverse-sector
+         * counterpart of the S+ phase above. */
+        const int spin_phase = fermion_parity(norb - nlinka);
+
 #pragma omp parallel for collapse(4) schedule(static)
         for (int component = 0; component < SOC_NCOMP; component++) {
                 for (int root = 0; root < nroots; root++) {
@@ -180,7 +199,8 @@ void SISOcontract_spin_minus(const double complex *h1e,
                                         }
 
                                         ci1[output_addr(component, root, stra, strb,
-                                                        nroots, nstra1, nstrb1)] = value;
+                                                        nroots, nstra1, nstrb1)]
+                                                = spin_phase * value;
                                 }
                         }
                 }

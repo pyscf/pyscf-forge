@@ -302,6 +302,9 @@ def contract_same_spin(h1e, ci0, link_index):
         libsiso.SISOcontract_same_spin, h1e, ci0, link_index)
 
 
+# The spin-flip drivers restore PySCF's alpha-beta fermionic phase.  This
+# rephases adjacent-spin blocks without changing the SISO energy spectrum,
+# while keeping the eigenvectors compatible with independently built operators.
 def contract_spin_plus(h1e, ci0, link_index):
     """
     Contract SOC integrals from a spin-S ket to a spin-(S+1) bra.
