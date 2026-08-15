@@ -22,7 +22,7 @@ mo_coeff = avas.kernel(mf, ['P 3s', 'P 3p', 'P 3d', 'P 4s', 'P 4p'], minao=mol.b
 # i.e.: (N_i=8, SM_i=2) and (N_j=1, SM_j=4) = [(8, 2), (1,4)]
 
 mc = mcpdft.CASSCF(mf,'tPBE0', 13, 5)
-mc = siso.sacasscf_solver(mc, [(8, 2), (1,4)], )
+mc = siso.state_average_solver(mc, [(8, 2), (1,4)], )
 mc.max_cycle_macro = 100
 mc.kernel(mo_coeff)
 

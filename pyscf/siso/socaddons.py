@@ -272,7 +272,7 @@ def socintegrals(mol, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ha
         hso = hso2e
     return np.array([x.T for x in hso])
 
-def sacasscf_solver(mc, states, weights=None, ms=None):
+def state_average_solver(mc, states, weights=None, ms=None):
     '''
     Wrapper for the generating the SACASSCF solver.
     args:
@@ -316,6 +316,10 @@ def sacasscf_solver(mc, states, weights=None, ms=None):
         return mc.multi_state_mix(solvers, weights, "lin")
     else:
         return mcscf.state_average_mix_(mc, solvers, weights)
+
+
+# Backward-compatible name retained for existing callers.
+sacasscf_solver = state_average_solver
 
 if __name__ == "__main__":
     from pyscf import scf, gto

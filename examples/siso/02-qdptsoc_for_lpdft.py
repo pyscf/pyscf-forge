@@ -37,7 +37,7 @@ mo_coeff = avas.kernel(mf, ['Ce 4f',], minao=mol.basis)[2]
 
 # 4. State-averaged CASSCF followed by L-PDFT:
 mc = mcpdft.CASSCF(mf, 'tPBE0', 7, 1)
-mc = siso.sacasscf_solver(mc, [(7, 2), ], ms='lin') # Model-space: 7 doublets: (2F States)
+mc = siso.state_average_solver(mc, [(7, 2), ], ms='lin') # Model-space: 7 doublets: (2F States)
 mc.max_cycle_macro = 100
 mc.kernel(mo_coeff)
 
