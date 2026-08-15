@@ -174,9 +174,8 @@ def compute_nevpt2_energies(mc, modelspace):
     if current_energies is None:
         raise ValueError("mc.e_states is required to update NEVPT2 energies")
     if np.asarray(current_energies).size != nstates:
-        msg = (f"
-            f"modelspace contains {nstates} states, but mc.e_states contains "
-            f"{np.asarray(current_energies).size}")
+        msg = "modelspace contains {nstates} states, but mc.e_states contains " +\
+               f"{np.asarray(current_energies).size}"
         raise ValueError(msg)
 
     if getattr(mc, 'mo_coeff', None) is None:
