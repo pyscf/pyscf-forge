@@ -92,9 +92,11 @@ class KnownValues(unittest.TestCase):
             socaddons._aggregate_modelspace(states), [(3, 1), (1, 3)])
 
     def test_symmetry_resolved_solver_api(self):
+        self.assertIs(socaddons.sacasscf_solver,
+                      socaddons.state_average_solver)
         modelspace = [(1, 2, 'Ag'), (1, 2, 'B1u')]
         mc = mcscf.CASSCF(scf.ROHF(self.mol), 2, 1)
-        mc = socaddons.sacasscf_solver(mc, modelspace)
+        mc = socaddons.state_average_solver(mc, modelspace)
 
         self.assertEqual(len(mc.fcisolver.fcisolvers), 2)
         self.assertEqual(
@@ -111,7 +113,7 @@ class KnownValues(unittest.TestCase):
         mf = scf.RHF(mol).run()
         modelspace = [(1, 1, 'Ag'), (1, 1, 'B1u')]
         mc = mcscf.CASSCF(mf, 2, 2)
-        mc = socaddons.sacasscf_solver(mc, modelspace).run()
+        mc = socaddons.state_average_solver(mc, modelspace).run()
 
         my_siso = siso.SISO(mc, modelspace, ham='BP')
         energies, si_vecs = my_siso.kernel()
