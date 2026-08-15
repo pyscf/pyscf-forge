@@ -25,11 +25,13 @@ Test-6: Reject invalid model-space entries.
 Test-7: Reject a model-space root count inconsistent with the MC object.
 Test-8: Validate SISO integral and Hamiltonian options.
 Test-9: Check state-weight assignment across the model space.
+Test-10: Check model-space NEVPT2 energies and automatic MC updates.
 '''
 
 import io
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 import numpy as np
 from pyscf import gto, mcscf, scf
@@ -163,6 +165,52 @@ class KnownValues(unittest.TestCase):
             socaddons._validate_state_weights([0.5, 0.5], 3)
         with self.assertRaisesRegex(ValueError, 'sum to one'):
             socaddons._validate_state_weights([0.2, 0.2, 0.2], 3)
+
+    def test_compute_nevpt2_energies_updates_mc(self):
+        casci_objects = []
+
+        class FakeCASCI:
+            def __init__(self, mf, ncas, nelecas, ncore=None):
+                self.nelecas = nelecas
+                casci_objects.append(self)
+
+            def kernel(self, mo_coeff):
+                nroots = self.fcisolver.nroots
+                energies = 10 * self.fcisolver.spin + np.arange(nroots)
+                return energies, None
+
+        class FakeNEVPT:
+            def __init__(self, casci, root):
+                self.root = root
+
+            def kernel(self):
+                return 0.1 * (self.root + 1)
+
+        mc = SimpleNamespace(
+            _scf=SimpleNamespace(mol=self.mol),
+            ncas=5,
+            nelecas=(3, 2),
+            ncore=0,
+            mo_coeff=np.eye(5),
+            e_states=np.zeros(3),
+        )
+        original_e_states = mc.e_states
+        modelspace = [(1, 4, 'Ag'), (2, 2, 'B1u')]
+
+        with mock.patch.object(socaddons.mcscf, 'CASCI', FakeCASCI), \
+                mock.patch.object(
+                    socaddons, 'csf_solver',
+                    side_effect=lambda mol, smult: SimpleNamespace()), \
+                mock.patch.object(socaddons.mrpt, 'NEVPT', FakeNEVPT):
+            energies = socaddons.compute_nevpt2_energies(mc, modelspace)
+
+        self.assertTrue(np.allclose(energies, [10.1, 11.2, 30.1]))
+        self.assertIs(mc.e_states, original_e_states)
+        self.assertIs(energies, original_e_states)
+        self.assertEqual([obj.nelecas for obj in casci_objects],
+                         [(3, 2), (4, 1)])
+        self.assertEqual([obj.fcisolver.wfnsym for obj in casci_objects],
+                         ['B1u', 'Ag'])
 
 
 if __name__ == '__main__':
