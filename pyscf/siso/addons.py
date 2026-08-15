@@ -29,7 +29,7 @@ generate_siso_data = anisoaddons.generate_aniso_data
 ge = 2.00231930436182
 
 def _compute_angmom_in_so_basis(siso_data):
-    r"""
+    r'''
     Get the SO-basis orbital angular-momentum matrices.
     The ``generate_siso_data`` dict, does have the spin
     and magnetic-moment matrices in the spin-orbit eigenbasis.
@@ -41,7 +41,12 @@ def _compute_angmom_in_so_basis(siso_data):
     Note the factor ``1j`` converting the real antisymmetric ``angmom``
     representation into the physical Hermitian L matrix is already included
     in ``mu``.
-    """
+
+    Returns:
+        angmom: numpy.ndarray of complex, shape (3, nstate, nstate)
+            Orbital angular-momentum matrices ``(Lx, Ly, Lz)`` in the SO
+            eigenbasis.
+    '''
 
     spin_mat = np.array([
         siso_data['spin_xr'] + 1j * siso_data['spin_xi'],
@@ -58,9 +63,14 @@ def _compute_angmom_in_so_basis(siso_data):
     return -mu_mat - ge * spin_mat
 
 def _compute_total_angmom_in_so_basis(siso_data):
-    """
-    Total angular-momentum matrices in the SOC basis.
-    """
+    '''
+    Total angular-momentum matrices in the SO basis.
+
+    Returns:
+        total_angmom: numpy.ndarray of complex, shape (3, nstate, nstate)
+            Total angular-momentum matrices ``(Jx, Jy, Jz)`` in the SOC
+            eigenbasis.
+    '''
     spin_mat = np.array([
         siso_data['spin_xr'] + 1j * siso_data['spin_xi'],
         siso_data['spin_yr'] + 1j * siso_data['spin_yi'],
@@ -69,9 +79,13 @@ def _compute_total_angmom_in_so_basis(siso_data):
     return _compute_angmom_in_so_basis(siso_data) + spin_mat
 
 def _select_degenerate_subblocks(energies, degeneracy_tol=1e-6):
-    """
+    '''
     Generate energy-degenerate state subblocks in original-state order.
-    """
+
+    Returns:
+        blocks: list of numpy.ndarray of int, shape (nblock_i,)
+            State indices belonging to each degenerate energy block.
+    '''
     energies = np.asarray(energies, dtype=np.float64).ravel()
     energy_order = np.argsort(energies, kind='stable')
     blocks = []
@@ -90,9 +104,19 @@ def _select_degenerate_subblocks(energies, degeneracy_tol=1e-6):
     return blocks
 
 def _diagonalize_degenerate_subblocks(operator, energies, degeneracy_tol=1e-6):
-    """
+    '''
     Diagonalize an operator independently within energy-degenerate blocks.
-    """
+
+    Returns:
+        rotated_operator: numpy.ndarray of complex, shape (nstate, nstate)
+            Operator after blockwise diagonalization.
+        diagonal: numpy.ndarray of float, shape (nstate,)
+            Real diagonal values of the rotated operator.
+        rotation: numpy.ndarray of complex, shape (nstate, nstate)
+            Block-diagonal eigenvector rotation matrix.
+        blocks: list of numpy.ndarray of int, shape (nblock_i,)
+            State indices belonging to each degenerate energy block.
+    '''
     operator = np.asarray(operator, dtype=np.complex128)
     energies = np.asarray(energies, dtype=np.float64).ravel()
     nstate = energies.size
@@ -125,9 +149,24 @@ def _diagonalize_degenerate_subblocks(operator, energies, degeneracy_tol=1e-6):
     return rotated_operator, np.asarray(diagonal, dtype=np.float64), rotation, blocks
 
 def _compute_spin_free_l_s_values(siso_data, log, degeneracy_tol=1e-6):
-    """
-    Compute the L and S values for each spin-free state
-    """
+    '''
+    Compute the L and S values for each spin-free state.
+
+    Returns:
+        angmom: tuple of numpy.ndarray of complex, shape (nstate, nstate)
+            Orbital angular-momentum matrices ``(Lx, Ly, Lz)`` in the rotated
+            spin-free basis.
+        l_values: numpy.ndarray of float, shape (nstate,)
+            Effective orbital angular-momentum value for each spin-free state.
+        spin_values: numpy.ndarray of float, shape (nstate,)
+            Spin quantum number S for each spin-free state.
+        s2_values: numpy.ndarray of float, shape (nstate,)
+            Spin-squared value ``S(S+1)`` for each spin-free state.
+
+    Log output:
+        spin_free_state_table: str
+            Energy-ordered table of spin-free energies, L values, and S values.
+    '''
     # Note: the spin-free angmom matrices are stored in their real antisymmetric
     # representation, so multiply by 1j to obtain physical Hermitian L
     Lx_mat = 1j * siso_data['angmom_x']
@@ -165,7 +204,7 @@ def _compute_spin_free_l_s_values(siso_data, log, degeneracy_tol=1e-6):
     return (Lx_mat, Ly_mat, Lz_mat), l_values, spin_values, s2_values
 
 def _compute_soc_j_values(siso_data, log, degeneracy_tol=1e-6):
-    r"""
+    r'''
     Compute the effective J values for each SOC state.
     The total angular momentum is given by
         ``J = L + S``
@@ -173,7 +212,17 @@ def _compute_soc_j_values(siso_data, log, degeneracy_tol=1e-6):
     spin angular momentum.
 
     Note: J is well defined quantum number only for the atoms.
-    """
+
+    Returns:
+        j2_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+            J-squared matrix after blockwise diagonalization.
+        j_values: numpy.ndarray of float, shape (nstate,)
+            Effective J value for each SOC state.
+
+    Log output:
+        soc_j_table: str
+            Table of SOC-state energies and effective J values.
+    '''
 
     tot_ang_mom = _compute_total_angmom_in_so_basis(siso_data)
 
@@ -198,12 +247,24 @@ def _compute_soc_j_values(siso_data, log, degeneracy_tol=1e-6):
     return j_mat, j_values
 
 def _compute_soc_omega_values(siso_data, log, axis='z', degeneracy_tol=1e-6):
-    r"""
+    r'''
     Compute the effective Omega values for each SOC state.
     Omega is the absolute projection of the total angular momentum along
     a principal axis.  The z axis (``axis=2``) is used by default, consistent
     with the molecular-axis convention for linear molecules.
-    """
+
+    Returns:
+        omega_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+            Total-angular-momentum projection matrix after blockwise
+            diagonalization.
+        omega_values: numpy.ndarray of float, shape (nstate,)
+            Absolute Omega value for each SOC state.
+
+    Log output:
+        soc_omega_table: str
+            Projection axis and tolerance followed by SOC energies, Omega
+            values, and degenerate-block indices.
+    '''
 
     axis_map = {'x': 0, 'y': 1, 'z': 2}
     if isinstance(axis, str):
@@ -255,7 +316,7 @@ def _compute_soc_omega_values(siso_data, log, axis='z', degeneracy_tol=1e-6):
     return omega_matrix, omega_values
 
 def _compute_L_for_diatomics(siso_data, log, axis='z', degeneracy_tol=1e-6):
-    r"""
+    r'''
     Compute the effective orbital-angular-momentum projection for each
     spin-orbit state of a diatomic molecule.
 
@@ -266,7 +327,19 @@ def _compute_L_for_diatomics(siso_data, log, axis='z', degeneracy_tol=1e-6):
     where the molecular axis is conventionally the z axis.  This function
     projects the orbital angular momentum only; it does not include spin and
     therefore does not compute Omega or J.
-    """
+
+    Returns:
+        projection_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+            Orbital-angular-momentum projection matrix after blockwise
+            diagonalization.
+        lambda_values: numpy.ndarray of float, shape (nstate,)
+            Absolute Lambda value for each SOC state.
+
+    Log output:
+        soc_lambda_table: str
+            Projection axis and tolerance followed by SOC energies, Lambda
+            values, and degenerate-block indices.
+    '''
 
     axis_map = {'x': 0, 'y': 1, 'z': 2}
     if isinstance(axis, str):
@@ -316,7 +389,7 @@ def _compute_L_for_diatomics(siso_data, log, axis='z', degeneracy_tol=1e-6):
     return projection_matrix, lambda_values
 
 def soc_state_analysis(siso_data, log, state=(0,), threshold=5e-3):
-    """
+    '''
     The decomposition of selected SOC states in the spin-free basis.
     args:
         siso_data: dict
@@ -327,7 +400,18 @@ def soc_state_analysis(siso_data, log, state=(0,), threshold=5e-3):
             The SOC-state(s) to analyze.
         threshold: float
             Minimum coefficient weight to report.
-    """
+
+    returns:
+        coefficients: numpy.ndarray of complex, shape (nss, nss)
+            SOC eigenvector coefficients in the spin-projection basis.
+        root_weights: numpy.ndarray of float, shape (nroot, nss)
+            Total weight of every spin-free root in each SOC state.
+
+    log output:
+        state_analysis: str
+            Spin-free energies and S-squared values followed by selected-state
+            root weights and M_S contributions above ``threshold``.
+    '''
     coefficients = (np.asarray(siso_data['eigenr'])
                     + 1j * np.asarray(siso_data['eigeni']))
     energies = np.asarray(siso_data['eso'])
@@ -407,7 +491,7 @@ def soc_state_analysis(siso_data, log, state=(0,), threshold=5e-3):
 
 
 class soc_analysis:
-    """
+    '''
     Class for analyzing the SOC states of a converged SISO object.
 
     args:
@@ -424,7 +508,7 @@ class soc_analysis:
             Gauge origin used when generating ``siso_data``.
         ham: str, optional
             SOC Hamiltonian used when generating ``siso_data``.
-    """
+    '''
 
     def __init__(self, mysiso, siso_data=None, modelspace=None,
                  origin='CHARGE_CENTER', ham=None):
@@ -452,41 +536,145 @@ class soc_analysis:
         self.siso_data = siso_data
 
     def _compute_angmom_in_so_basis(self):
+        '''
+        Get the SO-basis orbital angular-momentum matrices.
+
+        Returns:
+            angmom: numpy.ndarray of complex, shape (3, nstate, nstate)
+                Orbital angular-momentum matrices ``(Lx, Ly, Lz)`` in the SOC
+                eigenbasis.
+        '''
         return _compute_angmom_in_so_basis(self.siso_data)
 
     def compute_L_values(self, degeneracy_tol=1e-6):
+        '''
+        Compute L and S values for the spin-free states.
+
+        Returns:
+            angmom: tuple of numpy.ndarray of complex, shape (nstate, nstate)
+                Orbital angular-momentum matrices ``(Lx, Ly, Lz)`` in the
+                rotated spin-free basis.
+            l_values: numpy.ndarray of float, shape (nstate,)
+                Effective orbital angular-momentum values.
+            spin_values: numpy.ndarray of float, shape (nstate,)
+                Spin quantum numbers S.
+            s2_values: numpy.ndarray of float, shape (nstate,)
+                Spin-squared values ``S(S+1)``.
+
+        Log output:
+            spin_free_state_table: str
+                Energy-ordered spin-free energies, L values, and S values.
+        '''
         return _compute_spin_free_l_s_values(
             self.siso_data, self.log, degeneracy_tol=degeneracy_tol)
 
     def compute_J_values(self, degeneracy_tol=1e-6):
+        '''
+        Compute effective J values for the SOC states.
+
+        Returns:
+            j2_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+                J-squared matrix after blockwise diagonalization.
+            j_values: numpy.ndarray of float, shape (nstate,)
+                Effective J values for the SOC states.
+
+        Log output:
+            soc_j_table: str
+                SOC-state energies and effective J values.
+        '''
         return _compute_soc_j_values(
             self.siso_data, self.log, degeneracy_tol=degeneracy_tol)
 
     def _compute_soc_omega_values(self, axis='z', degeneracy_tol=1e-6):
+        '''
+        Compute effective Omega values along a principal axis.
+
+        Returns:
+            omega_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+                Angular-momentum projection matrix after blockwise
+                diagonalization.
+            omega_values: numpy.ndarray of float, shape (nstate,)
+                Absolute Omega values for the SOC states.
+
+        Log output:
+            soc_omega_table: str
+                Projection settings, SOC energies, Omega values, and block
+                indices.
+        '''
         return _compute_soc_omega_values(
             self.siso_data, self.log, axis=axis,
             degeneracy_tol=degeneracy_tol)
 
     def _compute_L_for_diatomics(self, axis='z', degeneracy_tol=1e-6):
+        '''
+        Compute effective Lambda values along a principal axis.
+
+        Returns:
+            projection_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+                Orbital projection matrix after blockwise diagonalization.
+            lambda_values: numpy.ndarray of float, shape (nstate,)
+                Absolute Lambda values for the SOC states.
+
+        Log output:
+            soc_lambda_table: str
+                Projection settings, SOC energies, Lambda values, and block
+                indices.
+        '''
         return _compute_L_for_diatomics(
             self.siso_data, self.log, axis=axis,
             degeneracy_tol=degeneracy_tol)
 
     def compute_omega_values(self, axis='z', degeneracy_tol=1e-6):
-        """
+        '''
         Compute SOC-state Omega values along a principal axis.
-        """
+
+        Returns:
+            omega_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+                Angular-momentum projection matrix after blockwise
+                diagonalization.
+            omega_values: numpy.ndarray of float, shape (nstate,)
+                Absolute Omega values for the SOC states.
+
+        Log output:
+            soc_omega_table: str
+                Projection settings, SOC energies, Omega values, and block
+                indices.
+        '''
         # Only use this for the linear molecules.
         return self._compute_soc_omega_values(
             axis=axis, degeneracy_tol=degeneracy_tol)
 
     def compute_L_values_for_diatomics(self, axis='z', degeneracy_tol=1e-6):
-        """
+        '''
         Compute orbital L-projection (Lambda) values for a diatomic molecule.
-        """
+
+        Returns:
+            projection_matrix: numpy.ndarray of complex, shape (nstate, nstate)
+                Orbital projection matrix after blockwise diagonalization.
+            lambda_values: numpy.ndarray of float, shape (nstate,)
+                Absolute Lambda values for the SOC states.
+
+        Log output:
+            soc_lambda_table: str
+                Projection settings, SOC energies, Lambda values, and block
+                indices.
+        '''
         return self._compute_L_for_diatomics(
             axis=axis, degeneracy_tol=degeneracy_tol)
 
     def soc_state_analysis(self, state=(0,), threshold=5e-3):
+        '''
+        Decompose selected SOC states in the spin-free basis.
+
+        Returns:
+            coefficients: numpy.ndarray of complex, shape (nss, nss)
+                SOC eigenvector coefficients in the spin-projection basis.
+            root_weights: numpy.ndarray of float, shape (nroot, nss)
+                Spin-free-root weights in every SOC state.
+
+        Log output:
+            state_analysis: str
+                Spin-free energies and selected-state root and M_S weights.
+        '''
         return soc_state_analysis(self.siso_data, self.log, state=state,
                                   threshold=threshold)
