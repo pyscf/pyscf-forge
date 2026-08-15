@@ -20,7 +20,7 @@ Helper Functions for SOC
 '''
 
 import numpy as np
-from pyscf import lib, mcscf, symm
+from pyscf import lib, mcscf, mrpt, symm
 from pyscf.csf_fci import csf_solver
 from pyscf.siso import amfi as amfIntegrals
 
@@ -147,6 +147,63 @@ def _aggregate_modelspace(modelspace):
         else:
             aggregated.append((nroots, spinmult))
     return aggregated
+
+
+def compute_nevpt2_energies(mc, modelspace):
+    """
+    Compute model-space NEVPT2 energies and update ``mc.e_states``.
+
+    A separate CASCI calculation is performed for every spin and symmetry
+    sector in modelspace using the optimized orbitals in mc.mo_coeff.
+    The resulting strongly-contracted NEVPT2 total energies are ordered in
+    the same way as the state-average solvers.
+
+    Args:
+        mc: converged CAS object
+        modelspace: Model-space entries ``(nroots, spinmult[, wfnsym])``
+
+    Returns:
+        The updated ``mc.e_states`` containing the NEVPT2 total energies.
+    """
+    mol = mc._scf.mol
+    states = _validate_modelspace(modelspace, mol=mol, ncas=mc.ncas,
+                                  nelecas=mc.nelecas)
+    nstates = sum(nroots for nroots, _, _ in states)
+
+    current_energies = getattr(mc, 'e_states', None)
+    if current_energies is None:
+        raise ValueError("mc.e_states is required to update NEVPT2 energies")
+    if np.asarray(current_energies).size != nstates:
+        msg = (f"
+            f"modelspace contains {nstates} states, but mc.e_states contains "
+            f"{np.asarray(current_energies).size}")
+        raise ValueError(msg)
+
+    if getattr(mc, 'mo_coeff', None) is None:
+        raise ValueError("mc.mo_coeff is required to compute NEVPT2 energies")
+
+    nelec = int(np.sum(mc.nelecas))
+    energies = []
+    for nroots, spinmult, wfnsym in states:
+        twos = spinmult - 1
+        nelecas = ((nelec + twos) // 2, (nelec - twos) // 2)
+        casci = mcscf.CASCI(mc._scf, mc.ncas, nelecas, ncore=mc.ncore)
+        casci.fcisolver = csf_solver(mol, smult=spinmult)
+        casci.fcisolver.spin = twos
+        if wfnsym is not None:
+            casci.fcisolver.wfnsym = wfnsym
+        casci.fcisolver.nroots = nroots
+
+        e_casci = np.asarray(casci.kernel(mc.mo_coeff)[0]).reshape(-1)
+        if e_casci.size != nroots:
+            raise RuntimeError(
+                f"CASCI returned {e_casci.size} energies for a model-space "
+                f"sector requesting {nroots} roots")
+        for root, energy in enumerate(e_casci):
+            energies.append(energy + mrpt.NEVPT(casci, root=root).kernel())
+
+    mc.e_states[:] = energies
+    return mc.e_states
 
 
 def socintegrals(mol, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ham='DKH', dm=None):

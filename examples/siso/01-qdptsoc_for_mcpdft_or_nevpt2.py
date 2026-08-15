@@ -1,9 +1,6 @@
-import numpy as np
-from pyscf import gto, scf, mcpdft, mcscf
-from pyscf import mrpt
+from pyscf import gto, scf, mcpdft
 from pyscf.mcscf import avas
 from pyscf import siso
-from pyscf.csf_fci import csf_solver
 
 # Two-step state interaction calculation with dynamical correlation effects included via MC-PDFT.
 # Alternatively, you can also include the dynamical correlation effects via NEVPT2.
@@ -81,32 +78,8 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
  19                  0.077258692              2.10232          16956.32290
 '''
 
-# To include the dynamical correlation effects via NEVPT2, you can do the following:
-mo_coeff = mc.mo_coeff.copy()
-
-mc2 = mcscf.CASSCF(mf, 13, 5)
-mc2 = siso.sacasscf_solver(mc2, [(8, 2), (1,4)], )
-mc2.max_cycle_macro = 100
-mc2.kernel(mo_coeff)
-
-# To do multiple states with NEVPT2:
-def generate_cas_wavefunctions(nelecas, smult, nroots, mo_coeff):
-    remc = mcscf.CASCI(mf, 13, nelecas)
-    remc.fcisolver = csf_solver(mol, smult=smult)
-    remc.fcisolver.spin = smult - 1
-    remc.fcisolver.nroots = nroots
-    casciEnergy = remc.kernel(mo_coeff)[0]
-
-    PT2Energies = []
-    for i in range(nroots):
-        ecasci = casciEnergy[i] if isinstance(casciEnergy, np.ndarray) else casciEnergy
-        e_corr = mrpt.NEVPT(remc,root=i).kernel()
-        e_tot = ecasci + e_corr
-        PT2Energies.append(e_tot)
-    return PT2Energies
-
-doubletEnergies = generate_cas_wavefunctions((3, 2), smult=2, nroots=8, mo_coeff=mo_coeff)
-quartetEnergies = generate_cas_wavefunctions((4, 1), smult=4, nroots=1, mo_coeff=mo_coeff)
+# Compute NEVPT2 energies for the model space and update mc.e_states.
+siso.compute_nevpt2_energies(mc, [(8, 2), (1, 4)])
 
 '''
 NEVPT2 Energies
@@ -121,10 +94,6 @@ NEVPT2 Energies
  State 7 Total Energy = -341.5630639026 S^2 = 0.75
  State 8 Total Energy = -341.5630638737 S^2 = 0.75
 '''
-
-# Now substite the SA-CASSCF energies with the NEVPT2 energies and do the
-# state interaction calculation.
-mc.e_states[:] = doubletEnergies + quartetEnergies
 
 # State interaction:
 mysiso = siso.SISO(mc, [(8, 2),(1,4)], ham='DKH', amf=True)

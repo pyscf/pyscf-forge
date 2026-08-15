@@ -15,8 +15,6 @@
 
 # Author: Bhavnesh Jangid <jangidbhavnesh@uchicago.edu>
 
-from pyscf.siso.socaddons import socintegrals, sacasscf_solver
+from pyscf.siso.socaddons import compute_nevpt2_energies, socintegrals, sacasscf_solver
 from pyscf.siso.siso import SISO
-
-
 
