@@ -4,7 +4,7 @@
 This example starts from three state-averaged CAS states and deliberately
 represents every state in a different active-orbital basis.  The corresponding
 CI vectors are counter-rotated so that the physical wave functions are
-unchanged.  ``SISOBiorthogonal`` then recovers their pairwise biorthogonal
+unchanged.  ``SI`` and ``SISO`` then recover their pairwise biorthogonal
 representations before constructing either the scalar state-interaction
 Hamiltonian or the state-interaction spin-orbit Hamiltonian.
 
@@ -16,7 +16,7 @@ import numpy as np
 
 from pyscf import fci, gto, mcscf, scf
 from pyscf.csf_fci import csf_solver
-from pyscf.siso.si_and_siso_biortho import SI, SISO
+from pyscf.siso.siso_biortho import SI, SISO
 
 
 mol = gto.M(
