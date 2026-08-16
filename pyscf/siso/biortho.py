@@ -1,8 +1,22 @@
-from dataclasses import dataclass
-from functools import reduce
+#!/usr/bin/env python
+# Copyright 2014-2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 import numpy as np
 from scipy import linalg
+from dataclasses import dataclass
+from functools import reduce
 
 from pyscf.fci import direct_nosym
 
@@ -37,8 +51,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
         block_sizes: tuple of ints
             size of cas subspaces
         threshold: float
-            Minimum squared norm allowed for either remaining pivot row,
-            matching the OpenMolcas ``LU2`` criterion.
+            Minimum squared norm allowed for either remaining pivot row.
     returns:
         cxa_t, cyb_t: np.array
             compact LU factors of the transformed matrices
@@ -66,8 +79,8 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
             s3 = np.dot(xa, yb)
             if s1 < threshold or s2 < threshold:
                 msg = ("The two orbital spaces are too dissimilar for the"
-                                         "LU partitioning: squared pivot-tail norms are "
-                                         f"{s1:.3e} and {s2:.3e} at orbital {i}")
+                       "LU partitioning: squared pivot-tail norms are "
+                       f"{s1:.3e} and {s2:.3e} at orbital {i}")
                 raise linalg.LinAlgError(msg)
             
             x1 = 1.0 / np.sqrt(s1)
@@ -297,7 +310,7 @@ def biorthogonalize(
 
     args:
         mo_left, mo_right: np.array
-            MO coefficients for the left and right states
+            MO coefficients for the (bra) left and (ket) right states
         ci_left, ci_right: np.array
             CI vectors for the left and right states
         ao_overlap: np.array
@@ -368,6 +381,10 @@ def biorthogonalize(
     ci_left_bi = transform_ci(ci_left, tra_left, ncore, ncas, nelec_left)
     ci_right_bi = transform_ci(ci_right, tra_right, ncore, ncas, nelec_right)
 
+    # Applying an ordinary make_rdm1 to one transformed CI and diagonalizing it
+    # will not generally give physical natural occupations.  Natural-orbital
+    # analysis should use the original normalized state in its orthonormal
+    # orbitals, or construct the properly metric-aware AO/state density.
+
     return (tra_left, tra_right, mo_left_bi, mo_right_bi,
             ci_left_bi, ci_right_bi)
-
