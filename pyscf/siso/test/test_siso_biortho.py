@@ -14,12 +14,15 @@
 # limitations under the License.
 
 import unittest
+import sys
 from types import SimpleNamespace
 from unittest import mock
 
 import numpy as np
 from numpy.testing import assert_allclose
+from scipy import linalg
 
+from pyscf import fci, gto, mcscf, scf
 from pyscf.fci import cistring
 from pyscf.siso import siso
 from pyscf.siso import siso_biortho
@@ -89,6 +92,149 @@ class KnownValues(unittest.TestCase):
                 result = siso_biortho._soc_action(
                     mode, zmat, ci, norb, nelec, twos)
                 assert_allclose(result, reference, atol=1e-14)
+
+
+class ScalarSI(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.mol = gto.M(
+            atom="Li 0 0 0; H 0 0 1.6",
+            basis="sto-3g",
+            verbose=0,
+        )
+        cls.mf = scf.RHF(cls.mol).run()
+        cls.mc = mcscf.CASCI(cls.mf, 2, 2)
+        cls.mc.fcisolver = fci.solver(cls.mol, singlet=True)
+        cls.mc.fcisolver.nroots = 2
+        cls.mc.kernel()
+
+        cls.ci = []
+        cls.mo = []
+        active = slice(cls.mc.ncore, cls.mc.ncore + cls.mc.ncas)
+        for ci, angle in zip(cls.mc.ci, (0.21, -0.34)):
+            rotation = np.array([
+                [np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)],
+            ])
+            mo = cls.mc.mo_coeff.copy()
+            mo[:, active] = mo[:, active] @ rotation
+            cls.mo.append(mo)
+            cls.ci.append(fci.addons.transform_ci_for_orbital_rotation(
+                ci, cls.mc.ncas, cls.mc.nelecas, rotation))
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.mol, cls.mf, cls.mc, cls.ci, cls.mo
+
+    def test_rotated_state_representations_recover_casci(self):
+        si = siso_biortho.SI(
+            self.mc,
+            [(2, 1)],
+            self.ci,
+            self.mo,
+        )
+        energies, vectors = si.kernel()
+
+        assert_allclose(energies, self.mc.e_tot, atol=1e-10)
+        assert_allclose(si.overlap, np.eye(2), atol=1e-10)
+        assert_allclose(si.hamiltonian, np.diag(self.mc.e_tot), atol=1e-10)
+        assert_allclose(
+            vectors.conj().T @ si.overlap @ vectors,
+            np.eye(2),
+            atol=1e-12,
+        )
+
+    def test_transition_density_includes_inactive_orbitals(self):
+        si = siso_biortho.SI(
+            self.mc, [(2, 1)], self.ci, self.mo).build()
+        ao_overlap = self.mf.get_ovlp()
+        total_electrons = 2 * self.mc.ncore + sum(self.mc.nelecas)
+
+        for left, right in ((0, 0), (0, 1)):
+            dm1_active = si.transition_rdm1(
+                left, right, basis="biorthogonal")
+            dm1_ao = si.transition_rdm1(left, right, basis="ao")
+            pair_overlap = si._get_pair(left, right).overlap
+
+            assert_allclose(
+                np.trace(dm1_active),
+                sum(self.mc.nelecas) * pair_overlap,
+                atol=1e-11,
+            )
+            assert_allclose(
+                np.einsum("uv,uv->", ao_overlap, dm1_ao),
+                total_electrons * pair_overlap,
+                atol=1e-11,
+            )
+
+        tdm1, tdm2 = si.transition_rdm12(0, 1)
+        self.assertEqual(tdm1.shape, (self.mc.ncas,) * 2)
+        self.assertEqual(tdm2.shape, (self.mc.ncas,) * 4)
+
+    def test_linearly_dependent_model_states(self):
+        si = siso_biortho.SI(
+            self.mc,
+            [(2, 1)],
+            [self.ci[0], self.ci[0]],
+            [self.mo[0], self.mo[0]],
+            energies=[self.mc.e_tot[0], self.mc.e_tot[0]],
+        )
+        with self.assertRaises(linalg.LinAlgError):
+            si.kernel()
+
+    def test_modelspace_reorders_state_data_with_spin_blocks(self):
+        mol = SimpleNamespace(symmetry=False)
+        mf = SimpleNamespace(mol=mol, get_ovlp=lambda: np.eye(3))
+        mc = SimpleNamespace(
+            _scf=mf,
+            ncore=0,
+            ncas=3,
+            nelecas=(2, 1),
+            e_tot=np.array([4.0, 2.0]),
+            stdout=sys.stdout,
+            verbose=0,
+        )
+        quartet_ci = np.ones((1, 1))
+        doublet_ci = np.zeros((3, 3))
+        doublet_ci[0, 0] = 1.0
+
+        si = siso_biortho.SI(
+            mc,
+            [(1, 4), (1, 2)],
+            [quartet_ci, doublet_ci],
+            [np.eye(3), np.eye(3)],
+        )
+
+        self.assertEqual(si.modelspace, ((1, 2, None), (1, 4, None)))
+        assert_allclose(si.state_twos, [1, 3])
+        assert_allclose(si.energies, [2.0, 4.0])
+        assert_allclose(si.ci[0], doublet_ci)
+        assert_allclose(si.ci[1], quartet_ci)
+        self.assertIs(si.run(), si)
+        with self.assertRaisesRegex(ValueError, "same spin"):
+            si.transition_rdm1(0, 1)
+        with self.assertRaisesRegex(ValueError, "same spin"):
+            si.transition_rdm12(0, 1)
+
+    def test_rejects_unnormalized_and_complex_inputs(self):
+        with self.assertRaisesRegex(ValueError, "not normalized"):
+            siso_biortho.SI(
+                self.mc,
+                [(1, 1)],
+                [2.0 * self.ci[0]],
+                [self.mo[0]],
+                energies=[self.mc.e_tot[0]],
+            )
+
+        with self.assertRaisesRegex(NotImplementedError, "Complex CI"):
+            siso_biortho.SI(
+                self.mc,
+                [(1, 1)],
+                [self.ci[0].astype(complex) * (1.0 + 1.0j)],
+                [self.mo[0]],
+                energies=[self.mc.e_tot[0]],
+            )
 
 
 if __name__ == "__main__":
