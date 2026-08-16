@@ -53,8 +53,6 @@ def _mixed_scalar_integrals(mc, mo_left, mo_right):
     dm_core = 2.0 * left_core @ right_core.conj().T
     hcore = mf.get_hcore(mol)
     if ncore:
-        # Follow the MCSCF integral path so that a DF-MCSCF object uses its
-        # own auxiliary basis even when the underlying SCF object does not.
         vj, vk = mc.get_jk(mol, dm_core, hermi=0)
         veff = vj - 0.5 * vk
     else:
@@ -79,8 +77,7 @@ def _mixed_scalar_integrals(mc, mo_left, mo_right):
 
     return ecore, h1, h2
 
-
-def _spherical_soc(hso, mo_left, mo_right, ncore, ncas):
+def _spherical_soc_integrals(hso, mo_left, mo_right, ncore, ncas):
     '''
     Transforming Cartesian AO SOC integrals to spherical components in the
     mixed biorthonormal active MO basis.
@@ -106,7 +103,6 @@ def _spherical_soc(hso, mo_left, mo_right, ncore, ncas):
     zsoc[1] = h1[2]
     zsoc[2] = -(h1[0] + 1j * h1[1]) / np.sqrt(2.0)
     return zsoc
-
 
 def _soc_action(mode, zmat, ciket, norb, nelec, twos):
     '''
@@ -155,7 +151,6 @@ def _soc_action(mode, zmat, ciket, norb, nelec, twos):
 
     ciket = np.asarray(ciket, dtype=np.complex128)[None]
     return contract(zmat, ciket, (alpha, beta))[:, 0]
-
 
 def _soc_block(zmat, ci_row, ci_col, twos_row, twos_col, norb, nelec):
     '''
@@ -213,37 +208,57 @@ def _soc_block(zmat, ci_row, ci_col, twos_row, twos_col, norb, nelec):
 
 
 class SI(lib.StreamObject):
-    '''
-    State interaction for CAS wave functions represented in different orbital
-    bases.
+    """Nonorthogonal state interaction between state-specific CAS wavefunctions.
 
-    args:
-        mc:
-            CASCI/CASSCF-like object
-        modelspace: list of tuples
-            model-space definition as
-            ``(number_of_states, spin_multiplicity)``
-        ci: list of np.array
-            determinant-basis CI vectors
-        mo_coeff: list of np.array
-            MO coefficients associated with the CI vectors
-        energies: np.array
-            spin-free state energies; defaults to ``mc.e_states``
-        lu_threshold: float
-            pseudo-pivoting threshold
-        linear_dep_threshold: float
-            threshold for linear dependence in the model-state overlap
+    Each model state is represented by its own orthonormal MO coefficients and
+    determinant-basis CI vector.  For each pair of states with the same spin,
+    the occupied CAS spaces are biorthogonalized and the CI vectors are
+    counter-transformed before scalar overlap and Hamiltonian matrix elements
+    are evaluated.
 
-    Pair-specific transformed orbitals, CI vectors, transition RDMs, overlaps,
-    and Hamiltonian elements are stored in ``pair_data[(left, right)]`` after
-    calling :meth:`build`.
-    '''
+    The implementation currently supports real, restricted CAS wavefunctions
+    that use the same AO basis, inactive-space size, active-space size, and
+    total number of active electrons.  Entries in ``ci``, ``mo_coeff``, and
+    ``energies`` must occur in the contiguous state blocks described by the
+    input ``modelspace``.  These blocks are grouped by increasing spin
+    multiplicity internally, together with all three state-dependent inputs.
+
+    Args:
+        mc: CASCI/CASSCF-like object defining the molecular integrals and CAS.
+        modelspace: Non-empty sequence of ``(nroots, spin_multiplicity)`` or
+            ``(nroots, spin_multiplicity, wfnsym)`` entries.
+        ci: Normalized determinant-basis CI vector for every model state.
+        mo_coeff: Orthonormal MO coefficient array associated with every CI
+            vector.
+        energies: Spin-free total energy of every model state.  If omitted,
+            ``mc.e_states`` is used, with ``mc.e_tot`` as a CASCI fallback.
+        lu_threshold: Minimum squared pivot-tail norm used by the simultaneous
+            LU decomposition.
+        linear_dep_threshold: Smallest allowed eigenvalue of the model-state
+            overlap matrix.
+
+    Attributes:
+        pair_data: Pair-specific biorthogonal orbitals, counter-transformed CI
+            vectors, transition RDMs, overlaps, and Hamiltonian elements.
+        hamiltonian: Scalar model-space Hamiltonian after :meth:`build`.
+        overlap: Model-state overlap matrix after :meth:`build`.
+        si_energies: Generalized eigenvalues after :meth:`kernel`.
+        si_vecs: Generalized eigenvectors after :meth:`kernel`.
+
+    Note:
+        :meth:`build` evaluates off-diagonal same-spin pairs.  Diagonal or
+        reverse-order pair data are constructed on demand by the transition-RDM
+        accessors.
+    """
 
     _keys = {
+        "modelspace",
         "ci",
         "mo_coeff",
         "energies",
         "state_twos",
+        "lu_threshold",
+        "linear_dep_threshold",
         "hamiltonian",
         "overlap",
         "si_energies",
@@ -263,29 +278,69 @@ class SI(lib.StreamObject):
         linear_dep_threshold=1e-9,
     ):
         self.mc = mc
-        self.modelspace = tuple(modelspace)
-        ordered = sorted(self.modelspace, key=lambda item: item[1])
+        input_modelspace = tuple(modelspace)
+        validated_modelspace = socaddons._validate_modelspace(
+            input_modelspace,
+            mol=mc._scf.mol,
+            ncas=mc.ncas,
+            nelecas=mc.nelecas,
+        )
+
+        # The explicit state data follow the input model-space blocks.  Apply
+        # the same stable spin ordering used by _validate_modelspace to avoid
+        # assigning a CI vector to the wrong spin when the blocks are unsorted.
+        block_offsets = np.cumsum(
+            [0] + [int(entry[0]) for entry in input_modelspace])
+        block_order = sorted(
+            range(len(input_modelspace)),
+            key=lambda index: input_modelspace[index][1],
+        )
+        state_order = np.concatenate([
+            np.arange(block_offsets[index], block_offsets[index + 1])
+            for index in block_order
+        ]).astype(int)
+
+        self.modelspace = tuple(validated_modelspace)
         self.state_twos = np.asarray(
-            [multiplicity - 1 for count, multiplicity, *_ in ordered
+            [multiplicity - 1
+             for count, multiplicity, _ in self.modelspace
              for _ in range(count)],
             dtype=int,
         )
+
+        nstates = len(self.state_twos)
+        ci = list(ci)
+        mo_coeff = list(mo_coeff)
+        if len(ci) != nstates or len(mo_coeff) != nstates:
+            raise ValueError(
+                f"modelspace defines {nstates} states, but received "
+                f"{len(ci)} CI vectors and {len(mo_coeff)} MO sets")
+
+        ci = [ci[index] for index in state_order]
+        mo_coeff = [mo_coeff[index] for index in state_order]
+        for label, arrays in (("CI vectors", ci), ("MO coefficients", mo_coeff)):
+            if any(np.iscomplexobj(array)
+                   and np.any(np.abs(np.imag(array)) > 1e-12)
+                   for array in arrays):
+                raise NotImplementedError(
+                    f"Complex {label} are not supported by biorthogonal SI")
         self.ci = [np.asarray(x, dtype=np.float64, order="C") for x in ci]
         self.mo_coeff = [
             np.asarray(x, dtype=np.float64, order="C") for x in mo_coeff]
 
-        nstates = len(self.state_twos)
-        if len(self.ci) != nstates or len(self.mo_coeff) != nstates:
-            raise ValueError(
-                f"modelspace defines {nstates} states, but received "
-                f"{len(self.ci)} CI vectors and "
-                f"{len(self.mo_coeff)} MO sets")
-
         if energies is None:
-            energies = mc.e_states
+            energies = getattr(mc, "e_states", None)
+            if energies is None:
+                energies = getattr(mc, "e_tot", None)
+        if energies is None:
+            raise ValueError(
+                "energies must be supplied when mc has no e_states or e_tot")
         self.energies = np.asarray(energies, dtype=float)
         if self.energies.shape != (nstates,):
             raise ValueError(f"Expected {nstates} state energies")
+        self.energies = self.energies[state_order]
+        if not np.all(np.isfinite(self.energies)):
+            raise ValueError("State energies must be finite")
 
         if not isinstance(mc.ncore, (int, np.integer)):
             raise NotImplementedError(
@@ -319,23 +374,39 @@ class SI(lib.StreamObject):
         self._dump_flags()
 
     def _sanity_checks(self):
-        '''
-        Checking the input parameters and orbital dimensions.
-        '''
+        """Validate the wavefunction representation and numerical thresholds."""
         if isinstance(self.mc, mcpdft.MultiStateMCPDFTSolver):
             raise NotImplementedError(
-                "State-specific MC-PDFT effective Hamiltonians are not yet "
+                "Multi state MC-PDFT effective Hamiltonians are not yet "
                 "supported by the biorthogonal interface")
 
+        if self.lu_threshold <= 0:
+            raise ValueError("lu_threshold must be positive")
+        if self.linear_dep_threshold < 0:
+            raise ValueError("linear_dep_threshold cannot be negative")
+
         shape = self.mo_coeff[0].shape
+        if len(shape) != 2 or shape[1] < self.mc.ncore + self.mc.ncas:
+            raise ValueError(
+                "MO coefficient arrays must contain the full inactive and "
+                "active orbital spaces")
         ao_overlap = self.mc._scf.get_ovlp()
+        if ao_overlap.shape != (shape[0], shape[0]):
+            raise ValueError(
+                "AO overlap dimensions are inconsistent with MO coefficients")
         for i, mo in enumerate(self.mo_coeff):
             if mo.shape != shape:
                 raise ValueError(
                     "All MO coefficient arrays must have equal shapes")
             metric = reduce(np.dot, (mo.T, ao_overlap, mo))
-            if not np.allclose(metric, np.eye(metric.shape[0]), atol=1e-8):
+            if not np.allclose(
+                    metric, np.eye(metric.shape[0]), atol=1e-8, rtol=0.0):
                 raise ValueError(f"MO coefficient set {i} is not orthonormal")
+            norm = np.vdot(self.ci[i].ravel(), self.ci[i].ravel()).real
+            if not np.isclose(norm, 1.0, atol=1e-8, rtol=0.0):
+                raise ValueError(
+                    f"CI vector {i} is not normalized; squared norm is "
+                    f"{norm:.12g}")
 
     def _dump_flags(self):
         '''
@@ -345,20 +416,16 @@ class SI(lib.StreamObject):
         log.info("******** %s ********", self.__class__)
         log.info("number of independently represented states: %d",
                  len(self.ci))
-        log.info("Malmqvist LU threshold: %.3e", self.lu_threshold)
+        log.info("LU threshold: %.3e", self.lu_threshold)
 
     def _nelec_for_state(self, state):
-        '''
-        Computing the active alpha and beta electrons for a model state.
-        '''
+        """Return active alpha and beta electron counts for one model state."""
         twos = self.state_twos[state]
         na = (self.nelec + twos) // 2
         return na, self.nelec - na
 
     def _make_pair(self, left, right):
-        '''
-        Building the biorthogonal intermediates for one state pair.
-        '''
+        """Construct and cache biorthogonal intermediates for a state pair."""
         values = biorthogonalize(
             self.mo_coeff[left],
             self.mo_coeff[right],
@@ -376,18 +443,14 @@ class SI(lib.StreamObject):
         return pair
 
     def _get_pair(self, left, right):
-        '''
-        Returning an existing pair or building it on demand.
-        '''
+        """Return a cached state pair, constructing it when necessary."""
         pair = self.pair_data.get((left, right))
         if pair is None:
             pair = self._make_pair(left, right)
         return pair
 
     def _build_scalar_pair(self, pair):
-        '''
-        Computing the overlap, TDMs, and scalar Hamiltonian for one state pair.
-        '''
+        """Populate scalar overlap, active-space TDMs, and Hamiltonian."""
         if self.state_twos[pair.left] != self.state_twos[pair.right]:
             return
 
@@ -407,13 +470,16 @@ class SI(lib.StreamObject):
             + 0.5 * np.einsum("pqrs,pqrs->", h2, pair.tdm2))
 
     def build(self):
-        '''
-        Building the nonorthogonal scalar Hamiltonian and overlap matrices.
+        """Build the nonorthogonal scalar Hamiltonian and overlap matrices.
 
-        returns:
-            self:
-                updated ``SI`` object
-        '''
+        The supplied state energies form the diagonal of the Hamiltonian.
+        Off-diagonal elements are evaluated explicitly for same-spin pairs;
+        scalar matrix elements between different total spins are zero.
+
+        Returns:
+            SI: This object with ``hamiltonian``, ``overlap``, and
+            ``pair_data`` updated.
+        """
         nstates = len(self.ci)
         hamiltonian = np.diag(self.energies).astype(np.complex128)
         overlap = np.eye(nstates, dtype=np.complex128)
@@ -431,20 +497,22 @@ class SI(lib.StreamObject):
                 overlap[left, right] = pair.overlap
                 overlap[right, left] = pair.overlap.conjugate()
 
+        # Suppress insignificant numerical anti-Hermitian components.
         self.hamiltonian = 0.5 * (hamiltonian + hamiltonian.conj().T)
         self.overlap = 0.5 * (overlap + overlap.conj().T)
         return self
 
     def kernel(self):
-        '''
-        Building and solving the generalized state-interaction eigenproblem.
+        """Build and solve the generalized state-interaction eigenproblem.
 
-        returns:
-            si_energies: np.array
-                state-interaction energies
-            si_vecs: np.array
-                state-interaction eigenvectors
-        '''
+        Returns:
+            tuple: ``(si_energies, si_vecs)``, containing the scalar SI
+            eigenvalues and overlap-normalized generalized eigenvectors.
+
+        Raises:
+            scipy.linalg.LinAlgError: If the model-state overlap is singular or
+            has an eigenvalue no larger than ``linear_dep_threshold``.
+        """
         self.build()
         overlap_eigenvalues = linalg.eigvalsh(self.overlap)
         if overlap_eigenvalues[0] <= self.linear_dep_threshold:
@@ -457,12 +525,27 @@ class SI(lib.StreamObject):
             self.hamiltonian, self.overlap)
         return self.si_energies, self.si_vecs
 
-    run = kernel
-
     def transition_rdm1(self, left, right, basis="biorthogonal"):
-        '''
-        Returning the scalar transition 1-RDM for a state pair.
-        '''
+        """Return the spin-summed transition one-particle density matrix.
+
+        Args:
+            left: Bra-state index.
+            right: Ket-state index.
+            basis: ``"biorthogonal"`` returns the active-space transition RDM
+                in the pair-specific biorthogonal orbitals.  ``"ao"`` returns
+                the complete AO transition density, including the inactive
+                doubly occupied orbitals.
+
+        Returns:
+            numpy.ndarray: Pair-specific transition one-particle density.
+
+        Note:
+            The biorthogonal result contains only active indices.  The AO
+            result satisfies ``einsum('uv,uv', S_AO, dm1) = N * overlap``.
+        """
+        if self.state_twos[left] != self.state_twos[right]:
+            raise ValueError(
+                "Scalar transition RDMs require states with the same spin")
         pair = self._get_pair(left, right)
         if pair.tdm1 is None:
             self._build_scalar_pair(pair)
@@ -471,15 +554,30 @@ class SI(lib.StreamObject):
             return pair.tdm1
         if basis == "ao":
             ncore, ncas = self.mc.ncore, self.mc.ncas
+            left_core = pair.mo_left[:, :ncore]
+            right_core = pair.mo_right[:, :ncore]
             left_active = pair.mo_left[:, ncore:ncore + ncas]
             right_active = pair.mo_right[:, ncore:ncore + ncas]
-            return left_active @ pair.tdm1 @ right_active.T
+            dm1 = left_active @ pair.tdm1 @ right_active.T
+            if ncore:
+                dm1 += (2.0 * pair.overlap
+                        * left_core @ right_core.T)
+            return dm1
         raise ValueError("basis must be 'biorthogonal' or 'ao'")
 
     def transition_rdm12(self, left, right):
-        '''
-        Returning pair-specific 1- and 2-TDMs in the biorthogonal CAS basis.
-        '''
+        """Return active-space 1- and 2-TDMs in the biorthogonal basis.
+
+        Args:
+            left: Bra-state index.
+            right: Ket-state index.
+
+        Returns:
+            tuple: Pair-specific spin-summed active-space ``(tdm1, tdm2)``.
+        """
+        if self.state_twos[left] != self.state_twos[right]:
+            raise ValueError(
+                "Scalar transition RDMs require states with the same spin")
         pair = self._get_pair(left, right)
         if pair.tdm1 is None:
             self._build_scalar_pair(pair)
@@ -602,7 +700,7 @@ class SISO(SI):
                     continue
 
                 pair = self._get_pair(left, right)
-                pair.zsoc = _spherical_soc(
+                pair.zsoc = _spherical_soc_integrals(
                     hso,
                     pair.mo_left,
                     pair.mo_right,
