@@ -102,7 +102,8 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
 '''
 
 # compute_nevpt2_energies returns the NEVPT2 total energies in the same order
-# as the model-space states. It does not modify mc.e_states.
+# as the model-space states. It does not modify mc.e_states. During the
+# calculation, the logger reports the NEVPT2 energy for each state.
 nevpt2_energies = siso.compute_nevpt2_energies(
     mc, [(8, 2), (1, 4)])
 
