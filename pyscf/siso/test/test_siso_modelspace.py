@@ -26,6 +26,7 @@ Test-7: Reject a model-space root count inconsistent with the MC object.
 Test-8: Validate SISO integral and Hamiltonian options.
 Test-9: Check state-weight assignment across the model space.
 Test-10: Check model-space NEVPT2 energies without automatic MC updates.
+Test-11: Read the model space from the state-average MC object.
 '''
 
 import io
@@ -105,6 +106,7 @@ class KnownValues(unittest.TestCase):
         self.assertEqual(
             [solver.spin for solver in mc.fcisolver.fcisolvers], [1, 1])
         self.assertTrue(np.allclose(mc.weights, 0.5))
+        self.assertEqual(socaddons._read_model_space(mc), modelspace)
 
     def test_symmetry_resolved_siso(self):
         mol = gto.M(
@@ -115,9 +117,10 @@ class KnownValues(unittest.TestCase):
         mc = mcscf.CASSCF(mf, 2, 2)
         mc = socaddons.state_average_solver(mc, modelspace).run()
 
-        my_siso = siso.SISO(mc, modelspace, ham='BP')
+        my_siso = siso.SISO(mc, ham='BP')
         energies, si_vecs = my_siso.kernel()
 
+        self.assertEqual(my_siso.modelspace, modelspace)
         self.assertEqual(my_siso.statelis, [2])
         self.assertEqual(my_siso.imds.c[0].shape, (2, 2, 2))
         self.assertEqual(si_vecs.shape, (2, 2))
@@ -139,6 +142,10 @@ class KnownValues(unittest.TestCase):
                 with self.assertRaises(exception):
                     socaddons._validate_modelspace(
                         modelspace, mol=self.mol, ncas=4, nelecas=(1, 0))
+
+    def test_modelspace_cannot_be_read_from_plain_solver(self):
+        with self.assertRaisesRegex(ValueError, 'could not be read from'):
+            socaddons._read_model_space(make_mc(self.mol, [0.75]))
 
     def test_modelspace_root_count_must_match_mc(self):
         mc = make_mc(self.mol, [0.75])
@@ -195,16 +202,19 @@ class KnownValues(unittest.TestCase):
             ncore=0,
             mo_coeff=np.eye(5),
             e_states=np.zeros(3),
+            fcisolver=SimpleNamespace(fcisolvers=[
+                SimpleNamespace(nroots=2, spin=1, wfnsym='B1u'),
+                SimpleNamespace(nroots=1, spin=3, wfnsym='Ag'),
+            ]),
         )
         original_e_states = mc.e_states
-        modelspace = [(1, 4, 'Ag'), (2, 2, 'B1u')]
 
         with mock.patch.object(socaddons.mcscf, 'CASCI', FakeCASCI), \
                 mock.patch.object(
                     socaddons, 'csf_solver',
                     side_effect=lambda mol, smult: SimpleNamespace()), \
                 mock.patch.object(socaddons.mrpt, 'NEVPT', FakeNEVPT):
-            energies = socaddons.compute_nevpt2_energies(mc, modelspace)
+            energies = socaddons.compute_nevpt2_energies(mc)
 
         self.assertTrue(np.allclose(energies, [10.1, 11.2, 30.1]))
         self.assertIsInstance(energies, list)

@@ -74,7 +74,7 @@ class KnownValues(unittest.TestCase):
         mc = mcpdft.CASSCF(
             mf, 'tPBE', ncas, nelecas, grids_level=GRID_LEVEL)
         mc = siso.sacasscf_solver(mc, modelspace, ms='lin').run()
-        my_siso = siso.SISO(mc, modelspace, ham='BP')
+        my_siso = siso.SISO(mc, ham='BP')
         energies, si_vecs = my_siso.kernel()
         return mc, my_siso, energies, si_vecs
 

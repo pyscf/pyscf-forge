@@ -80,7 +80,7 @@ class KnownValues(unittest.TestCase):
         for ham, reference in self.amfi_energies.items():
             with self.subTest(ham=ham):
                 my_siso = siso.SISO(
-                    self.mc, self.modelspace, ham=ham, amf=True)
+                    self.mc, ham=ham, amf=True)
                 energies, si_vecs = my_siso.kernel()
 
                 self.assertEqual(energies.shape, (6,))
@@ -96,7 +96,7 @@ class KnownValues(unittest.TestCase):
         for ham, reference in self.mmfi_energies.items():
             with self.subTest(ham=ham):
                 mmfi_siso = siso.SISO(
-                    self.mc, self.modelspace, ham=ham,
+                    self.mc, ham=ham,
                     amf=False, mmf=True)
                 energies = mmfi_siso.kernel()[0]
 

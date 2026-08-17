@@ -35,10 +35,9 @@ class DiatomicSystem(unittest.TestCase):
         cls.modelspace = [(1, 2)]
         cls.mc = siso.sacasscf_solver(
             mcscf.CASSCF(mf, 2, 1), cls.modelspace).run()
-        cls.mysiso = siso.SISO(
-            cls.mc, cls.modelspace, ham='BP', amf=True).run()
+        cls.mysiso = siso.SISO(cls.mc, ham='BP', amf=True).run()
         cls.data = addons.generate_siso_data(
-            cls.mol, cls.mc, cls.modelspace, cls.mysiso)
+            cls.mol, cls.mc, mysiso=cls.mysiso)
         cls.analysis = addons.soc_analysis(cls.mysiso, cls.data)
 
     def test_main_analysis_functions(self):
