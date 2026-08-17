@@ -53,9 +53,8 @@ CASCI energy for each state
   State 2 weight 0.333333  E = -75.471878612858 S^2 = 0.7500000  (B2)
 '''
 
-# 5. State interaction. Use exactly the same symmetry-resolved model space as in
-# the state-averaged CASSCF calculation.
-mysiso = siso.SISO(mc, modelspace, ham='BP', amf=True)
+# 5. State interaction. SISO reads the symmetry-resolved model space from mc.
+mysiso = siso.SISO(mc, ham='BP', amf=True)
 mysiso.kernel()
 
 # The lowest four states are the two Kramers pairs arising from the 2-Pi state.

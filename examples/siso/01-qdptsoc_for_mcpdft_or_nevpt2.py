@@ -73,7 +73,7 @@ MC-PDFT state 8 E = -341.8383313515934, Eot(t0.25*HF + 0.75*PBE, 0.25*HF + 0.75*
 '''
 
 # State interaction:
-mysiso = siso.SISO(mc, [(8, 2),(1,4)], ham='DKH', amf=True)
+mysiso = siso.SISO(mc, ham='DKH', amf=True)
 mysiso.kernel()
 
 '''
@@ -102,10 +102,11 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
 '''
 
 # compute_nevpt2_energies returns the NEVPT2 total energies in the same order
-# as the model-space states. It does not modify mc.e_states. During the
-# calculation, the logger reports the NEVPT2 energy for each state.
-nevpt2_energies = siso.compute_nevpt2_energies(
-    mc, [(8, 2), (1, 4)])
+# as the model-space states. When modelspace is omitted, it is read from the
+# state-average FCI solvers attached to mc. The function does not modify
+# mc.e_states. During the calculation, the logger reports the NEVPT2 energy
+# for each state.
+nevpt2_energies = siso.compute_nevpt2_energies(mc)
 
 # Apply the diagonal approximation explicitly. The CASSCF model-space wave
 # functions, and therefore the off-diagonal spin-orbit couplings, are retained,
@@ -127,7 +128,7 @@ NEVPT2 Energies
 '''
 
 # State interaction:
-mysiso = siso.SISO(mc, [(8, 2),(1,4)], ham='DKH', amf=True)
+mysiso = siso.SISO(mc, ham='DKH', amf=True)
 mysiso.kernel()
 
 '''

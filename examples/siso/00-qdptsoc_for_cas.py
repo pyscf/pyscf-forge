@@ -71,14 +71,13 @@ CASCI energy for each state
 '''
 
 # 4. State interaction
-# Note, in this case, the model-space for the SA-CASSCF and SISO is the same. You can also define the
-# different model-space for the SA-CASSCF and SISO, but then you need to reconstruct your mc object.
+# SISO reads the model space from the state-average FCI solvers attached to mc.
 # There are two Hamiltonian options for the SOC calculations: Breit-Pauli (BP) and
 # Douglas-Kroll-Hess (DKH).
 
 # amf: is the AMFI integrals.
 
-mysiso = siso.SISO(mc,  [(3, 2),], ham='BP', amf=True)
+mysiso = siso.SISO(mc, ham='BP', amf=True)
 mysiso.kernel()
 
 # 2P1/2 and 2P3/2 States:
@@ -96,8 +95,7 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
 # Computing the L and J values:
 from pyscf.siso.addons import soc_analysis, generate_siso_data
 
-modelspace = [(3, 2),]
-mydata = generate_siso_data(mol, mc, modelspace, mysiso,
+mydata = generate_siso_data(mol, mc, mysiso=mysiso,
                             origin='CHARGE_CENTER', ham='BP')
 
 mysiso_analysis = soc_analysis(mysiso, mydata, )

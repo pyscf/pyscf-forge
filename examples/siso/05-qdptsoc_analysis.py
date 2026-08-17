@@ -22,8 +22,9 @@ mf.kernel()
 mo_coeff = avas.kernel(mf, ['O 2s', 'O 2p'], minao=mol.basis)[2]
 
 # 3. State-average Calculation.
+modelspace = [(3, 1), (1, 3)]
 mc = mcscf.CASSCF(mf, 8, 12)
-mc = siso.sacasscf_solver(mc, [(3, 1), (1, 3)])
+mc = siso.sacasscf_solver(mc, modelspace)
 mc.max_cycle_macro = 100
 mc.conv_tol = 1e-8
 mc.kernel(mo_coeff)
@@ -35,7 +36,7 @@ CASCI energy for each state
   State 3 weight 0.25  E = -149.873803166108 S^2 = 2.0000000
 '''
 
-mysiso = siso.SISO(mc,  [(3, 1), (1, 3)], ham='DKH', amf=True)
+mysiso = siso.SISO(mc, ham='DKH', amf=True)
 mysiso.kernel()
 '''
 ******** Relative Spin Orbit Coupling Energetics ********
@@ -51,8 +52,7 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
 # Analysis Functions for SISO calculation:
 from pyscf.siso.addons import soc_analysis, generate_siso_data
 
-modelspace = [(3, 1), (1, 3)]
-mydata = generate_siso_data(mol, mc, modelspace, mysiso, 
+mydata = generate_siso_data(mol, mc, mysiso=mysiso,
                             origin='CHARGE_CENTER', ham='DKH')
 
 mysiso_analysis = soc_analysis(mysiso, mydata, )

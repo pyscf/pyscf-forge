@@ -67,7 +67,7 @@ molden.from_mo(mol, mf.chkfile.rstrip('chk')+'molden', mc.mo_coeff[:, mc.ncore:m
 
 # State interaction: SO-L-PDFT, the difference between this and the SO-MC-PDFT is
 # that the SO Hamiltonian is constructed in the L-PDFT states instead of the CASSCF states.
-mysiso = siso.SISO(mc,  [(7, 2), ], ham='DKH', amf=True)
+mysiso = siso.SISO(mc, ham='DKH', amf=True)
 mysiso.kernel()
 
 
