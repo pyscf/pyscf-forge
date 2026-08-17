@@ -25,7 +25,7 @@ Test-6: Reject invalid model-space entries.
 Test-7: Reject a model-space root count inconsistent with the MC object.
 Test-8: Validate SISO integral and Hamiltonian options.
 Test-9: Check state-weight assignment across the model space.
-Test-10: Check model-space NEVPT2 energies and automatic MC updates.
+Test-10: Check model-space NEVPT2 energies without automatic MC updates.
 '''
 
 import io
@@ -168,7 +168,7 @@ class KnownValues(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'sum to one'):
             socaddons._validate_state_weights([0.2, 0.2, 0.2], 3)
 
-    def test_compute_nevpt2_energies_updates_mc(self):
+    def test_compute_nevpt2_energies_does_not_update_mc(self):
         casci_objects = []
 
         class FakeCASCI:
@@ -207,8 +207,9 @@ class KnownValues(unittest.TestCase):
             energies = socaddons.compute_nevpt2_energies(mc, modelspace)
 
         self.assertTrue(np.allclose(energies, [10.1, 11.2, 30.1]))
+        self.assertIsInstance(energies, list)
         self.assertIs(mc.e_states, original_e_states)
-        self.assertIs(energies, original_e_states)
+        self.assertTrue(np.allclose(mc.e_states, 0.0))
         self.assertEqual([obj.nelecas for obj in casci_objects],
                          [(3, 2), (4, 1)])
         self.assertEqual([obj.fcisolver.wfnsym for obj in casci_objects],
