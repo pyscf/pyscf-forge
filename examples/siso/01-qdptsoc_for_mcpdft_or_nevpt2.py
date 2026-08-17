@@ -101,8 +101,15 @@ SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1
  19                  0.077258692              2.10232          16956.32290
 '''
 
-# Compute NEVPT2 energies for the model space and update mc.e_states.
-siso.compute_nevpt2_energies(mc, [(8, 2), (1, 4)])
+# compute_nevpt2_energies returns the NEVPT2 total energies in the same order
+# as the model-space states. It does not modify mc.e_states.
+nevpt2_energies = siso.compute_nevpt2_energies(
+    mc, [(8, 2), (1, 4)])
+
+# Apply the diagonal approximation explicitly. The CASSCF model-space wave
+# functions, and therefore the off-diagonal spin-orbit couplings, are retained,
+# while the diagonal spin-free energies are replaced by the NEVPT2 energies.
+mc.e_states[:] = nevpt2_energies
 
 '''
 NEVPT2 Energies
