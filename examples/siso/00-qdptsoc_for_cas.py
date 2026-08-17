@@ -42,7 +42,21 @@ mo_coeff = avas.kernel(mf, ['Al 3s', 'Al 3p'], minao=mol.basis)[2]
 # as [(N_i, SM_i, wfnsym_i), (N_j, SM_j, wfnsym_j), ...].
 # If the symmetry is not specified, it will be set to None by default.
 
-# 3. State-average Calculation.
+# Note: sacasscf_solver is a wrapper function that generates multiple FCI
+# solvers with specified spin multiplicities, symmetries, and numbers of roots.
+#
+# mc = siso.sacasscf_solver(mc, [(3, 2),]) is equivalent to:
+#
+# from pyscf.csf_fci import csf_solver
+# nroots, smult, wfnsym = 3, 2, None
+# solver = csf_solver(mol, smult=smult)
+# solver.wfnsym = wfnsym
+# solver.nroots = nroots
+# solver.spin = smult - 1
+# solvers = [solver]
+# weights = np.ones(nroots) / nroots
+# mc = mcscf.state_average_mix_(mc, solvers, weights)
+
 mc = mcscf.CASSCF(mf, 4, 3)
 mc = siso.sacasscf_solver(mc, [(3, 2),]) # Here, I am defining a model space of 3 doublets. (N_i=3, SM_i=2): (2P States)
 mc.max_cycle_macro = 100

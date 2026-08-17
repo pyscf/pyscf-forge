@@ -22,6 +22,29 @@ mo_coeff = avas.kernel(mf, ['P 3s', 'P 3p', 'P 3d', 'P 4s', 'P 4p'], minao=mol.b
 # i.e.: (N_i=8, SM_i=2) and (N_j=1, SM_j=4) = [(8, 2), (1,4)]
 
 mc = mcpdft.CASSCF(mf,'tPBE0', 13, 5)
+
+# Note: state_average_solver is a wrapper function that generates multiple FCI
+# solvers with specified spin multiplicities, symmetries, and numbers of roots.
+#
+# mc = siso.state_average_solver(mc, [(8, 2), (1, 4)]) is equivalent to:
+#
+# from pyscf.csf_fci import csf_solver
+# nroots_i, smult_i, wfnsym_i = 8, 2, None
+# solver_i = csf_solver(mol, smult=smult_i)
+# solver_i.wfnsym = wfnsym_i
+# solver_i.nroots = nroots_i
+# solver_i.spin = smult_i - 1
+#
+# nroots_j, smult_j, wfnsym_j = 1, 4, None
+# solver_j = csf_solver(mol, smult=smult_j)
+# solver_j.wfnsym = wfnsym_j
+# solver_j.nroots = nroots_j
+# solver_j.spin = smult_j - 1
+#
+# solvers = [solver_i, solver_j]
+# weights = [1 / 9] * 9
+# mc = mcscf.state_average_mix_(mc, solvers, weights)
+
 mc = siso.state_average_solver(mc, [(8, 2), (1,4)], )
 mc.max_cycle_macro = 100
 mc.kernel(mo_coeff)
