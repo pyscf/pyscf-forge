@@ -145,7 +145,7 @@ def _get_soc_integrals(mol, origin='CHARGE_CENTER', ham='DKH', somf=True,
     hso /= 1j
     return hso.real
 
-def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER'):
+def get_1e_prop(mc, modelspace=None, mysiso=None, origin='CHARGE_CENTER'):
     """
     Get the one-electron properties for the given model space.
     Basically it computes r"<Psi_i|O|Psi_j>" for the one electron
@@ -153,8 +153,9 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER'):
     args:
         mc: mcscf object
             SA-CAS or L-PDFT object
-        modelspace: list
-            List of tuples (nroots, mult, symm)
+        modelspace: list or None
+            List of tuples (nroots, mult, symm). If None, the model space is
+            read from ``mc``.
         mysiso: siso.SISO object
             SISO object containing sivec, sienergy, and ham
         origin: str
@@ -191,8 +192,12 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER'):
     ints_dip = _basis_transformation(
         _get_dipole_integrals(mc._scf.mol, origin), mo_cas)
 
-    symmetry_modelspace = socaddons._validate_modelspace(
-        modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
+    if modelspace is None:
+        symmetry_modelspace = socaddons._read_model_space(mc)
+    else:
+        symmetry_modelspace = socaddons._validate_modelspace(
+            modelspace, mol=mc._scf.mol, ncas=mc.ncas,
+            nelecas=mc.nelecas)
     modelspace = socaddons._aggregate_modelspace(symmetry_modelspace)
 
     expected_nroots = sum(state[0] for state in symmetry_modelspace)
@@ -246,7 +251,7 @@ def get_1e_prop(mc, modelspace, mysiso, origin='CHARGE_CENTER'):
 
     return orbangmoment, amfiinterac, edipinterac
 
-def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER',
+def generate_aniso_data(mol, mc, modelspace=None, mysiso=None, origin='CHARGE_CENTER',
                         ham=None):
     '''
     args:
@@ -254,8 +259,9 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER',
             Molecule object containing the molecular geometry and basis set
         mc: mcscf object
             SA-CAS or L-PDFT
-        modelspace: list
-            List of tuples (nroots, mult, symm)
+        modelspace: list or None
+            List of tuples (nroots, mult, symm). If None, the model space is
+            read from ``mc``.
         mysiso: siso.SISO object
             SISO object containing sivec, sienergy, and ham
         origin: str
@@ -272,8 +278,12 @@ def generate_aniso_data(mol, mc, modelspace, mysiso, origin='CHARGE_CENTER',
     if getattr(mysiso, 'mc', None) is not mc:
         raise ValueError("mysiso must be attached to mc")
 
-    modelspace = socaddons._validate_modelspace(
-        modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
+    if modelspace is None:
+        modelspace = socaddons._read_model_space(mc)
+    else:
+        modelspace = socaddons._validate_modelspace(
+            modelspace, mol=mc._scf.mol, ncas=mc.ncas,
+            nelecas=mc.nelecas)
     aggregate_modelspace = socaddons._aggregate_modelspace(modelspace)
 
     nstate = sum(nroots for nroots, _, _ in modelspace)
