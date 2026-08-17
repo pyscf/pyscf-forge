@@ -151,32 +151,25 @@ def _aggregate_modelspace(modelspace):
 
 def compute_nevpt2_energies(mc, modelspace):
     """
-    Compute model-space NEVPT2 energies and update ``mc.e_states``.
+    Compute model-space NEVPT2 energies.
 
     A separate CASCI calculation is performed for every spin and symmetry
     sector in modelspace using the optimized orbitals in mc.mo_coeff.
     The resulting strongly-contracted NEVPT2 total energies are ordered in
-    the same way as the state-average solvers.
+    the same way as the state-average solvers. This function does not modify
+    ``mc.e_states``.
 
     Args:
         mc: converged CAS object
         modelspace: Model-space entries ``(nroots, spinmult[, wfnsym])``
 
     Returns:
-        The updated ``mc.e_states`` containing the NEVPT2 total energies.
+        e_states: list of float
+            NEVPT2 total energies for the model-space states.
     """
     mol = mc._scf.mol
     states = _validate_modelspace(modelspace, mol=mol, ncas=mc.ncas,
                                   nelecas=mc.nelecas)
-    nstates = sum(nroots for nroots, _, _ in states)
-
-    current_energies = getattr(mc, 'e_states', None)
-    if current_energies is None:
-        raise ValueError("mc.e_states is required to update NEVPT2 energies")
-    if np.asarray(current_energies).size != nstates:
-        msg = "modelspace contains {nstates} states, but mc.e_states contains " +\
-               f"{np.asarray(current_energies).size}"
-        raise ValueError(msg)
 
     if getattr(mc, 'mo_coeff', None) is None:
         raise ValueError("mc.mo_coeff is required to compute NEVPT2 energies")
@@ -201,8 +194,7 @@ def compute_nevpt2_energies(mc, modelspace):
         for root, energy in enumerate(e_casci):
             energies.append(energy + mrpt.NEVPT(casci, root=root).kernel())
 
-    mc.e_states[:] = energies
-    return mc.e_states
+    return energies
 
 
 def socintegrals(mol, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ham='DKH', dm=None):
