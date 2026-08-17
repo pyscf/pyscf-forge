@@ -29,9 +29,10 @@ Test-3: Check spin-orbit integral shape, Hermiticity, and input validation.
 import unittest
 
 import numpy as np
+import scipy.linalg
 
-from pyscf import gto, lib
-from pyscf.siso import socaddons
+from pyscf import ao2mo, gto, lib
+from pyscf.siso import amfi, socaddons
 
 
 # Fixed inputs used to generate the absolute references below.  LIGHT_SPEED is
@@ -56,6 +57,27 @@ def _soc_reference(yz, zy, xz, zx, xy, yx):
     reference[1, 2, 4], reference[1, 4, 2] = 1j * xz, 1j * zx
     reference[2, 2, 3], reference[2, 3, 2] = 1j * xy, 1j * yx
     return reference
+
+
+def _soc2e_jk_ao2mo(pmol, dm, mo1, mo3):
+    """Reference implementation used before the direct shell contraction."""
+    nao = dm.shape[0]
+    eri = ao2mo.general(
+        pmol, (mo3, mo1, mo3, mo1), intor='int2e_p1vxp1',
+        aosym='s1', comp=3, compact=True)
+    vj = np.asarray([
+        np.einsum('ijkl,lk->ij', ao2mo.restore(1, eri[x], nao), dm)
+        for x in range(3)])
+
+    eri = ao2mo.general(
+        pmol, (mo3, mo1, mo1, mo3), intor='int2e_p1vxp1',
+        aosym='s1', comp=3, compact=True)
+    vk = np.zeros_like(vj)
+    for x in range(3):
+        eri_x = ao2mo.restore(1, eri[x], nao)
+        vk[x] = np.einsum('ijkl,jk->il', eri_x, dm)
+        vk[x] += np.einsum('ijkl,li->kj', eri_x, dm)
+    return vj, vk
 
 
 # Absolute BP and DKH AMFI/MMFI integral tensors generated using LIGHT_SPEED
@@ -124,6 +146,34 @@ class KnownValues(unittest.TestCase):
         self.assertTrue(np.allclose(
             self.hso['BP', 'AMFI'], hso1e + hso2e,
             atol=1e-10, rtol=0.0))
+
+    def test_diatomic_soc2e_direct_against_ao2mo(self):
+        mol = gto.M(
+            atom='O 0 0 0; F 0 0 1.3', basis='sto-3g', spin=1, verbose=0)
+        rng = np.random.default_rng(12)
+        dm = rng.standard_normal((mol.nao_nr(), mol.nao_nr()))
+        dm = dm + dm.T
+
+        hso2e_ref = np.zeros((3, mol.nao_nr(), mol.nao_nr()))
+        atom = mol.copy()
+        for ia, (b0, b1, p0, p1) in enumerate(mol.aoslice_by_atom()):
+            with self.subTest(atom=mol.atom_symbol(ia)):
+                atom._bas = mol._bas[b0:b1]
+                pmol, ctr_coeff = atom.decontract_basis()
+                ctr_coeff = scipy.linalg.block_diag(*ctr_coeff)
+                mo1, mo3 = amfi.compute_kinematic_factors(
+                    pmol, ctr_coeff, ham='DKH')
+                dm_atom = dm[p0:p1, p0:p1]
+
+                vj_ref, vk_ref = _soc2e_jk_ao2mo(
+                    pmol, dm_atom, mo1, mo3)
+                vj, vk = amfi.compute_soc2e_jk(pmol, dm_atom, mo1, mo3)
+                np.testing.assert_allclose(vj, vj_ref, atol=1e-12, rtol=0.0)
+                np.testing.assert_allclose(vk, vk_ref, atol=1e-12, rtol=0.0)
+                hso2e_ref[:, p0:p1, p0:p1] = vj_ref - 1.5 * vk_ref
+
+        hso2e = amfi.compute_hso2(mol, dm, ham='DKH')
+        np.testing.assert_allclose(hso2e, hso2e_ref, atol=1e-12, rtol=0.0)
 
 
 if __name__ == '__main__':
