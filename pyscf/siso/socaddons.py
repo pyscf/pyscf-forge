@@ -121,6 +121,34 @@ def _validate_modelspace(modelspace, mol=None, ncas=None, nelecas=None):
     return sorted(states, key=lambda state: state[1])
 
 
+def _read_model_space(mc):
+    """Read the model space from the state-average solvers attached to ``mc``."""
+    solvers = getattr(getattr(mc, 'fcisolver', None), 'fcisolvers', None)
+    if solvers is None or len(solvers) == 0:
+        raise ValueError(
+            "modelspace was not provided and could not be read from "
+            "mc.fcisolver.fcisolvers")
+
+    modelspace = []
+    for index, solver in enumerate(solvers):
+        spin = getattr(solver, 'spin', None)
+        spinmult = getattr(solver, 'smult', None)
+        if spin is not None:
+            spinmult = spin + 1
+        if spinmult is None:
+            raise ValueError(
+                "modelspace was not provided and spin information is missing "
+                f"from mc.fcisolver.fcisolvers[{index}]")
+        modelspace.append((
+            getattr(solver, 'nroots', 1),
+            spinmult,
+            getattr(solver, 'wfnsym', None),
+        ))
+
+    return _validate_modelspace(
+        modelspace, mol=mc._scf.mol, ncas=mc.ncas, nelecas=mc.nelecas)
+
+
 def _validate_state_weights(weights, nstates):
     '''
     Validate and normalize a SISO state weight specification.
@@ -149,7 +177,7 @@ def _aggregate_modelspace(modelspace):
     return aggregated
 
 
-def compute_nevpt2_energies(mc, modelspace):
+def compute_nevpt2_energies(mc, modelspace=None):
     """
     Compute model-space NEVPT2 energies.
 
@@ -161,15 +189,19 @@ def compute_nevpt2_energies(mc, modelspace):
 
     Args:
         mc: converged CAS object
-        modelspace: Model-space entries ``(nroots, spinmult[, wfnsym])``
+        modelspace: Model-space entries ``(nroots, spinmult[, wfnsym])``.
+            If None, the model space is read from ``mc``.
 
     Returns:
         e_states: list of float
             NEVPT2 total energies for the model-space states.
     """
     mol = mc._scf.mol
-    states = _validate_modelspace(modelspace, mol=mol, ncas=mc.ncas,
-                                  nelecas=mc.nelecas)
+    if modelspace is None:
+        states = _read_model_space(mc)
+    else:
+        states = _validate_modelspace(
+            modelspace, mol=mol, ncas=mc.ncas, nelecas=mc.nelecas)
 
     if getattr(mc, 'mo_coeff', None) is None:
         raise ValueError("mc.mo_coeff is required to compute NEVPT2 energies")

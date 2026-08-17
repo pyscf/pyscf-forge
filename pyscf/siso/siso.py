@@ -523,11 +523,16 @@ class SISO(lib.StreamObject):
     """
     Quasi-Degenerate Perturbation Theory Based Spin-Orbit Coupling Treatment.:
     State interaction Spin-Orbit Coupling (SISO) class.
+
+    Args:
+        mc: converged state-averaged CAS object
+        modelspace: Model-space entries ``(nroots, spinmult[, wfnsym])``.
+            If None, the model space is read from ``mc``.
     """
     _keys = ['modelspace', 'statelst', 'twoslst', 'stuples',
              'si_energies', 'si_vecs']
 
-    def __init__(self, mc, modelspace, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ham='DKH'):
+    def __init__(self, mc, modelspace=None, somf=True, amf=True, mmf=False, soc1e=True, soc2e=True, ham='DKH'):
         self.mc = mc
         self.somf = somf
         self.amf = amf
@@ -541,9 +546,12 @@ class SISO(lib.StreamObject):
         self.dump_flags()
 
     def initialize_(self, modelspace):
-        self.modelspace = socaddons._validate_modelspace(
-            modelspace, mol=self.mc._scf.mol, ncas=self.mc.ncas,
-            nelecas=self.mc.nelecas)
+        if modelspace is None:
+            self.modelspace = socaddons._read_model_space(self.mc)
+        else:
+            self.modelspace = socaddons._validate_modelspace(
+                modelspace, mol=self.mc._scf.mol, ncas=self.mc.ncas,
+                nelecas=self.mc.nelecas)
         spin_indices = [state[1] - 1 for state in self.modelspace]
         statelis_ = np.zeros(max(spin_indices) + 1, dtype=int)
         for nroots, spinmult, _ in self.modelspace:
