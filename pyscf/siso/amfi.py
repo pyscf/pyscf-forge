@@ -207,28 +207,6 @@ def compute_soc2e_jk(pmol, dm0, mo1, mo3):
     # vk=np.einsum('yijkl,jk->yil', hso2e, dm0)
     # vk+=np.einsum('yijkl,li->ykj', hso2e, dm0)
 
-    # Previous AO2MO implementation:
-    # nao = dm0.shape[0]
-    #
-    # vj = np.zeros((3, nao, nao))
-    # hso2e_ = ao2mo.general(
-    #     pmol, (mo3, mo1, mo3, mo1), intor='int2e_p1vxp1', aosym='s1',
-    #     comp=3, compact=True)
-    # vj = np.asarray([
-    #     np.einsum(
-    #         'ijkl,lk->ij', ao2mo.restore(1, hso2e_[i], nao), dm0)
-    #     for i in range(3)])
-    #
-    # hso2e_ = ao2mo.general(
-    #     pmol, (mo3, mo1, mo1, mo3), intor='int2e_p1vxp1', aosym='s1',
-    #     comp=3, compact=True)
-    # vk = np.zeros_like(vj)
-    # for i in range(3):
-    #     hso2etemp = ao2mo.restore(1, hso2e_[i], nao)
-    #     vk[i] = np.einsum('ijkl,jk->il', hso2etemp, dm0)
-    #     vk[i] += np.einsum('ijkl,li->kj', hso2etemp, dm0)
-    # del hso2e_
-
     assert not np.iscomplexobj(dm0), 'compute_soc2e_jk requires a real density'
 
     # Instead of transforming and storing the full SOC integral tensor in the
