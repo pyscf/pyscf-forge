@@ -39,7 +39,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
     Simultaneous LU decomposition with unitary pseudo-pivoting.
     As per as I know, it's not available in NumPy or SciPy, so I have
     implemented it here.
-    
+
     In this factorization, at every elimination step, the same block-unitary
     right transformation is applied implicitly to both input matrices.  The
     transformation maximizes the usable pivots of both matrices before their
@@ -60,7 +60,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
 
     cxa = np.asarray(cxa, dtype=dtype, order="C")
     cyb = np.asarray(cyb, dtype=dtype, order="C")
-    
+
     orb_pairs = np.stack((cxa, cyb),)
     ndim = orb_pairs.shape[1]
     assert orb_pairs.shape == (2, ndim, ndim), \
@@ -82,7 +82,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
                        "LU partitioning: squared pivot-tail norms are "
                        f"{s1:.3e} and {s2:.3e} at orbital {i}")
                 raise linalg.LinAlgError(msg)
-            
+
             x1 = 1.0 / np.sqrt(s1)
             x2 = 1.0 / np.copysign(np.sqrt(s2), s3)
             work = x1 * xa + x2 * yb
@@ -95,7 +95,7 @@ def lu_pp_decomposition(cxa, cyb, block_sizes, threshold=1e-6):
             tail_dot = rows[:, :, 1:] @ work[1:]
             first = rows[:, :, 0].copy()
             rows[:, :, 0] = first * work[0] + tail_dot
-            rows[:, :, 1:] -= ((first + alpha * tail_dot)[:, :, None] 
+            rows[:, :, 1:] -= ((first + alpha * tail_dot)[:, :, None]
                                * work[None, None, 1:])
 
             if i + 1 < end:
@@ -155,7 +155,7 @@ def compute_trans_mat(ovlp, block_sizes, lu_threshold=LU_THRESH):
     except linalg.LinAlgError as err:
         msg = ("The inact+act orbital cross-overlap is singular")
         raise linalg.LinAlgError(msg) from err
-    
+
     bmat = np.eye(nocc)
 
     # Part-1: loops backwards over all blocks except the first.
@@ -169,7 +169,7 @@ def compute_trans_mat(ovlp, block_sizes, lu_threshold=LU_THRESH):
         amat[block, :left_end] = 0.0
         amat[:left_end, :left_end] -= (
             amat[:left_end, block] @ bmat[block, :left_end])
-        
+
     # Take the transpose of bmat
     bmat = bmat.T
 
@@ -262,7 +262,7 @@ def transform_ci(ci, tra, ncore, ncas, nelec):
         # CI' = CI + (3-T_kk) TMP + A_k TMP
         tmp = 0.5 * direct_nosym.contract_1e(
             delta, ci, ncas, nelec, link_index=link_index)
-        
+
         # Part-2: Update the CI vector.
         ci = (
             ci

@@ -38,7 +38,7 @@ mc = siso.sacasscf_solver(mc, modelspace) # 21 Sextets
 mc.max_cycle_macro = 200
 mc.kernel(mo_coeff)
 
-# 5. State interaction: SO-CASSCF, similar to previous examples 
+# 5. State interaction: SO-CASSCF, similar to previous examples
 # (00-qdptsoc_for_cas.py, 01-qdptsoc_for_mcpdft.py, 02-qdptsoc_for_lpdft.py)
 # one can also use different methods for above calculation.
 mysiso = siso.SISO(mc, ham='DKH', amf=True)
@@ -49,8 +49,10 @@ mydata = generate_aniso_data(
     mol, mc, mysiso=mysiso, origin='CHARGE_CENTER', ham='DKH')
 write_aniso_file('DyO.aniso', data = mydata, backend='Orca')
 
-# 7. To run the single_aniso module, you will need to create the input file for the single_aniso, in addition to
-# the aniso data file created above (DyO.aniso) and binaries of the single_aniso module. Currently you can access these via
+# 7. To run the single_aniso module, you will need to create its input file in
+# addition to the aniso data file created above (DyO.aniso) and the binaries of
+# the single_aniso module. Currently you can access these via
 # OpenMolcas or Orca.
-# For more details on how to use SingleANISO: see: https://www.faccts.de/docs/orca/6.0/manual/contents/detailed/single_aniso.html
+# For more details on how to use SingleANISO, see:
+# https://www.faccts.de/docs/orca/6.0/manual/contents/detailed/single_aniso.html
 # https://molcas.gitlab.io/OpenMolcas/sphinx/users.guide/programs/single_aniso.html
