@@ -416,7 +416,10 @@ class SI(lib.StreamObject):
         log.info("******** %s ********", self.__class__)
         log.info("number of independently represented states: %d",
                  len(self.ci))
+        log.info("model space: %s", self.modelspace)
         log.info("LU threshold: %.3e", self.lu_threshold)
+        log.info("linear dependency threshold: %.3e",
+                 self.linear_dep_threshold)
 
     def _nelec_for_state(self, state):
         """Return active alpha and beta electron counts for one model state."""
@@ -638,6 +641,7 @@ class SISO(SI):
         )
         self._sanity_checks_soc()
         self._dump_soc_flags()
+        self._initialize()
 
     def _sanity_checks_soc(self):
         '''
@@ -661,7 +665,77 @@ class SISO(SI):
         Printing the biorthogonal SISO options.
         '''
         log = logger.Logger(self.mc.stdout, self.mc.verbose)
-        log.info("SOC Hamiltonian: %s; AMFI: %s", self.ham, self.amf)
+        log.info("SOMF: %s", self.somf)
+        log.info("AMFI: %s", self.amf)
+        log.info("MMFI: %s", self.mmf)
+        log.info("one-electron SOC: %s", self.soc1e)
+        log.info("two-electron SOC: %s", self.soc2e)
+        log.info("SOC Hamiltonian: %s", self.ham)
+        log.info("speed of light: %.8f a.u.", lib.param.LIGHT_SPEED)
+
+    def _initialize(self):
+        '''
+        Report the initial spin-free model-space energies.
+        '''
+        log = logger.Logger(self.mc.stdout, self.mc.verbose)
+        order = np.argsort(self.energies)
+        energies = self.energies[order]
+        state_twos = self.state_twos[order]
+
+        log.note(" ")
+        log.info("******** %s ********", "Spin Orbit Free Energetics")
+        for state, (energy, twos) in enumerate(zip(energies, state_twos)):
+            spin = twos / 2.0
+            spin_square = spin * (spin + 1.0)
+            log.note(" State %d Total Energy = %.10f S^2 = %.2f",
+                     state, energy, spin_square)
+
+        log.note(" ")
+        log.info("******** %s ********",
+                 "Relative Spin Orbit Free Energetics")
+        log.note("State          Relative Energy(au)   Relative Energy(eV)   "
+                 "Relative Energy(cm^-1)")
+        reference = energies[0]
+        for state, energy in enumerate(energies):
+            relative_energy = energy - reference
+            log.note(" {:<10} {:>20.9f} {:>20.5f} {:>20.5f}".format(
+                state,
+                relative_energy,
+                _siso.au2ev * relative_energy,
+                _siso.au2cminv * relative_energy))
+
+    def kernel(self):
+        '''
+        Build and solve the biorthogonal SISO eigenvalue problem.
+        '''
+        self.si_energies, self.si_vecs = super().kernel()
+        self._finalize()
+        return self.si_energies, self.si_vecs
+
+    def _finalize(self):
+        '''
+        Report the final spin-orbit coupled energies.
+        '''
+        log = logger.Logger(self.mc.stdout, self.mc.verbose)
+        log.note(" ")
+        log.info("******** %s ********", "Spin Orbit Coupling Energetics")
+        for state, energy in enumerate(self.si_energies):
+            log.note(" SO-CASSI State %d Total Energy = %.10f ",
+                     state, energy)
+
+        log.note(" ")
+        log.info("******** %s ********",
+                 "Relative Spin Orbit Coupling Energetics")
+        log.note("SO State       Relative Energy(au)   Relative Energy(eV)   "
+                 "Relative Energy(cm^-1)")
+        reference = self.si_energies[0]
+        for state, energy in enumerate(self.si_energies):
+            relative_energy = energy - reference
+            log.note(" {:<10} {:>20.9f} {:>20.5f} {:>20.5f}".format(
+                state,
+                relative_energy,
+                _siso.au2ev * relative_energy,
+                _siso.au2cminv * relative_energy))
 
     def build(self):
         '''
