@@ -13,8 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
+import io
 import sys
+import unittest
 from types import SimpleNamespace
 from unittest import mock
 
@@ -29,6 +30,66 @@ from pyscf.siso import siso_biortho
 
 
 class KnownValues(unittest.TestCase):
+
+    def test_siso_kernel_calls_finalize(self):
+        my_siso = object.__new__(siso_biortho.SISO)
+        energies = np.array([-1.0, -0.9])
+        vectors = np.eye(2)
+
+        with mock.patch.object(
+                siso_biortho.SI, "kernel",
+                return_value=(energies, vectors)) as si_kernel, \
+             mock.patch.object(my_siso, "_finalize") as finalize:
+            result = my_siso.kernel()
+
+        si_kernel.assert_called_once_with()
+        finalize.assert_called_once_with()
+        assert_allclose(result[0], energies)
+        assert_allclose(result[1], vectors)
+
+    def test_siso_finalize_reports_energies(self):
+        output = io.StringIO()
+        my_siso = object.__new__(siso_biortho.SISO)
+        my_siso.mc = SimpleNamespace(stdout=output, verbose=4)
+        my_siso.si_energies = np.array([-1.0, -0.9])
+
+        my_siso._finalize()
+
+        text = output.getvalue()
+        self.assertIn("Spin Orbit Coupling Energetics", text)
+        self.assertIn("SO-CASSI State 1 Total Energy = -0.9000000000", text)
+        self.assertIn("21947.46314", text)
+
+    def test_siso_initialization_reports_flags_and_energies(self):
+        output = io.StringIO()
+        my_siso = object.__new__(siso_biortho.SISO)
+        my_siso.mc = SimpleNamespace(stdout=output, verbose=4)
+        my_siso.modelspace = ((1, 2, None), (1, 4, None))
+        my_siso.ci = [np.ones(1), np.ones(1)]
+        my_siso.energies = np.array([-0.9, -1.0])
+        my_siso.state_twos = np.array([1, 3])
+        my_siso.lu_threshold = 1e-6
+        my_siso.linear_dep_threshold = 1e-9
+        my_siso.somf = True
+        my_siso.amf = True
+        my_siso.mmf = False
+        my_siso.soc1e = True
+        my_siso.soc2e = True
+        my_siso.ham = "BP"
+
+        my_siso._dump_flags()
+        my_siso._dump_soc_flags()
+        my_siso._initialize()
+
+        text = output.getvalue()
+        self.assertIn("model space: ((1, 2, None), (1, 4, None))", text)
+        self.assertIn("linear dependency threshold: 1.000e-09", text)
+        self.assertIn("SOMF: True", text)
+        self.assertIn("SOC Hamiltonian: BP", text)
+        self.assertIn("Spin Orbit Free Energetics", text)
+        self.assertIn("State 0 Total Energy = -1.0000000000 S^2 = 3.75", text)
+        self.assertIn("State 1 Total Energy = -0.9000000000 S^2 = 0.75", text)
+        self.assertIn("21947.46314", text)
 
     def test_scalar_integral_dispatch(self):
         mo = np.eye(2)
