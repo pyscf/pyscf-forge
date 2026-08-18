@@ -19,7 +19,7 @@ mol.spin = 5
 mol.charge = 1
 mol.verbose = 4
 mol.max_memory = 120000
-mol.output = 'DyO.log'
+mol.output = 'DyO.out'
 mol.build()
 
 # 2. SCF calculation
