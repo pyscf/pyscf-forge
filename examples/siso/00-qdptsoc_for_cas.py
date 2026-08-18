@@ -13,7 +13,6 @@ from pyscf import siso
 # 1. Define the molecule
 mol = gto.Mole(atom="Al 0 0 0",
                spin=1,
-               max_memory=10000,
                basis="ano@5s4p2d1f", #=ANO_RCC_VTZP
                verbose=4,
                output='Al.out')

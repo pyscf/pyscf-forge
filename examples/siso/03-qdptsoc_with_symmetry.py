@@ -14,7 +14,6 @@ from pyscf import siso
 # used in the model-space specification.
 mol = gto.Mole(atom='O 0 0 0; H 0 0 0.9697',
                spin=1,
-               max_memory=10000,
                basis='ano@4s3p2d1f',  # ANO-RCC-VTZP
                symmetry='C2v',
                verbose=4,

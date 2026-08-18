@@ -8,7 +8,6 @@ from pyscf import gto, scf, mcscf, mcpdft, lib
 # 1. Molecular structure and basis set
 mol = gto.Mole(atom="P 0 0 0",
                spin=3,
-               max_memory=10000,
                basis="ano@4s3p1d",#=ANO-RCC-VDZP
                verbose=4,
                output='P.out')

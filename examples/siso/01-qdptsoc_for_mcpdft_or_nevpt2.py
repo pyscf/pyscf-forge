@@ -15,7 +15,6 @@ mol.basis= basis = {'Cr': 'ano@4s3p1d', 'H' : 'ano@1s'} # ANO-MB
 mol.spin = 5
 mol.charge = 0
 mol.verbose = 4
-mol.max_memory = 10000
 mol.output = 'CrH.out'
 mol.build()
 

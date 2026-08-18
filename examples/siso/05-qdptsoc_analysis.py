@@ -2,13 +2,12 @@ from pyscf.mcscf import avas
 from pyscf import gto, scf, mcscf, lib
 from pyscf import siso
 
-# In this script, there are couple of implemented functions which 
+# In this script, there are couple of implemented functions which
 # can be used to analyze the SOC states.
 
 # 1. Define the molecule
 mol = gto.Mole(atom="O 0 0 0; O 0 0 1.21",
                spin=2,
-               max_memory=10000,
                basis="ano@4s3p2d1f", #=ANO_RCC_VTZP
                verbose=4,
                output='O2.out')
@@ -57,14 +56,14 @@ mydata = generate_siso_data(mol, mc, mysiso=mysiso,
 
 mysiso_analysis = soc_analysis(mysiso, mydata, )
 
-# Compute the Lambda values, which is the projection of the orbital 
+# Compute the Lambda values, which is the projection of the orbital
 # angular momentum along the principal axis.
 mysiso_analysis.compute_L_values_for_diatomics(axis='z')
 '''
 ******** SOC energies and effective orbital L projections ********
 Projection axis: L_z
 Degeneracy tolerance: 1.000e-06 Hartree
-  State         Energy (au)         Lambda-value    Block  
+  State         Energy (au)         Lambda-value    Block
 ------------------------------------------------------------
   0        -149.8738151314           0.0000        0
   1        -149.8738031661           0.0000        1
@@ -74,14 +73,14 @@ Degeneracy tolerance: 1.000e-06 Hartree
   5        -149.8190261827           0.0000        3
 '''
 
-# Compute the omega values for the SO states: Omega is the 
+# Compute the omega values for the SO states: Omega is the
 # projection of the total angular momentum along the principal axis.
 mysiso_analysis.compute_omega_values(axis='z')
 '''
 ******** SOC energies and effective Omega values ********
 Projection axis: J_z
 Degeneracy tolerance: 1.000e-06 Hartree
-  State         Energy (au)         Omega-value     Block  
+  State         Energy (au)         Omega-value     Block
 ------------------------------------------------------------
   0        -149.8738151314           0.0000        0
   1        -149.8738031661           1.0000        1
