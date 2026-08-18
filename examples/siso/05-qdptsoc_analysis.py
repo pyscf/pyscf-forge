@@ -8,7 +8,7 @@ from pyscf import siso
 # 1. Define the molecule
 mol = gto.Mole(atom="O 0 0 0; O 0 0 1.21",
                spin=2,
-               basis="ano@4s3p2d1f", #=ANO_RCC_VTZP
+               basis="ano@3s2p1d", #=ANO_RCC_VDZP
                verbose=4,
                output='O2.out')
 mol.build()
@@ -29,10 +29,10 @@ mc.conv_tol = 1e-8
 mc.kernel(mo_coeff)
 '''
 CASCI energy for each state
-  State 0 weight 0.25  E = -149.838622991567 S^2 = 0.0000000
-  State 1 weight 0.25  E = -149.83862299151  S^2 = 0.0000000
-  State 2 weight 0.25  E = -149.819038148011 S^2 = 0.0000000
-  State 3 weight 0.25  E = -149.873803166108 S^2 = 2.0000000
+  State 0 weight 0.25  E = -149.828698971524 S^2 = 0.0000000
+  State 1 weight 0.25  E = -149.828698971524 S^2 = -0.0000000
+  State 2 weight 0.25  E = -149.809434105444 S^2 = 0.0000000
+  State 3 weight 0.25  E = -149.863555677146 S^2 = 2.0000000
 '''
 
 mysiso = siso.SISO(mc, ham='DKH', amf=True)
@@ -41,11 +41,11 @@ mysiso.kernel()
 ******** Relative Spin Orbit Coupling Energetics ********
 SO State       Relative Energy(au)   Relative Energy(eV)   Relative Energy(cm^-1)
  0                   0.000000000              0.00000              0.00000
- 1                   0.000011965              0.00033              2.62609
- 2                   0.000011965              0.00033              2.62609
- 3                   0.035192140              0.95763           7723.78193
- 4                   0.035192140              0.95763           7723.78194
- 5                   0.054788949              1.49088          12024.78433
+ 1                   0.000012263              0.00033              2.69150
+ 2                   0.000012263              0.00033              2.69150
+ 3                   0.034868969              0.94883           7652.85412
+ 4                   0.034868969              0.94883           7652.85412
+ 5                   0.054146098              1.47339          11883.69500
 '''
 
 # Analysis Functions for SISO calculation:
@@ -65,12 +65,12 @@ Projection axis: L_z
 Degeneracy tolerance: 1.000e-06 Hartree
   State         Energy (au)         Lambda-value    Block
 ------------------------------------------------------------
-  0        -149.8738151314           0.0000        0
-  1        -149.8738031661           0.0000        1
-  2        -149.8738031661           0.0000        1
-  3        -149.8386229916           2.0000        2
-  4        -149.8386229915           2.0000        2
-  5        -149.8190261827           0.0000        3
+  0        -149.8635679405           0.0000        0
+  1        -149.8635556771           0.0000        1
+  2        -149.8635556771           0.0000        1
+  3        -149.8286989715           2.0000        2
+  4        -149.8286989715           2.0000        2
+  5        -149.8094218421           0.0000        3
 '''
 
 # Compute the omega values for the SO states: Omega is the
@@ -82,12 +82,12 @@ Projection axis: J_z
 Degeneracy tolerance: 1.000e-06 Hartree
   State         Energy (au)         Omega-value     Block
 ------------------------------------------------------------
-  0        -149.8738151314           0.0000        0
-  1        -149.8738031661           1.0000        1
-  2        -149.8738031661           1.0000        1
-  3        -149.8386229916           2.0000        2
-  4        -149.8386229915           2.0000        2
-  5        -149.8190261827           0.0000        3
+  0        -149.8635679405           0.0000        0
+  1        -149.8635556771           1.0000        1
+  2        -149.8635556771           1.0000        1
+  3        -149.8286989715           2.0000        2
+  4        -149.8286989715           2.0000        2
+  5        -149.8094218421           0.0000        3
 '''
 
 # Do the SO State decomposition in the spin-free basis.
@@ -95,29 +95,29 @@ mysiso_analysis.soc_state_analysis(state=(0, 1, 2, 3, 4, 5), threshold=1e-3)
 '''
 SOC-state decomposition in the spin-free basis
 
-SOC state 0, energy = -149.8738151314 au
-  spin-free root 3: total weight = 0.99978161
-    root 3, m_s = +0.0: weight = 0.99978161
+SOC state 0, energy = -149.8635679405 au
+  spin-free state 3: total weight = 0.99977351
+    state 3, m_s = +0.0: weight = 0.99977351
 
-SOC state 1, energy = -149.8738031661 au
-  spin-free root 3: total weight = 1.00000000
-    root 3, m_s = -1.0: weight = 0.50000000
-    root 3, m_s = +1.0: weight = 0.50000000
+SOC state 1, energy = -149.8635556771 au
+  spin-free state 3: total weight = 1.00000000
+    state 3, m_s = -1.0: weight = 0.11232255
+    state 3, m_s = +1.0: weight = 0.88767745
 
-SOC state 2, energy = -149.8738031661 au
-  spin-free root 3: total weight = 1.00000000
-    root 3, m_s = -1.0: weight = 0.50000000
-    root 3, m_s = +1.0: weight = 0.50000000
+SOC state 2, energy = -149.8635556771 au
+  spin-free state 3: total weight = 1.00000000
+    state 3, m_s = -1.0: weight = 0.88767745
+    state 3, m_s = +1.0: weight = 0.11232255
 
-SOC state 3, energy = -149.8386229916 au
-  spin-free root 0: total weight = 1.00000000
-    root 0, m_s = -0.0: weight = 1.00000000
+SOC state 3, energy = -149.8286989715 au
+  spin-free state 0: total weight = 1.00000000
+    state 0, m_s = -0.0: weight = 1.00000000
 
-SOC state 4, energy = -149.8386229915 au
-  spin-free root 1: total weight = 1.00000000
-    root 1, m_s = -0.0: weight = 1.00000000
+SOC state 4, energy = -149.8286989715 au
+  spin-free state 1: total weight = 1.00000000
+    state 1, m_s = -0.0: weight = 1.00000000
 
-SOC state 5, energy = -149.8190261827 au
-  spin-free root 2: total weight = 0.99978161
-    root 2, m_s = -0.0: weight = 0.99978161
+SOC state 5, energy = -149.8094218421 au
+  spin-free state 2: total weight = 0.99977351
+    state 2, m_s = -0.0: weight = 0.99977351
 '''
