@@ -29,7 +29,6 @@ mol.build()
 # 2. SCF calculation
 mf = scf.ROHF(mol).sfx2c1e().density_fit()
 mf.chkfile='CeCl6.chk'
-mf.init_guess = 'chk'
 mf.max_cycle = 100
 mf.kernel()
 
