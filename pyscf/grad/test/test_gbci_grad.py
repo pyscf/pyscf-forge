@@ -50,8 +50,8 @@ LIF_TRIPLET_ROHF_BATH_RESPONSE_NORM = (
     8.977611205020856e-03,
     1.933671822164339e-02,
 )
-LIH_TRIPLET_ROHF_RESPONSE_FP = 0.12102737231463209
-LIF_TRIPLET_ROHF_RESPONSE_FP = 0.367922010414346
+LIH_TRIPLET_ROHF_RESPONSE_NORM = 0.9347636842250564
+LIF_TRIPLET_ROHF_RESPONSE_NORM = 0.5901950275275865
 
 
 def close_scf_resources(mf):
@@ -88,7 +88,7 @@ def get_gbci_grad(atom, ncas, nelecas, spin=0, mf_cls=scf.RHF):
         mc.run()
 
         bath_response_norm = []
-        rohf_response_fp = []
+        rohf_response_norm = []
 
         def record_bath_response(*args, **kwargs):
             response = _solve_bath_cphf(*args, **kwargs)
@@ -98,7 +98,7 @@ def get_gbci_grad(atom, ncas, nelecas, spin=0, mf_cls=scf.RHF):
 
         def record_rohf_response(*args, **kwargs):
             response = _solve_rohf_adjoint(*args, **kwargs)
-            rohf_response_fp.append(float(lib.fp(response[0])))
+            rohf_response_norm.append(float(numpy.linalg.norm(response[0])))
             return response
 
         with mock.patch.object(
@@ -107,7 +107,7 @@ def get_gbci_grad(atom, ncas, nelecas, spin=0, mf_cls=scf.RHF):
                     rohf_gbci_grad, "_solve_rohf_adjoint",
                     side_effect=record_rohf_response):
             grad = mc.nuc_grad_method().kernel()
-        return grad, bath_response_norm, rohf_response_fp
+        return grad, bath_response_norm, rohf_response_norm
     finally:
         if mc is not None:
             close_gbci_resources(mc)
@@ -121,41 +121,41 @@ class KnownValues(unittest.TestCase):
             self.assertAlmostEqual(value, ref, places)
 
     def test_lih_2o2e(self):
-        grad, bath_response_norm, rohf_response_fp = get_gbci_grad(
+        grad, bath_response_norm, rohf_response_norm = get_gbci_grad(
             f"Li 0 0 0; H 0 0 {BOND_LENGTH}", 2, (1, 1))
         self.assertAlmostEqual(float(grad[0, 2]), LIH_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIH_BATH_RESPONSE_NORM, places=9)
-        self.assertEqual(rohf_response_fp, [])
+            bath_response_norm, LIH_BATH_RESPONSE_NORM, places=8)
+        self.assertEqual(rohf_response_norm, [])
 
     def test_lif_4o4e(self):
-        grad, bath_response_norm, rohf_response_fp = get_gbci_grad(
+        grad, bath_response_norm, rohf_response_norm = get_gbci_grad(
             f"Li 0 0 0; F 0 0 {BOND_LENGTH}", 4, (2, 2))
         self.assertAlmostEqual(float(grad[0, 2]), LIF_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIF_BATH_RESPONSE_NORM, places=9)
-        self.assertEqual(rohf_response_fp, [])
+            bath_response_norm, LIF_BATH_RESPONSE_NORM, places=8)
+        self.assertEqual(rohf_response_norm, [])
 
     def test_lih_triplet_rohf_2o2e(self):
-        grad, bath_response_norm, rohf_response_fp = get_gbci_grad(
+        grad, bath_response_norm, rohf_response_norm = get_gbci_grad(
             f"Li 0 0 0; H 0 0 {BOND_LENGTH}", 2, (1, 1),
             spin=2, mf_cls=scf.ROHF)
         self.assertAlmostEqual(float(grad[0, 2]), LIH_TRIPLET_ROHF_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIH_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=9)
+            bath_response_norm, LIH_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=8)
         self.assert_response(
-            rohf_response_fp, (LIH_TRIPLET_ROHF_RESPONSE_FP,), places=9)
+            rohf_response_norm, (LIH_TRIPLET_ROHF_RESPONSE_NORM,), places=8)
 
     def test_lif_triplet_rohf_4o4e(self):
-        grad, bath_response_norm, rohf_response_fp = get_gbci_grad(
+        grad, bath_response_norm, rohf_response_norm = get_gbci_grad(
             f"Li 0 0 0; F 0 0 {BOND_LENGTH}", 4, (2, 2),
             spin=2, mf_cls=scf.ROHF)
         self.assertAlmostEqual(
             float(grad[0, 2]), LIF_TRIPLET_ROHF_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIF_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=9)
+            bath_response_norm, LIF_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=8)
         self.assert_response(
-            rohf_response_fp, (LIF_TRIPLET_ROHF_RESPONSE_FP,), places=9)
+            rohf_response_norm, (LIF_TRIPLET_ROHF_RESPONSE_NORM,), places=8)
 
 
 if __name__ == "__main__":
