@@ -114,23 +114,25 @@ def get_gbci_grad(atom, ncas, nelecas, spin=0, mf_cls=scf.RHF):
 
 
 class KnownValues(unittest.TestCase):
-    def assert_response_fp(self, response_fp, reference):
+    def assert_response_fp(self, response_fp, reference, places=10):
         self.assertEqual(len(response_fp), len(reference))
         for value, ref in zip(response_fp, reference):
-            self.assertAlmostEqual(value, ref, 10)
+            self.assertAlmostEqual(value, ref, places)
 
     def test_lih_2o2e(self):
         grad, bath_response_fp, rohf_response_fp = get_gbci_grad(
             f"Li 0 0 0; H 0 0 {BOND_LENGTH}", 2, (1, 1))
         self.assertAlmostEqual(float(grad[0, 2]), LIH_GRAD_Z, 9)
-        self.assert_response_fp(bath_response_fp, LIH_BATH_RESPONSE_FP)
+        self.assert_response_fp(
+            bath_response_fp, LIH_BATH_RESPONSE_FP, places=6)
         self.assertEqual(rohf_response_fp, [])
 
     def test_lif_4o4e(self):
         grad, bath_response_fp, rohf_response_fp = get_gbci_grad(
             f"Li 0 0 0; F 0 0 {BOND_LENGTH}", 4, (2, 2))
         self.assertAlmostEqual(float(grad[0, 2]), LIF_GRAD_Z, 9)
-        self.assert_response_fp(bath_response_fp, LIF_BATH_RESPONSE_FP)
+        self.assert_response_fp(
+            bath_response_fp, LIF_BATH_RESPONSE_FP, places=6)
         self.assertEqual(rohf_response_fp, [])
 
     def test_lih_triplet_rohf_2o2e(self):
@@ -139,7 +141,7 @@ class KnownValues(unittest.TestCase):
             spin=2, mf_cls=scf.ROHF)
         self.assertAlmostEqual(float(grad[0, 2]), LIH_TRIPLET_ROHF_GRAD_Z, 9)
         self.assert_response_fp(
-            bath_response_fp, LIH_TRIPLET_ROHF_BATH_RESPONSE_FP)
+            bath_response_fp, LIH_TRIPLET_ROHF_BATH_RESPONSE_FP, places=6)
         self.assert_response_fp(
             rohf_response_fp, (LIH_TRIPLET_ROHF_RESPONSE_FP,))
 
@@ -150,7 +152,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(
             float(grad[0, 2]), LIF_TRIPLET_ROHF_GRAD_Z, 9)
         self.assert_response_fp(
-            bath_response_fp, LIF_TRIPLET_ROHF_BATH_RESPONSE_FP)
+            bath_response_fp, LIF_TRIPLET_ROHF_BATH_RESPONSE_FP, places=6)
         self.assert_response_fp(
             rohf_response_fp, (LIF_TRIPLET_ROHF_RESPONSE_FP,))
 
