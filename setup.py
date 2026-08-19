@@ -19,7 +19,7 @@ AUTHOR_EMAIL = None
 DESCRIPTION  = 'Staging ground for PySCF core features'
 SO_EXTENSIONS = {
 }
-DEPENDENCIES = ['pyscf', 'numpy!=2.4.*']
+DEPENDENCIES = ['pyscf', 'numpy!=2.4.*', 'sympy']
 EXTRAS = {
     'afqmc-cpu': ['jax'],
     'afqmc-cuda12': ['jax[cuda12]'],
