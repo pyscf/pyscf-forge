@@ -10,7 +10,7 @@ from unittest import mock
 from pyscf import gbci, gto, lib, scf
 from pyscf.grad import gbci as gbci_grad
 from pyscf.grad import rohf_gbci as rohf_gbci_grad
-from pyscf.grad.gbci import _solve_bath_cphf
+from pyscf.grad.gbci import _bath_rotation_zvec
 from pyscf.grad.rohf_casci import _solve_rohf_adjoint
 
 
@@ -25,28 +25,28 @@ LIF_GRAD_Z = 0.03548531842959424
 LIH_TRIPLET_ROHF_GRAD_Z = 0.0294477687822165
 LIF_TRIPLET_ROHF_GRAD_Z = 0.04667256084318572
 LIH_BATH_RESPONSE_FP = (
-    -1.281441047187003e-06,
-    8.166767436518320e-06,
-    -1.134336580675834e-05,
+    -1.627492829776010e-05,
+    1.119788583093171e-04,
+    2.120511245200006e-04,
 )
 LIF_BATH_RESPONSE_FP = (
     0.0,
-    7.977900765131525e-11,
-    -2.160664086507430e-05,
-    1.753615573441185e-03,
-    9.934711083980424e-04,
+    2.216177220066382e-10,
+    2.631660466514099e-05,
+    -1.611782286360561e-03,
+    -4.668488171487795e-04,
 )
 LIH_TRIPLET_ROHF_BATH_RESPONSE_FP = (
-    -1.373133991119119e-04,
-    2.919180709712215e-04,
-    -1.360480606578732e-03,
+    -1.934943396922866e-03,
+    8.244476143925915e-03,
+    2.983600786582193e-02,
 )
 LIF_TRIPLET_ROHF_BATH_RESPONSE_FP = (
     0.0,
-    1.605223481135911e-09,
-    -2.617441170808059e-05,
-    4.386211517745209e-03,
-    1.800762511446400e-03,
+    6.210682700180350e-09,
+    2.158303995930926e-05,
+    -4.669944849630451e-03,
+    -5.302987569270201e-03,
 )
 LIH_TRIPLET_ROHF_RESPONSE_FP = 0.12102737231463209
 LIF_TRIPLET_ROHF_RESPONSE_FP = 0.367922010414346
@@ -89,9 +89,8 @@ def get_gbci_grad(atom, ncas, nelecas, spin=0, mf_cls=scf.RHF):
         rohf_response_fp = []
 
         def record_bath_response(*args, **kwargs):
-            response = _solve_bath_cphf(*args, **kwargs)
-            if response.shape[1] == mc.ncore:
-                bath_response_fp.append(float(lib.fp(response)))
+            response = _bath_rotation_zvec(*args, **kwargs)
+            bath_response_fp.extend(float(lib.fp(x)) for x in response[1])
             return response
 
         def record_rohf_response(*args, **kwargs):
@@ -100,8 +99,10 @@ def get_gbci_grad(atom, ncas, nelecas, spin=0, mf_cls=scf.RHF):
             return response
 
         with mock.patch.object(
-                gbci_grad, "_solve_bath_cphf",
+                gbci_grad, "_bath_rotation_zvec",
                 side_effect=record_bath_response), mock.patch.object(
+                    rohf_gbci_grad, "_bath_rotation_zvec",
+                    side_effect=record_bath_response), mock.patch.object(
                     rohf_gbci_grad, "_solve_rohf_adjoint",
                     side_effect=record_rohf_response):
             grad = mc.nuc_grad_method().kernel()
