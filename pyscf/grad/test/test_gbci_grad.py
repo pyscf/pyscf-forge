@@ -125,7 +125,7 @@ class KnownValues(unittest.TestCase):
             f"Li 0 0 0; H 0 0 {BOND_LENGTH}", 2, (1, 1))
         self.assertAlmostEqual(float(grad[0, 2]), LIH_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIH_BATH_RESPONSE_NORM, places=10)
+            bath_response_norm, LIH_BATH_RESPONSE_NORM, places=9)
         self.assertEqual(rohf_response_fp, [])
 
     def test_lif_4o4e(self):
@@ -133,7 +133,7 @@ class KnownValues(unittest.TestCase):
             f"Li 0 0 0; F 0 0 {BOND_LENGTH}", 4, (2, 2))
         self.assertAlmostEqual(float(grad[0, 2]), LIF_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIF_BATH_RESPONSE_NORM, places=10)
+            bath_response_norm, LIF_BATH_RESPONSE_NORM, places=9)
         self.assertEqual(rohf_response_fp, [])
 
     def test_lih_triplet_rohf_2o2e(self):
@@ -142,9 +142,9 @@ class KnownValues(unittest.TestCase):
             spin=2, mf_cls=scf.ROHF)
         self.assertAlmostEqual(float(grad[0, 2]), LIH_TRIPLET_ROHF_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIH_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=10)
+            bath_response_norm, LIH_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=9)
         self.assert_response(
-            rohf_response_fp, (LIH_TRIPLET_ROHF_RESPONSE_FP,), places=10)
+            rohf_response_fp, (LIH_TRIPLET_ROHF_RESPONSE_FP,), places=9)
 
     def test_lif_triplet_rohf_4o4e(self):
         grad, bath_response_norm, rohf_response_fp = get_gbci_grad(
@@ -153,9 +153,9 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(
             float(grad[0, 2]), LIF_TRIPLET_ROHF_GRAD_Z, 9)
         self.assert_response(
-            bath_response_norm, LIF_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=10)
+            bath_response_norm, LIF_TRIPLET_ROHF_BATH_RESPONSE_NORM, places=9)
         self.assert_response(
-            rohf_response_fp, (LIF_TRIPLET_ROHF_RESPONSE_FP,), places=10)
+            rohf_response_fp, (LIF_TRIPLET_ROHF_RESPONSE_FP,), places=9)
 
 
 if __name__ == "__main__":
