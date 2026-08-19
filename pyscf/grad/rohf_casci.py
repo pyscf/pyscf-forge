@@ -230,15 +230,18 @@ def _solve_rohf_adjoint(mf, mo_coeff, orbital_gradient, data):
             matvec=lambda vector: vector / safe_diagonal,
             dtype=rhs.dtype,
         )
-        zvec, info = gmres(
-            operator,
-            rhs,
+        gmres_kwargs = dict(
             M=preconditioner,
-            rtol=DEFAULT_CPHF_TOL,
             atol=0.0,
             restart=min(rhs.size, 40),
             maxiter=DEFAULT_CPHF_MAX_CYCLE,
         )
+        try:
+            zvec, info = gmres(
+                operator, rhs, rtol=DEFAULT_CPHF_TOL, **gmres_kwargs)
+        except TypeError:
+            zvec, info = gmres(
+                operator, rhs, tol=DEFAULT_CPHF_TOL, **gmres_kwargs)
         residual = float(numpy.linalg.norm(response_transpose(zvec) - rhs))
         residual_limit = max(
             DEFAULT_CPHF_TOL * max(1.0, float(numpy.linalg.norm(rhs))) * 10.0,
