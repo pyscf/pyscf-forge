@@ -360,7 +360,7 @@ def kernel(gbci, h1e, eri, ncas, nelecas, conf_info_list, ov_list, ecore_list,
         # unable to generate more subspace basis from ci0. Adding vectors so
         # initial guess to help Davidson solver generate enough basis.
         if len(ci0) < nroots:
-            ci0.extend(init_guess()[len(ci0):])
+            ci0.extend(init_guess())
     if tol is None: tol = gbci.conv_tol
     if lindep is None: lindep = gbci.lindep
     if max_cycle is None: max_cycle = gbci.max_cycle
