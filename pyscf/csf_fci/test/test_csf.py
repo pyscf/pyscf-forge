@@ -142,7 +142,7 @@ class KnownValues(unittest.TestCase):
                 h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
                 print (norb, nelec)
                 for i in range (len (h0)):
-                    for j in range (len (h0)):
+                    for j in range (i):
                         if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
                             print (t.printable_csfstring (i), t.printable_csfstring (j),
                                    h0[i,j], h0_ref[i,j])

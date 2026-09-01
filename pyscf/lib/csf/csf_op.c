@@ -673,10 +673,24 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     }
     int parity = 0;
     double xdiag = 1.0;
-    unsigned int twoS0;
+    unsigned int twoS0, twoS0k, twoS0b;
     unsigned int * twoSp1;
     unsigned int * twoSp0;
     bool pphh = false;
+
+    // norm
+    for (unsigned int i=q; i < p; i++){
+        // 2S+1 for each CG coefficient
+        twoS0k = twoSk[i];
+        twoS0b = twoSb[i];
+        // paired electrons don't have CG coefficients!
+        if (((i==q) || (i==q+1)) && nq==2){ twoS0k = 0; }
+        if (((i==p) || (i==p-1)) && np==2){ twoS0k = 0; }
+        if (((i==q) || (i==q+1)) && nq==-2){ twoS0b = 0; }
+        if (((i==p) || (i==p-1)) && np==-2){ twoS0b = 0; }
+        xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
+    }
+    xdiag = sqrt (xdiag);
 
     // B(q) nq = 2
     if (abs (nq) == 2){
