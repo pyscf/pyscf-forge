@@ -673,7 +673,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     }
     int parity = 0;
     double xdiag = 1.0;
-    unsigned int twoS0, twoS0k, twoS0b;
+    unsigned int twoS0k, twoS0b;
     unsigned int * twoSp1;
     unsigned int * twoSp0;
     bool pphh = false;
@@ -692,10 +692,13 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     }
     xdiag = sqrt (xdiag);
 
-    // B(q) nq = 2
+    // A(q) nq = 2
     if (abs (nq) == 2){
-        twoS0 = nq < 0 ? twoSk[q] : twoSb[q];
-        parity += twoS0 + 3*twoSk[q-1] + 1;
+        if (nq > 0){
+            parity += twoSb[q-1] + 3*twoSb[q] + 1;
+        } else {
+            parity += twoSk[q-1] + 3*twoSk[q] + 1;
+        }
         // parity = parity % 4;
     }
 
@@ -742,12 +745,12 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         // parity = parity % 4;
     }
 
-    // A(p) np = 2
+    // B(p) np = 2
     if (abs (np) == 2){
         if (np > 0){
-            parity += twoSb[p-1] + 3*twoSk[p] + 1;
+            parity += twoSb[p] + 3*twoSb[p-1] + 1;
         } else {
-            parity += twoSk[p-1] + 3*twoSb[p] + 1;
+            parity += twoSk[p] + 3*twoSk[p-1] + 1;
         }
         // parity = parity % 4;
     }

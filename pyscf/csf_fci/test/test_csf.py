@@ -40,10 +40,10 @@ def setUpModule():
     mol.atom = [
         ['H', ( 1.,-1.    , 0.   )],
         ['H', ( 0.,-1.    ,-1.   )],
-#        ['H', ( 0.,-0.5   ,-0.   )],
-#        ['H', ( 0.,-0.    ,-1.   )],
-#        ['H', ( 1.,-0.5   , 0.   )],
-#        ['H', ( 0., 1.    , 1.   )],
+        ['H', ( 0.,-0.5   ,-0.   )],
+        ['H', ( 0.,-0.    ,-1.   )],
+        ['H', ( 1.,-0.5   , 0.   )],
+        ['H', ( 0., 1.    , 1.   )],
     ]
     mol.spin = len (mol.atom) % 2
     smult_lim = 2 #len (mol.atom) + 2
@@ -56,6 +56,7 @@ def setUpModule():
     ehf = m.scf()
 
     neleca = (mol.nelectron+1)//2 # round up
+    neleca = 1
 
     norb = m.mo_coeff.shape[1]
     nelec = (neleca, neleca)
