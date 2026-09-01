@@ -141,6 +141,7 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     uint64_t n = coupstr;
     unsigned int twoS = _count_set_bits (coupstr);
     assert (nspin >= twoS); // S >= 0
+    assert ((2*twoS) >= nspin);
     twoS = (2*twoS) - nspin;
     // in range 0 < j <= i;
     //    add 1/2 for every unset bit
@@ -150,6 +151,7 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     n = coupstr ^ (coupstr & ((1ULL << (nspin-i)) - 1));
     n = _count_set_bits (n);
     assert (n <= i);
+    assert (twoS >= 2*n);
     twoS -= 2 * n;
     return twoS;
 }
@@ -338,6 +340,9 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
         case 2:
             twoS0 = twoSb[q-1];
             break;
+        default:
+            assert (false);
+            exit (1);
     }
     parity += twoSk[q] + twoS0 + 1; // graph signs
     // parity = parity % 4; // remember everything is *2 until the very end
@@ -825,6 +830,7 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     if (((sa-si)%2) == 1){
         fac = -fac;
     }
+    assert (fac==fac);
     return fac;
 }
 
@@ -844,6 +850,7 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     int na = -_get_occ (bra, a);
     unsigned int nspin_ket = _count_set_bits (ket->sconf);
     unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int twoS = _get_twoS_running (bra->spin, 0, nspin_bra);
     nspin_ket += (ni-1)*2;
     nspin_bra += (abs(na)-1)*2;
     assert (nspin_bra==nspin_ket);
@@ -857,7 +864,6 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     double fac = CGC_2e_X (twoSk, twoSb, 0, 0, si, sa, 1, -1, ni, na, nspin);
     free (twoSk);
     free (twoSb);
-    unsigned int twoS = _get_twoS_running (bra->spin, 0, nspin_bra);
     // Sigma_z = ( 1/2  1  1/2 ) * S_z
     //           ( m    0   -m )
     //         = sqrt (2/3) * S_z
@@ -867,10 +873,13 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     //     ( S  1  S )
     //     ( M  0 -M )
     // WHY? UNCLEAR FACTOR OF 2 * .5;
+    assert (fac==fac);
     fac *= sqrt (1.5) * twoM; 
+    assert (fac==fac);
     if (twoS > 0){
        fac /= sqrt (twoS*(twoS+2)*.25);
     }
+    assert (fac==fac);
     return fac;
 }
 
@@ -916,6 +925,7 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     if ((parity%2)==1){ fac = -fac; }
     free (twoSk);
     free (twoSb);
+    assert (fac==fac);
     return fac;
 
 }
@@ -1054,6 +1064,8 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
 
     free (twoSk);
     free (twoSb);
+    assert (facl==facl);
+    assert (facu==facu);
     return facl+facu; 
 }
 
