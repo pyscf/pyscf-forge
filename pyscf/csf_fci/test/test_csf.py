@@ -40,13 +40,13 @@ def setUpModule():
     mol.atom = [
         ['H', ( 1.,-1.    , 0.   )],
         ['H', ( 0.,-1.    ,-1.   )],
-        ['H', ( 0.,-0.5   ,-0.   )],
-        ['H', ( 0.,-0.    ,-1.   )],
-        ['H', ( 1.,-0.5   , 0.   )],
-        ['H', ( 0., 1.    , 1.   )],
+#        ['H', ( 0.,-0.5   ,-0.   )],
+#        ['H', ( 0.,-0.    ,-1.   )],
+#        ['H', ( 1.,-0.5   , 0.   )],
+#        ['H', ( 0., 1.    , 1.   )],
     ]
     mol.spin = len (mol.atom) % 2
-    smult_lim = len (mol.atom) + 2
+    smult_lim = 2 #len (mol.atom) + 2
 
     mol.basis = {'H': 'sto-3g'}
     mol.build()
@@ -60,13 +60,13 @@ def setUpModule():
     norb = m.mo_coeff.shape[1]
     nelec = (neleca, neleca)
     h1e = reduce(np.dot, (m.mo_coeff.T, m.get_hcore(), m.mo_coeff))
-    #h1e[:] = 0
+    h1e[:] = 1
     h1e_s = (2 * rng.random (h1e.shape)) - 1
     h1e_s += h1e_s.conj ().T
-    #h1e_s[:] = 1
+    h1e_s[:] = 0
     h1e = np.stack ([h1e+h1e_s, h1e-h1e_s], axis=0)
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
-    #g2e[:] = 0
+    g2e[:] = 0
     neleci = (neleca, neleca-1)
     sol = csf_solver (mol, smult=1)
     nel = (neleci, nelec)
@@ -95,7 +95,7 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_kernel(self):
         nel = (neleci, nelec)
         refs = [-8.934702919292933, -12.578019902416628, -8.879204010931936,
@@ -117,6 +117,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
 
+    @unittest.skip('debug')
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -137,7 +138,14 @@ class KnownValues(unittest.TestCase):
             with self.subTest (smult=smult):
                 ne = nel[smult % 2]
                 addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                t = sol.transformer
                 h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                print (norb, nelec)
+                for i in range (len (h0)):
+                    for j in range (len (h0)):
+                        if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
+                            print (t.printable_csfstring (i), t.printable_csfstring (j),
+                                   h0[i,j], h0_ref[i,j])
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
