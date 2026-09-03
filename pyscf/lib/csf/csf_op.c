@@ -820,10 +820,10 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    if ((brap.spin & ((1ULL<<a)-1)) != (ketp.spin & ((1ULL<<a)-1))){
+    if (a>0){ if ((brap.spin & ((1ULL<<(a-1))-1)) != (ketp.spin & ((1ULL<<(a-1))-1))){
         return 0.0;
-    }
-    if ((brap.spin>>i) != (ketp.spin>>i)){
+    }}
+    if ((brap.spin>>(i+1)) != (ketp.spin>>(i+1))){
         return 0.0;
     }
     int ni = _get_occ (ket, i);
@@ -860,9 +860,9 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    if ((brap.spin & ((1ULL<<a)-1)) != (ketp.spin & ((1ULL<<a)-1))){
+    if (a>0){ if ((brap.spin & ((1ULL<<(a-1))-1)) != (ketp.spin & ((1ULL<<(a-1))-1))){
         return 0.0;
-    }
+    }}
     int ni = _get_occ (ket, i);
     int na = -_get_occ (bra, a);
     unsigned int nspin_ket = _count_set_bits (ket->sconf);
@@ -911,10 +911,10 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    if ((brap.spin & ((1ULL<<i)-1)) != (ketp.spin & ((1ULL<<i)-1))){
+    if (i>0){ if ((brap.spin & ((1ULL<<(i-1))-1)) != (ketp.spin & ((1ULL<<(i-1))-1))){
         return 0.0;
-    }
-    if ((brap.spin>>j) != (ketp.spin>>j)){
+    }}
+    if ((brap.spin>>(j+1)) != (ketp.spin>>(j+1))){
         return 0.0;
     }
     int ni = _get_occ (ket, i);
@@ -970,10 +970,10 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     unsigned int r = MIN (i, MIN (j, b));
     unsigned int t = MAX (i, MAX (j, b));
     unsigned int q = (i+j+b) - (r+t);
-    if ((brap.spin & ((1ULL<<p)-1)) != (ketp.spin & ((1ULL<<p)-1))){
+    if (p>0){ if ((brap.spin & ((1ULL<<(p-1))-1)) != (ketp.spin & ((1ULL<<(p-1))-1))){
         return 0.0;
-    }
-    if ((brap.spin>>t) != (ketp.spin>>t)){
+    }}
+    if ((brap.spin>>(t+1)) != (ketp.spin>>(t+1))){
         return 0.0;
     }
     // TODO: this part might be problematic, since pphh
@@ -1108,11 +1108,13 @@ void FCICSFpspace_h0tril(double *hmat,
     bra.dconf = dconfstrs[ibra];
     bra.sconf = sconfstrs[ibra];
     bra.spin = coupstrs[ibra];
+    if (bra.sconf == 0){ bra.spin = 0ULL; }
     for (size_t iket=0; iket<ibra; iket++){
     ihmat = (iket*np) + ibra;
     ket.dconf = dconfstrs[iket];
     ket.sconf = sconfstrs[iket];
     ket.spin = coupstrs[iket];
+    if (ket.sconf == 0){ ket.spin = 0ULL; }
     nch = Str3_link (&bra, &ket, &p, &r, &q, &t);
     switch (nch) {
         case 0: // spin interaction only

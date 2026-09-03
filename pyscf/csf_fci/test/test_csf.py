@@ -46,7 +46,7 @@ def setUpModule():
         ['H', ( 0., 1.    , 1.   )],
     ]
     mol.spin = len (mol.atom) % 2
-    smult_lim = 2 #len (mol.atom) + 2
+    smult_lim = 3 #len (mol.atom) + 2
 
     mol.basis = {'H': 'sto-3g'}
     mol.build()
@@ -56,7 +56,7 @@ def setUpModule():
     ehf = m.scf()
 
     neleca = (mol.nelectron+1)//2 # round up
-    neleca = 1
+    neleca = 2
 
     norb = m.mo_coeff.shape[1]
     nelec = (neleca, neleca)
