@@ -19,7 +19,7 @@
 #endif
 
 #ifndef DEBUG
-#define DEBUG false
+#define DEBUG true
 #endif
 
 static int first1(uint64_t r)
@@ -711,9 +711,9 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     // A(q) nq = 2
     if (abs (nq) == 2){
         if (nq > 0){
-            parity += twoSb[q-1] + 3*twoSb[q] + 1;
+            parity += twoSb[q-1] + 3*twoSb[q] + 3;
         } else {
-            parity += twoSk[q-1] + 3*twoSk[q] + 1;
+            parity += twoSk[q-1] + 3*twoSk[q] + 3;
         }
         // parity = parity % 4;
     }
@@ -764,9 +764,9 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     // B(p) np = 2
     if (abs (np) == 2){
         if (np > 0){
-            parity += twoSb[p] + 3*twoSb[p-1] + 1;
+            parity += twoSb[p] + 3*twoSb[p-1] + 3;
         } else {
-            parity += twoSk[p] + 3*twoSk[p-1] + 1;
+            parity += twoSk[p] + 3*twoSk[p-1] + 3;
         }
         // parity = parity % 4;
     }
@@ -867,13 +867,13 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     _get_spinindices1 (ket, i, nspin, twoSk, &si);
     if (abs (na) == 2){ sa++; }
     double fac = CGC_1e (twoSk, twoSb, sa, si, na, ni, nspin);
-    if (DEBUG){ printf ("\n"); fflush (stdout); }
     free (twoSk);
     free (twoSb);
     // operator anticommutation
     if (((sa-si)%2) == 1){
         fac = -fac;
     }
+    if (DEBUG){ printf ("final value = %e\n\n", fac); fflush (stdout); }
     assert (fac==fac);
     return fac;
 }
