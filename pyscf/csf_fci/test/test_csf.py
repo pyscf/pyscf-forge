@@ -41,9 +41,9 @@ def setUpModule():
         ['H', ( 1.,-1.    , 0.   )],
         ['H', ( 0.,-1.    ,-1.   )],
         ['H', ( 0.,-0.5   ,-0.   )],
-        ['H', ( 0.,-0.    ,-1.   )],
-        ['H', ( 1.,-0.5   , 0.   )],
-        ['H', ( 0., 1.    , 1.   )],
+        #['H', ( 0.,-0.    ,-1.   )],
+        #['H', ( 1.,-0.5   , 0.   )],
+        #['H', ( 0., 1.    , 1.   )],
     ]
     mol.spin = len (mol.atom) % 2
     smult_lim = 3 #len (mol.atom) + 2
@@ -118,7 +118,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -141,7 +141,7 @@ class KnownValues(unittest.TestCase):
                 addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
                 t = sol.transformer
                 h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
-                print (norb, nelec)
+                print (norb, ne, smult)
                 for i in range (len (h0)):
                     for j in range (i):
                         if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:

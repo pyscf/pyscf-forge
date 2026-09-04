@@ -10,12 +10,16 @@
 #include "csf.h"
 
 #ifndef MAX_PARTICLE
-#define MAX_PARTICLE = 64
+#define MAX_PARTICLE 64
 #endif
 
 #ifndef MAX
 #define MAX(X,Y) ((X) > (Y) ? (X) : (Y))
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
+#endif
+
+#ifndef DEBUG
+#define DEBUG false
 #endif
 
 static int first1(uint64_t r)
@@ -483,13 +487,13 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         twoS0b = twoSb[i];
         // paired electrons don't have CG coefficients!
         if (((i==t) || (i==t+1)) && nt==2){ twoS0k = 0; }
-        if (((i==q) || (i==q-1)) && nq==2){ twoS0k = 0; }
-        if (((i==r) || (i==r+1)) && nr==2){ twoS0k = 0; }
-        if (((i==p) || (i==p-1)) && np==2){ twoS0k = 0; }
-        if (((i==t) || (i==t+1)) && nt==-2){ twoS0b = 0; }
-        if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; }
-        if (((i==r) || (i==r+1)) && nr==-2){ twoS0b = 0; }
-        if (((i==p) || (i==p-1)) && np==-2){ twoS0b = 0; }
+        if (((i==q) || (i==q-1)) && nq==2){ twoS0k = 0; } // TODO: not sure if off by 1!
+        if (((i==r) || (i==r+1)) && nr==2){ twoS0k = 0; } // TODO: not sure if off by 1!
+        if (((i==(p-1)) || (i==(p-2))) && np==2){ twoS0k = 0; }
+        if (((i==t) || (i==t+1)) && nt==-2){ twoS0b = 0; } 
+        if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; } // TODO: not sure if off by 1!
+        if (((i==r) || (i==r+1)) && nr==-2){ twoS0b = 0; } // TODO: not sure if off by 1!
+        if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; }
         // For the dummy electron, somehow, the ket CG survives to cancel something
         if (i==0){ twoS0b = 0; }
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
@@ -669,7 +673,19 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
                unsigned int nspin)
 {
     if (p < q){
+        if (DEBUG){ printf ("flip ");}
         return CGC_1e (twoSk, twoSb, q, p, nq, np, nspin);
+    }
+    if (DEBUG){
+    printf ("<");
+    for (unsigned int i=0; i<=nspin; i++){
+        printf ("%u", twoSb[i]);
+    }
+    printf ("|%u(%d)'%u(%d)|", p, np, q, nq);
+    for (unsigned int i=0; i<=nspin; i++){
+        printf ("%u", twoSk[i]);
+    }
+    printf ("> = ");
     }
     int parity = 0;
     double xdiag = 1.0;
@@ -684,10 +700,10 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         twoS0k = twoSk[i];
         twoS0b = twoSb[i];
         // paired electrons don't have CG coefficients!
-        if (((i==q) || (i==q+1)) && nq==2){ twoS0k = 0; }
-        if (((i==p) || (i==p-1)) && np==2){ twoS0k = 0; }
-        if (((i==q) || (i==q+1)) && nq==-2){ twoS0b = 0; }
-        if (((i==p) || (i==p-1)) && np==-2){ twoS0b = 0; }
+        if (((i==q) || (i==(q+1))) && nq==2){ twoS0k = 0; }
+        if (((i==(p-1)) || (i==(p-2))) && np==2){ twoS0k = 0; }
+        if (((i==q) || (i==(q+1))) && nq==-2){ twoS0b = 0; }
+        if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; }
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
     }
     xdiag = sqrt (xdiag);
@@ -761,6 +777,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     assert ((parity % 2) == 0);
     parity = parity / 2;
     if ((parity%2)==1){ xdiag = -xdiag; }
+    if (DEBUG){ printf ("%e\n", xdiag); fflush (stdout); }
     return xdiag;
 }
 
@@ -816,14 +833,23 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     if (a>i){
         return csf_Eai (ket, bra, i, a);
     }
+    if (DEBUG){
+    printf ("\n<%lu,%lu,%lu|%u'%u|%lu,%lu,%lu>\n",
+            bra->dconf, bra->sconf, bra->spin,
+            a, i,
+            ket->dconf, ket->sconf, ket->spin);
+    fflush (stdout);
+    }
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
     if (a>0){ if ((brap.spin & ((1ULL<<(a-1))-1)) != (ketp.spin & ((1ULL<<(a-1))-1))){
+        if (DEBUG){ printf ("right escape\n"); fflush (stdout); }
         return 0.0;
     }}
     if ((brap.spin>>(i+1)) != (ketp.spin>>(i+1))){
+        if (DEBUG){ printf ("left escape\n"); fflush (stdout); }
         return 0.0;
     }
     int ni = _get_occ (ket, i);
@@ -841,6 +867,7 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     _get_spinindices1 (ket, i, nspin, twoSk, &si);
     if (abs (na) == 2){ sa++; }
     double fac = CGC_1e (twoSk, twoSb, sa, si, na, ni, nspin);
+    if (DEBUG){ printf ("\n"); fflush (stdout); }
     free (twoSk);
     free (twoSb);
     // operator anticommutation
