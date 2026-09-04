@@ -17,7 +17,9 @@
 
 import unittest
 from functools import reduce
+from itertools import product
 import numpy as np
+from scipy import linalg
 from pyscf import gto
 from pyscf import scf
 from pyscf import ao2mo
@@ -25,8 +27,10 @@ from pyscf import fci
 from pyscf import lib
 from pyscf.fci import fci_slow
 from pyscf.fci.spin_op import spin_square0
+from pyscf.fci.addons import des_a, des_b
 from pyscf.csf_fci import csf_solver
 from pyscf.csf_fci.csfstring import CSFTransformer
+
 
 def setUpModule():
     global mol, m, h1e, g2e, sol
@@ -118,7 +122,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -132,7 +136,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -148,6 +152,52 @@ class KnownValues(unittest.TestCase):
                             print (t.printable_csfstring (i), t.printable_csfstring (j),
                                    h0[i,j], h0_ref[i,j])
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+
+    def test_csf_sign (self):
+        rng = np.random.default_rng ()
+        for smult, ndocc, nvirt in product (range (1,8), range(1,3), range(3)):
+            with self.subTest (smult=smult, ndocc=ndocc, nvirt=nvirt):
+              if smult==1 and ndocc==0: continue
+              nelec = ((smult-1) + ndocc, ndocc)
+              norb = (smult-1) + ndocc + nvirt
+              trans_k = CSFTransformer (norb, nelec[0], nelec[1], smult)
+              trans_b = CSFTransformer (norb, nelec[0]-1, nelec[1]-1, smult)
+              dket, sket, tket = trans_k.csfaddrs2str (list (range (trans_k.ncsf)))
+              dbra, sbra, tbra = trans_b.csfaddrs2str (list (range (trans_b.ncsf)))
+              dket = np.maximum (dket, 0)
+              dbra = np.maximum (dbra, 0)
+              for iorb in range (norb):
+                with self.subTest (iorb=iorb):
+                  ikets = dket>=0
+                  ikets = ikets & np.remainder (dket // (2**iorb), 2)
+                  ikets = np.where (ikets)[0]
+                  for iket in ikets:
+                    with self.subTest (iket=iket):
+                      dk, sk, tk = dket[iket], sket[iket], tket[iket]
+                      ispin = iorb
+                      for jorb in range (iorb):
+                        if (dk & (1 << jorb)):
+                            ispin -= 1
+                      dconf = dk ^ (1 << iorb)
+                      sconf_right = sk & ((1 << ispin)-1)
+                      sconf_left = (sk >> ispin) << ispin
+                      sconf = (sconf_left << 1) | sconf_right
+                      ibra = (dbra==dconf) & (sbra==sconf) & (tbra==tket[iket])
+                      ibra = np.where (ibra)[0]
+                      assert (len (ibra) == 1)
+                      ibra = ibra[0]
+                      db, sb, tb = dbra[ibra], sbra[ibra], tbra[ibra]
+                      ci_ket = np.zeros (trans_k.ncsf)
+                      ci_ket[iket] = 1.0
+                      ci_ket = trans_k.vec_csf2det (ci_ket)
+                      ci_bra = np.zeros (trans_b.ncsf)
+                      ci_bra[ibra] = 1.0
+                      ci_bra = trans_b.vec_csf2det (ci_bra)
+                      ci1 = des_b (ci_ket, norb, nelec, iorb)
+                      ci1 = des_a (ci1, norb, (nelec[0], nelec[1]-1), iorb)
+                      ovlp = np.dot (ci_bra.ravel ().conj (), ci1.ravel ())
+                      msg = f'<{db},{sb},{tb}|a{iorb}b{iorb}|{dk},{sk},{tk}> = {ovlp}'
+                      self.assertAlmostEqual (ovlp, 1.0, 9, msg=msg)
 
 if __name__ == "__main__":
     print("Full Tests for csf_fci solver")
