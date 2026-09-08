@@ -651,6 +651,13 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
         # For the lvalues, I think it's necessary to flatten csf_addrs and det_addrs to avoid an exception
         # Hopefully this is parallel under the hood, and hopefully the OpenMP reduction epsilon doesn't ruin the spin
         # eigenvectors
+
+
+        # TODO: sign consistency
+        # the sign is sum_k^npair (a_k + b_k) - npair * (npair-1),
+        # where a_k and b_k are the ordinal positions of spin-up and spin-down electrons which happen to
+        # be paired. This means that the sign varies over determinants specifically, not CSFs, and cannot
+        # be vectorized to just one of dconf, sconf, or coupstr/tconf.
         t_ref = lib.logger.perf_counter ()
         if project:
             inparr[:,det_addrs] = np.tensordot (inparr[:,det_addrs], Pmat, axes=1)
