@@ -27,6 +27,7 @@ from pyscf.fci import fci_slow
 from pyscf.fci.spin_op import spin_square0
 from pyscf.csf_fci import csf_solver
 from pyscf.csf_fci.csfstring import CSFTransformer
+from pyscf.csf_fci.test.old_pspace import pspace as old_pspace
 
 # TODO: add test for the old pspace, since that's the only function that validates
 # CSFTransformer.mat_det2csf_confspace
@@ -141,6 +142,20 @@ class KnownValues(unittest.TestCase):
             with self.subTest (smult=smult):
                 ne = nel[smult % 2]
                 addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+
+    #@unittest.skip('debug')
+    def test_old_pspace(self):
+        nel = (neleci, nelec)
+        for smult in range (1,smult_lim):
+            with self.subTest (smult=smult):
+                ne = nel[smult % 2]
+                sol.smult = smult
+                sol.norb = norb
+                sol.nelec = ne
+                sol.check_transformer_cache ()
+                addr, h0 = old_pspace (sol, h1e, g2e, norb, ne, sol.transformer)
                 h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
