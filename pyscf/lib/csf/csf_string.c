@@ -256,5 +256,44 @@ void FCICSFaddrs2str (uint64_t * strings, int * addrs, size_t nstr, int * gentab
     free (gentable);
 }
 
+void FCICSFsignrule (int * sgns, uint64_t * dconfs, uint64_t * sconfs, size_t ndet, unsigned int norb)
+{
+/* Anticommute electron creation operators that participate in pairs out of normal order to before any
+   unpaired electrons so that CSFs of different seniority can have comparable signs
 
+   Output:
+    sgns : array of shape (ndet,)
+   Input:
+    dconfs : array of shape (ndet,)
+    sconfs : array of shape (ndet,)
+*/
+
+#pragma omp parallel default(shared)
+{
+
+    unsigned int npair;
+    uint64_t dconf, sconf;
+    int k;
+
+#pragma omp for schedule(static) 
+
+    for (size_t idet = 0; idet < ndet; idet++){
+        dconf = dconfs[idet];
+        sconf = sconfs[idet];
+        npair = count_set_bits (dconf);
+        sgns[idet] = 0;
+        for (unsigned int ipair = 0; ipair < npair; ipair++){
+            k = first1 (dconf);
+            assert (k>=0);
+            sgns[idet] += count_set_bits (sconf & ((1<<k)-1));
+            sconf >>= k;
+            sconf <<= (k+1);
+            dconf &= dconf-1;
+        }
+        sgns[idet] = ((sgns[idet] & 1ULL) == 1) ? -1 : 1;
+    }
+
+}
+
+}
 

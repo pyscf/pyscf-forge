@@ -54,16 +54,6 @@ void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin,
 
 }
 
-unsigned int _count_set_bits (uint64_t str)
-{
-    unsigned int n = 0;
-    while (str){
-        str &= (str - 1);
-        n++;
-    }
-    return n;
-}
-
 unsigned int _get_occ (Str3 * addr, unsigned int i)
 {
     if ((1ULL << i) & addr->dconf){ return 2; }
@@ -99,8 +89,8 @@ unsigned int _get_spinindex (Str3 * addr, unsigned int i)
 
 int _get_twoM (uint64_t sconfstr, uint64_t detstr)
 {
-    int nspin = _count_set_bits (sconfstr);
-    int twoM = _count_set_bits (detstr);
+    int nspin = count_set_bits (sconfstr);
+    int twoM = count_set_bits (detstr);
     assert (twoM <= nspin);
     twoM = nspin - 2*twoM;
     return -twoM;
@@ -111,7 +101,7 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     if (nspin == 0){ return 0; }
     assert (nspin - i >= 0);
     uint64_t n = coupstr;
-    unsigned int twoS = _count_set_bits (coupstr);
+    unsigned int twoS = count_set_bits (coupstr);
     assert (nspin >= twoS); // S >= 0
     assert ((2*twoS) >= nspin);
     twoS = (2*twoS) - nspin;
@@ -121,7 +111,7 @@ unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int n
     twoS += i;
     // unset all bits i or more places from the edge
     n = coupstr ^ (coupstr & ((1ULL << (nspin-i)) - 1));
-    n = _count_set_bits (n);
+    n = count_set_bits (n);
     assert (n <= i);
     assert (twoS >= 2*n);
     twoS -= 2 * n;
@@ -185,7 +175,7 @@ void _pad_Str3 (Str3 * addr, Str3 * addr_padded)
     uint64_t spin = addr->spin;
     addr_padded->dconf = dconf;
 
-    unsigned int n = _count_set_bits (dconf);
+    unsigned int n = count_set_bits (dconf);
     unsigned int p;
     for (unsigned int ip=0; ip<n; ip++){
         p = first1 (dconf);
@@ -197,7 +187,7 @@ void _pad_Str3 (Str3 * addr, Str3 * addr_padded)
     addr_padded->sconf = sconf;
 
     sconf = ~sconf;
-    n = _count_set_bits (sconf);
+    n = count_set_bits (sconf);
     for (unsigned int ip=0; ip<n; ip++){
         p = first1 (sconf);
         spin = ((((1ULL << p)-1) & spin) |
@@ -223,8 +213,8 @@ int Str3_link (Str3 * bra, Str3 * ket,
         excitations (spin flips are hard to evaluate because the intermediate spin couplings
         can be very differnt for 2-electron interactions).
     */
-    unsigned int nelec_bra = 2*_count_set_bits (bra->dconf) + _count_set_bits (bra->sconf);
-    unsigned int nelec_ket = 2*_count_set_bits (ket->dconf) + _count_set_bits (ket->sconf);
+    unsigned int nelec_bra = 2*count_set_bits (bra->dconf) + count_set_bits (bra->sconf);
+    unsigned int nelec_ket = 2*count_set_bits (ket->dconf) + count_set_bits (ket->sconf);
     assert (nelec_bra == nelec_ket);
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
@@ -237,8 +227,8 @@ int Str3_link (Str3 * bra, Str3 * ket,
     uint64_t c1sig = dsig^usig; // Identifies orbitals in which one electron hops in or out
     uint64_t c2sig = dsig&usig; // Identifies orbitals in which two electrons hop in or out
 
-    unsigned int nc2 = _count_set_bits (c2sig);
-    unsigned int nc1 = _count_set_bits (c1sig);
+    unsigned int nc2 = count_set_bits (c2sig);
+    unsigned int nc1 = count_set_bits (c1sig);
     assert ((nc1%2) == 0);
     int n = (2*nc2 + nc1) / 2;
     if (n>2){ n = -1; }
@@ -752,7 +742,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
 void _get_spinindices1 (Str3 * addr, unsigned int p, unsigned int nspin,
                         unsigned int * twoS, unsigned int * sp)
 {
-    unsigned int nspin0 = _count_set_bits (addr->sconf);
+    unsigned int nspin0 = count_set_bits (addr->sconf);
     for (unsigned int r=0; r <= nspin0; r++){
         twoS[r] = _get_twoS_running (addr->spin, r, nspin0);
     }
@@ -777,7 +767,7 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
         _get_spinindices2 (addr, q, p, nspin, twoS, sq, sp);
         return;
     }
-    unsigned int nspin0 = _count_set_bits (addr->sconf);
+    unsigned int nspin0 = count_set_bits (addr->sconf);
     _get_spinindices1 (addr, q, nspin, twoS, sq);
     *sp = nspin0 - _get_spinindex (addr, p);
     int np = _get_occ (addr, p);
@@ -822,8 +812,8 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     }
     int ni = _get_occ (ket, i);
     int na = -_get_occ (bra, a);
-    unsigned int nspin_ket = _count_set_bits (ket->sconf);
-    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int nspin_ket = count_set_bits (ket->sconf);
+    unsigned int nspin_bra = count_set_bits (bra->sconf);
     nspin_ket += (ni-1)*2;
     nspin_bra += (abs(na)-1)*2;
     assert (nspin_bra==nspin_ket);
@@ -860,8 +850,8 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     }}
     int ni = _get_occ (ket, i);
     int na = -_get_occ (bra, a);
-    unsigned int nspin_ket = _count_set_bits (ket->sconf);
-    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int nspin_ket = count_set_bits (ket->sconf);
+    unsigned int nspin_bra = count_set_bits (bra->sconf);
     unsigned int twoS = _get_twoS_running (bra->spin, 0, nspin_bra);
     nspin_ket += (ni-1)*2;
     nspin_bra += (abs(na)-1)*2;
@@ -914,8 +904,8 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     }
     int ni = _get_occ (ket, i);
     int nj = _get_occ (ket, j);
-    unsigned int nspin_ket = _count_set_bits (ket->sconf);
-    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int nspin_ket = count_set_bits (ket->sconf);
+    unsigned int nspin_bra = count_set_bits (bra->sconf);
     nspin_ket += (ni-1)*2;
     nspin_ket += (nj-1)*2;
     assert ((nspin_bra+2)==nspin_ket);
@@ -981,8 +971,8 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     int nj = _get_occ (ket, j);
     int na = -_get_occ (bra, a);
     int nb = -_get_occ (bra, b);
-    unsigned int nspin_ket = _count_set_bits (ket->sconf);
-    unsigned int nspin_bra = _count_set_bits (bra->sconf);
+    unsigned int nspin_ket = count_set_bits (ket->sconf);
+    unsigned int nspin_bra = count_set_bits (bra->sconf);
     if (i==j){
         nspin_ket += 2;
         assert (ni == 2);

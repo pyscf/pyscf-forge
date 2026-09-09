@@ -47,4 +47,15 @@ int last1 (uint64_t r)
 #endif
 }
 
+unsigned int count_set_bits (uint64_t str)
+{
+    unsigned int n = 0;
+    while (str){
+        str &= (str - 1);
+        n++;
+    }
+    return n;
+}
+
+
 

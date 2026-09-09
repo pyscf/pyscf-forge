@@ -38,9 +38,9 @@ typedef struct {
 
 int first1 (uint64_t r);
 int last1 (uint64_t r);
+unsigned int count_set_bits (uint64_t str);
 
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS);
-unsigned int _count_set_bits (uint64_t str);
 unsigned int _get_occ (Str3 * addr, unsigned int i);
 unsigned int _get_spinindex (Str3 * addr, unsigned int i);
 int _get_twoM (uint64_t sconfstr, uint64_t detstr);
@@ -69,3 +69,5 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
 void FCICSFgetscstrs (uint64_t * scstrs, bool * mask, size_t nstr, int nspin);
 void FCICSFstrs2addr (int * addrs, uint64_t * strings, size_t nstr, int * gentable_ravel, int nspin, int twoS);
 void FCICSFaddrs2str (uint64_t * strings, int * addrs, size_t nstr, int * gentable_ravel, int nspin, int twoS);
+void FCICSFsignrule (int * sgns, uint64_t * dconfs, uint64_t * sconfs, size_t ndet, unsigned int norb);
+

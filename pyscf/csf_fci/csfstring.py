@@ -226,17 +226,38 @@ class CSFTransformer (lib.StreamObject):
         return csfaddrs2str (self._norb, self._neleca, self._nelecb, self._smult, addrs)
 
 def det2csf_sign_rule (norb, neleca, nelecb, addrs):
-    '''Compute the sign'''
+    '''Compute the sign shift between CSF and determinant bases, except for the part accounted
+       for in get_spin_evecs. This means accounting for anticommutations of creation operators
+       in doubly-occupied orbitals specifically is ... a2' a1' a0' ... b2' b1' b0' |vac>
+       = A' B' |vac>. This function shifts that to A'(unpaired) B'(unpaired) C'(pairs) |vac>.
+
+    Args:
+        norb : integer
+        neleca : integer
+        nelecb : integer
+        addrs : ndarray of shape (ndet,)
+            Flat determinant (DD) addresses
+
+    Returns:
+        sgn : ndarray of shape (ndet,)
+    '''
     addrs_shape = addrs.shape
     addrs = addrs.ravel ()
 
     npairs, dconf, sconf, spins = tuple (csdstring.ddaddrs2csdstrs (norb, neleca, nelecb, addrs))
-    sgn = np.ones (len (addrs), dtype=np.int32)
+    sgn = np.zeros (len (addrs), dtype=np.int32)
 
+    # Separately commute a' and b' that participate in pairs to the beginnings of the strings
+    # A' and B'.
+    libcsf.FCICSFsignrule (sgn.ctypes.data_as (ctypes.c_void_p),
+                           dconf.ctypes.data_as (ctypes.c_void_p),
+                           sconf.ctypes.data_as (ctypes.c_void_p),
+                           ctypes.c_size_t (len (addrs)),
+                           ctypes.c_uint (norb))
+
+    # Second pass: commute paired a' and b' together
     for npair in np.unique (npairs):
         idx = npairs==npair
-        # sign convention of PySCF is A' B' |vac>
-        # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
         ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
         ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
         sgn[idx] *= (-1) ** (ncomm % 2)
