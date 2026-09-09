@@ -28,6 +28,9 @@ from pyscf.fci.spin_op import spin_square0
 from pyscf.csf_fci import csf_solver
 from pyscf.csf_fci.csfstring import CSFTransformer
 
+# TODO: add test for the old pspace, since that's the only function that validates
+# CSFTransformer.mat_det2csf_confspace
+
 def setUpModule():
     global mol, m, h1e, g2e, sol
     global norb, nelec, neleci, rng, smult_lim

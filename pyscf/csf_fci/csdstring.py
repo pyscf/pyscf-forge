@@ -91,6 +91,37 @@ def get_nspin_dets (norb, neleca, nelecb, nspin):
     #t_tot = logger.perf_counter () - t_start
     return ddaddrs
 
+def ddaddrs2csdstrs (norb, neleca, nelecb, ddaddrs):
+    ''' Convert double-determinant (DD) CI vector element addresses, [deta, detb], into
+        configuration-spin-determinant (CSD) vector strings, [npair, dconf, sconf, spinstate],
+        to facilitate a later transformation into CSFs. In the CSD format,
+            max (0, neleca + nelecb - norb) <= npair <= nelecb is the number of electron pairs
+
+            dconf is the string for a particular configuration of npair pairs'
+
+            sconf is the string for a particular configuration of the neleca + nelecb - 2*npair (= nunp)
+            unpaired electrons given dconf
+
+            spinstate is the state of (nunp + neleca - nelecb)/2 alpha and (nunp - neleca + nelecb)/2 beta spins
+
+        Args:
+        norb, neleca, nelecb are integers
+        ddaddrs is an array that specifies double determinant CI vector element address
+            If 1d, interpreted as deta_addr*ndetb + detb_addr
+            If 2d, interpreted as row/column i is interpreted as the ith index pair [deta, detb], if there are 2
+                columns/rows
+
+        Returns:
+        csdstrs, array of shape (n,4)
+
+    '''
+
+    ddaddrs = format_ddaddrs (norb, neleca, nelecb, ddaddrs)
+    ddstrs = np.asarray ([cistring.addrs2str (norb, neleca, ddaddrs[0]), cistring.addrs2str (norb, nelecb, ddaddrs[1])],
+                         dtype=np.int64)
+    csdstrs = ddstrs2csdstrs (norb, neleca, nelecb, ddstrs)
+    return csdstrs
+
 def ddaddrs2csdaddrs (norb, neleca, nelecb, ddaddrs):
     ''' Convert double-determinant (DD) CI vector element addresses, [deta, detb], into
         configuration-spin-determinant (CSD) vector element addresses, [npair, dconf, sconf, spinstate],
@@ -117,11 +148,7 @@ def ddaddrs2csdaddrs (norb, neleca, nelecb, ddaddrs):
         csdaddrs, list of integers for the CI vector in the form of a 1d array
 
     '''
-
-    ddaddrs = format_ddaddrs (norb, neleca, nelecb, ddaddrs)
-    ddstrs = np.asarray ([cistring.addrs2str (norb, neleca, ddaddrs[0]), cistring.addrs2str (norb, nelecb, ddaddrs[1])],
-                         dtype=np.int64)
-    csdstrs = ddstrs2csdstrs (norb, neleca, nelecb, ddstrs)
+    csdstrs = ddaddrs2csdstrs (norb, neleca, nelecb, ddaddrs)
     csdaddrs = csdstrs2csdaddrs (norb, neleca, nelecb, csdstrs)
     return csdaddrs
 
@@ -378,10 +405,4 @@ def unpack_confaddrs (norb, neleca, nelecb, addrs):
         somo_addrs[ix] = (addr - npair_offset[npair[ix]]) % npair_dconf_size
         npair[ix] += min_npair
     return npair, domo_addrs, somo_addrs
-
-
-
-
-
-
 

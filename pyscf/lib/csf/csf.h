@@ -34,6 +34,11 @@ typedef struct {
     uint64_t sconf;
     uint64_t spin;
 } Str3;
+
+
+int first1 (uint64_t r);
+int last1 (uint64_t r);
+
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS);
 unsigned int _count_set_bits (uint64_t str);
 unsigned int _get_occ (Str3 * addr, unsigned int i);

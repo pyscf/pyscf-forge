@@ -225,6 +225,24 @@ class CSFTransformer (lib.StreamObject):
     def csfaddrs2str (self, addrs):
         return csfaddrs2str (self._norb, self._neleca, self._nelecb, self._smult, addrs)
 
+def det2csf_sign_rule (norb, neleca, nelecb, addrs):
+    '''Compute the sign'''
+    addrs_shape = addrs.shape
+    addrs = addrs.ravel ()
+
+    npairs, dconf, sconf, spins = tuple (csdstring.ddaddrs2csdstrs (norb, neleca, nelecb, addrs))
+    sgn = np.ones (len (addrs), dtype=np.int32)
+
+    for npair in np.unique (npairs):
+        idx = npairs==npair
+        # sign convention of PySCF is A' B' |vac>
+        # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
+        ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+        ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
+        sgn[idx] *= (-1) ** (ncomm % 2)
+
+    return sgn.reshape (*addrs_shape)
+
 def unpack_sym_ci (ci, idx, vec_on_cols=False):
     if idx is None: return ci
     tot_len = idx.size
@@ -623,14 +641,9 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
             inparr[:,det_addrs] = 0
             continue
 
-        # sign convention of PySCF is A' B' |vac>
-        # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
-        ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
-        ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
-        sgn = (-1) ** (ncomm % 2)
 
         t_ref = lib.logger.perf_counter ()
-        umat = sgn * get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
+        umat = get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
         umat = np.asarray_chkfinite (umat)
         size_umat = max (size_umat, umat.nbytes)
         ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save
@@ -654,18 +667,16 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
 
 
         # TODO: sign consistency
-        # the sign is sum_k^npair (a_k + b_k) - npair * (npair-1),
-        # where a_k and b_k are the ordinal positions of spin-up and spin-down electrons which happen to
-        # be paired. This means that the sign varies over determinants specifically, not CSFs, and cannot
-        # be vectorized to just one of dconf, sconf, or coupstr/tconf.
+        sgn = det2csf_sign_rule (norb, neleca, nelecb, det_addrs[:,0])[None,:,None]
         t_ref = lib.logger.perf_counter ()
         if project:
             inparr[:,det_addrs] = np.tensordot (inparr[:,det_addrs], Pmat, axes=1)
         elif not reverse:
-            outarr[:,csf_addrs] = np.tensordot (inparr[:,det_addrs], umat, axes=1).reshape (nrow, ncsf_blk*nconf)
+            outarr[:,csf_addrs] = np.tensordot (inparr[:,det_addrs] * sgn, umat, axes=1).reshape (nrow, ncsf_blk*nconf)
         else:
             outarr[:,det_addrs] = np.tensordot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk), umat,
                                                 axes=((2,),(1,)))
+            outarr[:,det_addrs] *= sgn
         time_mult += lib.logger.perf_counter () - t_ref
 
     if project:
@@ -769,14 +780,8 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             dj = di + nconf*ndet
             mat_ij = mat[:,di:dj].reshape (nrow, nconf, ndet)
 
-            # sign convention of PySCF is A' B' |vac>
-            # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
-            ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
-            ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
-            sgn = (-1) ** (ncomm % 2)
-
             nspin = neleca + nelecb - 2*npair
-            umat = sgn * get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
+            umat = get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
             umat = np.asarray_chkfinite (umat)
 
             outmat[:,ci:cj] = np.tensordot (mat_ij, umat, axes=1).reshape (nrow, ncsf*nconf, order='C')
@@ -790,6 +795,9 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
         assert (csf_offset == ncsf_all), "{} {}".format (csf_offset, ncsf_all)
         return outmat
 
+    sgn = det2csf_sign_rule (norb, neleca, nelecb, det_addrs)
+    op = op * sgn[:,None]
+    op = op * sgn[None,:]
     op = ax_b (op).conj ().T
     op = ax_b (op).conj ().T
     return op, csf_addrs
