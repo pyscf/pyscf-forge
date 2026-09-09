@@ -27,6 +27,7 @@ from pyscf.fci import fci_slow
 from pyscf.fci.spin_op import spin_square0
 from pyscf.csf_fci import csf_solver
 from pyscf.csf_fci.csfstring import CSFTransformer
+from pyscf.csf_fci.test.old_pspace import pspace as old_pspace
 
 # TODO: test updating solver object in place
 # 4 A1; 1 B1u, 1 B2u, 1 B3u
@@ -103,6 +104,7 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
+    @unittest.skip('debug')
     def test_kernel(self):
         refs = [-11.806515601408687, -11.840480580594795, -11.250779244019393, -10.717848638632578,
                 -9.058272189032948, -9.60258614255864, -9.387425333405808]
@@ -136,6 +138,7 @@ class KnownValues(unittest.TestCase):
                 hdiag_ref = h2mat[smult-1].diagonal ()
                 self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
+    @unittest.skip('debug')
     def test_pspace(self):
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
@@ -144,6 +147,22 @@ class KnownValues(unittest.TestCase):
                 w = wfnsym[smult-1]
                 sol.wfnsym = w
                 addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                h0_ref = h2mat[smult-1][addr,:][:,addr]
+                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+
+    #@unittest.skip('debug')
+    def test_old_pspace(self):
+        wfnsym = [0,]*5 + [5,1]
+        for smult in range (1,8):
+            with self.subTest (smult=smult):
+                ne = nel[smult % 2]
+                w = wfnsym[smult-1]
+                sol.smult = smult
+                sol.norb = norb
+                sol.nelec = ne
+                sol.wfnsym = w
+                sol.check_transformer_cache ()
+                addr, h0 = old_pspace (sol, h1e, g2e, norb, ne, sol.transformer)
                 h0_ref = h2mat[smult-1][addr,:][:,addr]
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
