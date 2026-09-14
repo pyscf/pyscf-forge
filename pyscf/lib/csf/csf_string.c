@@ -272,7 +272,7 @@ void FCICSFsignrule (int * sgns, uint64_t * dconfs, uint64_t * sconfs, size_t nd
 {
 
     unsigned int npair;
-    uint64_t dconf, sconf;
+    uint64_t dconf, sconf, tconf;
     int k;
 
 #pragma omp for schedule(static) 
@@ -285,9 +285,11 @@ void FCICSFsignrule (int * sgns, uint64_t * dconfs, uint64_t * sconfs, size_t nd
         for (unsigned int ipair = 0; ipair < npair; ipair++){
             k = first1 (dconf);
             assert (k>=0);
-            sgns[idet] += count_set_bits (sconf & ((1<<k)-1));
+            tconf = sconf & ((1<<k)-1);
+            sgns[idet] += count_set_bits (tconf);
             sconf >>= k;
             sconf <<= (k+1);
+            sconf |= tconf;
             dconf &= dconf-1;
         }
         sgns[idet] = ((sgns[idet] & 1ULL) == 1) ? -1 : 1;
