@@ -244,11 +244,14 @@ def det2csf_sign_rule (norb, neleca, nelecb, addrs):
     addrs_shape = addrs.shape
     addrs = addrs.ravel ()
 
-    npairs, dconf, sconf, spins = tuple (csdstring.ddaddrs2csdstrs (norb, neleca, nelecb, addrs))
+    csdstrs = csdstring.ddaddrs2csdstrs (norb, neleca, nelecb, addrs)
+    csdaddrs = csdstring.csdstrs2csdaddrs (norb, neleca, nelecb, csdstrs)
+    _, dconf, sconf, spins = tuple (csdstrs)
     sgn = np.zeros (len (addrs), dtype=np.int32)
 
     # Separately commute a' and b' that participate in pairs to the beginnings of the strings
     # A' and B'.
+    # TODO: check if dconf is handled properly here when npair = 0
     libcsf.FCICSFsignrule (sgn.ctypes.data_as (ctypes.c_void_p),
                            dconf.ctypes.data_as (ctypes.c_void_p),
                            sconf.ctypes.data_as (ctypes.c_void_p),
@@ -256,8 +259,14 @@ def det2csf_sign_rule (norb, neleca, nelecb, addrs):
                            ctypes.c_uint (norb))
 
     # Second pass: commute paired a' and b' together
-    for npair in np.unique (npairs):
-        idx = npairs==npair
+    csdaddrs_shape = csdstring.get_csdaddrs_shape (norb, neleca, nelecb)
+    min_npair, offset, dsize, ssize, tsize = csdaddrs_shape
+    psize = dsize*ssize*tsize
+    max_npair = min (neleca, nelecb)
+    for ipair, npair in enumerate (range (min_npair, max_npair+1)):
+        o0 = offset[ipair]
+        o1 = o0 + psize[ipair]
+        idx = (csdaddrs >= o0) & (csdaddrs < o1)
         ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
         ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
         sgn[idx] *= (-1) ** (ncomm % 2)

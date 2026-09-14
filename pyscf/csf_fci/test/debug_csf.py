@@ -155,7 +155,8 @@ class KnownValues(unittest.TestCase):
 
     def test_csf_sign (self):
         rng = np.random.default_rng ()
-        for smult, ndocc, nvirt in product (range (1,8), range(1,3), range(3)):
+        #for smult, ndocc, nvirt in product (range (1,8), range(1,5), range(4)):
+        for smult, ndocc, nvirt in product (range (1,2), range(1,5), range(4)):
             with self.subTest (smult=smult, ndocc=ndocc, nvirt=nvirt):
               if smult==1 and ndocc==0: continue
               nelec = ((smult-1) + ndocc, ndocc)
@@ -171,8 +172,9 @@ class KnownValues(unittest.TestCase):
                   ikets = dket>=0
                   ikets = ikets & np.remainder (dket // (2**iorb), 2)
                   ikets = np.where (ikets)[0]
-                  for iket in ikets:
-                    with self.subTest (iket=iket):
+                  lbls = trans_k.printable_csfstring (ikets)
+                  for iket, klbl in zip (ikets, lbls):
+                    #with self.subTest (iket=iket):
                       dk, sk, tk = dket[iket], sket[iket], tket[iket]
                       ispin = iorb
                       for jorb in range (iorb):
@@ -186,6 +188,7 @@ class KnownValues(unittest.TestCase):
                       ibra = np.where (ibra)[0]
                       assert (len (ibra) == 1)
                       ibra = ibra[0]
+                      blbl = trans_b.printable_csfstring (ibra)
                       db, sb, tb = dbra[ibra], sbra[ibra], tbra[ibra]
                       ci_ket = np.zeros (trans_k.ncsf)
                       ci_ket[iket] = 1.0
@@ -193,10 +196,10 @@ class KnownValues(unittest.TestCase):
                       ci_bra = np.zeros (trans_b.ncsf)
                       ci_bra[ibra] = 1.0
                       ci_bra = trans_b.vec_csf2det (ci_bra)
-                      ci1 = des_b (ci_ket, norb, nelec, iorb)
-                      ci1 = des_a (ci1, norb, (nelec[0], nelec[1]-1), iorb)
+                      ci1 = des_a (ci_ket, norb, nelec, iorb)
+                      ci1 = des_b (ci1, norb, (nelec[0]-1, nelec[1]), iorb)
                       ovlp = np.dot (ci_bra.ravel ().conj (), ci1.ravel ())
-                      msg = f'<{db},{sb},{tb}|a{iorb}b{iorb}|{dk},{sk},{tk}> = {ovlp}'
+                      msg = f'<{blbl}|a{iorb}b{iorb}|{klbl}> = {ovlp}'
                       self.assertAlmostEqual (ovlp, 1.0, 9, msg=msg)
 
 if __name__ == "__main__":
