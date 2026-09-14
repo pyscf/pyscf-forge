@@ -267,7 +267,7 @@ def det2csf_sign_rule (norb, neleca, nelecb, addrs):
         o0 = offset[ipair]
         o1 = o0 + psize[ipair]
         idx = (csdaddrs >= o0) & (csdaddrs < o1)
-        ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+        ncomm = npair * (npair+1) // 2 # A'(paired) B'(paired) -> C'(pairs)
         ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
         sgn[idx] *= (-1) ** (ncomm % 2)
 

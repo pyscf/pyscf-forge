@@ -203,8 +203,8 @@ class KnownValues(unittest.TestCase):
                     ci_bra = np.zeros (trans_b.ncsf)
                     ci_bra[ibra] = 1.0
                     ci_bra = trans_b.vec_csf2det (ci_bra)
-                    ci1 = des_a (ci_ket, norb, nelec, iorb)
-                    ci1 = des_b (ci1, norb, (nelec[0]-1, nelec[1]), iorb)
+                    ci1 = des_b (ci_ket, norb, nelec, iorb)
+                    ci1 = des_a (ci1, norb, (nelec[0], nelec[1]-1), iorb)
                     ovlp = np.dot (ci_bra.ravel ().conj (), ci1.ravel ())
                     msg = f'<{blbl}|b{iorb}a{iorb}|{klbl}> = {ovlp}'
                     self.assertAlmostEqual (ovlp, 1.0, 9, msg=msg)
