@@ -246,6 +246,7 @@ def det2csf_sign_rule (norb, neleca, nelecb, addrs):
 
     csdstrs = csdstring.ddaddrs2csdstrs (norb, neleca, nelecb, addrs)
     csdaddrs = csdstring.csdstrs2csdaddrs (norb, neleca, nelecb, csdstrs)
+    csdaddrs1 = csdstring.ddaddrs2csdaddrs (norb, neleca, nelecb, addrs)
     _, dconf, sconf, spins = tuple (csdstrs)
     sgn = np.zeros (len (addrs), dtype=np.int32)
 
@@ -261,8 +262,8 @@ def det2csf_sign_rule (norb, neleca, nelecb, addrs):
     # Second pass: commute paired a' and b' together
     csdaddrs_shape = csdstring.get_csdaddrs_shape (norb, neleca, nelecb)
     min_npair, offset, dsize, ssize, tsize = csdaddrs_shape
-    psize = dsize*ssize*tsize
     max_npair = min (neleca, nelecb)
+    psize = dsize*ssize*tsize
     for ipair, npair in enumerate (range (min_npair, max_npair+1)):
         o0 = offset[ipair]
         o1 = o0 + psize[ipair]

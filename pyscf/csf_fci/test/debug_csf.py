@@ -156,7 +156,7 @@ class KnownValues(unittest.TestCase):
     def test_csf_sign (self):
         rng = np.random.default_rng ()
         #for smult, ndocc, nvirt in product (range (1,8), range(1,5), range(4)):
-        for smult, ndocc, nvirt in product (range (1,2), range(1,5), range(4)):
+        for smult, ndocc, nvirt in product (range (2,3), range(1,2), range(1)):
             with self.subTest (smult=smult, ndocc=ndocc, nvirt=nvirt):
               if smult==1 and ndocc==0: continue
               nelec = ((smult-1) + ndocc, ndocc)

@@ -254,7 +254,7 @@ def csdaddrs2csdstrs (norb, neleca, nelecb, csdaddrs):
         print ("{:.2f} seconds in cistring".format (logger.perf_counter () - t_ref))
         '''
 
-    #print ("{:.2f} seconds spent in csdaddrs2csdstrs".format (logger.perf_counter () - t_start))
+    #print ("{:.1f} seconds spent in csdaddrs2csdstrs".format (logger.perf_counter () - t_start))
     return csdstrs
 
 def get_csdaddrs_shape (norb, neleca, nelecb):
@@ -306,7 +306,7 @@ def ddstrs2csdstrs (norb, neleca, nelecb, ddstrs):
 
     nstr = len (ddstrs[0])
     csdstrs = np.empty ((4, nstr), dtype=np.int64, order='C')
-    if ddstrs.shape[1] == 2:
+    if (ddstrs.shape[1] == 2) and (ddstrs.shape[0] != 2):
         ddstrs = ddstrs.T
     if not ddstrs.flags['C_CONTIGUOUS']:
         ddstrs = np.ascontiguousarray (ddstrs)
