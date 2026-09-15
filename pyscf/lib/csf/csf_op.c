@@ -823,7 +823,7 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    if (a>0){ if ((brap.spin & ((1ULL<<(a-1))-1)) != (ketp.spin & ((1ULL<<(a-1))-1))){
+    if (a>0){ if ((brap.spin & ((1ULL<<a)-1)) != (ketp.spin & ((1ULL<<a)-1))){
         if (DEBUG){ printf ("right escape\n"); fflush (stdout); }
         return 0.0;
     }}
@@ -866,7 +866,7 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    if (a>0){ if ((brap.spin & ((1ULL<<(a-1))-1)) != (ketp.spin & ((1ULL<<(a-1))-1))){
+    if (a>0){ if ((brap.spin & ((1ULL<<a)-1)) != (ketp.spin & ((1ULL<<a)-1))){
         return 0.0;
     }}
     int ni = _get_occ (ket, i);
@@ -917,7 +917,7 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    if (i>0){ if ((brap.spin & ((1ULL<<(i-1))-1)) != (ketp.spin & ((1ULL<<(i-1))-1))){
+    if (i>0){ if ((brap.spin & ((1ULL<<i)-1)) != (ketp.spin & ((1ULL<<i)-1))){
         return 0.0;
     }}
     if ((brap.spin>>(j+1)) != (ketp.spin>>(j+1))){
