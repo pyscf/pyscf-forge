@@ -643,7 +643,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     for (unsigned int i=0; i<=nspin; i++){
         printf ("%u", twoSk[i]);
     }
-    printf ("> = ");
+    printf ("> = "); fflush (stdout);
     }
     int parity = 0;
     double xdiag = 1.0;
@@ -653,6 +653,10 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     bool pphh = false;
 
     // norm
+    // In Drake & Schlesinger eq (14), the norm is associated with the spin going into a CG
+    // coefficient: S(i) corresponds to the norm for the i+1 CG coefficient. However, in
+    // eq (9'), the S(0) case is explicitly excluded from the overall norm, and S(N) is by
+    // construction always zero.
     for (unsigned int i=q; i < p; i++){
         // 2S+1 for each CG coefficient
         twoS0k = twoSk[i];
@@ -665,6 +669,23 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
     }
     xdiag = sqrt (xdiag);
+
+    // The diagram has a factor of 1/(2S(q-1)+1) canceling the norm of the q CG coefficient.
+    // Normally this is accounted for by just starting the product above at i=q. If q is paired,
+    // skipping both S(q) and S(q+1) in the product below usually accounts for this cancellation.
+    // Then exception is if p = q+1. Then sqrt (1/(2S(q-1)+1)) is "orphaned": it can't cancel the
+    // S(q+1) normalization factor because that's already cancelled by the implicit 1/(S(q+1)+1)
+    // from eq (7.33) of Brink & Satchler. We have to divide explicitly.
+    if (p==q+1){
+        assert ((abs (np) + abs (nq)) <= 3);
+        if ((nq == 2) || (np == 2)){
+            assert (twoSk[q-1]==twoSk[q+1]);
+            xdiag /= sqrt ((double) (twoSk[q-1]+1));
+        } else if ((nq == -2) || (np == -2)){
+            assert (twoSb[q-1]==twoSb[q+1]);
+            xdiag /= sqrt ((double) (twoSb[q-1]+1));
+        }
+    }
 
     // A(q) nq = 2
     if (abs (nq) == 2){
