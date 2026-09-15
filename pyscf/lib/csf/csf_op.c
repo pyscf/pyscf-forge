@@ -902,6 +902,10 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     if (twoS > 0){
        fac /= sqrt (twoS*(twoS+2)*.25);
     }
+    // operator anticommutation
+    if (((sa-si)%2) == 1){
+        fac = -fac;
+    }
     assert (fac==fac);
     return fac;
 }
