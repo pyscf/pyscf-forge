@@ -446,14 +446,17 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         // paired electrons don't have CG coefficients!
         if (((i==t) || (i==t+1)) && nt==2){ twoS0k = 0; }
         if (((i==q) || (i==q-1)) && nq==2){ twoS0k = 0; } // TODO: not sure if off by 1!
-        if (((i==r) || (i==r+1)) && nr==2){ twoS0k = 0; } // TODO: not sure if off by 1!
+        if (((i==r) || (i==r-1)) && nr==2){ twoS0k = 0; } // TODO: not sure if off by 1!
         if (((i==(p-1)) || (i==(p-2))) && np==2){ twoS0k = 0; }
-        if (((i==t) || (i==t+1)) && nt==-2){ twoS0b = 0; } 
-        if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; } // TODO: not sure if off by 1!
-        if (((i==r) || (i==r+1)) && nr==-2){ twoS0b = 0; } // TODO: not sure if off by 1!
-        if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; }
-        // For the dummy electron, somehow, the ket CG survives to cancel something
-        if (i==0){ twoS0b = 0; }
+        bool bra_paired = false;
+        if (((i==t) || (i==t+1)) && nt==-2){ twoS0b = 0; bra_paired = true; }
+        if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; bra_paired = true; } // TODO: not sure if off by 1!
+        if (((i==r) || (i==r-1)) && nr==-2){ twoS0b = 0; bra_paired = true; } // TODO: not sure if off by 1!
+        if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; bra_paired = true; }
+        // Exactly one of the two CGs at the left boundary is spurious. Normally it is the
+        // bra's, but if the boundary is inside the bra's doubly-occupied gap that CG is
+        // already gone, so the ket's is the one that drops.
+        if (i==0){ if (bra_paired){ twoS0k = 0; } else { twoS0b = 0; } }
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
     }
     xdiag = sqrt (xdiag);

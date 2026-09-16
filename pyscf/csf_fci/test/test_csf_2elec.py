@@ -64,7 +64,7 @@ def setUpModule():
     #h1e[:] = 1
     h1e_s = (2 * rng.random (h1e.shape)) - 1
     h1e_s += h1e_s.conj ().T
-    h1e_s[:] = 0
+    #h1e_s[:] = 0
     h1e = np.stack ([h1e+h1e_s, h1e-h1e_s], axis=0)
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
     g2e[:] = 0
@@ -132,7 +132,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
