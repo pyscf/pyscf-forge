@@ -453,6 +453,8 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; bra_paired = true; } // TODO: not sure if off by 1!
         if (((i==r) || (i==r-1)) && nr==-2){ twoS0b = 0; bra_paired = true; } // TODO: not sure if off by 1!
         if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; bra_paired = true; }
+        // This bugfix came from this session:
+        // claude --resume 5c6acb8f-5f71-43d9-b6a5-02f8e5be130b
         // Exactly one of the two CGs at the left boundary is spurious. Normally it is the
         // bra's, but if the boundary is inside the bra's doubly-occupied gap that CG is
         // already gone, so the ket's is the one that drops.
