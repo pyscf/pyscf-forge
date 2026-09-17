@@ -139,7 +139,8 @@ def _debug_g2e (fci, g2e, eri, norb):
         g2e_ninf, g2e_nnan, norb, g2e.shape))
     return
 
-def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=None, npsp=200, max_memory=None):
+def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=None, npsp=200,
+            csf_addr=None, max_memory=None):
     ''' Note that getting pspace for npsp CSFs is substantially more costly than getting it for npsp determinants,
     until I write code than can evaluate Hamiltonian matrix elements of CSFs directly. On the other hand
     a pspace of determinants contains many redundant degrees of freedom for the same reason. Therefore I have
@@ -155,18 +156,19 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
         hdiag_det = fci.make_hdiag(h1e, eri, norb, nelec)
     if hdiag_csf is None:
         hdiag_csf = fci.make_hdiag_csf(h1e, eri, norb, nelec, hdiag_det=hdiag_det, max_memory=max_memory)
-    csf_addr = np.arange (hdiag_csf.size, dtype=np.int32)
-    if transformer.wfnsym is None:
-        ncsf_sym = hdiag_csf.size
-    else:
-        idx_sym = transformer.confsym[transformer.econf_csf_mask] == transformer.wfnsym
-        ncsf_sym = np.count_nonzero (idx_sym)
-        csf_addr = csf_addr[idx_sym]
-    if ncsf_sym > npsp:
-        try:
-            csf_addr = csf_addr[np.argpartition(hdiag_csf[csf_addr], npsp-1)[:npsp]]
-        except AttributeError:
-            csf_addr = csf_addr[np.argsort(hdiag_csf[csf_addr])[:npsp]]
+    if csf_addr is None:
+        csf_addr = np.arange (hdiag_csf.size, dtype=np.int32)
+        if transformer.wfnsym is None:
+            ncsf_sym = hdiag_csf.size
+        else:
+            idx_sym = transformer.confsym[transformer.econf_csf_mask] == transformer.wfnsym
+            ncsf_sym = np.count_nonzero (idx_sym)
+            csf_addr = csf_addr[idx_sym]
+        if ncsf_sym > npsp:
+            try:
+                csf_addr = csf_addr[np.argpartition(hdiag_csf[csf_addr], npsp-1)[:npsp]]
+            except AttributeError:
+                csf_addr = csf_addr[np.argsort(hdiag_csf[csf_addr])[:npsp]]
 
     npsp_csf = len(csf_addr)
 
@@ -354,7 +356,8 @@ class CSFFCISolver: # parent class
             hc += direct_uhf.contract_1e ([eri.h1e_s, -eri.h1e_s], fcivec, norb, nelec, link_index)
         return hc
 
-    def pspace (self, h1e, eri, norb, nelec, hdiag_det=None, hdiag_csf=None, npsp=200, **kwargs):
+    def pspace (self, h1e, eri, norb, nelec, hdiag_det=None, hdiag_csf=None, npsp=200, csf_addr=None,
+                **kwargs):
         self.norb = norb
         self.nelec = nelec
         if 'smult' in kwargs:
@@ -363,7 +366,7 @@ class CSFFCISolver: # parent class
         self.check_transformer_cache ()
         max_memory = kwargs.get ('max_memory', self.max_memory)
         return pspace (self, h1e, eri, norb, nelec, self.transformer, hdiag_det=hdiag_det,
-            hdiag_csf=hdiag_csf, npsp=npsp, max_memory=max_memory)
+            hdiag_csf=hdiag_csf, npsp=npsp, csf_addr=csf_addr, max_memory=max_memory)
 
     def log_transformer_cache (self, tverbose=0, **kwargs):
         if len (kwargs):

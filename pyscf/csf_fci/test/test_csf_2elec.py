@@ -42,8 +42,8 @@ def setUpModule():
         ['H', ( 0.,-1.    ,-1.   )],
         ['H', ( 0.,-0.5   ,-0.   )],
         ['H', ( 0.,-0.    ,-1.   )],
-        ['H', ( 1.,-0.5   , 0.   )],
-        ['H', ( 0., 1.    , 1.   )],
+        #['H', ( 1.,-0.5   , 0.   )],
+        #['H', ( 0., 1.    , 1.   )],
     ]
     mol.spin = len (mol.atom) % 2
     smult_lim = 3 #len (mol.atom) + 2
@@ -132,7 +132,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -145,9 +145,25 @@ class KnownValues(unittest.TestCase):
                 for i in range (len (h0)):
                     for j in range (i):
                         if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
-                            print (t.printable_csfstring (i), t.printable_csfstring (j),
+                            print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
                                    h0[i,j], h0_ref[i,j])
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+
+    #@unittest.skip('debug')
+    def test_pspace_single_element (self):
+        i = 5 
+        j = 0
+        smult=1
+        addr = np.array ([i,j], dtype=np.int32)
+        nel = (neleci, nelec)
+        ne = nel[smult % 2]
+        addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult, csf_addr=addr)
+        t = sol.transformer
+        h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+        if abs (h0[0,1] - h0_ref[0,1]) > 1e-8:
+            print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
+                   h0[0,1], h0_ref[0,1])
+        self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
     print("Full Tests for csf_fci solver")

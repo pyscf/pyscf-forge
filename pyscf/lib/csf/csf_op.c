@@ -18,8 +18,12 @@
 #define MIN(X,Y) ((X) < (Y) ? (X) : (Y))
 #endif
 
-#ifndef DEBUG
-#define DEBUG false
+#ifndef DEBUG_1E
+#define DEBUG_1E false
+#endif
+
+#ifndef DEBUG_2E
+#define DEBUG_2E true
 #endif
 
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
@@ -636,10 +640,10 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
                unsigned int nspin)
 {
     if (p < q){
-        if (DEBUG){ printf ("flip ");}
+        if (DEBUG_1E){ printf ("flip ");}
         return CGC_1e (twoSk, twoSb, q, p, nq, np, nspin);
     }
-    if (DEBUG){
+    if (DEBUG_1E){
     printf ("<");
     for (unsigned int i=0; i<=nspin; i++){
         printf ("%u", twoSb[i]);
@@ -761,7 +765,7 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     assert ((parity % 2) == 0);
     parity = parity / 2;
     if ((parity%2)==1){ xdiag = -xdiag; }
-    if (DEBUG){ printf ("%e\n", xdiag); fflush (stdout); }
+    if (DEBUG_1E){ printf ("%e\n", xdiag); fflush (stdout); }
     return xdiag;
 }
 
@@ -817,7 +821,7 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     if (a>i){
         return csf_Eai (ket, bra, i, a);
     }
-    if (DEBUG){
+    if (DEBUG_1E){
     printf ("\n<%lu,%lu,%lu|%u'%u|%lu,%lu,%lu>\n",
             bra->dconf, bra->sconf, bra->spin,
             a, i,
@@ -829,11 +833,11 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
     if (a>0){ if ((brap.spin & ((1ULL<<a)-1)) != (ketp.spin & ((1ULL<<a)-1))){
-        if (DEBUG){ printf ("right escape\n"); fflush (stdout); }
+        if (DEBUG_1E){ printf ("right escape\n"); fflush (stdout); }
         return 0.0;
     }}
     if ((brap.spin>>(i+1)) != (ketp.spin>>(i+1))){
-        if (DEBUG){ printf ("left escape\n"); fflush (stdout); }
+        if (DEBUG_1E){ printf ("left escape\n"); fflush (stdout); }
         return 0.0;
     }
     int ni = _get_occ (ket, i);
@@ -857,7 +861,7 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     if (((sa-si)%2) == 1){
         fac = -fac;
     }
-    if (DEBUG){ printf ("final value = %e\n\n", fac); fflush (stdout); }
+    if (DEBUG_1E){ printf ("final value = %e\n\n", fac); fflush (stdout); }
     assert (fac==fac);
     return fac;
 }
@@ -922,14 +926,23 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     if (i > j){
         return csf_EaiEaj (bra, ket, j, i);
     }
+    if (DEBUG_2E){
+    printf ("\n<%lu,%lu,%lu|%u,%u|%lu,%lu,%lu>\n",
+            bra->dconf, bra->sconf, bra->spin,
+            i, j,
+            ket->dconf, ket->sconf, ket->spin);
+    fflush (stdout);
+    }
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
     if (i>0){ if ((brap.spin & ((1ULL<<i)-1)) != (ketp.spin & ((1ULL<<i)-1))){
+        if (DEBUG_2E){ printf ("csf_EaiEaj right escape\n"); fflush (stdout); }
         return 0.0;
     }}
     if ((brap.spin>>(j+1)) != (ketp.spin>>(j+1))){
+        if (DEBUG_2E){ printf ("csf_EaiEbj left escape\n"); fflush (stdout); }
         return 0.0;
     }
     int ni = _get_occ (ket, i);
@@ -958,6 +971,7 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     free (twoSk);
     free (twoSb);
     assert (fac==fac);
+    if (DEBUG_2E){ printf ("final value = %e\n\n", fac); fflush (stdout); }
     return fac;
 
 }
@@ -977,6 +991,13 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     if (a > b){
         return csf_EaiEbj (bra, ket, b, j, a, i);
     }
+    if (DEBUG_2E){
+    printf ("\n<%lu,%lu,%lu|%u'%u,%u'%u|%lu,%lu,%lu>\n",
+            bra->dconf, bra->sconf, bra->spin,
+            a, i, b, j,
+            ket->dconf, ket->sconf, ket->spin);
+    fflush (stdout);
+    }
     Str3 brap, ketp;
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
@@ -986,9 +1007,11 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     unsigned int t = MAX (i, MAX (j, b));
     unsigned int q = (i+j+b) - (r+t);
     if (p>0){ if ((brap.spin & ((1ULL<<(p-1))-1)) != (ketp.spin & ((1ULL<<(p-1))-1))){
+        if (DEBUG_2E){ printf ("csf_EaiEbj right escape\n"); fflush (stdout); }
         return 0.0;
     }}
     if ((brap.spin>>(t+1)) != (ketp.spin>>(t+1))){
+        if (DEBUG_2E){ printf ("csf_EaiEbj left escape\n"); fflush (stdout); }
         return 0.0;
     }
     // TODO: this part might be problematic, since pphh
@@ -1074,12 +1097,18 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
 
-    int parity = sp + sr + sq + st + (int) (i>j);
+    int parity = sp + sr + sq + st + 1;
     double facl = (i==r) ? 0.0 : 3.0;
     double facu = unlinked_orth ? 0.0 : 1.0;
     if ((parity%2)==1){
         facl = -facl;
         facu = -facu;
+    }
+
+    if (DEBUG_2E){
+        printf ("sp,sr,sq,st: %u,%u,%u,%u\n", sp, sr, sq, st);
+        printf ("np,nr,nq,nt: %d,%d,%d,%d\n", np, nr, nq, nt);
+        fflush (stdout);
     }
 
     // linked term
@@ -1098,6 +1127,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     free (twoSb);
     assert (facl==facl);
     assert (facu==facu);
+    if (DEBUG_2E){ printf ("final value = %e + %e\n\n", facl,facu); fflush (stdout); }
     return facl+facu; 
 }
 
@@ -1187,11 +1217,13 @@ void FCICSFpspace_h0tril(double *hmat,
             // E^a_i E^b_j
             ihop = (a*norb*norb*norb) + (i*norb*norb) + (b*norb) + j;
             fac = csf_EaiEbj (&bra, &ket, a, i, b, j);
+            if (DEBUG_2E){ printf (" %u %u %u %u %f\n", a,i,b,j,fac); fflush (stdout); }
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
             if ((a!=b) && (i!=j)){
                 ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
                 fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
+                if (DEBUG_2E){ printf (" %u %u %u %u %f\n", a,j,b,i,fac); fflush (stdout); }
                 hmat[ihmat] += g2e[ihop] * fac;
             }
             break;
