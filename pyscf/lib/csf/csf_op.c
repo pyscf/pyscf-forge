@@ -1097,9 +1097,17 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
 
-    int parity = sp + sr + sq + st + 1;
-    double facl = (i==r) ? 0.0 : 3.0;
-    double facu = unlinked_orth ? 0.0 : 1.0;
+    int parity = sp + sr + sq + st;
+    double facl = (i==r) ? 0.0 : 3.0; // I know that -3.0 here makes hdiag_csf correct
+                                      // But why? It's inconsistent with D&S.
+                                      // I had previously justified this in terms of
+                                      // operator fermion anticommutation, but the
+                                      // specific (int) (i>j) logic led directly to
+                                      // a clearly wrong <du00|e|00du> cancellation.
+                                      // Everything below here for the two terms in
+                                      // <du00|e|00du> is identical. <du00|e|00du>
+                                      // apparently has linked term == 0.
+    double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){
         facl = -facl;
         facu = -facu;
@@ -1113,12 +1121,14 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
 
     // linked term
     if (i!=r){
+        if (DEBUG_2E){ printf ("evaluating a linked term\n"); fflush (stdout); }
         facl *= CGC_2e_X (twoSk, twoSb, st, sq, sr, sp, nt, nq, nr, np, nspin);
         facu *= 0.5; // this comes from closure of two S=0 Wigner 3j matrices + 1 fermion swap
     }
 
     // unlinked term
     if (!unlinked_orth){
+        if (DEBUG_2E){ printf ("evaluating an unlinked term\n"); fflush (stdout); }
         facu *= CGC_1e (twoSk, twoSb, sp, sr, np, nr, nspin);
         facu *= CGC_1e (twoSk, twoSb, sq, st, nq, nt, nspin);
     }
