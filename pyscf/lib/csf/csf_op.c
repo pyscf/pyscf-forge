@@ -1189,9 +1189,11 @@ void FCICSFpspace_h0tril(double *hmat,
             fac = csf_EaiEbj (&bra, &ket, a, i, b, j);
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
-            ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
-            fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
-            hmat[ihmat] += g2e[ihop] * fac;
+            if ((a!=b) && (i!=j)){
+                ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
+                fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
+                hmat[ihmat] += g2e[ihop] * fac;
+            }
             break;
     }
     }
