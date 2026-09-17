@@ -1097,7 +1097,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
 
-    int parity = sp + sr + sq + st;
+    int parity = sp + sr + sq + st + (int) (i>j);
     double facl = (i==r) ? 0.0 : 3.0; // I know that -3.0 here makes hdiag_csf correct
                                       // But why? It's inconsistent with D&S.
                                       // I had previously justified this in terms of
@@ -1123,7 +1123,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     if (i!=r){
         if (DEBUG_2E){ printf ("evaluating a linked term\n"); fflush (stdout); }
         facl *= CGC_2e_X (twoSk, twoSb, st, sq, sr, sp, nt, nq, nr, np, nspin);
-        facu *= 0.5; // this comes from closure of two S=0 Wigner 3j matrices + 1 fermion swap
+        facu *= -0.5; // this comes from closure of two S=0 Wigner 3j matrices + 1 fermion swap
     }
 
     // unlinked term
