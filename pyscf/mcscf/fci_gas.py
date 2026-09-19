@@ -16,8 +16,9 @@
 # Author: Yi Deng <yideng@uchicago.edu>
 #
 
-"""GAS-aware FCISolver bindings for the frozen GAS FCI C kernels."""
+"""GAS-aware FCISolver interface to the GAS C kernels."""
 
+from contextlib import nullcontext
 import ctypes
 
 import numpy
@@ -33,7 +34,7 @@ from pyscf.mcscf import _gaslib
 from pyscf.mcscf import addons_gas
 
 
-# A GAS pspace column currently costs one full C-kernel Hamiltonian product.
+# A GAS pspace column currently costs one full C kernel Hamiltonian product.
 # Keep exact small-space diagonalization bounded until a dedicated C pspace
 # builder exists.
 GAS_PSPACE_MATVEC_MAX = 64
@@ -236,14 +237,39 @@ def _spin_penalty_parameters(solver, norb, nelec):
     return shift, target, minimum, tuple(float(x) for x in eigenvalues)
 
 
+def _spin_penalty_action(contract_ss, vector, parameters):
+    """Apply the GAS spin penalty, without adding the physical Hamiltonian.
+
+    Shared by the fixed-orbital solver and the Newton CI derivatives. The
+    supplied contraction owns/reuses its spin plan; the input is not modified.
+    """
+    shift, target, minimum, _ = parameters
+    delta = numpy.asarray(contract_ss(vector)) - target * vector
+    if target >= minimum + 0.1:
+        delta = numpy.asarray(contract_ss(delta)) - target * delta
+    return shift * delta
+
+
+def _spin_penalty_diagonal(spin_diagonal, parameters):
+    """Return the shared Davidson/Newton penalty preconditioner diagonal.
+
+    For the quadratic penalty this is (diag(S^2)-target)^2, an inexpensive
+    approximation, not diag((S^2-target)^2). Operator actions remain exact.
+    """
+    shift, target, minimum, _ = parameters
+    delta = spin_diagonal - target
+    if target >= minimum + 0.1:
+        delta = delta * delta
+    return shift * delta
+
+
 class _GasSpinPlan:
     """Reusable block-sparse ``S^2`` contraction plan.
 
-    Raw GAS one-electron links retain excitation direction.  Pairing an alpha
-    ``q -> p`` link with the reverse beta ``p -> q`` link applies the
-    opposite-spin exchange term without expanding the CI vector into the full
-    CAS tensor.  The numerical gather/scatter is delegated to PySCF's C-backed
-    ``take_2d`` and ``takebak_2d`` helpers.
+    Opposite-spin exchange is evaluated from paired GAS one-electron
+    links without expanding the CI vector to the full CAS space.
+    The plan retains no C pointers and remains valid after the source
+    ``GasSpace`` is closed.
     """
 
     def __init__(self, gas):
@@ -551,6 +577,8 @@ class GasContractPlan:
     """
 
     def __init__(self, gas, eri):
+        if gas._gas is None:
+            raise RuntimeError("GAS space is closed")
         if not gas.links_are_compressed():
             raise ValueError(
                 "Hamiltonian contraction planning requires compressed links")
@@ -580,8 +608,10 @@ class GasContractPlan:
     def contract(self, fcivec):
         """Contract the fixed absorbed Hamiltonian with one GAS CI vector."""
 
-        if self._plan is None:
+        if self._plan is None or self.gas is None:
             raise RuntimeError("Hamiltonian contraction plan is closed")
+        if self.gas._gas is None:
+            raise RuntimeError("GAS space is closed")
         shape = numpy.asarray(fcivec).shape
         ci0 = _as_c_double(numpy.asarray(fcivec).reshape(-1))
         if ci0.size != self.ndet:
@@ -733,11 +763,16 @@ class FCISolver(direct_spin1.FCISolver):
     The Davidson driver and its convergence controls follow
     :class:`pyscf.fci.direct_spin1.FCISolver`.  CI vectors are one-dimensional
     arrays in canonical GAS block order rather than rectangular CAS arrays.
+
+    RDM methods accept an optional keyword-only ``plan`` created by
+    :meth:`make_rdm_plan`. Such plans are borrowed, not closed by the method.
+    Without a supplied plan, the base solver creates and closes a temporary
+    plan for each call; the GASSCF adapter may provide an owned cache entry.
     """
 
     _keys = direct_spin1.FCISolver._keys | {
         "gas_orbs", "gas_restr", "gas_restr_type", "e_spin_penalty",
-        "e_physical", "spin_penalty_method",
+        "e_physical", "spin_penalty_method", "ss_penalty", "ss_value",
     }
 
     def __init__(self, mol=None, gas_orbs=None, gas_restr=None,
@@ -779,7 +814,7 @@ class FCISolver(direct_spin1.FCISolver):
         return self
 
     def space_info(self, norb, nelec):
-        """Estimate GAS dimensions and validate C-kernel limits."""
+        """Estimate GAS dimensions and validate C kernel limits."""
 
         gas_orbs, nelec, blocks = self._space_spec(norb, nelec)
         return addons_gas.check_kernel_limits(gas_orbs, nelec, blocks)
@@ -795,6 +830,53 @@ class FCISolver(direct_spin1.FCISolver):
         """Construct a reusable :class:`GasRDMPlan` context manager."""
 
         return GasRDMPlan(self, norb, nelec)
+
+    def _validate_plan_space(self, plan, norb, nelec, kind):
+        """Validate a borrowed plan without building or taking ownership of it."""
+
+        if plan._plan is None or plan.gas is None:
+            raise RuntimeError(kind + " plan is closed")
+        if plan.gas._gas is None:
+            raise RuntimeError("GAS space is closed")
+        gas_orbs, expected_nelec, blocks = self._space_spec(norb, nelec)
+        if (tuple(gas_orbs) != plan.gas.norb or
+                tuple(expected_nelec) != tuple(plan.gas.nelec) or
+                not numpy.array_equal(blocks, plan.gas.blocks)):
+            raise ValueError(kind + " plan does not match the GAS space")
+
+    def _rdm_plan_context(self, norb, nelec, plan=None):
+        """Own a temporary RDM plan, or borrow an explicitly supplied plan.
+
+        RDM methods accept keyword-only ``plan=``. Borrowed plans remain open
+        on both success and failure; the caller controls their lifetime.
+        """
+
+        if plan is None:
+            return self.make_rdm_plan(norb, nelec)
+        if not isinstance(plan, GasRDMPlan):
+            raise TypeError("plan must be a GasRDMPlan")
+        self._validate_plan_space(plan, norb, nelec, "RDM")
+        return nullcontext(plan)
+
+    def make_spin_plan(self, norb, nelec):
+        """Construct an independent reusable ``S^2`` contraction plan.
+
+        GASCI normalizes the restriction and checks spin completeness.
+        The returned plan owns Python descriptors and NumPy link maps, with
+        no C pointers into the temporary raw-link space. ``contract(ci)``
+        and ``diagonal_vector()`` return new arrays. No close is required.
+
+        This closure requirement does not apply to ordinary GASCI or to
+        an ``S^2`` expectation value evaluated from RDMs. Internal solver
+        paths that already own a space may construct their plan directly.
+        """
+
+        gas_orbs, nelec, blocks = self._space_spec(norb, nelec)
+        if not addons_gas.is_spin_complete(gas_orbs, nelec, blocks):
+            raise ValueError(
+                "make_spin_plan requires a spin-complete GAS restriction")
+        with self.make_space(norb, nelec, compress_links=False) as gas:
+            return _GasSpinPlan(gas)
 
     def get_init_guess(self, norb, nelec, nroots, hdiag, gas=None):
         """Build PySCF-style determinant guesses in the GAS vector layout."""
@@ -836,15 +918,19 @@ class FCISolver(direct_spin1.FCISolver):
 
     def contract_2e(self, eri, fcivec, norb, nelec, link_index=None,
                     *args, **kwargs):
-        """Contract an absorbed Hamiltonian with a GAS CI vector."""
+        """Contract an absorbed Hamiltonian with a GAS CI vector.
+
+        With ``plan=``, use the plan's fixed Hamiltonian (``eri`` is unused).
+        Its normalized GAS space must match this solver. The borrowed plan
+        and its GAS space must be open and remain caller-owned on success
+        and failure.
+        """
 
         plan = kwargs.pop("plan", None)
         if plan is not None:
             if not isinstance(plan, GasContractPlan):
                 raise TypeError("plan must be a GasContractPlan")
-            expected_nelec = fci_addons._unpack_nelec(nelec, self.spin)
-            if int(norb) != plan.norb or expected_nelec != plan.nelec:
-                raise ValueError("contraction plan does not match norb/nelec")
+            self._validate_plan_space(plan, norb, nelec, "contraction")
             return plan.contract(fcivec)
 
         compress_links = bool(kwargs.pop("compress_links", True))
@@ -913,6 +999,96 @@ class FCISolver(direct_spin1.FCISolver):
                 "contract_ss requires a spin-complete GAS restriction")
         with self.make_space(norb, nelec, compress_links=False) as gas:
             return _GasSpinPlan(gas).contract(fcivec)
+
+    def transform_ci_within_gas(self, fcivec, norb, nelec, u):
+        """Return CI coefficients for ``mo_new = mo_old @ u`` within each GAS.
+
+        ``u`` must be real, orthogonal and block diagonal in the GAS partition.
+        Adjacent Givens rotations act on local string axes of each legal GAS
+        block; no full-CAS embedding or dense determinant rotation is formed.
+        Reflections and orbital permutations are included. The input is not
+        modified. This explicit method is separate from the unrestricted
+        ``transform_ci_for_orbital_rotation`` hook probed by native Newton.
+        """
+
+        gas_orbs, _, _ = self._space_spec(norb, nelec)
+        u = _as_c_double(u, (int(norb), int(norb)))
+        if not numpy.all(numpy.isfinite(u)) or not numpy.allclose(
+                u.T @ u, numpy.eye(norb), atol=1e-10, rtol=0):
+            raise ValueError("GAS orbital rotation must be finite and orthogonal")
+        allowed = numpy.zeros(u.shape, dtype=bool)
+        factors = []
+        offset = 0
+        for size in gas_orbs:
+            sl = slice(offset, offset + size)
+            allowed[sl, sl] = True
+            work = u[sl, sl].copy()
+            rotations = []
+            # L_m ... L_1 U = D, so the passive CI transform applies the
+            # exterior representations of L_1, ..., L_m, then diagonal D.
+            # Adjacent orbital pairs have no intervening fermionic sign.
+            for col in range(size - 1):
+                for q in range(size - 1, col, -1):
+                    p = q - 1
+                    a, b = work[p, col], work[q, col]
+                    if b == 0:
+                        continue
+                    norm = numpy.hypot(a, b)
+                    c, s = a / norm, b / norm
+                    row_p, row_q = work[p].copy(), work[q].copy()
+                    work[p] = c * row_p + s * row_q
+                    work[q] = -s * row_p + c * row_q
+                    rotations.append((p, q, c, s))
+            factors.append((rotations, numpy.where(work.diagonal() < 0, -1., 1.)))
+            offset += size
+        if numpy.any(numpy.abs(u[~allowed]) > 1e-12):
+            raise ValueError("orbital rotation must not mix different GAS subspaces")
+
+        source = _as_c_double(fcivec)
+        with self.make_space(norb, nelec, compress_links=False) as gas:
+            if source.size != gas.ndet:
+                raise ValueError("CI vector size does not match GAS determinant count")
+            result = source.reshape(-1).copy()
+            ngas = len(gas_orbs)
+            local = {}
+            for block in gas.block_descriptors():
+                occupations = [int(gas._gas.sector_occ[sid * ngas + g])
+                               for sid in (block['sa'], block['sb'])
+                               for g in range(ngas)]
+                shape = tuple(cistring.num_strings(gas_orbs[g % ngas], n)
+                              for g, n in enumerate(occupations))
+                begin = block['offset']
+                size = block['na'] * block['nb']
+                tensor = result[begin:begin + size].reshape(shape)
+                # C GAS sector strides have the last subspace varying fastest:
+                # (alpha GAS axes..., beta GAS axes...).
+                for axis, n in enumerate(occupations):
+                    g = axis % ngas
+                    key = (g, n)
+                    if key not in local:
+                        strings = cistring.make_strings(range(gas_orbs[g]), n)
+                        rotations, phases = factors[g]
+                        pairs = {}
+                        for p, q, _, _ in rotations:
+                            if (p, q) not in pairs:
+                                left = numpy.flatnonzero(
+                                    ((strings >> p) & 1) & ~((strings >> q) & 1))
+                                right = numpy.searchsorted(
+                                    strings, strings[left] ^ ((1 << p) | (1 << q)))
+                                pairs[p, q] = (left, right)
+                        signs = numpy.ones(strings.size)
+                        for p in numpy.flatnonzero(phases < 0):
+                            signs *= 1 - 2 * ((strings >> p) & 1)
+                        local[key] = pairs, signs
+                    pairs, signs = local[key]
+                    view = numpy.moveaxis(tensor, axis, 0)
+                    for p, q, c, s in factors[g][0]:
+                        left, right = pairs[p, q]
+                        old_left, old_right = view[left].copy(), view[right].copy()
+                        view[left] = c * old_left + s * old_right
+                        view[right] = -s * old_left + c * old_right
+                    view *= signs.reshape((-1,) + (1,) * (view.ndim - 1))
+        return result.reshape(source.shape)
 
     def transform_ci_for_orbital_rotation(self, fcivec, norb, nelec, u):
         raise NotImplementedError(
@@ -1062,11 +1238,8 @@ class FCISolver(direct_spin1.FCISolver):
                     if full_spin_pspace:
                         s2 = spin_plan.matrix()
                         s2 = s2[numpy.ix_(addresses, addresses)]
-                        delta_s2 = s2 - spin_target * numpy.eye(gas.ndet)
-                        if linear_spin_penalty:
-                            h0 += spin_shift * delta_s2
-                        else:
-                            h0 += spin_shift * numpy.dot(delta_s2, delta_s2)
+                        h0 += _spin_penalty_action(
+                            s2.dot, numpy.eye(gas.ndet), spin_penalty)
                         self.spin_penalty_method = "exact-small-space"
                     eigenvalues, eigenvectors = numpy.linalg.eigh(h0)
                     e = eigenvalues[:nroots]
@@ -1152,33 +1325,14 @@ class FCISolver(direct_spin1.FCISolver):
                             h2e, vec, norb, nelec, plan=plan).reshape(-1)
                         if spin_penalty is None:
                             return result
-                        ss_vector = numpy.asarray(
-                            spin_plan.contract(vec)).reshape(-1)
-                        if linear_spin_penalty:
-                            ss_vector -= spin_target * vec
-                            result += spin_shift * ss_vector
-                            return result
-                        tmp = ss_vector - spin_target * vec
-                        correction = numpy.asarray(
-                            spin_plan.contract(tmp)).reshape(-1)
-                        correction -= spin_target * tmp
-                        result += spin_shift * correction
+                        result += _spin_penalty_action(
+                            spin_plan.contract, vec, spin_penalty)
                         return result
 
                     preconditioner_diagonal = hdiag
                     if spin_penalty is not None:
-                        spin_diagonal = spin_plan.diagonal_vector()
-                        delta_diagonal = spin_diagonal - spin_target
-                        if linear_spin_penalty:
-                            penalty_diagonal = spin_shift * delta_diagonal
-                        else:
-                            # This is the inexpensive diagonal approximation to
-                            # (S^2-target)^2.  The projected trial vectors
-                            # improve access to the target sector; this term
-                            # only improves Davidson conditioning.
-                            penalty_diagonal = (
-                                spin_shift * delta_diagonal * delta_diagonal)
-                        preconditioner_diagonal = hdiag + penalty_diagonal
+                        preconditioner_diagonal = hdiag + _spin_penalty_diagonal(
+                            spin_plan.diagonal_vector(), spin_penalty)
 
                     def precond(dx, e, *args):
                         denom = preconditioner_diagonal - e
@@ -1213,22 +1367,18 @@ class FCISolver(direct_spin1.FCISolver):
                 c_list = [c_arr.reshape(-1)]
         if spin_penalty is not None:
             penalty_values = []
-            # The contraction GasSpace above has left its context.  Rebuild a
-            # short-lived raw-link space for post-solver diagnostics instead
-            # of retaining a plan backed by released C memory.
-            with self.make_space(
-                    norb, nelec, compress_links=False) as diagnostic_gas:
-                diagnostic_spin = _GasSpinPlan(diagnostic_gas)
-                for vector in c_list[:nroots]:
-                    ss_vector = numpy.asarray(
-                        diagnostic_spin.contract(vector)).reshape(-1)
-                    if linear_spin_penalty:
-                        penalty = spin_shift * (
-                            numpy.dot(vector, ss_vector) - spin_target)
-                    else:
-                        delta = ss_vector - spin_target * vector
-                        penalty = spin_shift * numpy.dot(delta, delta)
-                    penalty_values.append(float(penalty))
+            # Reuse the solve's independent NumPy plan after releasing the
+            # contraction GasSpace; diagnostics need no second raw-link space.
+            for vector in c_list[:nroots]:
+                ss_vector = numpy.asarray(
+                    spin_plan.contract(vector)).reshape(-1)
+                if linear_spin_penalty:
+                    penalty = spin_shift * (
+                        numpy.dot(vector, ss_vector) - spin_target)
+                else:
+                    delta = ss_vector - spin_target * vector
+                    penalty = spin_shift * numpy.dot(delta, delta)
+                penalty_values.append(float(penalty))
             penalty_values = numpy.asarray(
                 penalty_values, dtype=numpy.float64)
             physical_values = e[:nroots] - penalty_values
@@ -1249,48 +1399,66 @@ class FCISolver(direct_spin1.FCISolver):
         return self.eci, self.ci
 
     @pyscf_lib.with_doc(direct_spin1.make_rdm1s.__doc__)
-    def make_rdm1s(self, ci, norb, nelec, link_index=None):
-        return self.trans_rdm1s(ci, ci, norb, nelec, link_index)
+    def make_rdm1s(self, ci, norb, nelec, link_index=None, *, plan=None):
+        return self.trans_rdm1s(ci, ci, norb, nelec, link_index, plan=plan)
 
     @pyscf_lib.with_doc(direct_spin1.make_rdm1.__doc__)
-    def make_rdm1(self, ci, norb, nelec, link_index=None):
-        return self.trans_rdm1(ci, ci, norb, nelec, link_index)
+    def make_rdm1(self, ci, norb, nelec, link_index=None, *, plan=None):
+        return self.trans_rdm1(ci, ci, norb, nelec, link_index, plan=plan)
 
     @pyscf_lib.with_doc(direct_spin1.make_rdm12s.__doc__)
-    def make_rdm12s(self, ci, norb, nelec, link_index=None, reorder=True):
+    def make_rdm12s(self, ci, norb, nelec, link_index=None,
+                    reorder=True, *, plan=None):
         if not reorder:
             raise NotImplementedError("reorder=False is not supported")
-        with self.make_rdm_plan(norb, nelec) as plan:
+        with self._rdm_plan_context(norb, nelec, plan) as plan:
             return plan.make_rdm12s(ci, ci)
 
     @pyscf_lib.with_doc(direct_spin1.make_rdm12.__doc__)
-    def make_rdm12(self, ci, norb, nelec, link_index=None, reorder=True):
+    def make_rdm12(self, ci, norb, nelec, link_index=None,
+                   reorder=True, *, plan=None):
         if not reorder:
             raise NotImplementedError("reorder=False is not supported")
-        with self.make_rdm_plan(norb, nelec) as plan:
+        with self._rdm_plan_context(norb, nelec, plan) as plan:
             return plan.make_rdm12(ci, ci)
 
-    def make_rdm2(self, ci, norb, nelec, link_index=None, reorder=True):
+    def make_rdm2(self, ci, norb, nelec, link_index=None,
+                  reorder=True, *, plan=None):
         """Return the spin-traced GAS two-particle density matrix."""
 
-        return self.make_rdm12(ci, norb, nelec, link_index, reorder)[1]
+        return self.make_rdm12(ci, norb, nelec, link_index, reorder, plan=plan)[1]
+
+    def make_rdm123(self, *args, **kwargs):
+        """Reject inherited third- and fourth-order CAS density matrices."""
+        raise NotImplementedError(
+            "third- and fourth-order density matrices are not implemented "
+            "for the GAS solver")
+
+    make_rdm123s = make_rdm1234 = make_rdm1234s = make_rdm123
+
+    def to_gpu(self, *args, **kwargs):
+        """Reject conversion of the GAS C/OpenMP solver to a GPU backend."""
+        raise NotImplementedError(
+            "the libfci_gas C/OpenMP backend does not support GPU execution")
 
     @pyscf_lib.with_doc(direct_spin1.trans_rdm1s.__doc__)
-    def trans_rdm1s(self, cibra, ciket, norb, nelec, link_index=None):
-        with self.make_rdm_plan(norb, nelec) as plan:
+    def trans_rdm1s(self, cibra, ciket, norb, nelec, link_index=None,
+                    *, plan=None):
+        with self._rdm_plan_context(norb, nelec, plan) as plan:
             return plan.make_rdm1s(cibra, ciket)
 
     @pyscf_lib.with_doc(direct_spin1.trans_rdm1.__doc__)
-    def trans_rdm1(self, cibra, ciket, norb, nelec, link_index=None):
-        with self.make_rdm_plan(norb, nelec) as plan:
+    def trans_rdm1(self, cibra, ciket, norb, nelec, link_index=None,
+                   *, plan=None):
+        with self._rdm_plan_context(norb, nelec, plan) as plan:
             return plan.make_rdm1(cibra, ciket)
 
     @pyscf_lib.with_doc(direct_spin1.trans_rdm12s.__doc__)
     def trans_rdm12s(self, cibra, ciket, norb, nelec, link_index=None,
-                     reorder=True):
+                     reorder=True, *, plan=None):
         if not reorder:
             raise NotImplementedError("reorder=False is not supported")
-        with self.make_rdm_plan(norb, nelec) as plan:
+        with self._rdm_plan_context(norb, nelec, plan) as plan:
             dm1s, (dm2aa, dm2ab, dm2bb) = plan.make_rdm12s(cibra, ciket)
             _, (_, dm2ba_ji, _) = plan.make_rdm12s(ciket, cibra)
         dm2ba = dm2ba_ji.transpose(3, 2, 1, 0)
@@ -1298,10 +1466,10 @@ class FCISolver(direct_spin1.FCISolver):
 
     @pyscf_lib.with_doc(direct_spin1.trans_rdm12.__doc__)
     def trans_rdm12(self, cibra, ciket, norb, nelec, link_index=None,
-                    reorder=True):
+                    reorder=True, *, plan=None):
         if not reorder:
             raise NotImplementedError("reorder=False is not supported")
-        with self.make_rdm_plan(norb, nelec) as plan:
+        with self._rdm_plan_context(norb, nelec, plan) as plan:
             return plan.make_rdm12(cibra, ciket)
 
     def spin_square(self, ci, norb, nelec, *args, **kwargs):

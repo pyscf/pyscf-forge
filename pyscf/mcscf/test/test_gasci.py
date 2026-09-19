@@ -20,9 +20,11 @@
 
 import io
 import unittest
+from unittest import mock
 
 import numpy
 
+from pyscf import ao2mo
 from pyscf import gto
 from pyscf import mcscf
 from pyscf import scf
@@ -161,6 +163,99 @@ class TestGASRestrictions(unittest.TestCase):
 
 class TestGASFCISolver(unittest.TestCase):
 
+    def test_unsupported_cas_density_and_gpu_entries(self):
+        solver = fci_gas.FCISolver(gas_orbs=(1, 1))
+        for method in ('make_rdm123', 'make_rdm123s',
+                       'make_rdm1234', 'make_rdm1234s'):
+            with self.subTest(method=method):
+                with mock.patch.object(direct_spin1, method, create=True) as native:
+                    with self.assertRaisesRegex(NotImplementedError, 'density matrices'):
+                        getattr(solver, method)(None, 2, (1, 1))
+                    native.assert_not_called()
+        with self.assertRaisesRegex(NotImplementedError, 'C/OpenMP backend'):
+            solver.to_gpu()
+
+    def test_borrowed_rdm_plan_matches_full_fci_transitions(self):
+        solver = fci_gas.FCISolver(
+            gas_orbs=(1, 2), gas_restr=((0, 1), (2, 2)),
+            gas_restr_type='cumulative-occ')
+        norb, nelec = 3, (1, 1)
+        with solver.make_rdm_plan(norb, nelec) as plan:
+            rng = numpy.random.default_rng(902)
+            bra, ket = rng.normal(size=(2, plan.ndet))
+            bra /= numpy.linalg.norm(bra)
+            ket /= numpy.linalg.norm(ket)
+            full_bra = fci_gas.gas2fci(bra, plan.gas)
+            full_ket = fci_gas.gas2fci(ket, plan.gas)
+            methods = ('make_rdm1', 'make_rdm1s', 'make_rdm12',
+                       'make_rdm12s', 'trans_rdm1', 'trans_rdm1s',
+                       'trans_rdm12', 'trans_rdm12s')
+            def compare(actual, expected):
+                if isinstance(expected, tuple):
+                    self.assertEqual(len(actual), len(expected))
+                    for a, e in zip(actual, expected):
+                        compare(a, e)
+                else:
+                    numpy.testing.assert_allclose(actual, expected,
+                                                  atol=1e-12, rtol=0)
+            with mock.patch.object(solver, 'make_rdm_plan',
+                                   side_effect=AssertionError('borrowed plan replaced')):
+                for method in methods:
+                    args = (bra, ket) if method.startswith('trans') else (ket,)
+                    full = ((full_bra, full_ket) if method.startswith('trans')
+                            else (full_ket,))
+                    with self.subTest(method=method):
+                        expected = getattr(direct_spin1, method)(*full, norb, nelec)
+                        compare(getattr(solver, method)(*args, norb, nelec, plan=plan),
+                                expected)
+                        self.assertIsNotNone(plan._plan)
+                compare(solver.make_rdm2(ket, norb, nelec, plan=plan),
+                        direct_spin1.make_rdm12(full_ket, norb, nelec)[1])
+                # A failed execution also leaves the borrowed plan reusable.
+                with self.assertRaisesRegex(ValueError, 'CI vector size'):
+                    solver.make_rdm12(ket[:-1], norb, nelec, plan=plan)
+                self.assertIsNotNone(plan._plan)
+                compare(solver.trans_rdm12s(bra, ket, norb, nelec, plan=plan),
+                        direct_spin1.trans_rdm12s(full_bra, full_ket, norb, nelec))
+        self.assertIsNone(plan._plan)
+        self.assertIsNone(plan.gas)
+
+    def test_rdm_plan_validation_and_temporary_lifetime(self):
+        solver = fci_gas.FCISolver(gas_orbs=(1, 2),
+                                  gas_restr=((1, 0, 0, 1),))
+        opposite = fci_gas.FCISolver(gas_orbs=(1, 2),
+                                    gas_restr=((0, 1, 1, 0),))
+        ci = numpy.ones(2) / numpy.sqrt(2)
+        with opposite.make_rdm_plan(3, (1, 1)) as wrong:
+            # Same norb, electron counts and ndet, but different determinants.
+            self.assertEqual(wrong.ndet, ci.size)
+            with self.assertRaisesRegex(ValueError, 'GAS space'):
+                solver.make_rdm1(ci, 3, (1, 1), plan=wrong)
+            self.assertIsNotNone(wrong._plan)
+        with self.assertRaisesRegex(RuntimeError, 'closed'):
+            solver.make_rdm1(ci, 3, (1, 1), plan=wrong)
+        with self.assertRaisesRegex(TypeError, 'GasRDMPlan'):
+            solver.make_rdm1(ci, 3, (1, 1), plan=object())
+
+        original = solver.make_rdm_plan
+        created = []
+        def create(*args):
+            plan = original(*args)
+            created.append(plan)
+            return plan
+        with mock.patch.object(solver, 'make_rdm_plan', side_effect=create):
+            solver.make_rdm12(ci, 3, (1, 1))
+            with self.assertRaisesRegex(ValueError, 'CI vector size'):
+                solver.trans_rdm12s(ci[:-1], ci, 3, (1, 1))
+            self.assertEqual(len(created), 2)
+            for plan in created:
+                self.assertIsNone(plan._plan)
+                self.assertIsNone(plan.gas)
+            with self.assertRaises(NotImplementedError):
+                solver.make_rdm12(ci, 3, (1, 1), reorder=False)
+            self.assertEqual(len(created), 2)
+
+
     @classmethod
     def setUpClass(cls):
         cls.norb = 4
@@ -243,6 +338,90 @@ class TestGASFCISolver(unittest.TestCase):
                     numpy.testing.assert_allclose(
                         planned, one_shot, atol=1e-12, rtol=0)
 
+    def test_borrowed_contract_plan_equivalent_specs_and_ownership(self):
+        solver = fci_gas.FCISolver(
+            gas_orbs=(1, 2), gas_restr=((0, 1), (2, 2)),
+            gas_restr_type='cumulative-occ')
+        equivalent = fci_gas.FCISolver(
+            gas_orbs=(1, 2), gas_restr=((1, 1), (0, 2), (1, 1)),
+            gas_restr_type='supergroup')
+        h1, eri = make_integrals(3)
+        h2 = fci_gas.absorb_h1e(h1, eri, 3, (1, 1), .5)
+        with solver.make_space(3, (1, 1), compress_links=True) as gas:
+            with fci_gas.GasContractPlan(gas, h2) as plan:
+                ci = numpy.random.default_rng(410).normal(size=gas.ndet)
+                full = fci_gas.gas2fci(ci, gas)
+                expected = fci_gas.fci2gas(
+                    direct_spin1.contract_2e(h2, full, 3, (1, 1)), gas)
+                with mock.patch.object(equivalent, 'make_space',
+                                       side_effect=AssertionError('space rebuilt')):
+                    # plan= selects its fixed Hamiltonian, so eri is unused.
+                    actual = equivalent.contract_2e(
+                        None, ci, 3, numpy.array([1, 1]), plan=plan)
+                    numpy.testing.assert_allclose(actual, expected, atol=1e-12, rtol=0)
+                    with self.assertRaisesRegex(ValueError, 'CI vector size'):
+                        equivalent.contract_2e(None, ci[:-1], 3, (1, 1), plan=plan)
+                    self.assertIsNotNone(plan._plan)
+                    self.assertIsNotNone(gas._gas)
+                    numpy.testing.assert_allclose(plan.contract(ci), expected, atol=1e-12, rtol=0)
+            self.assertIsNone(plan._plan)
+            self.assertIsNotNone(gas._gas)
+
+    def test_contract_plan_rejects_same_size_foreign_space(self):
+        donor = fci_gas.FCISolver(
+            gas_orbs=(1, 2), gas_restr=((0, 0), (2, 2)),
+            gas_restr_type='cumulative-occ')
+        others = (
+            fci_gas.FCISolver(gas_orbs=(1, 2), gas_restr=((1, 1), (2, 2)),
+                              gas_restr_type='cumulative-occ'),
+            fci_gas.FCISolver(gas_orbs=(2, 1), gas_restr=((2, 2), (2, 2)),
+                              gas_restr_type='cumulative-occ'))
+        h2 = fci_gas.absorb_h1e(numpy.diag([1., 2., 4.]),
+                                numpy.zeros((6, 6)), 3, (1, 1), .5)
+        with donor.make_space(3, (1, 1), compress_links=True) as gas:
+            with fci_gas.GasContractPlan(gas, h2) as plan:
+                ci = numpy.ones(plan.ndet) / numpy.sqrt(plan.ndet)
+                original = plan.contract(ci)
+                for other in others:
+                    with self.subTest(gas_orbs=other.gas_orbs):
+                        self.assertEqual(other.space_info(3, (1, 1))['ndet_estimate'], plan.ndet)
+                        different = other.contract_2e(h2, ci, 3, (1, 1))
+                        self.assertGreater(numpy.linalg.norm(different - original), .1)
+                        with mock.patch.object(plan, 'contract',
+                                               side_effect=AssertionError('foreign execution')):
+                            with self.assertRaisesRegex(ValueError, 'GAS space'):
+                                other.contract_2e(h2, ci, 3, (1, 1), plan=plan)
+                        self.assertIsNotNone(plan._plan)
+                        numpy.testing.assert_array_equal(plan.contract(ci), original)
+                with self.assertRaises(ValueError):
+                    donor.contract_2e(h2, ci, 3, (2, 0), plan=plan)
+                with self.assertRaisesRegex(TypeError, 'GasContractPlan'):
+                    donor.contract_2e(h2, ci, 3, (1, 1), plan=object())
+
+    def test_contract_plan_closed_lifetimes(self):
+        solver = fci_gas.FCISolver(gas_orbs=(2,))
+        eri, ci = numpy.zeros((3, 3)), numpy.ones(4) / 2
+        with solver.make_space(2, (1, 1), compress_links=True) as gas:
+            with fci_gas.GasContractPlan(gas, eri) as plan:
+                pass
+            for call in (lambda: plan.contract(ci),
+                         lambda: solver.contract_2e(eri, ci, 2, (1, 1), plan=plan)):
+                with self.assertRaisesRegex(RuntimeError, 'plan is closed'):
+                    call()
+            self.assertIsNotNone(gas._gas)
+            with fci_gas.GasContractPlan(gas, eri) as plan:
+                gas.close()
+                for call in (lambda: plan.contract(ci),
+                             lambda: solver.contract_2e(eri, ci, 2, (1, 1), plan=plan),
+                             lambda: fci_gas.GasContractPlan(gas, eri)):
+                    with self.assertRaisesRegex(RuntimeError, 'GAS space is closed'):
+                        call()
+        # The common borrowed-space validation also protects the RDM path.
+        with solver.make_rdm_plan(2, (1, 1)) as rdm:
+            rdm.gas.close()
+            with self.assertRaisesRegex(RuntimeError, 'GAS space is closed'):
+                solver.make_rdm1(ci, 2, (1, 1), plan=rdm)
+
     def test_gas_fci_vector_converters(self):
         gas_orbs = (2, 2)
         nelec = (2, 1)
@@ -273,6 +452,72 @@ class TestGASFCISolver(unittest.TestCase):
                 fci_gas.fci2gas(projected, gas), gas)
             numpy.testing.assert_array_equal(projected_twice, projected)
             self.assertEqual(numpy.count_nonzero(projected), gas.ndet)
+
+    def test_ci_rotation_within_gas_matches_full_fci(self):
+        rng = numpy.random.default_rng(211)
+        norb, nelec = 5, (3, 2)
+        gas_orbs = (3, 2)
+        bounds = ((2, 4), (5, 5))
+        _, blocks = addons_gas.normalize_gas_spec(
+            gas_orbs, nelec, bounds, 'cumulative-occ')
+        supergroups = numpy.unique(blocks[:, :2] + blocks[:, 2:], axis=0)
+        cases = [
+            (gas_orbs, nelec, bounds, 'cumulative-occ'),
+            (gas_orbs, nelec, supergroups, 'supergroup'),
+            (gas_orbs, nelec, blocks[::2], 'spin-supergroup'),
+            ((5,), nelec, ((3, 2),), 'spin-supergroup'),
+            (gas_orbs, (0, 0), ((0, 0, 0, 0),), 'spin-supergroup'),
+            (gas_orbs, (5, 5), ((3, 2, 3, 2),), 'spin-supergroup'),
+        ]
+        for sizes, electrons, restriction, kind in cases:
+            solver = fci_gas.FCISolver(
+                gas_orbs=sizes, gas_restr=restriction, gas_restr_type=kind)
+            u = numpy.zeros((norb, norb))
+            offset = 0
+            for size in sizes:
+                q = numpy.linalg.qr(rng.normal(size=(size, size)))[0]
+                # Explicitly include determinant -1, not just proper rotations.
+                if numpy.linalg.det(q) > 0:
+                    q[:, 0] *= -1
+                u[offset:offset+size, offset:offset+size] = q
+                offset += size
+            permutation = numpy.eye(norb)
+            permutation[:, [0, 1]] = permutation[:, [1, 0]]
+            with solver.make_space(norb, electrons) as gas:
+                ci = rng.normal(size=gas.ndet)
+                ci /= numpy.linalg.norm(ci)
+                before = ci.copy()
+                full = fci_gas.gas2fci(ci, gas)
+                for rotation in (u, permutation):
+                    with self.subTest(kind=kind, nelec=electrons, sizes=sizes):
+                        expected = fci_addons.transform_ci_for_orbital_rotation(
+                            full, norb, electrons, rotation)
+                        with mock.patch.object(fci_gas, 'gas2fci',
+                                               side_effect=AssertionError('no CAS embedding')):
+                            actual = solver.transform_ci_within_gas(
+                                ci, norb, electrons, rotation)
+                        numpy.testing.assert_allclose(
+                            fci_gas.gas2fci(actual, gas), expected, atol=2e-12, rtol=0)
+                        recovered = solver.transform_ci_within_gas(
+                            actual, norb, electrons, rotation.T)
+                        numpy.testing.assert_allclose(recovered, ci, atol=2e-12, rtol=0)
+                        self.assertAlmostEqual(numpy.linalg.norm(actual), 1., places=12)
+                        numpy.testing.assert_array_equal(ci, before)
+
+    def test_ci_rotation_within_gas_rejects_invalid_transforms(self):
+        solver = fci_gas.FCISolver(gas_orbs=(2, 2),
+                                  gas_restr=((1, 1, 1, 1),))
+        ci = numpy.ones(16) / 4
+        with self.assertRaisesRegex(ValueError, 'orthogonal'):
+            solver.transform_ci_within_gas(ci, 4, (2, 2), numpy.eye(4) * 2)
+        mixed = numpy.eye(4)
+        mixed[:, [1, 2]] = mixed[:, [2, 1]]
+        with self.assertRaisesRegex(ValueError, 'mix different GAS'):
+            solver.transform_ci_within_gas(ci, 4, (2, 2), mixed)
+        with self.assertRaisesRegex(TypeError, 'real-valued'):
+            solver.transform_ci_within_gas(ci, 4, (2, 2), numpy.eye(4, dtype=complex))
+        with self.assertRaisesRegex(ValueError, 'CI vector size'):
+            solver.transform_ci_within_gas(ci[:-1], 4, (2, 2), numpy.eye(4))
 
     def test_restricted_hamiltonian_projection(self):
         cases = (
@@ -375,6 +620,147 @@ class TestGASFCISolver(unittest.TestCase):
                     embedded_sc = fci_gas.gas2fci(gas_sc, gas)
                     numpy.testing.assert_allclose(
                         embedded_sc, fci_sc, atol=1e-12, rtol=0)
+
+    def test_spin_plan_outlives_temporary_space(self):
+        solver = fci_gas.FCISolver(
+            gas_orbs=(2, 2),
+            gas_restr=[[1, 3], [4, 4]],
+            gas_restr_type="cumulative-occ")
+
+        spaces = []
+        original_make_space = solver.make_space
+
+        def make_space(*args, **kwargs):
+            space = original_make_space(*args, **kwargs)
+            spaces.append(space)
+            return space
+
+        with mock.patch.object(solver, "make_space", side_effect=make_space):
+            plan = solver.make_spin_plan(self.norb, self.nelec)
+
+        self.assertEqual(len(spaces), 1)
+        self.assertIsNone(spaces[0]._gas)
+
+        rng = numpy.random.default_rng(73)
+        ci = rng.normal(size=plan.ndet)
+        ci /= numpy.linalg.norm(ci)
+
+        planned = plan.contract(ci)
+        one_shot = solver.contract_ss(ci, self.norb, self.nelec)
+        numpy.testing.assert_allclose(planned, one_shot, atol=1e-13, rtol=0)
+
+        first = plan.contract(ci)
+        second = plan.contract(ci)
+        self.assertFalse(numpy.shares_memory(first, second))
+
+        diag = plan.diagonal_vector()
+        diag[:] = 999
+        self.assertFalse(numpy.any(plan.diagonal_vector() == 999))
+
+    def test_kernel_reuses_spin_plan_after_space_release(self):
+        norb, nelec = 3, (1, 1)
+        h1, eri = make_integrals(norb)
+        shift, core = .001, .37
+        observed_nonzero = {0.: False, 2.: False}
+        for target in (0., 2.):
+            for nroots in (1, 2):
+                for pspace in (0, 100):
+                    with self.subTest(target=target, nroots=nroots, pspace=pspace):
+                        solver = fci_gas.FCISolver(
+                            gas_orbs=(1, 2), gas_restr=((1, 1), (2, 2)),
+                            gas_restr_type='cumulative-occ')
+                        solver.ss_penalty, solver.ss_value = shift, target
+                        solver.nroots = nroots
+                        solver.pspace_size = pspace
+                        solver.conv_tol = 1e-12
+                        solver.max_space = 20
+                        spaces, plans, diagnostic_calls = [], [], []
+                        make_space = solver.make_space
+                        plan_class = fci_gas._GasSpinPlan
+
+                        def tracked_space(*args, **kwargs):
+                            space = make_space(*args, **kwargs)
+                            spaces.append(space)
+                            return space
+
+                        def tracked_plan(space):
+                            plan = plan_class(space)
+                            plans.append(plan)
+                            contract = plan.contract
+
+                            def tracked_contract(ci):
+                                if space._gas is None:
+                                    diagnostic_calls.append(plan)
+                                return contract(ci)
+
+                            plan.contract = tracked_contract
+                            return plan
+
+                        with mock.patch.object(solver, 'make_space', side_effect=tracked_space):
+                            with mock.patch.object(fci_gas, '_GasSpinPlan', side_effect=tracked_plan):
+                                energy, ci = solver.kernel(h1, eri, norb, nelec, ecore=core)
+                        self.assertEqual(len(spaces), 1)
+                        self.assertEqual(len(plans), 1)
+                        self.assertIsNone(spaces[0]._gas)
+                        self.assertEqual(len(diagnostic_calls), nroots)
+                        self.assertTrue(all(plan is plans[0] for plan in diagnostic_calls))
+                        self.assertTrue(numpy.all(solver.converged))
+                        self.assertEqual(solver.spin_penalty_method,
+                                         'exact-small-space' if pspace else
+                                         'projected-plus-global-davidson')
+                        # Independent full-FCI operators check physical energy
+                        # and both linear/quadratic penalties for each root.
+                        roots = [ci] if nroots == 1 else ci
+                        physical, penalties = [], []
+                        with make_space(norb, nelec) as gas:
+                            for root in roots:
+                                full = fci_gas.gas2fci(root, gas)
+                                ss_full = spin_op.contract_ss(full, norb, nelec)
+                                physical.append(core + direct_spin1.energy(
+                                    h1, eri, full, norb, nelec))
+                                if target == 0.:
+                                    penalty = shift * numpy.vdot(full, ss_full)
+                                else:
+                                    delta = ss_full - target * full
+                                    penalty = shift * numpy.vdot(delta, delta)
+                                penalties.append(float(penalty))
+                        observed_nonzero[target] |= max(penalties) > 1e-6
+                        numpy.testing.assert_allclose(
+                            numpy.atleast_1d(solver.e_spin_penalty), penalties,
+                            atol=2e-12, rtol=0)
+                        numpy.testing.assert_allclose(
+                            numpy.atleast_1d(solver.e_physical), physical,
+                            atol=2e-11, rtol=0)
+                        numpy.testing.assert_allclose(
+                            numpy.atleast_1d(energy), numpy.asarray(physical) + penalties,
+                            atol=2e-11, rtol=0)
+        self.assertTrue(all(observed_nonzero.values()))
+
+    def test_spin_plan_exception_closes_temporary_space(self):
+        solver = fci_gas.FCISolver(gas_orbs=(2,))
+        space = solver.make_space(2, (1, 1))
+        try:
+            self.assertIsNotNone(space._gas)
+            with mock.patch.object(solver, "make_space", return_value=space):
+                with mock.patch.object(
+                        fci_gas, "_GasSpinPlan",
+                        side_effect=RuntimeError("injected")):
+                    with self.assertRaisesRegex(RuntimeError, "injected"):
+                        solver.make_spin_plan(2, (1, 1))
+            self.assertIsNone(space._gas)
+        finally:
+            space.close()
+
+    def test_spin_plan_rejects_incomplete_space(self):
+        solver = fci_gas.FCISolver(
+            gas_orbs=(1, 1),
+            gas_restr=[[1, 0, 0, 1]])
+
+        with self.assertRaisesRegex(ValueError, "spin-complete"):
+            solver.make_spin_plan(2, (1, 1))
+
+        self.assertAlmostEqual(
+            solver.spin_square(numpy.ones(1), 2, (1, 1))[0], 1.0)
 
     def test_gas_as_cas_rdms(self):
         solver = fci_gas.FCISolver()
@@ -709,6 +1095,68 @@ no_plus_openmolcas_energies = numpy.asarray([
 
 
 class TestGASCI(unittest.TestCase):
+
+    def test_physical_energy_with_nonzero_spin_penalty(self):
+        mol = gto.M(atom="H 0 0 0; H 0 0 .9; H 0 0 2.2; H 0 0 3.1",
+                    basis="sto-3g", verbose=0)
+        mf = scf.RHF(mol).run()
+        # This restricted space has a triplet ground root. A deliberately
+        # insufficient singlet penalty makes physical != objective, so the
+        # test cannot pass merely because the penalty vanishes.
+        for weights, nroots in ((None, 1), (None, 2), ((.4, .6), 2), ((1., 0.), 2)):
+            with self.subTest(weights=weights, nroots=nroots):
+                mc = gasci.GASCI(
+                    mf, 3, (1, 1), ncore=1, gas_orbs=(1, 2),
+                    gas_restr=((0, 1), (2, 2)), gas_restr_type="cumulative-occ")
+                mc.fcisolver.nroots = nroots
+                if weights is not None:
+                    mc = mc.state_average(weights)
+                mc.fix_spin_(shift=.001, ss=0.)
+                returned = mc.kernel(mf.mo_coeff)
+                report = mc.spin_energy_report()
+                self.assertGreater(report["root_penalty"][0], 1e-3)
+                h1, core = mc.get_h1gas()
+                h2 = ao2mo.restore(1, mc.get_h2gas(), mc.ncas)
+                roots = mc.ci if nroots > 1 else [mc.ci]
+                physical = []
+                for ci in roots:
+                    with mc.fcisolver.make_rdm_plan(mc.ncas, mc.nelecas) as plan:
+                        d1, d2 = plan.make_rdm12(ci, ci)
+                    physical.append(core + numpy.einsum("pq,qp", h1, d1)
+                                    + .5 * numpy.einsum("pqrs,pqrs", h2, d2))
+                numpy.testing.assert_allclose(report["root_physical"], physical,
+                                              atol=1e-9, rtol=0)
+                expected = (numpy.dot(weights, physical) if weights is not None
+                            else physical[0] if nroots == 1 else physical)
+                numpy.testing.assert_allclose(returned[0], expected, atol=1e-9)
+                numpy.testing.assert_allclose(returned[1], numpy.asarray(expected)-core,
+                                              atol=1e-9)
+                numpy.testing.assert_allclose(mc.e_tot, returned[0])
+                numpy.testing.assert_allclose(mc.e_gas, returned[1])
+                numpy.testing.assert_allclose(
+                    report["root_objective"], numpy.array(physical)+report["root_penalty"],
+                    atol=1e-9)
+                if weights is not None:
+                    numpy.testing.assert_allclose(mc.e_states, physical, atol=1e-9)
+                    self.assertAlmostEqual(mc.e_average, returned[0], 9)
+                    numpy.testing.assert_allclose(mc.fcisolver.e_states,
+                                                  report["root_objective"])
+                self.assertFalse(hasattr(mc, "e_tot_physical"))
+                self.assertFalse(hasattr(mc, "e_gas_physical"))
+                # A later direct solver call must not rewrite the public report.
+                mc.fcisolver.e_physical = None
+                numpy.testing.assert_allclose(mc.spin_energy_report()["physical"], expected)
+                numpy.testing.assert_allclose(mc.kernel(mc.mo_coeff)[0], expected, atol=1e-9)
+                mc.undo_fix_spin_()
+                with self.assertRaises(ValueError):
+                    mc.spin_energy_report()
+                mc.kernel(mc.mo_coeff)
+                self.assertIsNone(mc.e_spin_penalty)
+                mc.fix_spin_(shift=.001, ss=0.)
+                scanner = mc.as_scanner()
+                value = scanner("H 0 0 0; H 0 0 .92; H 0 0 2.2; H 0 0 3.1")
+                numpy.testing.assert_allclose(value, scanner.spin_energy_report()["physical"])
+
 
     @classmethod
     def setUpClass(cls):
