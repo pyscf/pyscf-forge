@@ -27,3 +27,9 @@ Yu Jin
 Junjie Yang
 Hong-Zhou Ye
 Arshad Mehmood
+
+The local-density matrix approximation implementation under
+pyscf/msdft/ldma is distributed under the MIT License. It was developed by:
+
+Copyright (c) 2024 Alexander Humeniuk
+Copyright (c) 2024-2026 Yangyi Lu <luyy@szbl.ac.cn>

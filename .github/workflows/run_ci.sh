@@ -12,6 +12,8 @@ python -m pip install --upgrade pip
 pip install "scipy<1.16"
 pip install pytest
 pip install .
+python -c "import sys; from pyscf import msdft; assert 'torch' not in sys.modules; assert hasattr(msdft, 'NOCI')"
+pip install "torch>=2.0"
 pip install -U jax
 
 pip install trexio
