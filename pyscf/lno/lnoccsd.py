@@ -396,6 +396,11 @@ class MODIFIED_DFCCSD(dfccsd.RCCSD):
 class _DFChemistsERIs(_ChemistsERIs):
     def _contract_vvvv_t2(self, mycc, t2, direct=False, out=None, verbose=None):
         assert(not direct)
+        # pyscf >= 2.14 changed the signature to (mycc, mol, vvL, VVL, t2, out, verbose);
+        # with the six-argument call t2 arrives as `out` and the DF-LNO path crashes.
+        import inspect
+        if len(inspect.signature(dfccsd._contract_vvvv_t2).parameters) >= 7:
+            return dfccsd._contract_vvvv_t2(mycc, self.mol, self.vvL, self.vvL, t2, out, verbose)
         return dfccsd._contract_vvvv_t2(mycc, self.mol, self.vvL, t2, out, verbose)
 def _make_df_eris(cc, mo_coeff=None):
     from pyscf.ao2mo import _ao2mo
@@ -467,7 +472,9 @@ def _make_df_eris(cc, mo_coeff=None):
     return eris
 
 def _cp(a):
-    return np.array(a, copy=False, order='C')
+    # NumPy 2 raises on copy=False when a copy is unavoidable (e.g. an h5py slice on the
+    # out-of-core path); np.asarray keeps the NumPy 1.x meaning.
+    return np.asarray(a, order='C')
 
 class MODIFIED_DFCCSD_complex:
     pass
