@@ -675,6 +675,11 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         if (((i==(p-1)) || (i==(p-2))) && np==2){ twoS0k = 0; }
         if (((i==q) || (i==(q+1))) && nq==-2){ twoS0b = 0; }
         if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; }
+        // In the pp/hh case one chain is padded with a fabricated pair (see the pphh
+        // block below), so its S(q) node carries no CG coefficient of its own.
+        if ((i==q) && ((np>0) == (nq>0))){
+            if (nq>0){ twoS0b = 0; } else { twoS0k = 0; }
+        }
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
     }
     xdiag = sqrt (xdiag);
@@ -1097,7 +1102,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
 
-    int parity = sp + sr + sq + st + (int) (i>j);
+    int parity = sp + sr + sq + st + ((np>0)!=(nr>0));
     // I know that odd parity here makes hdiag_csf correct
     // But why? 
     // In the hdiag_csf path, i>j is always true.
