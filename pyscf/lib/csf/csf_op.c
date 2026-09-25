@@ -1098,15 +1098,18 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
 
     int parity = sp + sr + sq + st + (int) (i>j);
-    double facl = (i==r) ? 0.0 : 3.0; // I know that -3.0 here makes hdiag_csf correct
-                                      // But why? It's inconsistent with D&S.
-                                      // I had previously justified this in terms of
-                                      // operator fermion anticommutation, but the
-                                      // specific (int) (i>j) logic led directly to
-                                      // a clearly wrong <du00|e|00du> cancellation.
-                                      // Everything below here for the two terms in
-                                      // <du00|e|00du> is identical. <du00|e|00du>
-                                      // apparently has linked term == 0.
+    // I know that odd parity here makes hdiag_csf correct
+    // But why? 
+    // In the hdiag_csf path, i>j is always true.
+    // parity = sp + sq + sr + st + 1 is inconsistent with Drake & Schlesinger.
+    // int (i>j) is intuitive because it appears to correspond with a
+    // sign flip a'b'ij -> a'b'ji.
+    // But in the pspace path, (int) (i>j) appears to lead to a clearly wrong
+    // <du00|e|00du> cancellation.
+    // Everything below here for the two terms in
+    // <du00|e|00du> is identical, I think. <du00|e|00du>
+    // apparently has linked term == 0.
+    double facl = (i==r) ? 0.0 : 3.0; 
     double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){
         facl = -facl;
