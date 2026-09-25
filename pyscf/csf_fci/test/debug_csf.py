@@ -31,6 +31,7 @@ from pyscf.fci.addons import des_a, des_b
 from pyscf.csf_fci import csf_solver
 from pyscf.csf_fci.csfstring import CSFTransformer
 
+# This variant of test_csf.py just adds printouts
 
 def setUpModule():
     global mol, m, h1e, g2e, sol
@@ -71,7 +72,7 @@ def setUpModule():
     #h1e_s[:] = 0
     h1e = np.stack ([h1e+h1e_s, h1e-h1e_s], axis=0)
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
-    g2e[:] = 0
+    #g2e[:] = 0
     neleci = (neleca, neleca-1)
     sol = csf_solver (mol, smult=1)
     nel = (neleci, nelec)

@@ -31,9 +31,6 @@ from pyscf.csf_fci.csfstring import CSFTransformer
 from pyscf.csf_fci.test.old_pspace import pspace as old_pspace
 from pyscf.fci.addons import des_a, des_b
 
-# TODO: add test for the old pspace, since that's the only function that validates
-# CSFTransformer.mat_det2csf_confspace
-
 def setUpModule():
     global mol, m, h1e, g2e, sol
     global norb, nelec, neleci, rng, smult_lim
@@ -137,7 +134,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
