@@ -1103,17 +1103,10 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
 
     int parity = sp + sr + sq + st + ((np>0)!=(nr>0));
-    // I know that odd parity here makes hdiag_csf correct
-    // But why? 
-    // In the hdiag_csf path, i>j is always true.
-    // parity = sp + sq + sr + st + 1 is inconsistent with Drake & Schlesinger.
-    // int (i>j) is intuitive because it appears to correspond with a
-    // sign flip a'b'ij -> a'b'ji.
-    // But in the pspace path, (int) (i>j) appears to lead to a clearly wrong
-    // <du00|e|00du> cancellation.
-    // Everything below here for the two terms in
-    // <du00|e|00du> is identical, I think. <du00|e|00du>
-    // apparently has linked term == 0.
+    // TODO: revisit the final parity term, which is likely not fully correct.
+    // At time of writing, I know that final term = 1 makes hdiag_csf correct, whereas
+    // final term = 0 makes <du00|e|00du> correct. 
+    // the current ((np>0)!=(nr>0)) expression is an experiment from Claude.
     double facl = (i==r) ? 0.0 : 3.0; 
     double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){
