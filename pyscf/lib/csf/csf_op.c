@@ -23,7 +23,7 @@
 #endif
 
 #ifndef DEBUG_2E
-#define DEBUG_2E true
+#define DEBUG_2E false
 #endif
 
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
@@ -1123,9 +1123,14 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         } else {
             assert (sr == sq);
             assert (nr == -nq);
+            sr++;
             // This is the actual contradiction in terms.
             // Claude thinks I should sr++ here based on D&S.
             // other cases should have been handled by csf_EaiEaj
+            assert (false);
+            // Claude also tells me we never get to this branch through test_csf.py,
+            // but it could in principle. Adding this here as a tripwire so that I can
+            // investigate if and when we come this way.
         }
     }
 

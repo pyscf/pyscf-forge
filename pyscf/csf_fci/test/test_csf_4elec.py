@@ -44,8 +44,8 @@ def setUpModule():
         ['H', ( 0.,-1.    ,-1.   )],
         ['H', ( 0.,-0.5   ,-0.   )],
         ['H', ( 0.,-0.    ,-1.   )],
-#        ['H', ( 1.,-0.5   , 0.   )],
-#        ['H', ( 0., 1.    , 1.   )],
+        ['H', ( 1.,-0.5   , 0.   )],
+        ['H', ( 0., 1.    , 1.   )],
     ]
     mol.spin = len (mol.atom) % 2
     smult_lim = 5 #len (mol.atom) + 2
@@ -120,7 +120,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -134,7 +134,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -152,7 +152,7 @@ class KnownValues(unittest.TestCase):
                                    h0[i,j], h0_ref[i,j])
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_pspace_single_element (self):
         i = 1 
         j = 0
