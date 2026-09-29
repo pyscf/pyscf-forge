@@ -970,7 +970,7 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
     // the pair spins in a'a
     twoSb[nspin_bra+1] = 1;
     twoSb[nspin_bra+2] = 0;
-    int parity = si + sj + 1;
+    int parity = si + sj;
     double fac = CGC_1e (twoSk, twoSb, si, sj, ni, nj, nspin);
     if ((parity%2)==1){ fac = -fac; }
     free (twoSk);
@@ -1102,7 +1102,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
 
-    int parity = sp + sr + sq + st + ((np>0)!=(nr>0));
+    int parity = sp + sr + sq + st + (nr>0);
     // TODO: revisit the final parity term, which is likely not fully correct.
     // At time of writing, I know that final term = 1 makes hdiag_csf correct, whereas
     // final term = 0 makes <du00|e|00du> correct. 
