@@ -4,7 +4,9 @@ This `csf_mem` branch represents my attempt to address GitHub issue #156. The go
 
 I am currently stuck in debugging hell. The file I am trying to debug is `pyscf/lib/csf/csf_op.c`. The `pspace` and `make_hdiag_csf` target hotspots respectively are addressed by `FCICSFpspace_h0tril` and `FCICSFhdiag`, which in turn call down to diagonal and off-diagonal cases respectively of the functions `csf_Eai`, `csf_Sai`, `csf_EaiEaj`, and `csf_EaiEbj`. These four functions in turn call to different cases of `CGC_1e`, `CGC_2e_X`, and `CGC_2e_X_core`, which in my head refer to the diagrams in the Drake and Schlesinger paper: roughly, eqs (16), (26), and (27) respectively, although I think the latter two Drake equations are only special cases of a more general structure. The tests I am using to debug are in `pyscf/csf_fci/test`. `test_csf_2elec.py`, `test_csf_1eop.py`, and `debug_csf.py` are temporary files for debugging based off of `test_csf.py`. 
 
-I believe that `csf_Eai` and `csf_Sai` are fully debugged, which is checked by the `test_csf_1eop.py` file. I also believe that the hdiag path is fully debugged for all four `csf_` functions, since the hdiag test in `test_csf.py` now passes without any restrictions or special case applied. But the more complicated `csf_EaiEaj` and `csf_EaiEbj` functions, which use the underlying `CGC` functions in more complicated ways, are not debugged in the `pspace` (off-diagonal) case. 
+I believe that `csf_Eai` and `csf_Sai` are fully debugged, which is checked by the `test_csf_1eop.py` file. I also believe that the hdiag path is fully debugged for all four `csf_` functions, since the hdiag test in `test_csf.py` now passes without any restrictions or special case applied. But the more complicated `csf_EaiEaj` and `csf_EaiEbj` functions, which use the underlying `CGC` functions in more complicated ways, are not debugged in the `pspace` (off-diagonal) case.
+
+The last term in line 1105 of `pyscf/lib/csf/csf_op.c` (the parity line of `csf_EaiEbj`) is likely not entirely correct. It was determined empirically, and I can't currently justify it in terms of Drake & Schlesinger.
 
 ## Historical notes ##
 
