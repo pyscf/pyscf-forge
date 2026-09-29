@@ -66,6 +66,21 @@ class WaterDimer(unittest.TestCase):
         cls.mol.stdout.close()
         del cls.mol, cls.mf, cls.ecano, cls.frozen
 
+    def test_dfccsd_solver_blocked_df_eris(self):
+        # The DF-CCSD fragment solver (chosen by lnoccsd.CCSD when a fragment's vvvv block does not fit in
+        # memory, i.e. large fragments or a small max_memory) with the blocked loops of _make_df_eris:
+        # _cp must accept a non-contiguous Lov slice under NumPy 2, and _DFChemistsERIs._contract_vvvv_t2
+        # must call pyscf's dfccsd._contract_vvvv_t2 with its (mycc, mol, vvL, VVL, t2, out, verbose)
+        # signature. Neither path is reached by the LNO tests above on this small system.
+        from pyscf.lno import lnoccsd
+        ref = cc.CCSD(self.mf, frozen=self.frozen).run().e_corr
+        mycc = lnoccsd.MODIFIED_DFCCSD(self.mf, frozen=self.frozen)
+        mycc.max_memory = 1     # forces the blocked loops; the arrays stay small
+        mycc.verbose = 0
+        mycc.kernel()
+        self.assertTrue(mycc.converged)
+        self.assertAlmostEqual(mycc.e_corr, ref, 7)
+
     def test_lno_pm_by_thresh(self):
         mol = self.mol
         mf = self.mf
