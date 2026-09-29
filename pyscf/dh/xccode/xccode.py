@@ -27,7 +27,7 @@ import copy
 import warnings
 from typing import List
 from .xctype import XCType
-from .xcinfo import XCInfo, REGEX_XC
+from .xcinfo import XCInfo, REGEX_XC, _canonical_xc_name
 from .xcjson import _NAME_WITH_DASH, FUNCTIONALS_DICT
 
 
@@ -50,7 +50,7 @@ class XCList:
             info.round()
         self._xc_list = xc_list
 
-    def __init__(self, token=None, code_scf=None, **kwargs):
+    def __init__(self, token=None, code_scf=False, **kwargs):
         self.xc_list = []
         if token:
             if not isinstance(code_scf, bool):
@@ -339,11 +339,17 @@ class XCList:
         return self
 
     def __eq__(self, other: "XCList"):
-        tokens_self = [str(info) for info in self.xc_list]
-        tokens_other = [str(info) for info in other.xc_list]
-        tokens_self.sort()
-        tokens_other.sort()
-        return "".join(tokens_self) == "".join(tokens_other)
+        def info_key(info: XCInfo):
+            return (
+                info.fac,
+                _canonical_xc_name(info.name),
+                tuple(str(p) for p in info.parameters),
+                tuple(sorted((k.upper(), str(v)) for k, v in info.parameters_keyword.items())),
+            )
+
+        tokens_self = sorted(info_key(info) for info in self.xc_list)
+        tokens_other = sorted(info_key(info) for info in other.xc_list)
+        return tokens_self == tokens_other
 
     # endregion
 

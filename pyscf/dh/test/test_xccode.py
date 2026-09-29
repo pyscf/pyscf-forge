@@ -1,5 +1,5 @@
 import unittest
-from pyscf.dh.xccode import XCList, parse_xc_dh
+from pyscf.dh.xccode import XCList, parse_xc_dh, xc_equal
 
 
 class TestXCCode(unittest.TestCase):
@@ -45,6 +45,14 @@ class TestXCCode(unittest.TestCase):
         xc_io("0.5*Slater + 0.8*B88, 0.3*DFTD3(6, rs6=1.5)", "0.8*B88 + 0.5*SLATER, 0.3*DFTD3(6, RS6=1.5)")
         xc_io("0.5*Slater + 0.8*B88, 0.3*DFTD4(rs6=1.5)", "0.8*B88 + 0.5*SLATER, 0.3*DFTD4(RS6=1.5)")
         xc_io("0.75*HF + 0.25*PBE,", "0.75*HF + 0.25*PBE,")
+
+    def test_xc_equal(self):
+        # alias canonicalization through pyscf XC_CODES
+        self.assertTrue(xc_equal("B3LYP", "B3LYPg"))
+        self.assertTrue(xc_equal("PBE0", "PBE1PBE"))
+        self.assertTrue(xc_equal("HF", "HF,"))
+        self.assertFalse(xc_equal("B3LYP", "B3LYP5"))
+        self.assertFalse(xc_equal("B3LYP", "PBE0"))
 
     def test_d3_behavior(self):
         # Code string + D3 without XC= → NotImplementedError
