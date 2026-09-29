@@ -1055,6 +1055,13 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
     if (abs (na) == 2){ sa++; }
+    // The line above looks like double-counting in the case that a==b
+    // But, of course, the case that a==b (or i==j) can't get here, because
+    // we divert to csf_EaiEaj in that case.
+    assert (sa >= sb);
+    assert (sa >= si);
+    assert (sa >= sj);
+    assert (si != sj);
     int np = na;
     unsigned int sp=sa;
     int nr,nq,nt;
@@ -1106,7 +1113,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     // TODO: revisit the final parity term, which is likely not fully correct.
     // At time of writing, I know that final term = 1 makes hdiag_csf correct, whereas
     // final term = 0 makes <du00|e|00du> correct. 
-    // the current ((np>0)!=(nr>0)) expression is an experiment from Claude.
+    // the current (nr>0) expression is an experiment from Claude.
     double facl = (i==r) ? 0.0 : 3.0; 
     double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){

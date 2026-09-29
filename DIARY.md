@@ -8,8 +8,6 @@ I believe that `csf_Eai` and `csf_Sai` are fully debugged, which is checked by t
 
 The last term in line 1105 of `pyscf/lib/csf/csf_op.c` (the parity line of `csf_EaiEbj`) is likely not entirely correct. It was determined empirically, and I can't currently justify it in terms of Drake & Schlesinger.
 
-
-
 ## Historical notes ##
 
 By commit d4f9f180d19ed2f91890fc95534791bab4bcc769 I realized that the CSF sign convention implemented in pyscf-forge didn't respect the rule that adding or removing paired electrons should leave the sign unchanged. I had the option of either compensating for this inconsistency in `csf_op.c`, or modifying the sign handling in `csfstring.py`; I chose the latter, because adding or removing a pair of electrons *should* leave the sign unchanged. This fix was completed by commit fcbd77fe81eed8f1014ce5d09d96c637d7dfd8ea.
