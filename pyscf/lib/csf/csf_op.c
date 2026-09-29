@@ -396,8 +396,6 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     //  1: singly-occupied in the ket
     //  2: doubly-occupied in the ket
 
-    assert ((t!=q) || (abs(nt+nq)<(abs(nt)+abs(nq))));
-    assert ((r!=p) || (abs(nr+np)<(abs(nr)+abs(np))));
     double xdiag = 1.0;
     unsigned int twoS0b, twoS0k;
     int offk = 0;
@@ -414,6 +412,11 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     assert (qt_pp == pr_pp);
 
     // A bunch of index sanity checks
+    assert (p>=r);
+    assert ((r>=q) || (qt_pp & ((nr+nq)==0) && (abs (nr) == 2)));
+    assert (q>=t);
+    assert ((t!=q) || (abs(nt+nq)<(abs(nt)+abs(nq))));
+    assert ((r!=p) || (abs(nr+np)<(abs(nr)+abs(np))));
     if (p==r){ // p'r, pr'
         assert (abs (np) == 1);
         assert (np == -nr);
@@ -947,7 +950,7 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
         return 0.0;
     }}
     if ((brap.spin>>(j+1)) != (ketp.spin>>(j+1))){
-        if (DEBUG_2E){ printf ("csf_EaiEbj left escape\n"); fflush (stdout); }
+        if (DEBUG_2E){ printf ("csf_EaiEaj left escape\n"); fflush (stdout); }
         return 0.0;
     }
     int ni = _get_occ (ket, i);
@@ -1088,10 +1091,21 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             nq=ni; sq=si; nt=nb; st=sb;
         }
     }
+    // sr >= sq is not optional* and that logic up there ^ sometimes breaks it
+    // *exception: pphh with |nq| = 2; see the third case in the conditional below
+    unsigned int sx;
+    int nx = nr;
+    if (sq > sr){
+        sx = sq; sq = sr; sr = sx;
+        nx = nq; nq = nr; nr = nx;
+    }
     // When acting on doubly-occupied orbitals, I can choose ~sq or ~sq+1 freely, because
     // the difference is formally just a factor of -1 that is canceled by the "parity" line
-    // down there. But I need to choose consistently: sp >= sr >= sq >= st and ~sq+1; ~sr
+    // down there. But I need to choose consistently: sp >= sr >= sq >= st and sq=~sq+1; sr=~sr
     // are mutually contradictory if ~sq = ~sr and |nq| = |nr| = 2. 
+    // My sense that you ought to sq++ comes from my reading of the diagrams of
+    // Drake & Schlesinger, literally the lines connecting the rectangles to each other
+    // always crossing the lines connecting the rectangles to the floor/ceiling.
     if (abs (nq) == 2){
         if (sr > sq){
             sq++; 
@@ -1099,13 +1113,19 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             assert (sr == sq);
             assert (abs (nr+nq) < (abs (nr) + abs (nq)));
             // Here just sort so that sr = ~sr, for which there is no contradiction
-            int nx = nr;
-            nr = nq; nq = nx;
+            nx = nr; nr = nq; nq = nx;
         } else if (abs (nq+nt) == (abs (nq) + abs (nt))){
-            sq++; // You should end up adding 2 to sr down the line
+            assert (sr == sq);
+            sq++;
+            // This is the exception indicated above to the rule sr>=sq.
+            // Going from CGC_2e_X to CGC_2e_X_core should have implicitly caused
+            // sr += 2 or sq -= 2 which I think is what makes this OK.
         } else {
-            assert (nr == -nq); // other cases should have been handled by csf_EaiEaj
-            // I don't know what to do!
+            assert (sr == sq);
+            assert (nr == -nq);
+            // This is the actual contradiction in terms.
+            // Claude thinks I should sr++ here based on D&S.
+            // other cases should have been handled by csf_EaiEaj
         }
     }
 
