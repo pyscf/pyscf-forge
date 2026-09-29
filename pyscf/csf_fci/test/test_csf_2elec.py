@@ -153,7 +153,7 @@ class KnownValues(unittest.TestCase):
 
     #@unittest.skip('debug')
     def test_pspace_single_element (self):
-        i = 5 
+        i = 1 
         j = 0
         smult=1
         addr = np.array ([i,j], dtype=np.int32)
@@ -162,9 +162,8 @@ class KnownValues(unittest.TestCase):
         addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult, csf_addr=addr)
         t = sol.transformer
         h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
-        if abs (h0[0,1] - h0_ref[0,1]) > 1e-8:
-            print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
-                   h0[0,1], h0_ref[0,1])
+        print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
+            h0[0,1], h0_ref[0,1])
         self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
