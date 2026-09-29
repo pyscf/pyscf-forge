@@ -92,7 +92,7 @@ def xc_equal(a, b):
         return True
     if a is None or b is None:
         return False
-    return XCList(a, code_scf=False) == XCList(b, code_scf=False)
+    return XCList(a) == XCList(b)
 
 
 def _check_unsupported(name):

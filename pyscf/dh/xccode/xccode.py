@@ -50,7 +50,7 @@ class XCList:
             info.round()
         self._xc_list = xc_list
 
-    def __init__(self, token=None, code_scf=None, **kwargs):
+    def __init__(self, token=None, code_scf=False, **kwargs):
         self.xc_list = []
         if token:
             if not isinstance(code_scf, bool):
