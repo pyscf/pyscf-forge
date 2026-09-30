@@ -14,3 +14,7 @@ The ``contradiction in terms'' that I was afraid of in `csf_EaiEbj` is not hit b
 
 By commit d4f9f180d19ed2f91890fc95534791bab4bcc769 I realized that the CSF sign convention implemented in pyscf-forge didn't respect the rule that adding or removing paired electrons should leave the sign unchanged. I had the option of either compensating for this inconsistency in `csf_op.c`, or modifying the sign handling in `csfstring.py`; I chose the latter, because adding or removing a pair of electrons *should* leave the sign unchanged. This fix was completed by commit fcbd77fe81eed8f1014ce5d09d96c637d7dfd8ea.
 
+## Stumbling blocks ##
+
+If this is in a worktree, remember to use the `pyscf_here` command from bashrc when testing!
+

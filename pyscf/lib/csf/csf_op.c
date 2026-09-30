@@ -1032,6 +1032,47 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     int nj = _get_occ (ket, j);
     int na = -_get_occ (bra, a);
     int nb = -_get_occ (bra, b);
+    // Note that at this point in the code we can't have a==b or i==j
+    unsigned int sx;
+    int nx;
+    if (i==a){ assert (ni==-na); if (ni!=-na){ return 0.0; }}
+    else if (i==b){ assert (ni==-nb); if (ni!=-nb){ return 0.0; }}
+    else { 
+        nx = _get_occ (bra, i) + 1; 
+        assert (ni == nx);
+        if (ni != nx){ return 0.0; }
+    }
+    if (j==a){ assert (nj==-na); if (nj!=-na){ return 0.0; }}
+    else if (j==b){ assert (nj==-nb); if (nj!=-nb){ return 0.0; }}
+    else { 
+        nx = _get_occ (bra, j) + 1; 
+        assert (nj == nx); 
+        if (nj != nx){ return 0.0; }
+    }
+    if ((a!=i) && (a!=j)){ 
+        nx = _get_occ (ket, a) + 1; 
+        assert (-na == nx); 
+        if (-na != nx){ return 0.0; }
+    }
+    if ((b!=i) && (b!=j)){ 
+        nx = _get_occ (ket, b) + 1; 
+        assert (-nb == nx); 
+        if (-nb != nx){ return 0.0; }
+    }
+    if (!(ni>0 && nj>0 && na<0 && nb<0)){ 
+        assert (false);
+        return 0.0;
+    }
+    // According to the graphical logic in Drake & Schlesinger, a two-electron interaction which
+    // includes a number operator that hits a doubly-occupied orbital in both the bra and the ket
+    // is identical to a one-electron interaction with the number part dropped. I am not good
+    // enough at coding to make the CGC functions handle that elegantly, but I can write up a
+    // brute-force branch, although I already simplified in the caller so I shouldn't go here
+    // in practice.
+    if (a==i && na==-2 && ni==2){ assert (false); return csf_Eai (bra, ket, b, j); }
+    if (a==j && na==-2 && nj==2){ assert (false); return csf_Eai (bra, ket, b, i); }
+    if (b==i && nb==-2 && ni==2){ assert (false); return csf_Eai (bra, ket, a, j); }
+    if (b==j && nb==-2 && nj==2){ assert (false); return csf_Eai (bra, ket, a, i); }
     unsigned int nspin_ket = count_set_bits (ket->sconf);
     unsigned int nspin_bra = count_set_bits (bra->sconf);
     if (i==j){
@@ -1093,8 +1134,6 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
     // sr >= sq is not optional* and that logic up there ^ sometimes breaks it
     // *exception: pphh with |nq| = 2; see the third case in the conditional below
-    unsigned int sx;
-    int nx = nr;
     if (sq > sr){
         sx = sq; sq = sr; sr = sx;
         nx = nq; nq = nr; nr = nx;
@@ -1131,6 +1170,33 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             // Claude also tells me we never get to this branch through test_csf.py,
             // but it could in principle. Adding this here as a tripwire so that I can
             // investigate if and when we come this way.
+            //
+            // Update 09/30/2026: Now Claude says we ~can't~ get here, at least not via
+            // the pspace or hdiag callers. I didn't quite follow its explanation but I
+            // think it's true based on D&S graphical logic. Graphically, being here means
+            //
+            //        r                     t
+            //     ____                  ____
+            //   --|__|--x-- ... --x--x--|__|
+            //  ____     |         |  |  |  
+            //  |__|--x--x-- ... --x--x--x
+            //     q
+            //
+            // (nt == 2 above) or (nt == 1 below)
+            //
+            //        r                     t
+            //     ____
+            //   --|__|--x-- ... --x--x--x--x
+            //  ____     |         |  |  |  
+            //  |__|--x--x-- ... --x--x--x
+            //     q
+            //
+            // sr and sq are the index of the spins, increasing right to left, which are
+            // the "x" symbols and the left and right sides of the boxes, so here sr == sq.
+            // But the orbital positions, r and q, are the columns (i.e., the horizontal
+            // positions, *increasing from left to right. So here we have r = q+1, which
+            // is impossible because I quite explicitly sorted it at the top of this function
+            // so that r <= q,t.
         }
     }
 
