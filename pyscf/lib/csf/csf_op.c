@@ -1171,31 +1171,34 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             // but it could in principle. Adding this here as a tripwire so that I can
             // investigate if and when we come this way.
             //
-            // Update 09/30/2026: Now Claude says we ~can't~ get here, at least not via
-            // the pspace or hdiag callers. I didn't quite follow its explanation but I
-            // think it's true based on D&S graphical logic. Graphically, being here means
+            // Update 09/30/2026: Now Claude says we ~can't~ get here, at least not as long as
+            // I keep all those occupancy checks up there. I didn't quite follow its explanation but
+            // I think it's true based on D&S graphical logic. Graphically, being here means
             //
-            //        r                     t
-            //     ____                  ____
-            //   --|__|--x-- ... --x--x--|__|
-            //  ____     |         |  |  |  
-            //  |__|--x--x-- ... --x--x--x
-            //     q
+            //            r                     t
+            //         ____                  ____
+            //  ...  --|__|--x-- ... --x--x--|__|
+            //      ____     |         |  |  |  
+            //  ... |__|--x--x-- ... --x--x--x
+            //         q
             //
             // (nt == 2 above) or (nt == 1 below)
             //
-            //        r                     t
-            //     ____
-            //   --|__|--x-- ... --x--x--x--x
-            //  ____     |         |  |  |  
-            //  |__|--x--x-- ... --x--x--x
-            //     q
+            //            r                     t
+            //         ____
+            //  ...  --|__|--x-- ... --x--x--x--x
+            //      ____     |         |  |  |  
+            //  ... |__|--x--x-- ... --x--x--x
+            //         q
             //
+            // (q is always on the bra row rather than the ket row because it has to be opposite
+            // both r and t, the implicit p is always on the bra row by construction, and E E
+            // conserves total number of electrons.)
             // sr and sq are the index of the spins, increasing right to left, which are
             // the "x" symbols and the left and right sides of the boxes, so here sr == sq.
             // But the orbital positions, r and q, are the columns (i.e., the horizontal
-            // positions, *increasing from left to right. So here we have r = q+1, which
-            // is impossible because I quite explicitly sorted it at the top of this function
+            // positions), increasing from left to right. So here we have r > q, which is
+            // impossible because I quite explicitly sorted it at the top of this function
             // so that r <= q,t.
         }
     }
