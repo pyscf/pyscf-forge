@@ -98,6 +98,9 @@ class CMakeBuildPy(build_py):
         self.announce('Configuring extensions', level=3)
         src_dir = os.path.abspath(os.path.join(__file__, '..', 'pyscf', 'lib'))
         cmd = ['cmake', f'-S{src_dir}', f'-B{self.build_temp}']
+        # The interpreter this build runs under: CMakeLists.txt asks it where pyscf is installed, so that the lookup
+        # does not depend on which python3 is first on PATH.
+        cmd.append(f'-DPython_EXECUTABLE={sys.executable}')
         
         # Allow user to disable OCCRI C extension build
         build_occri = os.getenv('BUILD_OCCRI', 'ON')
