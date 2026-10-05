@@ -16,7 +16,7 @@
 # Author: Yi Deng <yideng@uchicago.edu>
 #
 
-"""Private ctypes bridge for the GAS FCI C kernels."""
+"""Private ctypes bridge for the GAS C kernels."""
 
 import ctypes
 import os

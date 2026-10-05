@@ -16,7 +16,7 @@
 # Author: Yi Deng <yideng@uchicago.edu>
 #
 
-"""PySCF-style generalized active-space configuration interaction."""
+"""Generalized active space configuration interaction."""
 
 import hashlib
 from functools import reduce
@@ -24,7 +24,6 @@ from functools import reduce
 import numpy
 
 from pyscf import __config__
-from pyscf import fci
 from pyscf import gto
 from pyscf import lib
 from pyscf.fci import addons as fci_addons
@@ -49,7 +48,7 @@ h1e_for_gas = casci.h1e_for_cas
 
 
 def kernel(mc, mo_coeff=None, ci0=None, verbose=logger.NOTE):
-    """Run the fixed-orbital GASCI solver."""
+    """Internal fixed-orbital solve; return objective energies for Newton."""
 
     if mo_coeff is None:
         mo_coeff = mc.mo_coeff
@@ -81,6 +80,149 @@ def kernel(mc, mo_coeff=None, ci0=None, verbose=logger.NOTE):
     return e_tot, e_tot - energy_core, ci
 
 
+def _gas_space_info(mc, gas_orbs, blocks, info):
+    """Assemble metadata for a GAS specification normalized by the caller."""
+
+    restriction_type = mc.gas_restr_type
+    if mc.gas_restr is None:
+        restriction = None
+    elif restriction_type == addons_gas.GAS_RESTR_SPIN_SUPERGROUP:
+        restriction = numpy.array(
+            info["canonical_spin_supergroups"], copy=True)
+    elif restriction_type == addons_gas.GAS_RESTR_SUPERGROUP:
+        restriction = numpy.array(
+            info["canonical_supergroups"], copy=True)
+    elif restriction_type == addons_gas.GAS_RESTR_CUMULATIVE_OCC:
+        restriction = numpy.array(info["cumulative_bounds"], copy=True)
+    elif restriction_type == addons_gas.GAS_RESTR_RAS:
+        restriction = {
+            "max_holes": int(info["max_holes"]),
+            "max_particles": int(info["max_particles"]),
+        }
+    else:  # normalize_gas_spec rejects this before reaching this branch.
+        raise RuntimeError("unrecognized normalized GAS restriction type")
+
+    user_gas_orbs = ((int(mc.ncas),) if mc.gas_orbs is None else
+                     tuple(int(value) for value in mc.gas_orbs))
+    with fci_gas.GasSpace(
+            gas_orbs, mc._effective_nelecas(), blocks,
+            lib=mc.fcisolver.lib) as space:
+        core = space.core_info()
+    return {
+        "metadata": {
+            "gas_orbs": user_gas_orbs,
+            "gas_restr_type": restriction_type,
+            "gas_restr": restriction,
+            "kernel_gas_orbs": tuple(int(value) for value in gas_orbs),
+            "spin_supergroups": numpy.array(blocks, copy=True),
+        },
+        "core": core,
+    }
+
+
+def _energy_value(value):
+    """Copy an energy without changing its scalar/array convention."""
+    value = numpy.asarray(value, dtype=float)
+    return float(value) if value.ndim == 0 else value.copy()
+
+
+def _clear_energy_results(mc):
+    mc._gas_energy_results = None
+    mc.e_tot = mc.e_cas = None
+    mc.e_spin_penalty = None
+    mc.spin_penalty_method = None
+
+
+def _publish_energy_results(mc, objective, gas_objective):
+    """Publish physical energies; solver and Newton results remain objectives.
+
+    Call only after a fixed-orbital solve, with its *objective* energies.
+    Keep a snapshot rather than consulting mutable solver diagnostics later.
+    """
+    solver = mc.fcisolver
+    weights = mc._state_weights()
+    root_objective = numpy.atleast_1d(numpy.asarray(
+        solver.e_states if weights is not None else objective, dtype=float))
+    penalty = getattr(solver, "e_spin_penalty", None)
+    penalized = hasattr(solver, "ss_penalty")
+    if penalized:
+        if penalty is None or getattr(solver, "e_physical", None) is None:
+            raise RuntimeError("spin-penalized solve did not supply energy diagnostics")
+        penalty = numpy.atleast_1d(numpy.asarray(penalty, dtype=float))
+        physical = numpy.atleast_1d(numpy.asarray(solver.e_physical, dtype=float))
+        if physical.shape != root_objective.shape or penalty.shape != physical.shape:
+            raise ValueError("spin-energy results do not match the solved roots")
+    else:
+        physical = root_objective.copy()
+        penalty = numpy.zeros_like(physical)
+    total = (numpy.dot(weights, physical) if weights is not None else
+             physical.reshape(numpy.shape(objective)))
+    core = numpy.asarray(objective) - numpy.asarray(gas_objective)
+    mc.e_tot = _energy_value(total)
+    mc.e_cas = _energy_value(total - core)
+    mc.e_spin_penalty = (_energy_value(penalty.reshape(
+        numpy.shape(getattr(solver, "e_spin_penalty")))) if penalized else None)
+    mc.spin_penalty_method = getattr(solver, "spin_penalty_method", None)
+    mc._gas_energy_results = {
+        "root_physical": physical.copy(),
+        "root_penalty": penalty.copy(),
+        "root_objective": root_objective.copy(),
+        "physical": _energy_value(total),
+        "penalty": _energy_value(numpy.dot(weights, penalty) if weights is not None
+                                 else penalty.reshape(numpy.shape(objective))),
+        "objective": _energy_value(objective),
+        "gas_physical": _energy_value(total - core),
+        "penalized": penalized,
+        "shift": float(getattr(solver, "ss_penalty", 0.)),
+        "target_s2": getattr(solver, "ss_value", None),
+        "method": mc.spin_penalty_method,
+    }
+    return mc.e_tot, mc.e_cas
+
+
+def _set_spin_penalty(mc, shift, ss):
+    """Configure the native GAS penalty, without a second CAS penalty wrapper."""
+    gas_orbs, gas_restr = mc._normalized_restriction()
+    nelecas = mc._effective_nelecas()
+    if not addons_gas.is_spin_complete(gas_orbs, nelecas, gas_restr):
+        raise ValueError("fix_spin_ requires a spin-complete GAS restriction")
+    shift = float(shift)
+    target = None if ss is None else float(ss)
+    trial = mc.fcisolver.copy()
+    trial.ss_penalty, trial.ss_value = shift, target
+    fci_gas._spin_penalty_parameters(trial, mc.ncas, nelecas)
+    if isinstance(mc.fcisolver, fci_addons.SpinPenaltyFCISolver):
+        mc.fcisolver = mc.fcisolver.undo_fix_spin()
+    mc.fcisolver.ss_penalty, mc.fcisolver.ss_value = shift, target
+    mc.fcisolver.e_physical = None
+    mc.fcisolver.e_spin_penalty = None
+    mc.fcisolver.spin_penalty_method = None
+    _clear_energy_results(mc)
+
+
+def _physical_e_states(mc):
+    result = getattr(mc, "_gas_energy_results", None)
+    if result is None:
+        return [None] * mc.fcisolver.nroots
+    return result["root_physical"].copy()
+
+
+def spin_energy_report(mc):
+    """Return the completed solve's physical, penalty and objective energies.
+
+    Totals are scalars for a single root or state average, and arrays for
+    unweighted multiroot GASCI. Root entries always retain solver root order.
+    Requires a completed spin-penalized solve; otherwise raises ValueError.
+    """
+    result = getattr(mc, "_gas_energy_results", None)
+    if result is None or not result["penalized"]:
+        raise ValueError("no completed spin-penalized GASCI solve")
+    return {key: (value.tolist() if key.startswith("root_") else
+                  value.copy() if isinstance(value, numpy.ndarray) else value)
+            for key, value in result.items()
+            if key not in ("gas_physical", "penalized")}
+
+
 def as_scanner(mc):
     """Return a GASCI potential-energy-surface scanner.
 
@@ -97,7 +239,7 @@ def as_scanner(mc):
 
 
 class GASCIScanner(lib.SinglePointScanner):
-    """Callable GASCI scanner following the PySCF CASCI scanner protocol."""
+    """Callable GASCI scanner following the CASCI scanner protocol."""
 
     __name_mixin__ = "Scanner"
 
@@ -125,7 +267,7 @@ class GASCIScanner(lib.SinglePointScanner):
             # sectors.  Reusing only the preceding roots may then follow an
             # excited sector through a crossing.  For spaces covered by the
             # bounded exact pspace, solve for the lowest roots afresh; larger
-            # production spaces retain PySCF-style CI reuse.
+            # production spaces retain CI reuse.
             try:
                 ndet = self._gas_problem_signature()[-1]
             except (TypeError, ValueError, NotImplementedError):
@@ -166,7 +308,7 @@ class GASCI(casci.CASCI):
 
     _keys = casci.CASCI._keys | {
         "gas_orbs", "gas_restr", "gas_restr_type", "e_spin_penalty",
-        "e_tot_physical", "e_gas_physical", "spin_penalty_method",
+        "spin_penalty_method", "_gas_energy_results",
     }
 
     def __init__(self, mf, ncas, nelecas, gas_orbs=None, gas_restr=None,
@@ -180,10 +322,7 @@ class GASCI(casci.CASCI):
             getattr(mf, "mol", None), gas_orbs=self.gas_orbs,
             gas_restr=self.gas_restr, gas_restr_type=self.gas_restr_type)
         self._gas_ci_signature = None
-        self.e_spin_penalty = None
-        self.e_tot_physical = None
-        self.e_gas_physical = None
-        self.spin_penalty_method = None
+        _clear_energy_results(self)
 
     @property
     def ngas(self):
@@ -228,41 +367,7 @@ class GASCI(casci.CASCI):
         self._sync_fcisolver()
         gas_orbs, blocks, info = self._normalized_restriction(
             return_info=True)
-        restriction_type = self.gas_restr_type
-        if self.gas_restr is None:
-            restriction = None
-        elif restriction_type == addons_gas.GAS_RESTR_SPIN_SUPERGROUP:
-            restriction = numpy.array(
-                info["canonical_spin_supergroups"], copy=True)
-        elif restriction_type == addons_gas.GAS_RESTR_SUPERGROUP:
-            restriction = numpy.array(
-                info["canonical_supergroups"], copy=True)
-        elif restriction_type == addons_gas.GAS_RESTR_CUMULATIVE_OCC:
-            restriction = numpy.array(info["cumulative_bounds"], copy=True)
-        elif restriction_type == addons_gas.GAS_RESTR_RAS:
-            restriction = {
-                "max_holes": int(info["max_holes"]),
-                "max_particles": int(info["max_particles"]),
-            }
-        else:  # normalize_gas_spec rejects this before reaching this branch.
-            raise RuntimeError("unrecognized normalized GAS restriction type")
-
-        user_gas_orbs = ((int(self.ncas),) if self.gas_orbs is None else
-                         tuple(int(value) for value in self.gas_orbs))
-        with fci_gas.GasSpace(
-                gas_orbs, self._effective_nelecas(), blocks,
-                lib=self.fcisolver.lib) as space:
-            core = space.core_info()
-        return {
-            "metadata": {
-                "gas_orbs": user_gas_orbs,
-                "gas_restr_type": restriction_type,
-                "gas_restr": restriction,
-                "kernel_gas_orbs": tuple(int(value) for value in gas_orbs),
-                "spin_supergroups": numpy.array(blocks, copy=True),
-            },
-            "core": core,
-        }
+        return _gas_space_info(self, gas_orbs, blocks, info)
 
     def _gas_problem_signature(self):
         """Return the normalized GAS definition associated with a CI vector."""
@@ -302,14 +407,12 @@ class GASCI(casci.CASCI):
         for name in ("ci", "eci"):
             if hasattr(self.fcisolver, name):
                 setattr(self.fcisolver, name, None)
-        self.e_spin_penalty = None
-        self.e_tot_physical = None
-        self.e_gas_physical = None
-        self.spin_penalty_method = None
+        _clear_energy_results(self)
 
     def reset(self, mol=None):
         """Reset molecular data while retaining only a compatible GAS CI guess."""
 
+        _clear_energy_results(self)
         previous_signature = self._gas_ci_signature
         super().reset(mol)
         self._sync_fcisolver()
@@ -453,15 +556,17 @@ class GASCI(casci.CASCI):
         return error
 
     def kernel(self, mo_coeff=None, ci0=None, verbose=None):
-        """Run fixed-orbital GASCI and return PySCF-style results.
+        """Run a fixed-orbital GASCI calculation.
 
         Returns:
-            Tuple ``(e_tot, e_gas, ci, mo_coeff, mo_energy)``.  For multiple
-            roots, energies and CI vectors follow the selected PySCF solver
-            convention.
+            Tuple ``(e_tot, e_gas, ci, mo_coeff, mo_energy)``. For multiple
+            roots, energies and CI vectors follow the underlying FCI solver
+            convention. Energies exclude any spin penalty; the penalized
+            objective is available from :meth:`spin_energy_report`.
         """
 
         self._sync_fcisolver()
+        _clear_energy_results(self)
         if mo_coeff is None:
             if self.mo_coeff is None and self._scf.mol.nelectron > 0:
                 self._scf.run()
@@ -482,28 +587,7 @@ class GASCI(casci.CASCI):
             self, mo_coeff, ci0=ci0, verbose=log)
         self._gas_ci_signature = signature
 
-        solver_physical = getattr(self.fcisolver, "e_physical", None)
-        solver_penalty = getattr(self.fcisolver, "e_spin_penalty", None)
-        self.spin_penalty_method = getattr(
-            self.fcisolver, "spin_penalty_method", None)
-        if solver_physical is None or solver_penalty is None:
-            self.e_spin_penalty = None
-            self.e_tot_physical = self.e_tot
-            self.e_gas_physical = self.e_gas
-        else:
-            physical = numpy.asarray(solver_physical, dtype=numpy.float64)
-            penalty = numpy.asarray(solver_penalty, dtype=numpy.float64)
-            core = (numpy.asarray(self.e_tot, dtype=numpy.float64) -
-                    numpy.asarray(self.e_gas, dtype=numpy.float64))
-            gas_physical = physical - core
-            if physical.ndim == 0:
-                self.e_spin_penalty = float(penalty)
-                self.e_tot_physical = float(physical)
-                self.e_gas_physical = float(gas_physical)
-            else:
-                self.e_spin_penalty = penalty
-                self.e_tot_physical = physical
-                self.e_gas_physical = gas_physical
+        _publish_energy_results(self, self.e_tot, self.e_gas)
 
         if self.canonicalization:
             gasdm1 = None
@@ -606,27 +690,38 @@ class GASCI(casci.CASCI):
     cas_natorb_ = cas_natorb
 
     def fix_spin_(self, shift=0.2, ss=None):
-        """Use a PySCF-style energy penalty to target a GAS spin state.
+        """Apply an energy penalty to target a GAS spin state.
 
-        This optional numerical aid is only defined for a spin-complete GAS
-        restriction.  Its success depends on the energy gaps between spin
-        sectors and on a suitable finite shift; it is not a spin-adapted CI
-        representation.  Small GAS spaces are solved exactly, while larger
-        spaces use target-spin-projected guesses together with global probes
-        so that an insufficient shift does not silently change the eigenproblem.
+        This numerical aid requires a spin-complete GAS restriction.
+        It is not a spin-adapted CI representation, and its effectiveness
+        depends on the spin-state energy gaps and the chosen penalty shift.
         """
 
         self._sync_fcisolver()
-        gas_orbs, gas_restr = self._normalized_restriction()
-        nelecas = self._effective_nelecas()
-        if not addons_gas.is_spin_complete(
-                gas_orbs, nelecas, gas_restr):
-            raise ValueError(
-                "fix_spin_ requires a spin-complete GAS restriction")
-        fci.addons.fix_spin_(self.fcisolver, shift, ss)
+        _set_spin_penalty(self, shift, ss)
         return self
 
     fix_spin = fix_spin_
+    spin_energy_report = spin_energy_report
+    _physical_e_states = _physical_e_states
+    _clear_energy_results = _clear_energy_results
+
+    def undo_fix_spin_(self):
+        """Remove the native GAS penalty in place; invalidate its report."""
+        if isinstance(self.fcisolver, fci_addons.SpinPenaltyFCISolver):
+            self.fcisolver = self.fcisolver.undo_fix_spin()
+        for name in ("ss_penalty", "ss_value"):
+            self.fcisolver.__dict__.pop(name, None)
+        self.fcisolver.e_physical = None
+        self.fcisolver.e_spin_penalty = None
+        self.fcisolver.spin_penalty_method = None
+        _clear_energy_results(self)
+        return self
+
+    def undo_fix_spin(self):
+        result = self.copy()
+        result.fcisolver = self.fcisolver.copy()
+        return result.undo_fix_spin_()
 
     def state_average(self, weights=(0.5, 0.5), wfnsym=None):
         """Return a GASCI object carrying fixed-orbital state weights.
@@ -652,9 +747,7 @@ class GASCI(casci.CASCI):
         raise NotImplementedError(
             "GASCI nuclear gradients are not implemented")
 
-    def to_gpu(self, *args, **kwargs):
-        raise NotImplementedError(
-            "the libfci_gas C/OpenMP backend does not support GPU execution")
+    to_gpu = fci_gas.FCISolver.to_gpu
 
     def state_specific_(self, state=1, wfnsym=None):
         if wfnsym is not None:
@@ -716,12 +809,14 @@ class GASCI(casci.CASCI):
         weights = self._state_weights()
         if weights is not None:
             totals = numpy.asarray(
-                self.fcisolver.e_states, dtype=numpy.float64).reshape(-1)
+                self.e_states, dtype=numpy.float64).reshape(-1)
             roots = self.ci if isinstance(self.ci, (list, tuple)) else [self.ci]
             energy_core = float(self.e_tot) - float(self.e_gas)
-            log.note("GASCI weighted energy (fixed orbitals) = %#.15g",
-                     self.e_tot)
-            log.note("GASCI energy for each state")
+            label = getattr(self, "_gas_analysis_label", "GASCI")
+            context = " (fixed orbitals)" if label == "GASCI" else ""
+            log.note("%s weighted physical energy%s = %#.15g",
+                     label, context, self.e_tot)
+            log.note("%s physical energy for each state", label)
             spin_values = self._spin_square_for_roots(
                 roots, self.ncas, self.nelecas)
             for i, (weight, e_tot, spin) in enumerate(
@@ -765,7 +860,7 @@ class GASCI(casci.CASCI):
             penalties = numpy.asarray(
                 self.e_spin_penalty, dtype=numpy.float64).reshape(-1)
             physical = numpy.asarray(
-                self.e_tot_physical, dtype=numpy.float64).reshape(-1)
+                self.e_tot, dtype=numpy.float64).reshape(-1)
             target = getattr(self.fcisolver, "ss_value", None)
             if target is None:
                 nelecas = self._effective_nelecas()
@@ -990,7 +1085,8 @@ class GASCI(casci.CASCI):
             raise ValueError("mo_coeff does not contain the complete GAS space")
         if rotation.shape != (self.ncas, self.ncas):
             raise ValueError("GAS orbital rotation has an invalid shape")
-        mo_natorb = mo_coeff.copy()
+        mo_natorb = numpy.array(
+            mo_coeff, dtype=numpy.result_type(mo_coeff, rotation), copy=True)
         gas = slice(self.ncore, self.ncore + self.ncas)
         mo_natorb[:, gas] = numpy.dot(mo_coeff[:, gas], rotation)
         return mo_natorb
@@ -1003,6 +1099,8 @@ class GASCI(casci.CASCI):
         diagonalized.  For a restricted GAS, the resulting orbitals can mix
         different GAS subspaces and are therefore analysis orbitals only.
         This method never modifies ``mo_coeff`` or transforms the CI vector.
+        The returned array preserves the eigenvectors' numeric dtype; complex
+        analysis orbitals cannot be used by the real-valued GAS solver.
         """
 
         if gasdm1 is None and state is None:
@@ -1021,7 +1119,7 @@ class GASCI(casci.CASCI):
                                sort=True):
         """Return natural orbitals of the explicitly state-averaged GAS DM.
 
-        This method is available only on a state-average GASCI object.  Like
+        This method requires a state-average GASCI or GASSCF object. Like
         :meth:`get_gas_natorb`, the returned orbitals are for analysis and do
         not replace the computational GAS orbitals.
         """
@@ -1052,7 +1150,8 @@ class GASCI(casci.CASCI):
 
         gas_orbs = ((self.ncas,) if self.gas_orbs is None else
                     tuple(int(value) for value in self.gas_orbs))
-        rotation = numpy.zeros_like(gasdm1)
+        rotation = numpy.zeros_like(
+            gasdm1, dtype=numpy.result_type(gasdm1, numpy.float64))
         occupations = []
         offset = 0
         for size in gas_orbs:
@@ -1085,7 +1184,8 @@ class GASCI(casci.CASCI):
             root_labels = [selected]
 
         log.info("")
-        log.info("******** GASCI analysis ********")
+        label_name = getattr(self, "_gas_analysis_label", "GASCI")
+        log.info("******** %s analysis ********", label_name)
         weights = self._state_weights()
         energies = numpy.asarray(self.e_states if weights is not None else
                                  self.e_tot).reshape(-1)
@@ -1095,13 +1195,13 @@ class GASCI(casci.CASCI):
             ss, mult = spin
             energy_index = label if energies.size > 1 else 0
             if weights is None:
-                log.note("GASCI state %3d  E = %#.15g  S^2 = %.7f  "
-                         "multiplicity = %.7f", label,
+                log.note("%s state %3d  E = %#.15g  S^2 = %.7f  "
+                         "multiplicity = %.7f", label_name, label,
                          energies[energy_index], ss, mult)
             else:
-                log.note("GASCI state %3d  weight = %g  E = %#.15g  "
+                log.note("%s state %3d  weight = %g  E = %#.15g  "
                          "S^2 = %.7f  multiplicity = %.7f",
-                         label, weights[label], energies[energy_index],
+                         label_name, label, weights[label], energies[energy_index],
                          ss, mult)
 
         density_state = None if weights is not None and state is None else (

@@ -41,9 +41,26 @@ from typing import List
 from .xctype import XCType
 from .xcjson import ADV_CORR_ALIAS, ADV_CORR_DICT
 from pyscf import dft
+from pyscf.dft.libxc import XC_CODES
 
 
 REGEX_XC = r"((,?)([+-]*)([0-9.]+\*)?([\w@]+)(\([\w+\-\*.,;=]+\))?)"
+
+
+def _canonical_xc_name(name: str) -> str:
+    r"""Resolve an XC name through PySCF's XC_CODES alias table into a canonical form.
+
+    For example, "B3LYP" and "B3LYPG" both resolve to the same libxc functional
+    id (402), unless B3LYP_WITH_VWN5 is set, in which case "B3LYP" resolves to
+    the VWN5 variant. Names absent from XC_CODES (HF, MP2, registered custom
+    functionals, ...) are returned unchanged.
+    """
+    key = name.upper()
+    seen = set()
+    while key in XC_CODES and key not in seen:
+        seen.add(key)
+        key = str(XC_CODES[key]).upper()
+    return key
 
 
 @dataclass

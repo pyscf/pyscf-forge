@@ -82,11 +82,17 @@ def _register_ext_params(xc_list):
 
 
 def xc_equal(a, b):
+    r"""Compare two SCF-level XC functionals for equality after alias canonicalization.
+
+    Both arguments must be plain SCF functional names or code strings; DH
+    functional names are not accepted here. Extract the SCF part first, e.g.
+    ``XCList("XYG3", code_scf=True).token``.
+    """
     if a is None and b is None:
         return True
     if a is None or b is None:
         return False
-    return XCList(a, code_scf=True) == XCList(b, code_scf=True)
+    return XCList(a) == XCList(b)
 
 
 def _check_unsupported(name):
