@@ -583,9 +583,6 @@ class SISO(lib.StreamObject):
         if self.amf == self.mmf:
             raise ValueError("Exactly one of amf and mmf must be enabled")
 
-        if isinstance(self.mc, mcpdft.MultiStateMCPDFTSolver):
-            self.sort_eigenstates_forlpdft()
-
         expected_nroots = sum(state[0] for state in self.modelspace)
         solvers = getattr(self.mc.fcisolver, 'fcisolvers', None)
         if solvers is not None:
@@ -637,15 +634,6 @@ class SISO(lib.StreamObject):
                 f"expected {expected_mults}, found {actual_mults}")
         self._state_s2 = ss
         return self
-
-    def sort_eigenstates_forlpdft(self):
-        '''
-        Sorting the L-PDFT ci-vecs and energies accoarding to spin-states.
-        '''
-        ss = self.mc.fcisolver.states_spin_square(self.mc.ci, self.mc.ncas, self.mc.nelecas)[0]
-        idx = np.argsort(ss)
-        self.mc.ci = [self.mc.ci[i] for i in idx]
-        self.mc.e_states = [self.mc.e_states[i] for i in idx]
 
     def dump_flags(self):
         log = logger.Logger(self.mc.stdout, self.mc.verbose)
