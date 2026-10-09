@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.12)
+cmake_minimum_required (VERSION 3.15)
 project (pyscf_forge)
 
 # Build only the GAS FCI kernel library.  This mode is intended for
