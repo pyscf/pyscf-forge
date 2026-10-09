@@ -1149,6 +1149,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             assert (abs (nr+nq) < (abs (nr) + abs (nq)));
             // Here just sort so that sr = ~sr, for which there is no contradiction
             nx = nr; nr = nq; nq = nx;
+            sx = r; r = q; q = sx;
         } else if (abs (nq+nt) == (abs (nq) + abs (nt))){
             assert (sr == sq);
             sq++;
@@ -1199,6 +1200,8 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         }
     }
 
+    // The unlinked diagram vanishes if, at any spectator spin, the cumulative spin
+    // magnitudes of bra and ket are unequal.
     bool unlinked_orth = false;
     if (nr < 0){ // pphh: np is negative always
         nx = 2;
@@ -1237,8 +1240,17 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     // unlinked term
     if (!unlinked_orth){
         if (DEBUG_2E){ printf ("evaluating an unlinked term\n"); fflush (stdout); }
-        facu *= CGC_1e (twoSk, twoSb, sp, sr, np, nr, nspin);
         facu *= CGC_1e (twoSk, twoSb, sq, st, nq, nt, nspin);
+        if (nr < 0){ // pphh: np is always negative
+            // The ket line has two more nodes below r and two fewer nodes above
+            // r compared to the phph/phhp case
+            for (sx = sr+1; sx < nspin+1; sx++){
+                twoSk[sx-2] = twoSk[sx];
+            }
+            twoSk[nspin-1] = 1; // arbitrary?
+            twoSk[nspin] = 0; // arbitrary?
+        }
+        facu *= CGC_1e (twoSk, twoSb, sp, sr, np, nr, nspin);
     }
 
     free (twoSk);
