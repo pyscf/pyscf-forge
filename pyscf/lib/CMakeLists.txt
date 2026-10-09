@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.5)
+cmake_minimum_required (VERSION 3.15)
 project (pyscf_forge)
 
 # Build only the GAS FCI kernel library.  This mode is intended for
@@ -93,11 +93,22 @@ if(ENABLE_OPENMP)
   endif()
 endif()
 
-option(PYSCF_SOURCE_DIR "Pyscf source directory e.g. /usr/local/lib/python3.7/site-packages/pyscf")
+set(PYSCF_SOURCE_DIR "" CACHE PATH "Pyscf source directory e.g. /usr/local/lib/python3.7/site-packages/pyscf")
 if(NOT PYSCF_SOURCE_DIR)
+  # Locate the installed pyscf with the interpreter the build runs under (setup.py passes -DPython_EXECUTABLE),
+  # from the build directory: run from the checkout, an interpreter without pyscf would import the checkout's own
+  # namespace-package portion pyscf/ and answer with the wrong directory, silently.
+  find_package(Python COMPONENTS Interpreter REQUIRED)
   execute_process(
-    COMMAND python3 -c "import pyscf; print(pyscf.__path__[0], end='')"
-    OUTPUT_VARIABLE PYSCF_SOURCE_DIR)
+    COMMAND ${Python_EXECUTABLE} -c "import pyscf; print(pyscf.__path__[0], end='')"
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    OUTPUT_VARIABLE PYSCF_SOURCE_DIR
+    RESULT_VARIABLE _pyscf_rc)
+  if(NOT _pyscf_rc EQUAL 0 OR NOT EXISTS "${PYSCF_SOURCE_DIR}/lib/config.h.in")
+    message(FATAL_ERROR
+      "Could not locate an installed pyscf using ${Python_EXECUTABLE}. "
+      "Pass -DPYSCF_SOURCE_DIR=<.../site-packages/pyscf> or -DPython_EXECUTABLE=<interpreter with pyscf>.")
+  endif()
 endif()
 message(STATUS "Include pyscf source dir: ${PYSCF_SOURCE_DIR}")
 include_directories(${PYSCF_SOURCE_DIR}/lib ${PYSCF_SOURCE_DIR}/lib/deps/include)
