@@ -1022,10 +1022,9 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         if (DEBUG_2E){ printf ("csf_EaiEbj left escape\n"); fflush (stdout); }
         return 0.0;
     }
-    // TODO: this part might be problematic, since pphh
-    // messes up the alignment
-    uint64_t bra_rq = ((bra->spin) & ((1ULL<<r)-1)) >> q;
-    uint64_t ket_rq = ((ket->spin) & ((1ULL<<r)-1)) >> q;
+    // TODO: this is known to be wrong in cases of pphh
+    uint64_t bra_rq = ((bra->spin) & ((1ULL<<q)-1)) >> r;
+    uint64_t ket_rq = ((ket->spin) & ((1ULL<<q)-1)) >> r;
     bool unlinked_orth = (bra_rq!=ket_rq);
 
     int ni = _get_occ (ket, i);
@@ -1137,6 +1136,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     if (sq > sr){
         sx = sq; sq = sr; sr = sx;
         nx = nq; nq = nr; nr = nx;
+        sx = r; r = q; q = sx;
     }
     // When acting on doubly-occupied orbitals, I can choose ~sq or ~sq+1 freely, because
     // the difference is formally just a factor of -1 that is canceled by the "parity" line
