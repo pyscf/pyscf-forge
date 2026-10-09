@@ -1022,10 +1022,6 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         if (DEBUG_2E){ printf ("csf_EaiEbj left escape\n"); fflush (stdout); }
         return 0.0;
     }
-    // TODO: this is known to be wrong in cases of pphh
-    uint64_t bra_rq = ((bra->spin) & ((1ULL<<q)-1)) >> r;
-    uint64_t ket_rq = ((ket->spin) & ((1ULL<<q)-1)) >> r;
-    bool unlinked_orth = (bra_rq!=ket_rq);
 
     int ni = _get_occ (ket, i);
     int nj = _get_occ (ket, j);
@@ -1201,6 +1197,16 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             // impossible because I quite explicitly sorted it at the top of this function
             // so that r <= q,t.
         }
+    }
+
+    bool unlinked_orth = false;
+    if (nr < 0){ // pphh: np is negative always
+        nx = 2;
+    } else {
+        nx = 0;
+    }
+    for (sx = sq; sx < sr; sx++){
+        if (twoSk[sx] != twoSb[sx-nx]){ unlinked_orth = true; }
     }
 
     int parity = sp + sr + sq + st + (nr>0);
