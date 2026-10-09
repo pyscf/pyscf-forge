@@ -15,3 +15,7 @@ recursive-include pyscf *.c *.h CMakeLists.txt
 
 # dh xccode JSON data
 recursive-include pyscf/dh *.json
+
+# licenses and documentation for bundled components
+include pyscf/msdft/ldma/LICENSE
+include pyscf/msdft/ldma/README.md
