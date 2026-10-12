@@ -23,7 +23,11 @@
 #endif
 
 #ifndef DEBUG_2E
-#define DEBUG_2E false
+#define DEBUG_2E true
+#endif
+
+#ifndef DEBUG_2E_CGC
+#define DEBUG_2E_CGC true
 #endif
 
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
@@ -469,6 +473,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
     }
     xdiag = sqrt (xdiag);
+    if (DEBUG_2E_CGC){ printf ("CGC_2e_X norm: %f\n", xdiag); fflush (stdout); }
 
     // We just skip all of these when we are doing Sz, which corresponds to t = q = 0
     if (q>0){
@@ -497,14 +502,40 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         if ((i==t) && (abs (nt) == 2)){
             continue;
         }
-        if ((i==(q-1)) && (abs (nq) == 2)){
+        // EMPIRICAL: || qt_pp
+        // Spin coefficients for interactions like <0uuu00|H|000uuu> should always have
+        // magnitude 1. The point of these functions is to compensate for spin coupling, and
+        // there is essentially no spin at all if they are all parallel and ferromagnetically
+        // coupled, so this is trivially always true no matter how many 0's or how many u's or
+        // where they are, as long as they can be coupled by a double excitaiton.
+        // Furthermore, if qt_pp, all unlinked terms vanish (if all spins are
+        // parallel then there is no way for the bra and ket lines to have the same running
+        // spin after different numbers of CG nodes.)
+        // The output of this function gets multiplied by 3 in the caller, so 
+        // we should have |xdiag| = 0.33333. For the given example, the norm from CG
+        // coefficients is 6, and |xcore| from CGC_2e_X_core below is 1/18. Hence I conclude
+        // that the innermost T(i) terms in this function are double-counting.
+        // TODO: This applies to all qt_pp, not just the ones with q==t+1/p=r+1, but:
+        //    1. I still don't have the unlinked term vanishing as it should,
+        //    2. We're apparently off by 1/2 or 1/4 in cases where b or j is doubly-occupied,
+        //    3. (ai|bj) and (aj|bi) need to differ by a factor of -1, and they still don't.
+        if ((i==(q-1)) && ((abs (nq) == 2) || qt_pp)){
             continue;
         }
         if (nt < 0){ // T(i)
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSb[i+1], twoSb[i], twoSk[i-1]);
+            if (DEBUG_2E_CGC){
+                printf (" { 1 %d %d }\n { 1 %d %d }\n", twoSk[i], twoSb[i+1], twoSb[i], twoSk[i-1]);
+                fflush (stdout);
+            }
         } else { // T'(i)
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
+            if (DEBUG_2E_CGC){
+                printf (" { 1 %d %d }\n { 1 %d %d }\n", twoSk[i], twoSb[i+1], twoSb[i], twoSk[i-1]);
+                fflush (stdout);
+            }
         }
+        if (DEBUG_2E_CGC){ printf (" * T(%d) = %f\n", i, xdiag); fflush (stdout); }
         parity += 2 + twoSk[i] + twoSb[i];
         // parity = parity % 4;
     }
@@ -527,6 +558,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
                             r-offb, q-offk,
                             nr, nq,
                             qt_pp);
+    if (DEBUG_2E_CGC){ printf (" * Xcore = %f\n", xdiag); fflush (stdout); }
 
     // T(i) and T'(i) strings
     //     T(i) =
@@ -535,7 +567,9 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     //     { 1    S(i)   S'(i+1) }
     //     { 1/2  S'(i)  S(i-1)  }
     for (i=r; i < p; i++){
-        if ((i==r) && (abs (nr) == 2)){
+        // EMPIRICAL: || qt_pp
+        // See above
+        if ((i==r) && ((abs (nr) == 2) || qt_pp)){
             continue;
         }
         if ((i==(p-1)) && (abs (np) == 2)){
@@ -547,6 +581,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
             xdiag *= _get_wigner_6j_j41h (1, twoSk[i], twoSk[i+1], twoSb[i], twoSb[i-1]);
         }
         parity += 2 + twoSk[i] + twoSb[i];
+        if (DEBUG_2E_CGC){ printf (" * T(%d) = %f\n", i, xdiag); fflush (stdout); }
         // parity = parity % 4;
     }
 
