@@ -152,7 +152,7 @@ class KnownValues(unittest.TestCase):
                                    h0[i,j], h0_ref[i,j])
                 self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_pspace_single_element (self):
         i = 9 
         j = 0

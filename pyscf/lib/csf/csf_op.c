@@ -23,11 +23,11 @@
 #endif
 
 #ifndef DEBUG_2E
-#define DEBUG_2E true
+#define DEBUG_2E false
 #endif
 
 #ifndef DEBUG_2E_CGC
-#define DEBUG_2E_CGC true
+#define DEBUG_2E_CGC false
 #endif
 
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
@@ -516,9 +516,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         // coefficients is 6, and |xcore| from CGC_2e_X_core below is 1/18. Hence I conclude
         // that the innermost T(i) terms in this function are double-counting.
         // TODO: This applies to all qt_pp, not just the ones with q==t+1/p=r+1, but:
-        //    1. I still don't have the unlinked term vanishing as it should,
-        //    2. We're apparently off by 1/2 or 1/4 in cases where b or j is doubly-occupied,
-        //    3. (ai|bj) and (aj|bi) need to differ by a factor of -1, and they still don't.
+        //    1. We're apparently off by 1/2 or 1/4 in cases where b or j is doubly-occupied,
         if ((i==(q-1)) && ((abs (nq) == 2) || qt_pp)){
             continue;
         }
@@ -1243,15 +1241,23 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     } else {
         nx = 0;
     }
-    for (sx = sq; sx < sr; sx++){
+    for (sx = sq; sx < sr+nx; sx++){
         if (twoSk[sx] != twoSb[sx-nx]){ unlinked_orth = true; }
     }
 
-    int parity = sp + sr + sq + st + (nr>0);
+    int parity = sp + sr + sq + st + ((nr>0) || (i>j));
     // TODO: revisit the final parity term, which is likely not fully correct.
     // At time of writing, I know that final term = 1 makes hdiag_csf correct, whereas
     // final term = 0 makes <du00|e|00du> correct. 
-    // the current (nr>0) expression is an experiment from Claude.
+    // the (nr>0) expression is an experiment from Claude.
+    // New on 10/12/2026:
+    // (i>j) is something I came up with in the hopes of making (ai|bj) == -(aj|bi)
+    // Claude says that i>j is better but that it should only be applied to facl, not facu.
+    // If that's true, it implies something about the graphical logic that I need to
+    // make sure I understand. I don't want to compensate for bad parity logic in
+    // CGC functions by adding a bunch of conditionals here. But I do know from D&S that
+    // there ought to be a sorting parity term entirely outside of the graphs and that
+    // does differ between linked and unlinked terms.
     double facl = (i==r) ? 0.0 : 3.0; 
     double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){
