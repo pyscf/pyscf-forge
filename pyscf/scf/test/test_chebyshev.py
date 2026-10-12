@@ -16,7 +16,7 @@ import unittest
 import numpy as np
 
 from pyscf import gto, scf, lib
-from chebyshev_scf import ChebyshevSCF
+from pyscf.scf.chebyshev_scf import ChebyshevSCF
 
 
 def build_h_chain(n, bond_length=0.74, basis='sto-3g', spin=None):
@@ -45,8 +45,6 @@ def setUpModule():
     global mol_h2, mol_h4, mol_h6_stretch
     mol_h2 = build_h_chain(2, bond_length=0.74, basis='sto-3g')
     mol_h4 = build_h_chain(4, bond_length=0.74, basis='sto-3g')
-    # A stretched-bond case, closer to the near-degenerate regime seen
-    # in the H-chain scan at short bond length.
     mol_h6_stretch = build_h_chain(6, bond_length=0.6, basis='sto-3g')
 
 
