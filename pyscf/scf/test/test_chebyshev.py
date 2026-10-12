@@ -19,11 +19,11 @@ from pyscf import gto, scf, lib
 from pyscf.scf.chebyshev_scf import ChebyshevSCF
 
 
-def build_h_chain(n, bond_length=0.74, basis='sto-3g', spin=None):
+def build_h_chain(n, bond_length=0.74, basis="sto-3g", spin=None):
     """Build an n-atom linear hydrogen chain Mole."""
     if n < 1:
         raise ValueError("n must be a positive integer")
-    atom_list = [['H', (0.0, 0.0, i * bond_length)] for i in range(n)]
+    atom_list = [["H", (0.0, 0.0, i * bond_length)] for i in range(n)]
     if spin is None:
         spin = n % 2
     mol = gto.Mole()
@@ -43,14 +43,14 @@ mol_h2 = mol_h4 = mol_h6_stretch = None
 
 def setUpModule():
     global mol_h2, mol_h4, mol_h6_stretch
-    mol_h2 = build_h_chain(2, bond_length=0.74, basis='sto-3g')
-    mol_h4 = build_h_chain(4, bond_length=0.74, basis='sto-3g')
-    mol_h6_stretch = build_h_chain(6, bond_length=0.6, basis='sto-3g')
+    mol_h2 = build_h_chain(2, bond_length=0.74, basis="sto-3g")
+    mol_h4 = build_h_chain(4, bond_length=0.74, basis="sto-3g")
+    mol_h6_stretch = build_h_chain(6, bond_length=0.6, basis="sto-3g")
 
 
 def tearDownModule():
     global mol_h2, mol_h4, mol_h6_stretch
-    mol_h2.stdout.close() if getattr(mol_h2, 'stdout', None) else None
+    mol_h2.stdout.close() if getattr(mol_h2, "stdout", None) else None
     mol_h2 = mol_h4 = mol_h6_stretch = None
 
 
@@ -75,11 +75,11 @@ class KnownValues(unittest.TestCase):
 
     def test_energy_agrees_with_rhf_h2o(self):
         mol_h2o = gto.M(
-            atom='O 0.000000 0.000000 0.000000; '
-                 'H 0.000000 -0.757000 0.587000; '
-                 'H 0.000000 0.757000 0.587000',
-            basis='sto-3g',
-            unit='Angstrom',
+            atom="O 0.000000 0.000000 0.000000; "
+            "H 0.000000 -0.757000 0.587000; "
+            "H 0.000000 0.757000 0.587000",
+            basis="sto-3g",
+            unit="Angstrom",
             verbose=0,
         )
         mf_ref = scf.RHF(mol_h2o).run()
@@ -94,8 +94,8 @@ class KnownValues(unittest.TestCase):
     def test_energy_agrees_with_rhf_density_fit(self):
         # Mirrors the density-fitted usage pattern from the benchmark
         # script: mf.density_fit(auxbasis='weigend').
-        mf_ref = scf.RHF(mol_h4).density_fit(auxbasis='weigend').run()
-        mf_chb = ChebyshevSCF(mol_h4).density_fit(auxbasis='weigend')
+        mf_ref = scf.RHF(mol_h4).density_fit(auxbasis="weigend").run()
+        mf_chb = ChebyshevSCF(mol_h4).density_fit(auxbasis="weigend")
         mf_chb.chebyshev_degree = 40
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
@@ -170,7 +170,7 @@ class ElectronCountAndOccupation(unittest.TestCase):
         mf.kernel()
         dm = mf.make_rdm1()
         s = mf.get_ovlp()
-        nelec_computed = np.einsum('ij,ji->', dm, s)
+        nelec_computed = np.einsum("ij,ji->", dm, s)
         self.assertAlmostEqual(nelec_computed, mol.nelectron, delta=1e-3)
 
     def test_density_matrix_hermitian(self):
@@ -192,8 +192,8 @@ class InterfaceCompatibility(unittest.TestCase):
 
     def test_default_attributes_exist(self):
         mf = ChebyshevSCF(mol_h2)
-        self.assertTrue(hasattr(mf, 'chebyshev_degree'))
-        self.assertTrue(hasattr(mf, 'beta'))
+        self.assertTrue(hasattr(mf, "chebyshev_degree"))
+        self.assertTrue(hasattr(mf, "beta"))
 
     def test_converged_flag_set(self):
         mf = ChebyshevSCF(mol_h2)
@@ -205,7 +205,7 @@ class InterfaceCompatibility(unittest.TestCase):
     def test_scanner_and_density_fit_chainable(self):
         # Matches the benchmark script's .density_fit(auxbasis='weigend')
         # usage; just confirm it returns an SCF-derived object that runs.
-        mf = ChebyshevSCF(mol_h2).density_fit(auxbasis='weigend')
+        mf = ChebyshevSCF(mol_h2).density_fit(auxbasis="weigend")
         mf.chebyshev_degree = 40
         mf.beta = 40.0
         e = mf.kernel()
@@ -230,6 +230,7 @@ class EdgeCases(unittest.TestCase):
         mf.beta = 10.0
         e = mf.kernel()
         self.assertTrue(np.isfinite(e))
+
 
 class Reproducibility(unittest.TestCase):
     """
@@ -275,12 +276,12 @@ class SGXExchange(unittest.TestCase):
     Exercises ChebyshevSCF combined with pyscf.sgx (Chain-of-Spheres /
     seminumerical exchange), the usage pattern from the original benchmark
     script:
- 
+
         mf = sgx.sgx_fit(ChebyshevSCF(mol), pjs=False)
         mf.with_df.dfj = True
         mf.with_df.optk = True
         mf.kernel()
- 
+
     SGX itself introduces a numerical-integration approximation to the
     exchange matrix, independent of the Chebyshev density-filtering
     approximation in this driver, so the reference here is SGX-RHF (not
@@ -289,50 +290,50 @@ class SGXExchange(unittest.TestCase):
     Chebyshev occupation filtering) are expected to be independent, so a
     looser but still sub-1-mHa tolerance is used relative to KnownValues.
     """
- 
+
     def test_energy_agrees_with_sgx_rhf(self):
         from pyscf import sgx
- 
+
         mf_ref = sgx.sgx_fit(scf.RHF(mol_h4), pjs=False)
         mf_ref.with_df.dfj = True
         mf_ref.with_df.optk = True
         e_ref = mf_ref.kernel()
- 
+
         mf_chb = sgx.sgx_fit(ChebyshevSCF(mol_h4), pjs=False)
         mf_chb.with_df.dfj = True
         mf_chb.with_df.optk = True
         mf_chb.rng_seed = 0
         e_chb = mf_chb.kernel()
- 
+
         self.assertAlmostEqual(e_chb, e_ref, delta=1e-3)  # < 1 mHa
- 
+
     def test_converged_flag_and_interface_with_sgx(self):
         from pyscf import sgx
- 
+
         mf = sgx.sgx_fit(ChebyshevSCF(mol_h2), pjs=False)
         mf.with_df.dfj = True
         mf.with_df.optk = True
         mf.rng_seed = 0
         e = mf.kernel()
- 
+
         self.assertTrue(mf.converged)
         self.assertTrue(np.isfinite(e))
         dm = mf.make_rdm1()
         self.assertTrue(np.allclose(dm, dm.conj().T, atol=1e-8))
- 
+
     def test_reproducible_with_sgx(self):
         from pyscf import sgx
- 
+
         def run():
             mf = sgx.sgx_fit(ChebyshevSCF(mol_h2), pjs=False)
             mf.with_df.dfj = True
             mf.with_df.optk = True
             mf.rng_seed = 0
             return mf.kernel()
- 
-        self.assertEqual(run(), run())
- 
 
-if __name__ == '__main__':
+        self.assertEqual(run(), run())
+
+
+if __name__ == "__main__":
     print("Full Tests for ChebyshevSCF")
     unittest.main()

@@ -16,14 +16,14 @@
 # Author: Naoki Kitamura
 #
 
-'''
+"""
 Diagonalization-free Hartree-Fock density construction with Chebyshev filters.
 
 This module provides an experimental SCF driver that approximates the
 finite-temperature occupation projector by a Chebyshev polynomial expansion.
 The density matrix is built from filtered basis vectors in an orthogonalized AO
 representation, avoiding an explicit Fock diagonalization in each SCF cycle.
-'''
+"""
 
 
 import numpy
@@ -81,6 +81,7 @@ def block_inv_sqrt(s, thresh=1e-12):
     # ブロックを対角に並べる
     return s_inv_sqrt
 
+
 def inv_sqrt(s, thresh=1e-12, full_inv=False):
     """
     Compute an inverse square root of a symmetric positive-definite matrix.
@@ -107,6 +108,7 @@ def inv_sqrt(s, thresh=1e-12, full_inv=False):
     else:
         return block_inv_sqrt(s, thresh=thresh)
 
+
 def to_csr_matrix(matrix, threshold=1e-5):
     """
     Convert a dense array to CSR format after dropping small elements.
@@ -126,8 +128,9 @@ def to_csr_matrix(matrix, threshold=1e-5):
     matrix = numpy.where(numpy.abs(matrix) < threshold, 0.0, matrix)
     return csr_matrix(matrix)
 
+
 class ChebyshevSCF(hf.SCF):
-    '''
+    """
     Restricted Hartree-Fock SCF driver using Chebyshev density filtering.
 
     The class follows the :class:`pyscf.scf.hf.SCF` interface but replaces the
@@ -156,7 +159,8 @@ class ChebyshevSCF(hf.SCF):
     an accepted, documented scope limitation rather than a defect to fix
     in this driver -- benchmarking and validation of this class should
     likewise be restricted to well-gapped closed-shell systems.
-    '''
+    """
+
     def __init__(self, mol):
         """
         Initialize the Chebyshev SCF object for a PySCF molecule.
@@ -200,11 +204,15 @@ class ChebyshevSCF(hf.SCF):
             The built SCF object.
         """
         hf.SCF.build(self, mol)
-        self._keys = self._keys.union(['chebyshev_degree',
-                                       'chebyshev_filter_interval',
-                                       'auto_degree',
-                                       'degree_safety_factor',
-                                       'rng_seed'])
+        self._keys = self._keys.union(
+            [
+                "chebyshev_degree",
+                "chebyshev_filter_interval",
+                "auto_degree",
+                "degree_safety_factor",
+                "rng_seed",
+            ]
+        )
         return self
 
     def get_ovlp_inv_sqrt(self, mol=None, thresh=1e-14, full_inv=False):
@@ -225,8 +233,9 @@ class ChebyshevSCF(hf.SCF):
         ndarray
             AO overlap inverse square-root matrix.
         """
-        if mol is None: mol = self.mol
-        ovlp = mol.intor_symmetric('int1e_ovlp')
+        if mol is None:
+            mol = self.mol
+        ovlp = mol.intor_symmetric("int1e_ovlp")
         ovlp_inv_sqrt = inv_sqrt(ovlp, thresh=thresh, full_inv=full_inv)
         return ovlp_inv_sqrt
 
@@ -259,10 +268,11 @@ class ChebyshevSCF(hf.SCF):
             if err < tol:
                 break
         e_max = numpy.dot(x1.T, numpy.dot(fock, x1)) / numpy.dot(x1.T, x1)
-        return e_max[0,0]
+        return e_max[0, 0]
 
-    def _chebyshev_poly_vec(self, v, fock_ortho, mu, degree, beta, a,
-                             vec_threshold=None):
+    def _chebyshev_poly_vec(
+        self, v, fock_ortho, mu, degree, beta, a, vec_threshold=None
+    ):
         """
         Apply the Chebyshev occupation polynomial to a basis vector.
 
@@ -305,7 +315,7 @@ class ChebyshevSCF(hf.SCF):
             Filtered vector contribution to the density matrix.
         """
         if vec_threshold is None:
-            vec_threshold = getattr(self, 'vec_threshold', 1e-6)
+            vec_threshold = getattr(self, "vec_threshold", 1e-6)
 
         coeffs = self._calc_coeff(degree, beta=beta, mu=mu, a=a)
         # T0 v_
@@ -316,7 +326,7 @@ class ChebyshevSCF(hf.SCF):
         if vec_threshold:
             v1 = to_csr_matrix(v1.toarray(), threshold=vec_threshold)
         y = coeffs[0] * v0 + coeffs[1] * v1
-        for k in range(2, degree+1):
+        for k in range(2, degree + 1):
             v2 = 2 * fock_ortho @ v1 - v0
             if vec_threshold:
                 v2 = to_csr_matrix(v2.toarray(), threshold=vec_threshold)
@@ -349,7 +359,7 @@ class ChebyshevSCF(hf.SCF):
         theta = numpy.pi * numpy.arange(N) / (N - 1)
         beta_tilde = beta * a
         f = 1.0 / (1.0 + numpy.exp(beta_tilde * (numpy.cos(theta) - mu)))
-        coeffs = numpy.fft.fft(numpy.r_[f, f[-2:0:-1]]).real[:n+1]
+        coeffs = numpy.fft.fft(numpy.r_[f, f[-2:0:-1]]).real[: n + 1]
         coeffs *= 2.0 / (N - 1)
         coeffs[0] *= 0.5
         return coeffs
@@ -391,12 +401,14 @@ class ChebyshevSCF(hf.SCF):
         # filtered density matrix, and the final energy are exactly
         # reproducible for a given (mol, beta, rng_seed), not just
         # statistically similar run to run.
-        rng = numpy.random.RandomState(getattr(self, 'rng_seed', 0))
+        rng = numpy.random.RandomState(getattr(self, "rng_seed", 0))
         random_vec = rng.rand(nmo)
         random_vec /= numpy.linalg.norm(random_vec)
         from pyscf.lib import davidson
+
         def fock_ortho_mv(v):
             return fock_ortho @ v
+
         emin, _ = davidson(fock_ortho_mv, random_vec, precond=precond)
         emin -= 0.1
 
@@ -409,7 +421,9 @@ class ChebyshevSCF(hf.SCF):
         b = (emax + emin) / 2.0
         return a, b, emin, emax, fock_ortho
 
-    def _degree_for_beta_a(self, beta, a, safety_factor=2.0, min_degree=10, max_degree=2000):
+    def _degree_for_beta_a(
+        self, beta, a, safety_factor=2.0, min_degree=10, max_degree=2000
+    ):
         """
         Pure formula: suggested Chebyshev degree for a given ``beta`` and
         spectral half-width ``a``, without re-estimating ``a`` from a Fock
@@ -436,7 +450,9 @@ class ChebyshevSCF(hf.SCF):
         degree = int(numpy.ceil(safety_factor * beta_tilde))
         return max(min_degree, min(max_degree, degree))
 
-    def _auto_degree(self, fock, beta=None, safety_factor=2.5, min_degree=10, max_degree=2000):
+    def _auto_degree(
+        self, fock, beta=None, safety_factor=2.5, min_degree=10, max_degree=2000
+    ):
         """
         Estimate a Chebyshev expansion degree sufficient to resolve the
         Fermi-Dirac occupation step for the given Fock matrix and ``beta``.
@@ -477,15 +493,28 @@ class ChebyshevSCF(hf.SCF):
         if beta is None:
             beta = self.beta
         a, b, emin, emax, _ = self._spectral_bounds(fock)
-        degree = self._degree_for_beta_a(beta, a, safety_factor=safety_factor,
-                                          min_degree=min_degree, max_degree=max_degree)
-        logger.info(self, 'Auto-selected chebyshev_degree = %d '
-                    '(beta=%.3g, a=%.4f, beta*a=%.3g, safety_factor=%.2f)',
-                    degree, beta, a, beta * a, safety_factor)
+        degree = self._degree_for_beta_a(
+            beta,
+            a,
+            safety_factor=safety_factor,
+            min_degree=min_degree,
+            max_degree=max_degree,
+        )
+        logger.info(
+            self,
+            "Auto-selected chebyshev_degree = %d "
+            "(beta=%.3g, a=%.4f, beta*a=%.3g, safety_factor=%.2f)",
+            degree,
+            beta,
+            a,
+            beta * a,
+            safety_factor,
+        )
         return degree
 
-
-    def make_rdm1_chebyshev(self, fock, mu, ovlp=None, nmo=None, degree=None, beta=None):
+    def make_rdm1_chebyshev(
+        self, fock, mu, ovlp=None, nmo=None, degree=None, beta=None
+    ):
         """
         Construct an AO-basis one-particle density matrix by Chebyshev filtering.
 
@@ -527,17 +556,18 @@ class ChebyshevSCF(hf.SCF):
 
         dm = numpy.zeros((fock.shape[0], fock.shape[0]))
 
-        identity = csr_matrix((numpy.ones(fock.shape[0]),
-                               (numpy.arange(fock.shape[0]), numpy.arange(fock.shape[0]))),
-                              shape=(fock.shape[0], fock.shape[0]))
+        identity = csr_matrix(
+            (
+                numpy.ones(fock.shape[0]),
+                (numpy.arange(fock.shape[0]), numpy.arange(fock.shape[0])),
+            ),
+            shape=(fock.shape[0], fock.shape[0]),
+        )
         normalized_fock = (fock_ortho - b * identity) / a
         normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=1e-5)
 
         for i in range(nmo):
-            v = coo_matrix(
-                ([1.0], ([i], [0])),
-                shape=(nmo, 1)
-            ).tocsr()
+            v = coo_matrix(([1.0], ([i], [0])), shape=(nmo, 1)).tocsr()
             y = self._chebyshev_poly_vec(v, normalized_fock, mu, degree, beta, a)
             dm[:, i] = y.toarray().flatten()
 
@@ -568,10 +598,11 @@ class ChebyshevSCF(hf.SCF):
         ndarray
             AO-basis one-particle density matrix.
         """
-        if getattr(self, '_dm1', None) is None:
+        if getattr(self, "_dm1", None) is None:
             raise RuntimeError(
-                'ChebyshevSCF.make_rdm1() called before kernel() has run; '
-                'no density matrix is available yet.')
+                "ChebyshevSCF.make_rdm1() called before kernel() has run; "
+                "no density matrix is available yet."
+            )
         return self._dm1
 
     def _diff_ne(self, nelec, mu, fock):
@@ -619,13 +650,13 @@ class ChebyshevSCF(hf.SCF):
         if fock is None:
             fock = self.get_fock(self.get_init_guess(self.mol))
         mu = bisect(
-            lambda mu: self._diff_ne(nelectrons, mu, fock),
-            mu_lo, mu_hi,
-            xtol=1e-14
+            lambda mu: self._diff_ne(nelectrons, mu, fock), mu_lo, mu_hi, xtol=1e-14
         )
         return mu
 
-    def kernel(self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, mixing_beta=0.3, dm1=None):
+    def kernel(
+        self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, mixing_beta=0.3, dm1=None
+    ):
         """
         Run the Chebyshev-filtered SCF iteration.
 
@@ -662,11 +693,17 @@ class ChebyshevSCF(hf.SCF):
         ovlp = self.get_ovlp()
 
         if self.auto_degree:
-            auto_deg = self._auto_degree(fock, beta=self.beta,
-                                          safety_factor=self.degree_safety_factor)
+            auto_deg = self._auto_degree(
+                fock, beta=self.beta, safety_factor=self.degree_safety_factor
+            )
             if auto_deg > self.chebyshev_degree:
-                logger.info(self, 'auto_degree: raising chebyshev_degree '
-                            '%d -> %d for this geometry/beta', self.chebyshev_degree, auto_deg)
+                logger.info(
+                    self,
+                    "auto_degree: raising chebyshev_degree "
+                    "%d -> %d for this geometry/beta",
+                    self.chebyshev_degree,
+                    auto_deg,
+                )
                 self.chebyshev_degree = auto_deg
 
         mu = self.bisect_search_mu(self.mol.nelectron, fock)
@@ -689,8 +726,15 @@ class ChebyshevSCF(hf.SCF):
             diff = numpy.linalg.norm(dm_new - dm1)
             ## energy_elec_dm
             e = self.energy_elec(dm_new, h1e, veff)[0] + self.mol.energy_nuc()
-            logger.info(self, 'Cycle %d  mu = %.12f  diff = %.8f e = %.8f  ne = %.8f',
-                        cycle, self.mu, diff, e, ne)
+            logger.info(
+                self,
+                "Cycle %d  mu = %.12f  diff = %.8f e = %.8f  ne = %.8f",
+                cycle,
+                self.mu,
+                diff,
+                e,
+                ne,
+            )
             if diff < conv_dm or abs(e - e_save) < conv_e:
                 converged = True
                 break
@@ -698,10 +742,16 @@ class ChebyshevSCF(hf.SCF):
             e_save = e
 
         if not converged:
-            logger.warn(self, 'ChebyshevSCF did not converge after %d cycles '
-                        '(final |ddm|/|dE| still above conv_dm=%.3g / '
-                        'conv_e=%.3g). Try increasing max_cycle, '
-                        'chebyshev_degree, or beta.', max_cycle, conv_dm, conv_e)
+            logger.warn(
+                self,
+                "ChebyshevSCF did not converge after %d cycles "
+                "(final |ddm|/|dE| still above conv_dm=%.3g / "
+                "conv_e=%.3g). Try increasing max_cycle, "
+                "chebyshev_degree, or beta.",
+                max_cycle,
+                conv_dm,
+                conv_e,
+            )
 
         ## energy_elec_dm
         e_tot = self.energy_elec(dm_new, h1e, veff)[0] + self.mol.energy_nuc()
@@ -727,6 +777,6 @@ class ChebyshevSCF(hf.SCF):
         self.mo_coeff = mo_coeff
         self.mo_occ = mo_occ
 
-        logger.info(self, 'ChebyshevSCF converged = %s', self.converged)
-        logger.info(self, 'Converged SCF energy = %.12f', e_tot)
+        logger.info(self, "ChebyshevSCF converged = %s", self.converged)
+        logger.info(self, "Converged SCF energy = %.12f", e_tot)
         return e_tot
