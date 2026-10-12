@@ -1251,7 +1251,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     // final term = 0 makes <du00|e|00du> correct. 
     // the (nr>0) expression is an experiment from Claude.
     // New on 10/12/2026:
-    // (i>j) is something I came up with in the hopes of making (ai|bj) == -(aj|bi)
+    // (i>j) is something I came up with in the hopes of making (ai|bj) -> -(aj|bi)
     // Claude says that i>j is better but that it should only be applied to facl, not facu.
     // If that's true, it implies something about the graphical logic that I need to
     // make sure I understand. I don't want to compensate for bad parity logic in
@@ -1262,6 +1262,14 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){
         facl = -facl;
+        facu = -facu;
+    }
+    // If the above parity term just models sorting, then from D&S Section IV and
+    // Brink and Satchler textbook rule (7.5) (which D&S don't mention but which
+    // seems to be what makes sense of where they put the arrows in Fig 3), I was
+    // able to convince myself that specifically the unlinked term of pphh with
+    // i>j has a special factor of -1 over the top of everything else.
+    if ((nr<0) && (i>j)){
         facu = -facu;
     }
 
