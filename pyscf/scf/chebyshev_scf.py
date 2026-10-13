@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # Copyright 2014-2020 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,18 +26,13 @@ representation, avoiding an explicit Fock diagonalization in each SCF cycle.
 
 
 import numpy
-from pyscf.lib import logger
-from pyscf.scf import diis
-from pyscf import __config__
-from pyscf.scf import hf
 from scipy.optimize import bisect
-from scipy.sparse import coo_matrix, csr_matrix
-from pyscf.scf import diis
-
-from scipy.sparse import csr_matrix, block_diag
-
-from scipy.sparse import csr_matrix
+from scipy.sparse import block_diag, coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
+
+from pyscf import __config__
+from pyscf.lib import logger
+from pyscf.scf import diis, hf
 
 
 def block_inv_sqrt(s, thresh=1e-12):
@@ -492,7 +486,7 @@ class ChebyshevSCF(hf.SCF):
         """
         if beta is None:
             beta = self.beta
-        a, b, emin, emax, _ = self._spectral_bounds(fock)
+        a, _b, _emin, _emax, _ = self._spectral_bounds(fock)
         degree = self._degree_for_beta_a(
             beta,
             a,
@@ -547,7 +541,7 @@ class ChebyshevSCF(hf.SCF):
         if beta is None:
             beta = self.beta
 
-        a, b, emin, emax, fock_ortho = self._spectral_bounds(fock)
+        a, b, _emin, _emax, fock_ortho = self._spectral_bounds(fock)
         self.a = a
         self.b = b
 

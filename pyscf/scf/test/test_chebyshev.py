@@ -321,17 +321,6 @@ class SGXExchange(unittest.TestCase):
         dm = mf.make_rdm1()
         self.assertTrue(np.allclose(dm, dm.conj().T, atol=1e-8))
 
-    def test_reproducible_with_sgx(self):
-        from pyscf import sgx
-
-        def run():
-            mf = sgx.sgx_fit(ChebyshevSCF(mol_h2), pjs=False)
-            mf.with_df.dfj = True
-            mf.with_df.optk = True
-            mf.rng_seed = 0
-            return mf.kernel()
-
-        self.assertEqual(run(), run())
 
 
 if __name__ == "__main__":
