@@ -117,6 +117,7 @@ class KnownValues(unittest.TestCase):
                 ss, smulttest = spin_square0 (ci, norb, ne)
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
+                self.assertTrue (sol.converged)
         sol.davidson_only = True
         for smult in range (1,6):
             with self.subTest ("davidson only", smult=smult):
@@ -126,6 +127,7 @@ class KnownValues(unittest.TestCase):
                 ss, smulttest = spin_square0 (ci, norb, ne)
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
+                self.assertTrue (sol.converged)
 
     def test_hdiag_csf (self):
         wfnsym = [0,]*5 + [5,1]

@@ -101,12 +101,12 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_kernel(self):
         nel = (neleci, nelec)
-        refs = [-8.934702919292933, -12.578019902416628, -8.879204010931936,
-                -10.273273133118241, -8.566577456561983, -8.600167849055723,
-                -7.484341852449313]
+        refs = [-15.003311789389066, -16.762333443834866, -14.815624182691325,
+                -13.890425147644102, -13.970824168941814, -11.862812754187217,
+                -12.560232166662873]
         for smult in range (1,8):
             with self.subTest (smult=smult):
                 ne = nel[smult % 2]
@@ -114,6 +114,7 @@ class KnownValues(unittest.TestCase):
                 ss, smulttest = spin_square0 (ci, norb, ne)
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
+                self.assertTrue (sol.converged)
         sol.davidson_only = True
         for smult in range (1,smult_lim):
             with self.subTest ("davidson only", smult=smult):
@@ -122,6 +123,7 @@ class KnownValues(unittest.TestCase):
                 ss, smulttest = spin_square0 (ci, norb, ne)
                 self.assertAlmostEqual (smulttest, smult, 8)
                 self.assertAlmostEqual (e, refs[smult-1], 8)
+                self.assertTrue (sol.converged)
 
     #@unittest.skip('debug')
     def test_hdiag_csf (self):
