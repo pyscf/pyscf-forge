@@ -35,8 +35,8 @@ from pyscf.csf_fci.test.old_pspace import pspace as old_pspace
 # Test both B*u (smult=6) and B*g (smult=7)
 
 def setUpModule():
-    global mol, m, h1e, g2e, h2mat
-    global norb, nelec, neleci, nel, orbsym, sol
+    global mol, m, h1e, g2e, h2mat_det, h2mat_csf
+    global norb, nelec, neleci, nel, orbsym, sol, sol_ref
     mol = gto.Mole()
     mol.verbose = 0
     mol.output = None#"out_h2o"
@@ -65,42 +65,38 @@ def setUpModule():
     h1e = reduce(np.dot, (m.mo_coeff.T, m.get_hcore(), m.mo_coeff))
     g2e = ao2mo.incore.general(m._eri, (m.mo_coeff,)*4, compact=False)
     neleci = (mol.nelectron//2, mol.nelectron//2)
-    sol = csf_solver (mol, smult=1, symm=False)
-
-    h2eff = sol.absorb_h1e (h1e, g2e, norb, nelec, .5)
-    h2mat = np.zeros ((1225,1225))
-    for i in range (1225):
-        c = np.zeros (1225)
-        c[i] = 1.0
-        c = c.reshape (35,35)
-        h2mat[i,:] = sol.contract_2e (h2eff, c, norb, nelec).ravel ()
-    h2effi = sol.absorb_h1e (h1e, g2e, norb, neleci, .5)
-    h2mati = np.zeros ((1225,1225))
-    for i in range (1225):
-        c = np.zeros (1225)
-        c[i] = 1.0
-        c = c.reshape (35,35)
-        h2mati[i,:] = sol.contract_2e (h2effi, c, norb, neleci).ravel ()
-    h2mat = [h2mat, h2mati]
+    sol_ref = csf_solver (mol, smult=1, symm=False)
     nel = (nelec, neleci)
-    h2mat_csf = []
-    for smult in range (1,8):
-        h2mat_det = h2mat[smult % 2]
-        ne = nel[smult % 2]
-        t = CSFTransformer (norb, ne[0], ne[1], smult, orbsym=orbsym, wfnsym=sol.wfnsym)
-        mat = np.zeros ((h2mat_det.shape[0], t.ncsf))
-        for i in range (h2mat_det.shape[0]):
-            mat[i,:] = t.vec_det2csf (h2mat_det[i,:], normalize=False)
-        h2mat_csf.append (np.zeros ((t.ncsf,t.ncsf)))
-        for i in range (t.ncsf):
-            h2mat_csf[-1][:,i] = t.vec_det2csf (mat[:,i], normalize=False)
-    h2mat = h2mat_csf
+    h2mat_det = {}
+    h2mat_csf = {}
 
     sol = csf_solver (mol, smult=1).set (orbsym=orbsym)
 
+def get_h2mat_ref (ne, smult):
+    ne = tuple (ne)
+    if (ne, smult) in h2mat_csf:
+        return h2mat_csf[(ne, smult)]
+    t = CSFTransformer (norb, ne[0], ne[1], smult, orbsym=orbsym, wfnsym=sol_ref.wfnsym)
+    ndet = t.ndeta*t.ndetb
+    if ne not in h2mat_det:
+        h2eff = sol_ref.absorb_h1e (h1e, g2e, norb, ne, .5)
+        h2mat_det[ne] = np.zeros ((ndet, ndet))
+        for i in range (ndet):
+            c = np.zeros (ndet)
+            c[i] = 1.0
+            c = c.reshape (t.ndeta,t.ndetb)
+            h2mat_det[ne][i,:] = sol_ref.contract_2e (h2eff, c, norb, ne).ravel ()
+    mat = np.zeros ((ndet, t.ncsf))
+    for i in range (ndet):
+        mat[i,:] = t.vec_det2csf (h2mat_det[ne][i,:], normalize=False)
+    h2mat_csf[(ne, smult)] = np.zeros ((t.ncsf,t.ncsf))
+    for i in range (t.ncsf):
+        h2mat_csf[(ne, smult)][:,i] = t.vec_det2csf (mat[:,i], normalize=False)
+    return h2mat_csf[(ne, smult)]
+
 def tearDownModule():
-    global mol, m, h1e, g2e, h2mat, norb, nelec, neleci, nel, orbsym, sol
-    del mol, m, h1e, g2e, h2mat, norb, nelec, neleci, nel, orbsym, sol
+    global mol, m, h1e, g2e, h2mat_det, h2mat_csf, norb, nelec, neleci, nel, orbsym, sol, sol_ref
+    del mol, m, h1e, g2e, h2mat_det, h2mat_csf, norb, nelec, neleci, nel, orbsym, sol, sol_ref
 
 class KnownValues(unittest.TestCase):
 
@@ -132,41 +128,50 @@ class KnownValues(unittest.TestCase):
     def test_hdiag_csf (self):
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
-            with self.subTest (smult=smult):
-                ne = nel[smult % 2]
-                w = wfnsym[smult-1]
-                sol.wfnsym = w
-                hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
-                hdiag_ref = h2mat[smult-1].diagonal ()
-                self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
+            n = sum (nel[smult % 2])
+            s2 = smult - 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    w = wfnsym[smult-1]
+                    sol.wfnsym = w
+                    hdiag = sol.make_hdiag_csf (h1e, g2e, norb, ne, smult=smult)
+                    hdiag_ref = get_h2mat_ref (ne, smult).diagonal ()
+                    self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
     @unittest.skip('debug')
     def test_pspace(self):
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
-            with self.subTest (smult=smult):
-                ne = nel[smult % 2]
-                w = wfnsym[smult-1]
-                sol.wfnsym = w
-                addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
-                h0_ref = h2mat[smult-1][addr,:][:,addr]
-                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+            n = sum (nel[smult % 2])
+            s2 = smult - 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    w = wfnsym[smult-1]
+                    sol.wfnsym = w
+                    addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                    h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                    self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
     #@unittest.skip('debug')
     def test_old_pspace(self):
         wfnsym = [0,]*5 + [5,1]
         for smult in range (1,8):
-            with self.subTest (smult=smult):
-                ne = nel[smult % 2]
-                w = wfnsym[smult-1]
-                sol.smult = smult
-                sol.norb = norb
-                sol.nelec = ne
-                sol.wfnsym = w
-                sol.check_transformer_cache ()
-                addr, h0 = old_pspace (sol, h1e, g2e, norb, ne, sol.transformer)
-                h0_ref = h2mat[smult-1][addr,:][:,addr]
-                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+            n = sum (nel[smult % 2])
+            s2 = smult - 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    w = wfnsym[smult-1]
+                    sol.smult = smult
+                    sol.norb = norb
+                    sol.nelec = ne
+                    sol.wfnsym = w
+                    sol.check_transformer_cache ()
+                    addr, h0 = old_pspace (sol, h1e, g2e, norb, ne, sol.transformer)
+                    h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                    self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
 if __name__ == "__main__":
     print("Full Tests for csf_fci solver with symmetry")

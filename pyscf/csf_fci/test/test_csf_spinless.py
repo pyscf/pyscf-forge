@@ -132,19 +132,22 @@ class KnownValues(unittest.TestCase):
 
     #@unittest.skip('debug')
     def test_pspace(self):
-        for ne in range (1,7):
-            with self.subTest (ne=ne):
-                smult = ne+1
-                addr, h0 = sol.pspace (h1e, g2e, norb, (ne,0), smult=smult)
-                t = sol.transformer
-                h0_ref = get_h2mat_ref (ne)[addr,:][:,addr]
-                print (norb, ne, smult)
-                for i in range (len (h0)):
-                    for j in range (i):
-                        if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
-                            print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
-                                   h0[i,j], h0_ref[i,j])
-                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+        for n in range (1,7):
+            s2 = n
+            smult = n + 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                    t = sol.transformer
+                    h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                    print (norb, ne, smult)
+                    for i in range (len (h0)):
+                        for j in range (i):
+                            if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
+                                print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
+                                       h0[i,j], h0_ref[i,j])
+                    self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
     @unittest.skip('debug')
     def test_pspace_single_element (self):

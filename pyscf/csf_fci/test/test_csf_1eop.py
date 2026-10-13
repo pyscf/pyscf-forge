@@ -143,25 +143,31 @@ class KnownValues(unittest.TestCase):
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
-            with self.subTest (smult=smult):
-                ne = nel[smult % 2]
-                addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
-                h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
-                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+            n = sum (nel[smult % 2])
+            s2 = smult - 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    addr, h0 = sol.pspace (h1e, g2e, norb, ne, smult=smult)
+                    h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                    self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
     #@unittest.skip('debug')
     def test_old_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
-            with self.subTest (smult=smult):
-                ne = nel[smult % 2]
-                sol.smult = smult
-                sol.norb = norb
-                sol.nelec = ne
-                sol.check_transformer_cache ()
-                addr, h0 = old_pspace (sol, h1e, g2e, norb, ne, sol.transformer)
-                h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
-                self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
+            n = sum (nel[smult % 2])
+            s2 = smult - 1
+            for m in range (-s2, s2+1, 2):
+                ne = [(n+m) // 2, (n-m) // 2]
+                with self.subTest (smult=smult, m=m):
+                    sol.smult = smult
+                    sol.norb = norb
+                    sol.nelec = ne
+                    sol.check_transformer_cache ()
+                    addr, h0 = old_pspace (sol, h1e, g2e, norb, ne, sol.transformer)
+                    h0_ref = get_h2mat_ref (ne, smult)[addr,:][:,addr]
+                    self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
     def test_csf_pair_removal_sign (self):
         ''' Ensure that pair removal or pair addition doesn't change the sign of
