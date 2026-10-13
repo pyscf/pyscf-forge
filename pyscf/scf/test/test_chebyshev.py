@@ -50,7 +50,6 @@ def setUpModule():
 
 def tearDownModule():
     global mol_h2, mol_h4, mol_h6_stretch
-    mol_h2.stdout.close() if getattr(mol_h2, "stdout", None) else None
     mol_h2 = mol_h4 = mol_h6_stretch = None
 
 
