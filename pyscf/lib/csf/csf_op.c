@@ -23,7 +23,7 @@
 #endif
 
 #ifndef DEBUG_2E
-#define DEBUG_2E false
+#define DEBUG_2E true
 #endif
 
 #ifndef DEBUG_2E_CGC
@@ -1047,7 +1047,7 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     unsigned int r = MIN (i, MIN (j, b));
     unsigned int t = MAX (i, MAX (j, b));
     unsigned int q = (i+j+b) - (r+t);
-    if (p>0){ if ((brap.spin & ((1ULL<<(p-1))-1)) != (ketp.spin & ((1ULL<<(p-1))-1))){
+    if (p>0){ if ((brap.spin & ((1ULL<<p)-1)) != (ketp.spin & ((1ULL<<p)-1))){
         if (DEBUG_2E){ printf ("csf_EaiEbj right escape\n"); fflush (stdout); }
         return 0.0;
     }}
@@ -1388,7 +1388,9 @@ void FCICSFpspace_h0tril(double *hmat,
                 if (p==i){ continue; }
                 ihop = (a*norb*norb*norb) + p*((norb*norb) + norb) + i;
                 fac = csf_EaiEbj (&bra, &ket, a, p, p, i);
+                if (DEBUG_2E){ printf (" %u %u %u %u %f\n", a,p,p,i,fac); fflush (stdout); }
                 fac += csf_EaiEbj (&bra, &ket, a, i, p, p);
+                if (DEBUG_2E){ printf (" %u %u %u %u %f\n", a,i,p,p,fac); fflush (stdout); }
                 hmat[ihmat] += g2e[ihop] * fac;
             }
             break;

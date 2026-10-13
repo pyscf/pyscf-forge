@@ -120,7 +120,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (e, refs[smult-1], 8)
                 self.assertTrue (sol.converged)
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -134,7 +134,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -149,17 +149,17 @@ class KnownValues(unittest.TestCase):
                     print (norb, ne, smult)
                     for i in range (len (h0)):
                         for j in range (i):
-                            if True:
-                            #if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
+                            #if True:
+                            if abs (h0[i,j] - h0_ref[i,j]) > 1e-8:
                                 print (i, j, t.printable_csfstring (i), t.printable_csfstring (j),
                                        h0[i,j], h0_ref[i,j])
                     self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_pspace_single_element (self):
-        i = 9 
-        j = 0
-        smult=4
+        i = 103 
+        j = 94
+        smult=3
         addr = np.array ([i,j], dtype=np.int32)
         nel = (neleci, nelec)
         ne = nel[smult % 2]
