@@ -23,7 +23,7 @@
 #endif
 
 #ifndef DEBUG_2E
-#define DEBUG_2E true
+#define DEBUG_2E false
 #endif
 
 #ifndef DEBUG_2E_CGC
@@ -318,13 +318,13 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     // parity = parity % 4; // remember everything is *2 until the very end
     xdiag *= _get_wigner_6j_j41h (twoSb[q], twoSk[q], 2, 1, twoS0);
 
-    // 'hill' and 'self' parity: |nq| = 2
+    // 'hill' and 'shelf' parity: |nq| = 2
     switch (nq) {
         case -2:
-            parity += twoSk[q] + 3*twoSb[q-1] - 1;
+            parity += twoSk[q-1] + 3*twoSb[q] - 1;
             break;
         case 2:
-            parity += twoSb[q] + 3*twoSk[q-1] - 1;
+            parity += twoSb[q-1] + 3*twoSk[q] - 1;
             break;
     }
     // parity = parity % 4;
@@ -370,7 +370,9 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     parity += twoS0 + twoSb[r-1] - 1; // graph signs
     // parity = parity % 4;
 
-    // 'hill' and 'self' parity: |nr| = 2
+    // 'hill' and 'shelf' parity: |nr| = 2
+    // TODO: possible off-by-1 in indexing here. There was an off-by-1 in
+    // the |nq| = 2 case above through a43a4ecca71ae9b093f694d597c35e60d2a70fe3
     switch (nr) {
         case -2:
             parity += twoSk[r] + 3*twoSb[r-1] - 1;
@@ -406,6 +408,13 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     int offb = 0;
     int parity = 0;
     unsigned int i;
+    if (DEBUG_2E_CGC){
+        printf ("\ntwoSk: ");
+        for (i = 0; i <= nspin; i++){ printf ("%u ", twoSk[i]); }
+        printf ("\ntwoSb: ");
+        for (i = 0; i <= nspin; i++){ printf ("%u ", twoSb[i]); }
+        printf ("\n"); fflush (stdout);
+    }
 
     // because the highest possible value of i is nspin - 1 and we want to start at 1 and go
     // through nspin inclusively.
@@ -516,7 +525,7 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         // coefficients is 6, and |xcore| from CGC_2e_X_core below is 1/18. Hence I conclude
         // that the innermost T(i) terms in this function are double-counting.
         // TODO: This applies to all qt_pp, not just the ones with q==t+1/p=r+1, but:
-        //    1. We're apparently off by 1/2 or 1/4 in cases where b or j is doubly-occupied,
+        //    1. We're apparently off by 1/2 or 1/4 in cases where b or j is doubly-occupied.
         if ((i==(q-1)) && ((abs (nq) == 2) || qt_pp)){
             continue;
         }

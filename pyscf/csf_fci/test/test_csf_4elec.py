@@ -98,7 +98,7 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_kernel(self):
         nel = (neleci, nelec)
         refs = [0.0, 0.0, 0.0, 0.0]
@@ -120,7 +120,7 @@ class KnownValues(unittest.TestCase):
                 self.assertAlmostEqual (e, refs[smult-1], 8)
                 self.assertTrue (sol.converged)
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_hdiag_csf (self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -134,7 +134,7 @@ class KnownValues(unittest.TestCase):
                     self.assertAlmostEqual (lib.fp (hdiag), lib.fp (hdiag_ref), 8)
 
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_pspace(self):
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
@@ -155,7 +155,7 @@ class KnownValues(unittest.TestCase):
                                        h0[i,j], h0_ref[i,j])
                     self.assertAlmostEqual (lib.fp (h0), lib.fp (h0_ref), 8)
 
-    #@unittest.skip('debug')
+    @unittest.skip('debug')
     def test_pspace_single_element (self):
         i = 103 
         j = 94
