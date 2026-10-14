@@ -145,8 +145,10 @@ def pspace (fci, h1e, eri, norb, nelec, transformer, hdiag_det=None, hdiag_csf=N
     until I write code than can evaluate Hamiltonian matrix elements of CSFs directly. On the other hand
     a pspace of determinants contains many redundant degrees of freedom for the same reason. Therefore I have
     reduced the default pspace size by a factor of 2.'''
-    if norb > 63:
-        raise NotImplementedError('norb > 63')
+    # norb > 30 rather than > 63 because of the int shift in FCICSFsignrule (see the TODO in
+    # pyscf/lib/csf/csf_string.c), which is undefined for orbital indices >= 31.
+    if norb > 30:
+        raise NotImplementedError('norb > 30')
     if max_memory is None: max_memory=fci.max_memory
 
     neleca, nelecb = _unpack_nelec(nelec)

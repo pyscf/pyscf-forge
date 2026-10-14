@@ -30,6 +30,62 @@
 #define DEBUG_2E_CGC false
 #endif
 
+// The running spin "between" the two electrons of a doubly-occupied orbital is formally undefined
+// (Drake & Schlesinger Fig. 2: it drops out of every graph). It is nevertheless stored in the twoS
+// arrays by _get_spinindices1/2. Nothing should depend on it; these hooks let dev_csf_op/probe.py
+// set it to the other legal value or to a value of the wrong parity to detect any code that reads it.
+#ifndef PAIR_MID1
+#define PAIR_MID1(x) ((x)+1)
+#endif
+#ifndef PAIR_MID2
+#define PAIR_MID2(x) ((x)+1)
+#endif
+
+// Record where the formally-undefined pair intermediates were stored so that callers can
+// replace them by a well-defined function of the other (facing) chain; see _fix_pair_mids.
+// DUMMY_RULE 0 keeps the historical up-then-down value (PAIR_MID1/2).
+#ifndef DUMMY_RULE
+#define DUMMY_RULE 0
+#endif
+static __thread unsigned int * _dummy_arr[4];
+static __thread unsigned int _dummy_idx[4];
+static __thread int _ndummy = 0;
+static void _record_dummy (unsigned int * arr, unsigned int idx){
+    assert (_ndummy < 4);
+    _dummy_arr[_ndummy] = arr;
+    _dummy_idx[_ndummy] = idx;
+    _ndummy++;
+}
+static void _shift_dummies (unsigned int * arr, unsigned int from){
+    for (int k=0; k<_ndummy; k++){ if ((_dummy_arr[k]==arr) && (_dummy_idx[k]>=from)){ _dummy_idx[k] += 2; } }
+}
+static void _fix_pair_mids (unsigned int * twoSk, unsigned int * twoSb, int rule)
+{
+    if (rule == 0){ return; } // keep whatever PAIR_MID1/2 stored
+    // For each recorded intermediate P[k] of a pair spanning P[k+1] -> P[k] -> P[k-1] (P[k+1] == P[k-1] == v),
+    // choose P[k] from the facing chain O. dO1 = O[k]-O[k+1], dO2 = O[k-1]-O[k].
+    for (int d=0; d<_ndummy; d++){
+        unsigned int * P = _dummy_arr[d];
+        unsigned int * O = (P==twoSk) ? twoSb : twoSk;
+        unsigned int k = _dummy_idx[d];
+        int v = (int) P[k+1];
+        int dO1 = (int) O[k] - (int) O[k+1];
+        int dO2 = (int) O[k-1] - (int) O[k];
+        int x;
+        switch (rule){
+            case 1: x = v-1; break;          // down-then-up
+            case 2: x = v-dO1; break;        // antiparallel to facing step 1
+            case 3: x = v+dO1; break;        // parallel to facing step 1
+            case 4: x = v+dO2; break;        // antiparallel to facing step 2
+            case 5: x = v-dO2; break;        // parallel to facing step 2
+            case 6: x = (int) O[k]; break;   // copy facing chain
+            default: x = v+1;
+        }
+        if ((x < 0) || (abs (x-v) != 1)){ x = v+1; }
+        P[k] = (unsigned int) x;
+    }
+}
+
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
 {
 
@@ -464,15 +520,23 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         twoS0k = twoSk[i];
         twoS0b = twoSb[i];
         // paired electrons don't have CG coefficients!
-        if (((i==t) || (i==t+1)) && nt==2){ twoS0k = 0; }
-        if (((i==q) || (i==q-1)) && nq==2){ twoS0k = 0; } // TODO: not sure if off by 1!
-        if (((i==r) || (i==r-1)) && nr==2){ twoS0k = 0; } // TODO: not sure if off by 1!
-        if (((i==(p-1)) || (i==(p-2))) && np==2){ twoS0k = 0; }
+        // Each doubly-occupied operator orbital removes two factors. If two pairs are adjacent in
+        // the same chain their claims overlap on one index, and one factor is left over; since a
+        // pair doesn't change the running spin, it equals (2S+1) at the shared index.
+        int claimk = 0, claimb = 0;
+        if (((i==t) || (i==t+1)) && nt==2){ claimk++; }
+        if (((i==q) || (i==q-1)) && nq==2){ claimk++; } // TODO: not sure if off by 1!
+        if (((i==r) || (i==r-1)) && nr==2){ claimk++; } // TODO: not sure if off by 1!
+        if (((i==(p-1)) || (i==(p-2))) && np==2){ claimk++; }
+        if (claimk){ twoS0k = 0; }
         bool bra_paired = false;
-        if (((i==t) || (i==t+1)) && nt==-2){ twoS0b = 0; bra_paired = true; }
-        if (((i==q) || (i==q-1)) && nq==-2){ twoS0b = 0; bra_paired = true; } // TODO: not sure if off by 1!
-        if (((i==r) || (i==r-1)) && nr==-2){ twoS0b = 0; bra_paired = true; } // TODO: not sure if off by 1!
-        if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; bra_paired = true; }
+        if (((i==t) || (i==t+1)) && nt==-2){ claimb++; }
+        if (((i==q) || (i==q-1)) && nq==-2){ claimb++; } // TODO: not sure if off by 1!
+        if (((i==r) || (i==r-1)) && nr==-2){ claimb++; } // TODO: not sure if off by 1!
+        if (((i==(p-1)) || (i==(p-2))) && np==-2){ claimb++; }
+        if (claimb){ twoS0b = 0; bra_paired = true; }
+        for (int c=1; c<claimk; c++){ xdiag /= (double) (twoSk[i]+1); }
+        for (int c=1; c<claimb; c++){ xdiag /= (double) (twoSb[i]+1); }
         // This bugfix came from this session:
         // claude --resume 5c6acb8f-5f71-43d9-b6a5-02f8e5be130b
         // Exactly one of the two CGs at the left boundary is spurious. Normally it is the
@@ -833,7 +897,8 @@ void _get_spinindices1 (Str3 * addr, unsigned int p, unsigned int nspin,
             assert ((int) (r+2) < (int) (nspin+1));
             twoS[r+2] = twoS[r];
         }
-        twoS[(*sp)+1] = twoS[(*sp)]+1;
+        twoS[(*sp)+1] = PAIR_MID1 (twoS[(*sp)]);
+        _record_dummy (twoS, (*sp)+1);
         (*sp)++;
     }
 }
@@ -861,7 +926,9 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
             assert ((int) (r+2) < (int) (nspin+1));
             twoS[r+2] = twoS[r];
         }
-        twoS[(*sp)+1] = twoS[(*sp)]+1;
+        _shift_dummies (twoS, (*sp));
+        twoS[(*sp)+1] = PAIR_MID2 (twoS[(*sp)]);
+        _record_dummy (twoS, (*sp)+1);
         (*sp)++;
     } 
 }
@@ -901,6 +968,7 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa;
+    _ndummy = 0;
     _get_spinindices1 (bra, a, nspin, twoSb, &sa);
     _get_spinindices1 (ket, i, nspin, twoSk, &si);
     if (abs (na) == 2){ sa++; }
@@ -940,6 +1008,7 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa;
+    _ndummy = 0;
     _get_spinindices1 (bra, a, nspin, twoSb, &sa);
     _get_spinindices1 (ket, i, nspin, twoSk, &si);
     if (abs (na) == 2){ sa++; }
@@ -969,61 +1038,222 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     return fac;
 }
 
+// Move the closed pair of orbital src to orbital dst (dst must be empty). The spin coupling string
+// is unchanged because a closed pair carries no spin and the set of open shells is unchanged.
+static void _relocate_pair (Str3 * in, unsigned int src, unsigned int dst, Str3 * out)
+{
+    int occ[64];
+    for (unsigned int p=0; p<64; p++){ occ[p] = (int) _get_occ (in, p); }
+    assert (occ[src] == 2);
+    assert (occ[dst] == 0);
+    occ[src] = 0; occ[dst] = 2;
+    out->dconf = 0ULL; out->sconf = 0ULL;
+    unsigned int k = 0;
+    for (unsigned int p=0; p<64; p++){
+        if (occ[p] == 2){ out->dconf |= (1ULL << p); continue; }
+        if (occ[p] == 1){ out->sconf |= (1ULL << k); }
+        k++;
+    }
+    out->spin = (out->sconf == 0ULL) ? 0ULL : in->spin;
+}
+
 double csf_EaiEaj (Str3 * bra, Str3 * ket,
                    unsigned int i, unsigned int j)
 {
-    if (i == j){ return 1.0; }
-    if (i > j){
-        return csf_EaiEaj (bra, ket, j, i);
+    /* <bra|E_ai E_aj|ket>, where a is the orbital that is doubly occupied in bra and empty in ket.
+
+       On the (i,j) electrons, E_ai E_aj and E_ji act identically: both give sqrt(2) times the
+       singlet-coupled component and annihilate the triplet one. A closed pair is a spin scalar,
+       so moving it between orbitals changes no spin coupling (and costs no fermion sign). Hence
+       this is a single excitation between CSFs with one pair relocated, and csf_Eai (which reads
+       no undefined intermediate spins) can evaluate it:
+         nj = 1:      <bra(a->j)|E_ji|ket>
+         ni = 1:      <bra(a->i)|E_ij|ket>
+         ni = nj = 2: -<bra|E_ji|ket(j->a)>
+       (signs verified numerically against the resolution-of-the-identity oracle csf_EaiEbj_ri).
+       This replaces the old CGC_1e-based evaluation, which padded the bra chain with a fabricated
+       pair and read the undefined intermediate spin of doubly-occupied i or j. */
+    unsigned int a = 64;
+    for (unsigned int p=0; p<64; p++){
+        if (((int) _get_occ (bra, p) - (int) _get_occ (ket, p)) == 2){ a = p; break; }
     }
-    if (DEBUG_2E){
-    printf ("\n<%lu,%lu,%lu|%u,%u|%lu,%lu,%lu>\n",
-            bra->dconf, bra->sconf, bra->spin,
-            i, j,
-            ket->dconf, ket->sconf, ket->spin);
-    fflush (stdout);
-    }
-    Str3 brap, ketp;
-    _pad_Str3 (bra, &brap);
-    _pad_Str3 (ket, &ketp);
-    // CSF orthogonality
-    if (i>0){ if ((brap.spin & ((1ULL<<i)-1)) != (ketp.spin & ((1ULL<<i)-1))){
-        if (DEBUG_2E){ printf ("csf_EaiEaj right escape\n"); fflush (stdout); }
-        return 0.0;
-    }}
-    if ((brap.spin>>(j+1)) != (ketp.spin>>(j+1))){
-        if (DEBUG_2E){ printf ("csf_EaiEaj left escape\n"); fflush (stdout); }
-        return 0.0;
+    assert (a < 64);
+    if (a >= 64){ return 0.0; }
+    Str3 x;
+    if (i == j){
+        // A whole pair moves i -> a: <bra|E_ai E_ai|ket> = 2 if the spin couplings are identical,
+        // else 0. The caller's convention for this case includes the Hamiltonian's 1/2, so return 1.
+        _relocate_pair (bra, a, i, &x);
+        uint64_t sx = (x.sconf == 0ULL) ? 0ULL : x.spin;
+        uint64_t sk = (ket->sconf == 0ULL) ? 0ULL : ket->spin;
+        return ((x.dconf == ket->dconf) && (x.sconf == ket->sconf) && (sx == sk)) ? 1.0 : 0.0;
     }
     int ni = _get_occ (ket, i);
     int nj = _get_occ (ket, j);
-    unsigned int nspin_ket = count_set_bits (ket->sconf);
-    unsigned int nspin_bra = count_set_bits (bra->sconf);
-    nspin_ket += (ni-1)*2;
-    nspin_ket += (nj-1)*2;
-    assert ((nspin_bra+2)==nspin_ket);
-    unsigned int nspin=nspin_ket;
-    unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
-    unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
-    unsigned int si, sj;
-    _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
-    if (abs (ni) == 2){ si++; }
-    for (unsigned int r=0; r <= nspin_bra; r++){
-        twoSb[r] = _get_twoS_running (bra->spin, r, nspin_bra);
+    double fac;
+    if (nj == 1){
+        _relocate_pair (bra, a, j, &x);
+        fac = csf_Eai (&x, ket, j, i);
+    } else if (ni == 1){
+        _relocate_pair (bra, a, i, &x);
+        fac = csf_Eai (&x, ket, i, j);
+    } else {
+        _relocate_pair (ket, j, a, &x);
+        fac = -csf_Eai (bra, &x, j, i);
     }
-    // TODO: this seems random. Double-check the validity
-    // the pair spins in a'a
-    twoSb[nspin_bra+1] = 1;
-    twoSb[nspin_bra+2] = 0;
-    int parity = si + sj;
-    double fac = CGC_1e (twoSk, twoSb, si, sj, ni, nj, nspin);
-    if ((parity%2)==1){ fac = -fac; }
-    free (twoSk);
-    free (twoSb);
+    if (DEBUG_2E){ printf ("csf_EaiEaj <%lu,%lu,%lu|%u,%u|%lu,%lu,%lu> = %e\n",
+                           bra->dconf, bra->sconf, bra->spin, i, j, ket->dconf, ket->sconf, ket->spin, fac); }
     assert (fac==fac);
-    if (DEBUG_2E){ printf ("final value = %e\n\n", fac); fflush (stdout); }
     return fac;
+}
 
+
+// Resolution-of-the-identity evaluation of two-electron spin-free operator products, built only
+// from the (fully validated) one-electron csf_Eai. Because E_pq is spin-free, E_bj|ket> lies in the
+// span of the CSFs of its occupation with the same S and M, so
+//     <bra|E_ai E_bj|ket> = sum_m <bra|E_ai|m> <m|E_bj|ket>
+// exactly, with m running over all genealogical couplings of the intermediate occupation.
+// Brute-force enumeration of the couplings; meant as an oracle (-DCSF_2E_RI=1 uses it everywhere).
+#ifndef CSF_2E_RI
+#define CSF_2E_RI 0
+#endif
+#ifndef CSF_EAIEBJ_PART
+#define CSF_EAIEBJ_PART 0
+#endif
+#ifndef CSF_PPHH_GRAPHICAL
+#define CSF_PPHH_GRAPHICAL 0
+#endif
+static void _occ_of (Str3 * s, unsigned int norb, int * occ){
+    for (unsigned int p=0; p<norb; p++){ occ[p] = (int) _get_occ (s, p); }
+}
+static bool _str3_from_occ (int * occ, unsigned int norb, Str3 * s, unsigned int * nopen){
+    s->dconf = 0ULL; s->sconf = 0ULL; s->spin = 0ULL;
+    unsigned int k = 0; *nopen = 0;
+    for (unsigned int p=0; p<norb; p++){
+        if ((occ[p] < 0) || (occ[p] > 2)){ return false; }
+        if (occ[p] == 2){ s->dconf |= (1ULL << p); continue; }
+        if (occ[p] == 1){ s->sconf |= (1ULL << k); (*nopen)++; }
+        k++;
+    }
+    return true;
+}
+// <bra|E_ai|ket>, a != i. The RI callers build every intermediate so that the occupations are
+// consistent; csf_Eai does not check them (its escapes test only the spin couplings), so assert it.
+static double _csf_E1 (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, unsigned int norb){
+    assert (a != i);
+#ifndef NDEBUG
+    int ob[64], ok[64];
+    _occ_of (bra, norb, ob); _occ_of (ket, norb, ok);
+    ok[i]--; ok[a]++;
+    for (unsigned int p=0; p<norb; p++){ assert (ok[p] == ob[p]); }
+#endif
+    return csf_Eai (bra, ket, a, i);
+}
+static unsigned int _norb_of (Str3 * x, Str3 * y){
+    // orbitals actually needed to describe both strings
+    unsigned int n = 1;
+    for (unsigned int p=0; p<64; p++){ if ((_get_occ (x, p) > 0) || (_get_occ (y, p) > 0)){ n = p+1; } }
+    return n;
+}
+double csf_EaiEbj_ri (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, unsigned int b, unsigned int j)
+{
+    unsigned int norb = MAX (_norb_of (bra, ket), MAX (MAX (a, i), MAX (b, j)) + 1);
+    int om[64];
+    _occ_of (ket, norb, om);
+    if (b == j){ return ((double) om[j]) * _csf_E1 (bra, ket, a, i, norb); }
+    om[j]--; om[b]++;
+    Str3 m;
+    unsigned int nopen;
+    if (!_str3_from_occ (om, norb, &m, &nopen)){ return 0.0; }
+    unsigned int nspin_ket = count_set_bits (ket->sconf);
+    unsigned int twoS = (ket->sconf == 0ULL) ? 0 : _get_twoS_running (ket->spin, 0, nspin_ket);
+    if ((nopen < twoS) || ((nopen - twoS) % 2)){ return 0.0; }
+    unsigned int nup = (nopen + twoS) / 2;
+    double sum = 0.0;
+    if (nopen == 0){
+        m.spin = 0ULL;
+        return _csf_E1 (bra, &m, a, i, norb) * _csf_E1 (&m, ket, b, j, norb);
+    }
+    // iterate over all nopen-bit strings with nup set bits (Gosper's hack)
+    uint64_t x = (nup == 0) ? 0ULL : ((1ULL << nup) - 1ULL);
+    uint64_t lim = 1ULL << nopen;
+    while (x < lim){
+        // valid genealogical coupling: running spin never negative, counting from bit 0
+        int run = 0; bool ok = true;
+        for (unsigned int k=0; k<nopen; k++){ run += ((x >> k) & 1ULL) ? 1 : -1; if (run < 0){ ok = false; break; } }
+        if (ok){
+            m.spin = x;
+            double f2 = _csf_E1 (&m, ket, b, j, norb);
+            if (f2 != 0.0){ sum += _csf_E1 (bra, &m, a, i, norb) * f2; }
+        }
+        if (x == 0ULL){ break; }
+        uint64_t c = x & (~x + 1ULL);
+        uint64_t r = x + c;
+        x = (((r ^ x) >> 2) / c) | r;
+    }
+    return sum;
+}
+
+// Same identity as csf_EaiEbj_ri, but enumerating only the intermediate couplings that can
+// contribute: <m|E_bj|ket> vanishes unless m and ket have identical couplings outside the orbital
+// range spanned by (b,j), and <bra|E_ai|m> unless m and bra agree outside the range of (a,i).
+// So only the open shells of m inside both ranges are free.
+static void _steps_of (Str3 * s, unsigned int norb, int * step){
+    // step[p] = +1/-1 for the coupling step of open shell p, 0 if p is not singly occupied
+    unsigned int k = 0;
+    for (unsigned int p=0; p<norb; p++){
+        step[p] = 0;
+        if (_get_occ (s, p) == 1){ step[p] = ((s->spin >> k) & 1ULL) ? 1 : -1; k++; }
+    }
+}
+double csf_EaiEbj_ri_local (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, unsigned int b, unsigned int j)
+{
+    unsigned int norb = MAX (_norb_of (bra, ket), MAX (MAX (a, i), MAX (b, j)) + 1);
+    int om[64], sb[64], sk[64], sm[64], freep[64];
+    _occ_of (ket, norb, om);
+    if (b == j){ return ((double) om[j]) * _csf_E1 (bra, ket, a, i, norb); }
+    om[j]--; om[b]++;
+    Str3 m;
+    unsigned int nopen;
+    if (!_str3_from_occ (om, norb, &m, &nopen)){ return 0.0; }
+    _steps_of (bra, norb, sb); _steps_of (ket, norb, sk);
+    unsigned int lo1 = MIN (b, j), hi1 = MAX (b, j), lo2 = MIN (a, i), hi2 = MAX (a, i);
+    int nfree = 0;
+    for (unsigned int p=0; p<norb; p++){
+        sm[p] = 0;
+        if (om[p] != 1){ continue; }
+        bool in1 = (p >= lo1) && (p <= hi1);
+        bool in2 = (p >= lo2) && (p <= hi2);
+        if (in1 && in2){ freep[nfree++] = (int) p; continue; }
+        if (!in1 && !in2){
+            if ((sk[p] == 0) || (sk[p] != sb[p])){ return 0.0; }
+            sm[p] = sk[p];
+        } else if (!in1){
+            if (sk[p] == 0){ return 0.0; }
+            sm[p] = sk[p];
+        } else {
+            if (sb[p] == 0){ return 0.0; }
+            sm[p] = sb[p];
+        }
+    }
+    unsigned int nspin_ket = count_set_bits (ket->sconf);
+    int twoS = (ket->sconf == 0ULL) ? 0 : (int) _get_twoS_running (ket->spin, 0, nspin_ket);
+    double sum = 0.0;
+    for (uint64_t x=0; x < (1ULL << nfree); x++){
+        for (int f=0; f<nfree; f++){ sm[freep[f]] = ((x >> f) & 1ULL) ? 1 : -1; }
+        int run = 0; bool ok = true; uint64_t spin = 0ULL; unsigned int k = 0;
+        for (unsigned int p=0; p<norb; p++){
+            if (sm[p] == 0){ continue; }
+            run += sm[p]; if (run < 0){ ok = false; break; }
+            if (sm[p] > 0){ spin |= (1ULL << k); }
+            k++;
+        }
+        if (!ok || (run != twoS)){ continue; }
+        m.spin = (m.sconf == 0ULL) ? 0ULL : spin;
+        double f2 = _csf_E1 (&m, ket, b, j, norb);
+        if (f2 != 0.0){ sum += _csf_E1 (bra, &m, a, i, norb) * f2; }
+    }
+    return sum;
 }
 
 double csf_EaiEbj (Str3 * bra, Str3 * ket,
@@ -1040,6 +1270,13 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
     if (a > b){
         return csf_EaiEbj (bra, ket, b, j, a, i);
+    }
+    // pphh (both creators below both annihilators): the graphical evaluation below (CGC_2e_X with
+    // qt_pp/pr_pp and the CGC_1e pphh branch) reads the undefined intermediate spin of doubly-
+    // occupied orbitals and is wrong for most mixed-spin cases; evaluate exactly instead.
+    // -DCSF_PPHH_GRAPHICAL=1 restores the graphical path for further derivation work.
+    if (!CSF_PPHH_GRAPHICAL && (b < i) && (b < j)){
+        return csf_EaiEbj_ri_local (bra, ket, a, i, b, j);
     }
     if (DEBUG_2E){
     printf ("\n<%lu,%lu,%lu|%u'%u,%u'%u|%lu,%lu,%lu>\n",
@@ -1133,8 +1370,10 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa, sj, sb;
+    _ndummy = 0;
     _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
+    _fix_pair_mids (twoSk, twoSb, DUMMY_RULE);
     if (abs (na) == 2){ sa++; }
     // The line above looks like double-counting in the case that a==b
     // But, of course, the case that a==b (or i==j) can't get here, because
@@ -1316,6 +1555,9 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     assert (facl==facl);
     assert (facu==facu);
     if (DEBUG_2E){ printf ("final value = %e + %e\n\n", facl,facu); fflush (stdout); }
+    // debugging hook: -DCSF_EAIEBJ_PART=1 (linked only) or 2 (unlinked only)
+    if (CSF_EAIEBJ_PART == 1){ return facl; }
+    if (CSF_EAIEBJ_PART == 2){ return facu; }
     return facl+facu; 
 }
 
@@ -1358,7 +1600,7 @@ void FCICSFpspace_h0tril(double *hmat,
                 fac = csf_Sai (&bra, &ket, p, p, twoM);
                 hmat[ihmat] += fac * h1e_s[ihop];
                 // eri exchange
-                for (q=p; q<norb; q++){
+                for (q=p+1; q<norb; q++){
                     if (_get_occ(&bra, q) != 1){ continue ; }
                     ihop = p*((norb*norb*norb) + 1) + q*(norb+1)*norb;
                     fac = csf_EaiEbj (&bra, &ket, p, q, q, p);
@@ -1407,13 +1649,19 @@ void FCICSFpspace_h0tril(double *hmat,
             exc2_sort (&bra, &ket, p, r, q, t, &a, &i, &b, &j);
             // E^a_i E^b_j
             ihop = (a*norb*norb*norb) + (i*norb*norb) + (b*norb) + j;
-            fac = csf_EaiEbj (&bra, &ket, a, i, b, j);
+            if (CSF_2E_RI){
+                fac = csf_EaiEbj_ri (&bra, &ket, a, i, b, j);
+                // a==b and i==j: only one ordering, so the 1/2 of the Hamiltonian survives
+                if ((a==b) && (i==j)){ fac *= 0.5; }
+            } else {
+                fac = csf_EaiEbj (&bra, &ket, a, i, b, j);
+            }
             if (DEBUG_2E){ printf (" %u %u %u %u %f\n", a,i,b,j,fac); fflush (stdout); }
             hmat[ihmat] += g2e[ihop] * fac;
             // E^a_j E^b_i
             if ((a!=b) && (i!=j)){
                 ihop = (a*norb*norb*norb) + (j*norb*norb) + (b*norb) + i;
-                fac = csf_EaiEbj (&bra, &ket, a, j, b, i);
+                fac = CSF_2E_RI ? csf_EaiEbj_ri (&bra, &ket, a, j, b, i) : csf_EaiEbj (&bra, &ket, a, j, b, i);
                 if (DEBUG_2E){ printf (" %u %u %u %u %f\n", a,j,b,i,fac); fflush (stdout); }
                 hmat[ihmat] += g2e[ihop] * fac;
             }

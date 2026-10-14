@@ -285,6 +285,8 @@ void FCICSFsignrule (int * sgns, uint64_t * dconfs, uint64_t * sconfs, size_t nd
         for (unsigned int ipair = 0; ipair < npair; ipair++){
             k = first1 (dconf);
             assert (k>=0);
+            // TODO: (1<<k) is an int shift: undefined behavior for k >= 31, i.e. for any doubly-occupied
+            // orbital with index >= 31. Should be ((1ULL<<k)-1). csf.py's pspace guards with norb > 30.
             tconf = sconf & ((1<<k)-1);
             sgns[idet] += count_set_bits (tconf);
             sconf >>= k;
