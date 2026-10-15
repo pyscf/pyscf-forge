@@ -98,7 +98,7 @@ def tearDownModule():
 
 class KnownValues(unittest.TestCase):
 
-    @unittest.skip('debug')
+    #@unittest.skip('debug')
     def test_kernel(self):
         nel = (neleci, nelec)
         refs = [-8.934702919292933, -12.578019902416628, -8.879204010931936,
