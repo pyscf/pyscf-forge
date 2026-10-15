@@ -447,6 +447,19 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     return xdiag;
 }
 
+// Number of doubly-occupied operator orbitals in the chain with sign sgn (+1: ket, -1: bra) that
+// claim the CG norm index x (pairs carry no CG coefficients); see the norm loop of CGC_2e_X.
+static int _pair_claims (int x, int t, int q, int r, int p,
+                         int nt, int nq, int nr, int np, int sgn)
+{
+    int n = 0;
+    if (((x==t) || (x==t+1)) && nt==2*sgn){ n++; }
+    if (((x==q) || (x==q-1)) && nq==2*sgn){ n++; } // TODO: not sure if off by 1!
+    if (((x==r) || (x==r-1)) && nr==2*sgn){ n++; } // TODO: not sure if off by 1!
+    if (((x==(p-1)) || (x==(p-2))) && np==2*sgn){ n++; }
+    return n;
+}
+
 double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
                  unsigned int t, unsigned int q, unsigned int r, unsigned int p,
                  int nt, int nq, int nr, int np,
@@ -482,7 +495,9 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
 
     // A bunch of index sanity checks
     assert (p>=r);
-    assert ((r>=q) || (qt_pp & ((nr+nq)==0) && (abs (nr) == 2)));
+    // pphh (qt_pp): r is an index into the bra chain and q into the ket chain; between them the
+    // bra has two more electrons, so r+2 is the ket index of the same position.
+    assert (qt_pp ? (r+2 >= q) : (r >= q));
     assert (q>=t);
     assert ((t!=q) || (abs(nt+nq)<(abs(nt)+abs(nq))));
     assert ((r!=p) || (abs(nr+np)<(abs(nr)+abs(np))));
@@ -514,6 +529,28 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
 
     // populate the actual S arrays   
 
+    // pphh boundary CGs. The norm below runs over [t,p) for both chains, and the T strings
+    // implicitly leave out one bra CG at the j end (index t-1, outside the loop anyway) and one
+    // ket CG at the a end (index p, also outside). In pphh a pair can sit on either of those:
+    // a bra pair at b with nothing open between b and j, or a ket pair at i with nothing open
+    // between a and i. Then the CG to leave out is the next one into the chain: the lowest
+    // unclaimed bra index >= t-1, or the highest unclaimed ket index <= p. If that search runs
+    // all the way through to the other boundary, the factor has to be divided out explicitly.
+    int dropb = -1, dropk = -1;
+    if (qt_pp){
+        int x;
+        for (x=((int) t)-1; x < (int) p; x++){
+            if (!_pair_claims (x, t, q, r, p, nt, nq, nr, np, -1)){ break; }
+        }
+        if (x > ((int) t)-1){ dropb = x; }
+        for (x=(int) p; x > ((int) t)-1; x--){
+            if (!_pair_claims (x, t, q, r, p, nt, nq, nr, np, +1)){ break; }
+        }
+        if (x < (int) p){ dropk = x; }
+    }
+    if (dropb == (int) p){ xdiag /= (double) (twoSb[p]+1); }
+    if ((dropk == ((int) t)-1) && (t>0)){ xdiag /= (double) (twoSk[t-1]+1); }
+
     // Factorize out the damn norm! I'm not keeping track of this garbage in the subdiagrams anymore!
     for (i=t; i < p; i++){
         // 2S+1 for each CG coefficient
@@ -523,18 +560,12 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         // Each doubly-occupied operator orbital removes two factors. If two pairs are adjacent in
         // the same chain their claims overlap on one index, and one factor is left over; since a
         // pair doesn't change the running spin, it equals (2S+1) at the shared index.
-        int claimk = 0, claimb = 0;
-        if (((i==t) || (i==t+1)) && nt==2){ claimk++; }
-        if (((i==q) || (i==q-1)) && nq==2){ claimk++; } // TODO: not sure if off by 1!
-        if (((i==r) || (i==r-1)) && nr==2){ claimk++; } // TODO: not sure if off by 1!
-        if (((i==(p-1)) || (i==(p-2))) && np==2){ claimk++; }
-        if (claimk){ twoS0k = 0; }
+        int claimk = _pair_claims (i, t, q, r, p, nt, nq, nr, np, +1);
+        int claimb = _pair_claims (i, t, q, r, p, nt, nq, nr, np, -1);
+        if (claimk || ((int) i == dropk)){ twoS0k = 0; }
         bool bra_paired = false;
-        if (((i==t) || (i==t+1)) && nt==-2){ claimb++; }
-        if (((i==q) || (i==q-1)) && nq==-2){ claimb++; } // TODO: not sure if off by 1!
-        if (((i==r) || (i==r-1)) && nr==-2){ claimb++; } // TODO: not sure if off by 1!
-        if (((i==(p-1)) || (i==(p-2))) && np==-2){ claimb++; }
         if (claimb){ twoS0b = 0; bra_paired = true; }
+        if ((int) i == dropb){ twoS0b = 0; }
         for (int c=1; c<claimk; c++){ xdiag /= (double) (twoSk[i]+1); }
         for (int c=1; c<claimb; c++){ xdiag /= (double) (twoSb[i]+1); }
         // This bugfix came from this session:
@@ -575,22 +606,13 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
         if ((i==t) && (abs (nt) == 2)){
             continue;
         }
-        // EMPIRICAL: || qt_pp
-        // Spin coefficients for interactions like <0uuu00|H|000uuu> should always have
-        // magnitude 1. The point of these functions is to compensate for spin coupling, and
-        // there is essentially no spin at all if they are all parallel and ferromagnetically
-        // coupled, so this is trivially always true no matter how many 0's or how many u's or
-        // where they are, as long as they can be coupled by a double excitaiton.
-        // Furthermore, if qt_pp, all unlinked terms vanish (if all spins are
-        // parallel then there is no way for the bra and ket lines to have the same running
-        // spin after different numbers of CG nodes.)
-        // The output of this function gets multiplied by 3 in the caller, so 
-        // we should have |xdiag| = 0.33333. For the given example, the norm from CG
-        // coefficients is 6, and |xcore| from CGC_2e_X_core below is 1/18. Hence I conclude
-        // that the innermost T(i) terms in this function are double-counting.
-        // TODO: This applies to all qt_pp, not just the ones with q==t+1/p=r+1, but:
-        //    1. We're apparently off by 1/2 or 1/4 in cases where b or j is doubly-occupied.
+        // pphh (qt_pp): q = i is a ket orbital, so the ket index right of i, where the T
+        // string must stop, is q-1 (q-2 for a ket pair at i). In phph, q = b is a bra orbital
+        // whose index is already the ket index right of b.
         if ((i==(q-1)) && ((abs (nq) == 2) || qt_pp)){
+            continue;
+        }
+        if (qt_pp && (i==(q-2)) && (abs (nq) == 2)){
             continue;
         }
         if (nt < 0){ // T(i)
@@ -622,8 +644,8 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
             offk = -2;
             assert (false); // I haven't rederived this case but I think it doesn't appear?
         }
-        // assert (q>=t+(abs(nt)+abs(nq))-1);
-        // This can't be enforced because of the sr = sq, |nr| = |nq| = 2 problem.
+        // The core is the hphp core (nr < 0, nq > 0) read with the bra chain shifted by the
+        // two extra bra electrons between b and i: twoSb-2, and r+2 for b in ket indices.
     }
     xdiag *= CGC_2e_X_core (twoSk+offk, twoSb+offb,
                             r-offb, q-offk,
@@ -638,9 +660,13 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
     //     { 1    S(i)   S'(i+1) }
     //     { 1/2  S'(i)  S(i-1)  }
     for (i=r; i < p; i++){
-        // EMPIRICAL: || qt_pp
-        // See above
+        // pphh (qt_pp): r = b is a bra index, and between a and b the bra has one more
+        // electron than the ket, so the T string starts at ket index r+1 (r+2 for a bra pair
+        // at b, whose index r is the middle of the pair).
         if ((i==r) && ((abs (nr) == 2) || qt_pp)){
+            continue;
+        }
+        if (qt_pp && (i==(r+1)) && (abs (nr) == 2)){
             continue;
         }
         if ((i==(p-1)) && (abs (np) == 2)){
@@ -1121,7 +1147,10 @@ double csf_EaiEaj (Str3 * bra, Str3 * ket,
 #define CSF_EAIEBJ_PART 0
 #endif
 #ifndef CSF_PPHH_GRAPHICAL
-#define CSF_PPHH_GRAPHICAL 0
+#define CSF_PPHH_GRAPHICAL 1
+#endif
+#ifndef CSF_HPHP_GRAPHICAL
+#define CSF_HPHP_GRAPHICAL 1
 #endif
 static void _occ_of (Str3 * s, unsigned int norb, int * occ){
     for (unsigned int p=0; p<norb; p++){ occ[p] = (int) _get_occ (s, p); }
@@ -1256,6 +1285,71 @@ double csf_EaiEbj_ri_local (Str3 * bra, Str3 * ket, unsigned int a, unsigned int
     return sum;
 }
 
+// Running 2S after each orbital: twoS[p] is the spin of the chain coupled through orbital p.
+static void _twoS_after (Str3 * s, int * twoS){
+    int run = 0;
+    unsigned int k = 0;
+    for (unsigned int p=0; p<64; p++){
+        if (_get_occ (s, p) == 1){
+            run += ((s->spin >> k) & 1ULL) ? 1 : -1;
+            k++;
+        }
+        twoS[p] = run;
+    }
+}
+
+// Unlinked pphh term (the singlet-pair channel, (<E_ai E_bj> + <E_aj E_bi>)/2) for a<b<i,j.
+// Its diagram is a pair annihilation on (i,j) times a pair creation on (a,b), joined by an
+// intermediate m = ket minus the (i,j) pair = bra minus the (a,b) pair. Pairs are spin scalars,
+// so m is unique: its running spin is the ket's to the left of min(i,j) and the bra's from there
+// on (if bra and ket don't agree between b and min(i,j), it is not a valid coupling and the term
+// vanishes). Putting the pair on a spare orbital x turns each factor into a pair hop, which
+// csf_EaiEaj evaluates as a single csf_Eai. Each pair hop carries sqrt(2) times the singlet-pair
+// amplitude, hence the 1/2. This replaces the CGC_1e pphh branch with its fabricated chain pad.
+static double _pphh_unlinked (Str3 * bra, Str3 * ket,
+                              unsigned int a, unsigned int i,
+                              unsigned int b, unsigned int j)
+{
+    const unsigned int x = 63; // spare orbital (pspace is limited to norb <= 30)
+    int om[64], sb[64], sk[64];
+    for (unsigned int p=0; p<64; p++){ om[p] = (int) _get_occ (ket, p); }
+    om[i]--; om[j]--;
+#ifndef NDEBUG
+    for (unsigned int p=0; p<64; p++){
+        int ob = (int) _get_occ (bra, p) - ((p==a) ? 1 : 0) - ((p==b) ? 1 : 0);
+        assert (ob == om[p]);
+    }
+    assert (om[x] == 0 && _get_occ (bra, x) == 0);
+#endif
+    _twoS_after (bra, sb);
+    _twoS_after (ket, sk);
+    unsigned int c = MIN (i, j);
+    Str3 m;
+    m.dconf = 1ULL << x; m.sconf = 0ULL; m.spin = 0ULL;
+    unsigned int k = 0, kk = 0;
+    int prev = 0;
+    for (unsigned int p=0; p<64; p++){
+        int cur = (p < c) ? sk[p] : sb[p];
+        int step = cur - prev;
+        prev = cur;
+        if (om[p] == 2){
+            if (step != 0){ return 0.0; }
+            m.dconf |= 1ULL << p;
+            continue;
+        }
+        if (om[p] == 1){
+            m.sconf |= 1ULL << k;
+            if (step == 1){ m.spin |= 1ULL << kk; }
+            else if (step != -1){ return 0.0; }
+            kk++;
+        } else if (step != 0){
+            return 0.0;
+        }
+        k++;
+    }
+    return 0.5 * csf_EaiEaj (&m, bra, b, a) * csf_EaiEaj (&m, ket, i, j);
+}
+
 double csf_EaiEbj (Str3 * bra, Str3 * ket,
                    unsigned int a, unsigned int i,
                    unsigned int b, unsigned int j)
@@ -1265,16 +1359,17 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     } else if (i==j){
         return csf_EaiEaj (ket, bra, a, b);
     }
-    if (MIN (a,b) > MIN (i,j)){
+    // nested hphp: after the a<b swap below, j < a < i < b
+    bool hphp = CSF_HPHP_GRAPHICAL && ((a<b) ? ((j<a) && (a<i) && (i<b)) : ((i<b) && (b<j) && (j<a)));
+    if ((MIN (a,b) > MIN (i,j)) && !hphp){
         return csf_EaiEbj (ket, bra, i, a, j, b);
     }
     if (a > b){
         return csf_EaiEbj (bra, ket, b, j, a, i);
     }
-    // pphh (both creators below both annihilators): the graphical evaluation below (CGC_2e_X with
-    // qt_pp/pr_pp and the CGC_1e pphh branch) reads the undefined intermediate spin of doubly-
-    // occupied orbitals and is wrong for most mixed-spin cases; evaluate exactly instead.
-    // -DCSF_PPHH_GRAPHICAL=1 restores the graphical path for further derivation work.
+    // pphh (both creators below both annihilators) is evaluated graphically below: linked term by
+    // CGC_2e_X (qt_pp), unlinked term by _pphh_unlinked. -DCSF_PPHH_GRAPHICAL=0 evaluates it
+    // instead by the local resolution of the identity, which is exact and can serve as a check.
     if (!CSF_PPHH_GRAPHICAL && (b < i) && (b < j)){
         return csf_EaiEbj_ri_local (bra, ket, a, i, b, j);
     }
@@ -1289,10 +1384,10 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     _pad_Str3 (bra, &brap);
     _pad_Str3 (ket, &ketp);
     // CSF orthogonality
-    unsigned int p = a;
-    unsigned int r = MIN (i, MIN (j, b));
+    unsigned int p = hphp ? j : a;
+    unsigned int r = hphp ? a : MIN (i, MIN (j, b));
     unsigned int t = MAX (i, MAX (j, b));
-    unsigned int q = (i+j+b) - (r+t);
+    unsigned int q = hphp ? i : (i+j+b) - (r+t);
     if (p>0){ if ((brap.spin & ((1ULL<<p)-1)) != (ketp.spin & ((1ULL<<p)-1))){
         if (DEBUG_2E){ printf ("csf_EaiEbj right escape\n"); fflush (stdout); }
         return 0.0;
@@ -1374,19 +1469,22 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
     _fix_pair_mids (twoSk, twoSb, DUMMY_RULE);
-    if (abs (na) == 2){ sa++; }
+    if (hphp){ if (abs (nj) == 2){ sj++; } }
+    else if (abs (na) == 2){ sa++; }
     // The line above looks like double-counting in the case that a==b
     // But, of course, the case that a==b (or i==j) can't get here, because
     // we divert to csf_EaiEaj in that case.
-    assert (sa >= sb);
-    assert (sa >= si);
-    assert (sa >= sj);
+    assert (hphp || (sa >= sb));
+    assert (hphp || (sa >= si));
+    assert (hphp || (sa >= sj));
     assert (si != sj);
-    int np = na;
-    unsigned int sp=sa;
+    int np = hphp ? nj : na;
+    unsigned int sp = hphp ? sj : sa;
     int nr,nq,nt;
     unsigned int sr,sq,st;
-    if (r==i){
+    if (hphp){
+        nr=na; sr=sa; nq=ni; sq=si; nt=nb; st=sb;
+    } else if (r==i){
         nr=ni; sr=si;
         if (q==b){
             nq=nb; sq=sb; nt=nj; st=sj;
@@ -1408,9 +1506,15 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
             nq=ni; sq=si; nt=nb; st=sb;
         }
     }
+    // pphh: both creators to the left of both annihilators
+    bool pphh = ((np < 0) == (nr < 0));
     // sr >= sq is not optional* and that logic up there ^ sometimes breaks it
-    // *exception: pphh with |nq| = 2; see the third case in the conditional below
-    if (sq > sr){
+    // *exception: pphh, where sr is an index into the bra chain and sq into the ket chain.
+    // Between b and i the bra has two more electrons than the ket, so the same position has
+    // a bra index 2 lower than its ket index, and comparing sr with sq means nothing. (The
+    // swap below used to fire for most pphh elements; it exchanged b with i or j, and when it
+    // swapped in i the linked term was zeroed by the (i==r) check further down.)
+    if ((sq > sr) && !pphh){
         sx = sq; sq = sr; sr = sx;
         nx = nq; nq = nr; nr = nx;
         sx = r; r = q; q = sx;
@@ -1422,7 +1526,11 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     // My sense that you ought to sq++ comes from my reading of the diagrams of
     // Drake & Schlesinger, literally the lines connecting the rectangles to each other
     // always crossing the lines connecting the rectangles to the floor/ceiling.
-    if (abs (nq) == 2){
+    if (pphh){
+        // q = i is in the ket and r = b in the bra, so there is no contradiction: a ket pair
+        // at i points to its left edge, the same position a singly-occupied i points to.
+        if (abs (nq) == 2){ sq++; }
+    } else if (abs (nq) == 2){
         if (sr > sq){
             sq++; 
         } else if (abs (nr) == 1){
@@ -1483,14 +1591,12 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
 
     // The unlinked diagram vanishes if, at any spectator spin, the cumulative spin
     // magnitudes of bra and ket are unequal.
+    // (pphh evaluates its unlinked term separately; see _pphh_unlinked)
     bool unlinked_orth = false;
-    if (nr < 0){ // pphh: np is negative always
-        nx = 2;
-    } else {
-        nx = 0;
-    }
-    for (sx = sq; sx < sr+nx; sx++){
-        if (twoSk[sx] != twoSb[sx-nx]){ unlinked_orth = true; }
+    if (!pphh){
+        for (sx = sq; sx < sr; sx++){
+            if (twoSk[sx] != twoSb[sx]){ unlinked_orth = true; }
+        }
     }
 
     int parity = sp + sr + sq + st + ((nr>0) || (i>j));
@@ -1512,14 +1618,6 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
         facl = -facl;
         facu = -facu;
     }
-    // If the above parity term just models sorting, then from D&S Section IV and
-    // Brink and Satchler textbook rule (7.5) (which D&S don't mention but which
-    // seems to be what makes sense of where they put the arrows in Fig 3), I was
-    // able to convince myself that specifically the unlinked term of pphh with
-    // i>j has a special factor of -1 over the top of everything else.
-    if ((nr<0) && (i>j)){
-        facu = -facu;
-    }
 
     if (DEBUG_2E){
         printf ("sp,sr,sq,st: %u,%u,%u,%u\n", sp, sr, sq, st);
@@ -1535,18 +1633,12 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
 
     // unlinked term
-    if (!unlinked_orth){
+    if (pphh){
+        if (DEBUG_2E){ printf ("evaluating a pphh unlinked term\n"); fflush (stdout); }
+        facu = _pphh_unlinked (bra, ket, a, i, b, j);
+    } else if (!unlinked_orth){
         if (DEBUG_2E){ printf ("evaluating an unlinked term\n"); fflush (stdout); }
         facu *= CGC_1e (twoSk, twoSb, sq, st, nq, nt, nspin);
-        if (nr < 0){ // pphh: np is always negative
-            // The ket line has two more nodes below r and two fewer nodes above
-            // r compared to the phph/phhp case
-            for (sx = sr+1; sx < nspin+1; sx++){
-                twoSk[sx-2] = twoSk[sx];
-            }
-            twoSk[nspin-1] = 1; // arbitrary?
-            twoSk[nspin] = 0; // arbitrary?
-        }
         facu *= CGC_1e (twoSk, twoSb, sp, sr, np, nr, nspin);
     }
 
