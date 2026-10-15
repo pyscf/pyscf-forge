@@ -109,6 +109,7 @@ This configuration allows Python to locate and load the new `pp_rpa.py` module f
 Note that the `pyscf` core `tdscf` folder already contains an `__init__.py` file.
 To avoid overwriting the existing `__init__.py` file in `pyscf` during the installation of `pyscf-forge`,
 you should not add an `__init__.py` file in the `pyscf-forge/pyscf/tdscf` directory.
+CI fails if any `__init__.py` in `pyscf-forge` has a counterpart in the installed `pyscf`.
 
 The structure of the core packages and the components of `pyscf-forge` can be organized as follows:
 ```
