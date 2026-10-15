@@ -41,51 +41,6 @@
 #define PAIR_MID2(x) ((x)+1)
 #endif
 
-// Record where the formally-undefined pair intermediates were stored so that callers can
-// replace them by a well-defined function of the other (facing) chain; see _fix_pair_mids.
-// DUMMY_RULE 0 keeps the historical up-then-down value (PAIR_MID1/2).
-#ifndef DUMMY_RULE
-#define DUMMY_RULE 0
-#endif
-static __thread unsigned int * _dummy_arr[4];
-static __thread unsigned int _dummy_idx[4];
-static __thread int _ndummy = 0;
-static void _record_dummy (unsigned int * arr, unsigned int idx){
-    assert (_ndummy < 4);
-    _dummy_arr[_ndummy] = arr;
-    _dummy_idx[_ndummy] = idx;
-    _ndummy++;
-}
-static void _shift_dummies (unsigned int * arr, unsigned int from){
-    for (int k=0; k<_ndummy; k++){ if ((_dummy_arr[k]==arr) && (_dummy_idx[k]>=from)){ _dummy_idx[k] += 2; } }
-}
-static void _fix_pair_mids (unsigned int * twoSk, unsigned int * twoSb, int rule)
-{
-    if (rule == 0){ return; } // keep whatever PAIR_MID1/2 stored
-    // For each recorded intermediate P[k] of a pair spanning P[k+1] -> P[k] -> P[k-1] (P[k+1] == P[k-1] == v),
-    // choose P[k] from the facing chain O. dO1 = O[k]-O[k+1], dO2 = O[k-1]-O[k].
-    for (int d=0; d<_ndummy; d++){
-        unsigned int * P = _dummy_arr[d];
-        unsigned int * O = (P==twoSk) ? twoSb : twoSk;
-        unsigned int k = _dummy_idx[d];
-        int v = (int) P[k+1];
-        int dO1 = (int) O[k] - (int) O[k+1];
-        int dO2 = (int) O[k-1] - (int) O[k];
-        int x;
-        switch (rule){
-            case 1: x = v-1; break;          // down-then-up
-            case 2: x = v-dO1; break;        // antiparallel to facing step 1
-            case 3: x = v+dO1; break;        // parallel to facing step 1
-            case 4: x = v+dO2; break;        // antiparallel to facing step 2
-            case 5: x = v-dO2; break;        // parallel to facing step 2
-            case 6: x = (int) O[k]; break;   // copy facing chain
-            default: x = v+1;
-        }
-        if ((x < 0) || (abs (x-v) != 1)){ x = v+1; }
-        P[k] = (unsigned int) x;
-    }
-}
-
 void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS)
 {
 
@@ -342,7 +297,6 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     unsigned int twoS0;
     unsigned int i;
 
-    // TODO: check that this still works for t = 1, q = 2 case
     if (q>0){
 
     // q
@@ -427,8 +381,6 @@ double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
     // parity = parity % 4;
 
     // 'hill' and 'shelf' parity: |nr| = 2
-    // TODO: possible off-by-1 in indexing here. There was an off-by-1 in
-    // the |nq| = 2 case above through a43a4ecca71ae9b093f694d597c35e60d2a70fe3
     switch (nr) {
         case -2:
             parity += twoSk[r] + 3*twoSb[r-1] - 1;
@@ -454,8 +406,8 @@ static int _pair_claims (int x, int t, int q, int r, int p,
 {
     int n = 0;
     if (((x==t) || (x==t+1)) && nt==2*sgn){ n++; }
-    if (((x==q) || (x==q-1)) && nq==2*sgn){ n++; } // TODO: not sure if off by 1!
-    if (((x==r) || (x==r-1)) && nr==2*sgn){ n++; } // TODO: not sure if off by 1!
+    if (((x==q) || (x==q-1)) && nq==2*sgn){ n++; }
+    if (((x==r) || (x==r-1)) && nr==2*sgn){ n++; }
     if (((x==(p-1)) || (x==(p-2))) && np==2*sgn){ n++; }
     return n;
 }
@@ -473,7 +425,6 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
 
     double xdiag = 1.0;
     unsigned int twoS0b, twoS0k;
-    int offk = 0;
     int offb = 0;
     int parity = 0;
     unsigned int i;
@@ -636,19 +587,16 @@ double CGC_2e_X (unsigned int * twoSk, unsigned int *twoSb,
 
     // Xcore
     if (qt_pp){
-        if (nq > 0){
-            offb = -2;
-            parity += twoSk[r+1+abs(nr)-1] + (3*twoSb[r+abs(nr)-1]);
-            parity += twoSb[q-abs(nq)-1] + (3*twoSk[q-abs(nq)]);
-        } else {
-            offk = -2;
-            assert (false); // I haven't rederived this case but I think it doesn't appear?
-        }
+        // q = i is a ket creator after csf_EaiEbj's a<b canonicalization
+        assert (nq > 0);
+        offb = -2;
+        parity += twoSk[r+1+abs(nr)-1] + (3*twoSb[r+abs(nr)-1]);
+        parity += twoSb[q-abs(nq)-1] + (3*twoSk[q-abs(nq)]);
         // The core is the hphp core (nr < 0, nq > 0) read with the bra chain shifted by the
         // two extra bra electrons between b and i: twoSb-2, and r+2 for b in ket indices.
     }
-    xdiag *= CGC_2e_X_core (twoSk+offk, twoSb+offb,
-                            r-offb, q-offk,
+    xdiag *= CGC_2e_X_core (twoSk, twoSb+offb,
+                            r-offb, q,
                             nr, nq,
                             qt_pp);
     if (DEBUG_2E_CGC){ printf (" * Xcore = %f\n", xdiag); fflush (stdout); }
@@ -774,10 +722,8 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
                int np, int nq,
                unsigned int nspin)
 {
-    if (p < q){
-        if (DEBUG_1E){ printf ("flip ");}
-        return CGC_1e (twoSk, twoSb, q, p, nq, np, nspin);
-    }
+    // callers pass p left of q (csf_Eai sorts a<i; csf_EaiEbj passes sp>=sr, sq>=st)
+    assert (p >= q);
     if (DEBUG_1E){
     printf ("<");
     for (unsigned int i=0; i<=nspin; i++){
@@ -792,9 +738,8 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
     int parity = 0;
     double xdiag = 1.0;
     unsigned int twoS0k, twoS0b;
-    unsigned int * twoSp1;
-    unsigned int * twoSp0;
-    bool pphh = false;
+    // one creator and one annihilator (pphh unlinked terms are evaluated by _pphh_unlinked)
+    assert ((np>0) != (nq>0));
 
     // norm
     // In Drake & Schlesinger eq (14), the norm is associated with the spin going into a CG
@@ -810,11 +755,6 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         if (((i==(p-1)) || (i==(p-2))) && np==2){ twoS0k = 0; }
         if (((i==q) || (i==(q+1))) && nq==-2){ twoS0b = 0; }
         if (((i==(p-1)) || (i==(p-2))) && np==-2){ twoS0b = 0; }
-        // In the pp/hh case one chain is padded with a fabricated pair (see the pphh
-        // block below), so its S(q) node carries no CG coefficient of its own.
-        if ((i==q) && ((np>0) == (nq>0))){
-            if (nq>0){ twoS0b = 0; } else { twoS0k = 0; }
-        }
         xdiag = xdiag * (twoS0k+1) * (twoS0b+1);
     }
     xdiag = sqrt (xdiag);
@@ -846,31 +786,6 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         // parity = parity % 4;
     }
 
-    // pp, hh case
-    if ((np>0) == (nq>0)){
-        pphh = true;
-        if (nq>0){
-            parity += twoSb[q] + 3*twoSk[q+1] + 1;
-        } else {
-            parity += twoSk[q] + 3*twoSb[q+1] + 1;
-        }
-        // parity = parity % 4;
-        twoSp1 = malloc ((nspin+1) * sizeof (unsigned int));
-        twoSp0 = nq>0 ? twoSb : twoSk;
-        for (unsigned int i=0; i<=(q-1); i++){
-            twoSp1[i] = twoSp0[i];
-        }
-        for (unsigned int i=(q-1); i<=p-2; i++){
-            twoSp1[i+2] = twoSp0[i];
-        }
-        if (nq>0){
-            twoSb = twoSp1;
-        } else {
-            twoSk = twoSp1;
-        }
-        q++;
-    }
-
     // T(i) and T'(i) strings
     //     T'(i) =
     //     -1**[S'(i) + S(i) + 1]
@@ -899,9 +814,6 @@ double CGC_1e (unsigned int * twoSk, unsigned int * twoSb,
         // parity = parity % 4;
     }
 
-    if (pphh){
-        free (twoSp1); 
-    }
     assert ((parity % 2) == 0);
     parity = parity / 2;
     if ((parity%2)==1){ xdiag = -xdiag; }
@@ -924,7 +836,6 @@ void _get_spinindices1 (Str3 * addr, unsigned int p, unsigned int nspin,
             twoS[r+2] = twoS[r];
         }
         twoS[(*sp)+1] = PAIR_MID1 (twoS[(*sp)]);
-        _record_dummy (twoS, (*sp)+1);
         (*sp)++;
     }
 }
@@ -952,9 +863,7 @@ void _get_spinindices2 (Str3 * addr, unsigned int p, unsigned int q,
             assert ((int) (r+2) < (int) (nspin+1));
             twoS[r+2] = twoS[r];
         }
-        _shift_dummies (twoS, (*sp));
         twoS[(*sp)+1] = PAIR_MID2 (twoS[(*sp)]);
-        _record_dummy (twoS, (*sp)+1);
         (*sp)++;
     } 
 }
@@ -994,7 +903,6 @@ double csf_Eai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i)
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa;
-    _ndummy = 0;
     _get_spinindices1 (bra, a, nspin, twoSb, &sa);
     _get_spinindices1 (ket, i, nspin, twoSk, &si);
     if (abs (na) == 2){ sa++; }
@@ -1034,7 +942,6 @@ double csf_Sai (Str3 * bra, Str3 * ket, unsigned int a, unsigned int i, int twoM
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa;
-    _ndummy = 0;
     _get_spinindices1 (bra, a, nspin, twoSb, &sa);
     _get_spinindices1 (ket, i, nspin, twoSk, &si);
     if (abs (na) == 2){ sa++; }
@@ -1305,7 +1212,7 @@ static void _twoS_after (Str3 * s, int * twoS){
 // on (if bra and ket don't agree between b and min(i,j), it is not a valid coupling and the term
 // vanishes). Putting the pair on a spare orbital x turns each factor into a pair hop, which
 // csf_EaiEaj evaluates as a single csf_Eai. Each pair hop carries sqrt(2) times the singlet-pair
-// amplitude, hence the 1/2. This replaces the CGC_1e pphh branch with its fabricated chain pad.
+// amplitude, hence the 1/2.
 static double _pphh_unlinked (Str3 * bra, Str3 * ket,
                               unsigned int a, unsigned int i,
                               unsigned int b, unsigned int j)
@@ -1444,31 +1351,17 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     if (b==j && nb==-2 && nj==2){ assert (false); return csf_Eai (bra, ket, a, i); }
     unsigned int nspin_ket = count_set_bits (ket->sconf);
     unsigned int nspin_bra = count_set_bits (bra->sconf);
-    if (i==j){
-        nspin_ket += 2;
-        assert (ni == 2);
-        assert (nj == 2);
-    } else {
-        nspin_ket += (ni-1)*2;
-        nspin_ket += (nj-1)*2;
-    }
-    if (a==b){
-        nspin_bra += 2;
-        assert (na == -2);
-        assert (nb == -2);
-    } else {
-        nspin_bra += (abs(na)-1)*2;
-        nspin_bra += (abs(nb)-1)*2;
-    }
+    nspin_ket += (ni-1)*2;
+    nspin_ket += (nj-1)*2;
+    nspin_bra += (abs(na)-1)*2;
+    nspin_bra += (abs(nb)-1)*2;
     assert (nspin_bra==nspin_ket);
     unsigned int nspin=nspin_ket;
     unsigned int * twoSk = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int * twoSb = malloc ((nspin+1) * sizeof (unsigned int));
     unsigned int si, sa, sj, sb;
-    _ndummy = 0;
     _get_spinindices2 (bra, a, b, nspin, twoSb, &sa, &sb);
     _get_spinindices2 (ket, i, j, nspin, twoSk, &si, &sj);
-    _fix_pair_mids (twoSk, twoSb, DUMMY_RULE);
     if (hphp){ if (abs (nj) == 2){ sj++; } }
     else if (abs (na) == 2){ sa++; }
     // The line above looks like double-counting in the case that a==b
@@ -1600,18 +1493,15 @@ double csf_EaiEbj (Str3 * bra, Str3 * ket,
     }
 
     int parity = sp + sr + sq + st + ((nr>0) || (i>j));
-    // TODO: revisit the final parity term, which is likely not fully correct.
-    // At time of writing, I know that final term = 1 makes hdiag_csf correct, whereas
-    // final term = 0 makes <du00|e|00du> correct. 
-    // the (nr>0) expression is an experiment from Claude.
-    // New on 10/12/2026:
-    // (i>j) is something I came up with in the hopes of making (ai|bj) -> -(aj|bi)
-    // Claude says that i>j is better but that it should only be applied to facl, not facu.
-    // If that's true, it implies something about the graphical logic that I need to
-    // make sure I understand. I don't want to compensate for bad parity logic in
-    // CGC functions by adding a bunch of conditionals here. But I do know from D&S that
-    // there ought to be a sorting parity term entirely outside of the graphs and that
-    // does differ between linked and unlinked terms.
+    // This amounts to:
+    // a > i > ...:   sp + sr + sq + st + 1
+    // a > j > ...:   sp + sr + sq + st + 1
+    // a > b > i > j: sp + sr + sq + st + 1
+    // a > b > j > i: sp + sr + sq + st
+    // Which I suppose is just normal-ordering the fermion operators, as implied by
+    // D&S figure 1 (except that Claude's _pphh_unlinked doesn't get this, but that's
+    // almost certainly because it's already counted in the underlying csf_EaiEaj
+    // mapping).
     double facl = (i==r) ? 0.0 : 3.0; 
     double facu = unlinked_orth ? 0.0 : -1.0;
     if ((parity%2)==1){
