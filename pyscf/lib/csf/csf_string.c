@@ -137,6 +137,268 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
 }
 }
 
+/* FCICSFspinevecs_dot: out = in . umat (transpose = 0) or out = in . umat^T (transpose = 1), where umat
+ * is the (ndet, ncoup) array that FCICSFmakecsf would build, without ever building it.
+ *
+ * Each element of umat is a product of nspin Clebsch-Gordan coefficients, one per spin, so umat factors
+ * into nspin sparse steps, each of which couples one more spin. Before step k, a basis state is labeled
+ * by an nspin-bit key: bits 0..k-1 are the coupling path of the first k spins (running spin
+ * 2S_k = 2*nup - k) and bits k..nspin-1 are the remaining det spins, which fix the running 2M_k because
+ * the total 2M is fixed. Step k pairs the keys K (bit k = 0) and K | 1<<k (bit k = 1). Before the step
+ * they mean m_k = -1/2 and +1/2; after it they mean S_{k+1} = S_k - 1/2 and S_k + 1/2. Each pair is
+ * acted on by the 2x2 matrix c[J][m] = <S_k, M_{k+1}-m_k; 1/2, m_k | S_{k+1}, M_{k+1}>. States that can
+ * no longer reach S = twoS/2 are dropped, so no step ever holds more than ndet states. The fermion sign
+ * of FCICSFmakecsf is diagonal in the det basis and is applied before (or, for the transpose, after) the
+ * sweep. The cost is O(nspin*ndet) per row instead of O(ndet*ncoup).
+ */
+typedef struct {
+    int32_t in[2];  // index of the m_k = -1/2, +1/2 states before the step (-1 if absent)
+    int32_t out[2]; // index of the S_k -/+ 1/2 states after the step (-1 if absent)
+    int16_t twoS;   // 2S_k
+    int16_t twoM;   // 2M_{k+1}
+} _sweep_pair;
+
+typedef struct {
+    uint64_t key;
+    int64_t idx;
+} _key_idx;
+
+static int _cmp_key_idx (const void * a, const void * b)
+{
+    uint64_t x = ((const _key_idx *) a)->key;
+    uint64_t y = ((const _key_idx *) b)->key;
+    return (x > y) - (x < y);
+}
+
+static int64_t _find_key (uint64_t * keys, size_t nkey, uint64_t key)
+{
+    size_t lo = 0, hi = nkey;
+    while (lo < hi){
+        size_t mid = lo + (hi - lo) / 2;
+        if (keys[mid] < key){ lo = mid + 1; } else { hi = mid; }
+    }
+    if ((lo < nkey) && (keys[lo] == key)){ return (int64_t) lo; }
+    return -1;
+}
+
+/* <S, M-m; 1/2, m | S +/- 1/2, M> in doubled units (twoS = 2S, twoM = 2M, up_m: m = +1/2, up_J: J = S + 1/2),
+ * with the same sign convention as FCICSFmakecsf */
+static double _cg_half (int twoS, int twoM, int up_m, int up_J)
+{
+    int sm = up_m ? twoM : -twoM;
+    int num = up_J ? (twoS + sm + 1) : (twoS - sm + 1);
+    if (num <= 0){ return 0.0; }
+    double c = sqrt ((double) num / (2.0 * (twoS + 1)));
+    return (up_m && !up_J) ? -c : c;
+}
+
+#ifndef SWEEP_BLK_ELEMS
+#define SWEEP_BLK_ELEMS (1<<17) // doubles per sweep buffer (two per thread)
+#endif
+#ifndef SWEEP_BLK_MAXROW
+#define SWEEP_BLK_MAXROW 64
+#endif
+
+// y = c0*x0 + c1*x1, where a NULL x counts as zero
+static void _sweep_comb (double * y, double * x0, double * x1, double c0, double c1, size_t n)
+{
+    size_t r;
+    if (x0 && x1){ for (r = 0; r < n; r++){ y[r] = c0*x0[r] + c1*x1[r]; } }
+    else if (x0){ for (r = 0; r < n; r++){ y[r] = c0*x0[r]; } }
+    else if (x1){ for (r = 0; r < n; r++){ y[r] = c1*x1[r]; } }
+    else { for (r = 0; r < n; r++){ y[r] = 0.0; } }
+}
+
+void FCICSFspinevecs_dot (double * out, double * in, uint64_t * detstr, uint64_t * coupstr,
+                          int nspin, size_t ndet, size_t ncoup, int twoS, int twoMS,
+                          size_t nrow, int transpose)
+{
+    assert (ndet < INT32_MAX);
+    assert ((nspin >= 0) && (nspin < 64));
+    int k;
+    size_t i, j;
+
+    // fermion sign: each spin-down electron commutes past every spin-up electron to its right
+    double * fsgn = malloc (ndet * sizeof (double));
+    for (i = 0; i < ndet; i++){
+        int nup = 0;
+        fsgn[i] = 1.0;
+        for (k = 0; k < nspin; k++){
+            if ((detstr[i] >> k) & 1ULL){ nup++; } else if (nup % 2){ fsgn[i] = -fsgn[i]; }
+        }
+    }
+
+    // coefficient table, indexed [twoS_k][twoM_{k+1}+moff][up_J][up_m]
+    int moff = 2*nspin + 1;
+    int nm = 2*moff + 1;
+    double * cgtab = malloc ((size_t) (nspin+1) * nm * 4 * sizeof (double));
+    for (int s = 0; s <= nspin; s++){ for (int m = 0; m < nm; m++){
+        for (int up_J = 0; up_J < 2; up_J++){ for (int up_m = 0; up_m < 2; up_m++){
+            cgtab[((s*nm + m)*2 + up_J)*2 + up_m] = _cg_half (s, m - moff, up_m, up_J);
+        }}
+    }}
+
+    // build the steps
+    _sweep_pair ** pairs = malloc ((nspin+1) * sizeof (_sweep_pair *));
+    size_t * npair = malloc ((nspin+1) * sizeof (size_t));
+    size_t nkey = ndet;
+    size_t maxkey = ndet;
+    uint64_t * keys = malloc (ndet * sizeof (uint64_t));
+    for (i = 0; i < ndet; i++){
+        keys[i] = detstr[i];
+        if (i > 0){ assert (keys[i] > keys[i-1]); }
+    }
+    for (k = 0; k < nspin; k++){
+        uint64_t bit = 1ULL << k;
+        uint64_t low = bit - 1ULL;
+        int nrest = nspin - k - 1;
+        // pair representatives (bit k cleared), sorted and unique
+        _key_idx * kr = malloc ((nkey+1) * sizeof (_key_idx));
+        for (i = 0; i < nkey; i++){ kr[i].key = keys[i] & ~bit; kr[i].idx = 0; }
+        qsort (kr, nkey, sizeof (_key_idx), _cmp_key_idx);
+        uint64_t * reps = malloc ((nkey+1) * sizeof (uint64_t));
+        size_t nrep = 0;
+        for (i = 0; i < nkey; i++){
+            if ((nrep == 0) || (reps[nrep-1] != kr[i].key)){ reps[nrep++] = kr[i].key; }
+        }
+        free (kr);
+        _sweep_pair * p = malloc (nrep * sizeof (_sweep_pair));
+        _key_idx * newkeys = malloc (2 * nrep * sizeof (_key_idx));
+        size_t nnew = 0;
+        for (j = 0; j < nrep; j++){
+            uint64_t r = reps[j];
+            int twoSk = 2 * (int) count_set_bits (r & low) - k;
+            int twoMk = twoMS - (2 * (int) count_set_bits (r >> (k+1)) - nrest);
+            p[j].twoS = (int16_t) twoSk;
+            p[j].twoM = (int16_t) twoMk;
+            p[j].in[0] = (int32_t) _find_key (keys, nkey, r);
+            p[j].in[1] = (int32_t) _find_key (keys, nkey, r | bit);
+            for (int up_J = 0; up_J < 2; up_J++){
+                int twoS1 = twoSk + (up_J ? 1 : -1);
+                if ((twoS1 >= 0) && (twoS1 >= abs (twoMk)) && (abs (twoS1 - twoS) <= nrest)){
+                    p[j].out[up_J] = (int32_t) nnew;
+                    newkeys[nnew].key = up_J ? (r | bit) : r;
+                    newkeys[nnew].idx = (int64_t) nnew;
+                    nnew++;
+                } else {
+                    p[j].out[up_J] = -1;
+                }
+            }
+        }
+        free (reps);
+        // sort the new keys and point the pairs' outputs at their sorted positions
+        qsort (newkeys, nnew, sizeof (_key_idx), _cmp_key_idx);
+        int32_t * rank = malloc ((nnew+1) * sizeof (int32_t));
+        free (keys);
+        keys = malloc ((nnew+1) * sizeof (uint64_t));
+        for (i = 0; i < nnew; i++){
+            rank[newkeys[i].idx] = (int32_t) i;
+            keys[i] = newkeys[i].key;
+        }
+        for (j = 0; j < nrep; j++){
+            for (int up_J = 0; up_J < 2; up_J++){
+                if (p[j].out[up_J] >= 0){ p[j].out[up_J] = rank[p[j].out[up_J]]; }
+            }
+        }
+        free (rank);
+        free (newkeys);
+        pairs[k] = p;
+        npair[k] = nrep;
+        nkey = nnew;
+        if (nkey > maxkey){ maxkey = nkey; }
+    }
+    // the surviving keys are exactly the coupling strings; map them to csf addresses
+    assert (nkey == ncoup);
+    int64_t * csfaddr = malloc ((ncoup+1) * sizeof (int64_t));
+    {
+        _key_idx * ki = malloc ((ncoup+1) * sizeof (_key_idx));
+        // (the nspin = 0 coupling string is stored as 1)
+        uint64_t mask = (nspin > 0) ? (~0ULL >> (64 - nspin)) : 0ULL;
+        for (j = 0; j < ncoup; j++){ ki[j].key = coupstr[j] & mask; ki[j].idx = (int64_t) j; }
+        qsort (ki, ncoup, sizeof (_key_idx), _cmp_key_idx);
+        for (j = 0; j < ncoup; j++){
+            assert (ki[j].key == keys[j]);
+            csfaddr[j] = ki[j].idx;
+        }
+        free (ki);
+    }
+    free (keys);
+
+    // apply the steps to blocks of R rows at a time; the buffers are laid out [key][row in block] so that
+    // each pair acts on contiguous memory. Parallel over blocks if there are enough of them, otherwise
+    // over the pairs of each step.
+    size_t ninp = transpose ? ncoup : ndet;
+    size_t nout = transpose ? ndet : ncoup;
+    size_t R = SWEEP_BLK_ELEMS / (maxkey+1);
+    if (R > SWEEP_BLK_MAXROW){ R = SWEEP_BLK_MAXROW; }
+    if (R > nrow){ R = nrow; }
+    if (R < 1){ R = 1; }
+    size_t nblk = (nrow + R - 1) / R;
+    int blk_parallel = (nblk >= (size_t) omp_get_max_threads ());
+#pragma omp parallel if (blk_parallel) default(shared) private(i,j,k)
+{
+    double * a = malloc ((maxkey+1) * R * sizeof (double));
+    double * b = malloc ((maxkey+1) * R * sizeof (double));
+    double * t;
+    size_t iblk, r;
+#pragma omp for schedule(dynamic)
+    for (iblk = 0; iblk < nblk; iblk++){
+        size_t r0 = iblk * R;
+        size_t nr = ((r0 + R) > nrow) ? (nrow - r0) : R;
+        double * x = in + r0 * ninp;
+        double * y = out + r0 * nout;
+        if (!transpose){
+            for (r = 0; r < nr; r++){ for (i = 0; i < ndet; i++){
+                a[i*R + r] = x[r*ninp + i] * fsgn[i];
+            }}
+            for (k = 0; k < nspin; k++){
+                _sweep_pair * p = pairs[k];
+#pragma omp parallel for if (!blk_parallel) schedule(static)
+                for (j = 0; j < npair[k]; j++){
+                    double * x0 = (p[j].in[0] >= 0) ? a + (size_t) p[j].in[0] * R : NULL;
+                    double * x1 = (p[j].in[1] >= 0) ? a + (size_t) p[j].in[1] * R : NULL;
+                    double * c = cgtab + ((size_t) p[j].twoS*nm + p[j].twoM + moff)*4;
+                    if (p[j].out[0] >= 0){ _sweep_comb (b + (size_t) p[j].out[0] * R, x0, x1, c[0], c[1], nr); }
+                    if (p[j].out[1] >= 0){ _sweep_comb (b + (size_t) p[j].out[1] * R, x0, x1, c[2], c[3], nr); }
+                }
+                t = a; a = b; b = t;
+            }
+            for (r = 0; r < nr; r++){ for (j = 0; j < ncoup; j++){
+                y[r*nout + csfaddr[j]] = a[j*R + r];
+            }}
+        } else {
+            for (r = 0; r < nr; r++){ for (j = 0; j < ncoup; j++){
+                a[j*R + r] = x[r*ninp + csfaddr[j]];
+            }}
+            for (k = nspin-1; k >= 0; k--){
+                _sweep_pair * p = pairs[k];
+#pragma omp parallel for if (!blk_parallel) schedule(static)
+                for (j = 0; j < npair[k]; j++){
+                    double * y0 = (p[j].out[0] >= 0) ? a + (size_t) p[j].out[0] * R : NULL;
+                    double * y1 = (p[j].out[1] >= 0) ? a + (size_t) p[j].out[1] * R : NULL;
+                    double * c = cgtab + ((size_t) p[j].twoS*nm + p[j].twoM + moff)*4;
+                    if (p[j].in[0] >= 0){ _sweep_comb (b + (size_t) p[j].in[0] * R, y0, y1, c[0], c[2], nr); }
+                    if (p[j].in[1] >= 0){ _sweep_comb (b + (size_t) p[j].in[1] * R, y0, y1, c[1], c[3], nr); }
+                }
+                t = a; a = b; b = t;
+            }
+            for (r = 0; r < nr; r++){ for (i = 0; i < ndet; i++){
+                y[r*nout + i] = a[i*R + r] * fsgn[i];
+            }}
+        }
+    }
+    free (a);
+    free (b);
+}
+
+    for (k = 0; k < nspin; k++){ free (pairs[k]); }
+    free (pairs);
+    free (npair);
+    free (csfaddr);
+    free (cgtab);
+    free (fsgn);
+}
+
 
 void FCICSFgetscstrs (uint64_t * scstrs, bool * mask, size_t nstr, int nspin)
 {

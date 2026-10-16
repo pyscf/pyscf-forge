@@ -5,12 +5,17 @@ import warnings
 from pyscf.csf_fci import csdstring
 from pyscf.fci import cistring
 from pyscf.fci.spin_op import spin_square0
-from pyscf import lib
+from pyscf import lib, __config__
 from pyscf.lib import numpy_helper, param
 from scipy import special, linalg
 from functools import reduce
 from pyscf.fci.direct_spin1_symm import _gen_strs_irrep
 libcsf = lib.load_library ('libcsf')
+
+# Below this many unpaired electrons, det <-> csf transformations multiply by the dense umat array built by
+# get_spin_evecs. At or above it they apply umat one spin at a time (FCICSFspinevecs_dot) without building
+# it. This is a performance crossover, not a memory limit: umat is small below it.
+SWEEP_MIN_NSPIN = getattr (__config__, 'csf_fci_csfstring_sweep_min_nspin', 14)
 
 class ImpossibleCIvecError (RuntimeError):
     def __init__(self, message, ndet=None, ncsf=None, norb=None, neleca=None, nelecb=None):
@@ -672,18 +677,7 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
             continue
 
 
-        t_ref = lib.logger.perf_counter ()
-        umat = get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
-        umat = np.asarray_chkfinite (umat)
-        size_umat = max (size_umat, umat.nbytes)
-        ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save
-        #                 memory when there are too many csfs
-        assert (umat.shape[0] == ndet)
-        assert (umat.shape[1] == ncsf_blk)
-        if project:
-            Pmat = np.dot (umat, umat.T)
-        time_umat += lib.logger.perf_counter () - t_ref
-
+        ncsf_blk = ncsf
         if not project:
             csf_addrs_ipair[:,:ncsf_blk] = True # Note: edits csf_addrs
 
@@ -700,12 +694,16 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
         sgn = det2csf_sign_rule (norb, neleca, nelecb, det_addrs[:,0])[None,:,None]
         t_ref = lib.logger.perf_counter ()
         if project:
-            inparr[:,det_addrs] = np.tensordot (inparr[:,det_addrs], Pmat, axes=1)
+            inparr[:,det_addrs] = spin_evecs_dot (
+                spin_evecs_dot (inparr[:,det_addrs], nspin, neleca, nelecb, smult, max_memory=max_memory),
+                nspin, neleca, nelecb, smult, transpose=True, max_memory=max_memory)
         elif not reverse:
-            outarr[:,csf_addrs] = np.tensordot (inparr[:,det_addrs] * sgn, umat, axes=1).reshape (nrow, ncsf_blk*nconf)
+            outarr[:,csf_addrs] = spin_evecs_dot (inparr[:,det_addrs] * sgn, nspin, neleca, nelecb, smult,
+                                                  max_memory=max_memory).reshape (nrow, ncsf_blk*nconf)
         else:
-            outarr[:,det_addrs] = np.tensordot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk), umat,
-                                                axes=((2,),(1,)))
+            outarr[:,det_addrs] = spin_evecs_dot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk),
+                                                  nspin, neleca, nelecb, smult, transpose=True,
+                                                  max_memory=max_memory)
             outarr[:,det_addrs] *= sgn
         time_mult += lib.logger.perf_counter () - t_ref
 
@@ -811,10 +809,8 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             mat_ij = mat[:,di:dj].reshape (nrow, nconf, ndet)
 
             nspin = neleca + nelecb - 2*npair
-            umat = get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
-            umat = np.asarray_chkfinite (umat)
-
-            outmat[:,ci:cj] = np.tensordot (mat_ij, umat, axes=1).reshape (nrow, ncsf*nconf, order='C')
+            outmat[:,ci:cj] = spin_evecs_dot (mat_ij, nspin, neleca, nelecb, smult,
+                                              max_memory=max_memory).reshape (nrow, ncsf*nconf, order='C')
 
             det_offset += nconf*ndet
             csf_offset += nconf*ncsf
@@ -1006,6 +1002,38 @@ def get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=param.MAX_MEMORY):
                         ctypes.c_int (twoMS))
 
     return umat
+
+def spin_evecs_dot (x, nspin, neleca, nelecb, smult, transpose=False, max_memory=param.MAX_MEMORY):
+    ''' x . umat, or x . umat.T if transpose, contracted over the last axis of x, where
+    umat = get_spin_evecs (nspin, neleca, nelecb, smult). For nspin >= SWEEP_MIN_NSPIN, umat is applied one
+    spin at a time and never built. '''
+    if nspin < SWEEP_MIN_NSPIN:
+        umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory))
+        if transpose: umat = umat.T
+        return np.tensordot (x, umat, axes=1)
+    na = (nspin + neleca - nelecb) // 2
+    ndet = int (special.comb (nspin, na, exact=True))
+    ncsf = count_csfs (nspin, smult)
+    x = np.asarray (x)
+    shape = x.shape[:-1]
+    assert (x.shape[-1] == (ncsf if transpose else ndet))
+    x = np.ascontiguousarray (x.reshape (-1, x.shape[-1]), dtype=np.float64)
+    nrow = x.shape[0]
+    y = np.empty ((nrow, ndet if transpose else ncsf), dtype=np.float64)
+    spinstrs = np.ascontiguousarray (cistring.addrs2str (nspin, na, list (range (ndet))), dtype=np.uint64)
+    scstrs = np.ascontiguousarray (addrs2str (nspin, smult, list (range (ncsf))), dtype=np.uint64)
+    libcsf.FCICSFspinevecs_dot (y.ctypes.data_as (ctypes.c_void_p),
+                                x.ctypes.data_as (ctypes.c_void_p),
+                                spinstrs.ctypes.data_as (ctypes.c_void_p),
+                                scstrs.ctypes.data_as (ctypes.c_void_p),
+                                ctypes.c_int (nspin),
+                                ctypes.c_size_t (ndet),
+                                ctypes.c_size_t (ncsf),
+                                ctypes.c_int (smult-1),
+                                ctypes.c_int (neleca-nelecb),
+                                ctypes.c_size_t (nrow),
+                                ctypes.c_int (int (transpose)))
+    return y.reshape (*shape, y.shape[-1])
 
 def _test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     s = (smult - 1) / 2
