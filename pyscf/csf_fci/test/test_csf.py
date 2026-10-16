@@ -74,7 +74,17 @@ def setUpModule():
     sol = csf_solver (mol, smult=1)
     nel = (neleci, nelec)
 
+# test_hdiag_csf, test_pspace, and test_old_pspace all need the same reference matrices, which cost
+# far more than the code under test, so build each one only once
+h2mat_ref_cache = {}
+
 def get_h2mat_ref (ne, smult):
+    key = (tuple (ne), smult)
+    if key not in h2mat_ref_cache:
+        h2mat_ref_cache[key] = _get_h2mat_ref (ne, smult)
+    return h2mat_ref_cache[key]
+
+def _get_h2mat_ref (ne, smult):
     t = CSFTransformer (norb, ne[0], ne[1], smult)
     h2eff = sol.absorb_h1e (h1e, g2e, norb, ne, .5)
     ndet = t.ndeta*t.ndetb
@@ -95,6 +105,7 @@ def get_h2mat_ref (ne, smult):
 def tearDownModule():
     global mol, m, h1e, g2e, sol, norb, nelec, neleci, rng, smult_lim
     del mol, m, h1e, g2e, sol, norb, nelec, neleci, rng, smult_lim
+    h2mat_ref_cache.clear ()
 
 class KnownValues(unittest.TestCase):
 
@@ -151,6 +162,8 @@ class KnownValues(unittest.TestCase):
 
     #@unittest.skip('debug')
     def test_old_pspace(self):
+        # I'm leaving this here because I think this is the only thing that runs
+        # through CSFTransformer's mat_det2csf_confspace
         nel = (neleci, nelec)
         for smult in range (1,smult_lim):
             n = sum (nel[smult % 2])
