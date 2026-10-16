@@ -774,3 +774,15 @@ class ChebyshevSCF(hf.SCF):
         logger.info(self, "ChebyshevSCF converged = %s", self.converged)
         logger.info(self, "Converged SCF energy = %.12f", e_tot)
         return e_tot
+
+
+if __name__ == '__main__':
+    from pyscf import gto
+
+    mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='sto-3g', verbose=4)
+    mf = ChebyshevSCF(mol)
+    mf.chebyshev_degree = 10
+    mf.beta = 40.0
+    mf.kernel()
+
+    print('ChebyshevSCF Energy:', mf.e_tot)
