@@ -626,10 +626,10 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
                         project=False, max_memory=param.MAX_MEMORY):
     ''' Must take an array of shape (*, ndet) or (*, ncsf) '''
     #t_start = lib.logger.perf_counter ()
-    time_umat = 0
+    #time_umat = 0
     time_mult = 0
     time_getdet = 0
-    size_umat = 0
+    #size_umat = 0
 
     min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = csdstring.get_csdaddrs_shape (
         norb, neleca, nelecb)
