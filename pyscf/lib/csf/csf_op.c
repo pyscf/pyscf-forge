@@ -198,8 +198,9 @@ void _pad_Str3 (Str3 * addr, Str3 * addr_padded)
     unsigned int p;
     for (unsigned int ip=0; ip<n; ip++){
         p = first1 (dconf);
+        // nothing above bit 63 to move up, and a shift by 64 is undefined
         sconf = ((((1ULL << p)-1) & sconf) |
-                 ((sconf >> p) << (p+1)));
+                 ((p < 63) ? ((sconf >> p) << (p+1)) : 0ULL));
         dconf = dconf ^ (1ULL<<p);
     }
     assert (dconf==0ULL);
@@ -210,7 +211,7 @@ void _pad_Str3 (Str3 * addr, Str3 * addr_padded)
     for (unsigned int ip=0; ip<n; ip++){
         p = first1 (sconf);
         spin = ((((1ULL << p)-1) & spin) |
-                ((spin >> p) << (p+1)));
+                ((p < 63) ? ((spin >> p) << (p+1)) : 0ULL));
         sconf = sconf ^ (1ULL<<p);
     }
     assert (sconf==0ULL);
