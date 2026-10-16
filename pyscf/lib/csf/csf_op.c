@@ -1217,7 +1217,7 @@ static double _pphh_unlinked (Str3 * bra, Str3 * ket,
                               unsigned int a, unsigned int i,
                               unsigned int b, unsigned int j)
 {
-    const unsigned int x = 63; // spare orbital (pspace is limited to norb <= 30)
+    const unsigned int x = 63; // spare orbital (pspace is limited to norb <= 63)
     int om[64], sb[64], sk[64];
     for (unsigned int p=0; p<64; p++){ om[p] = (int) _get_occ (ket, p); }
     om[i]--; om[j]--;
