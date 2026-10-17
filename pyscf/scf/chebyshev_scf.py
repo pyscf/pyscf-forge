@@ -56,7 +56,7 @@ def block_inv_sqrt(s, thresh=1e-12):
         Approximate ``s**(-1/2)`` assembled from independently transformed
         overlap blocks.
     """
-    s_sparse = csr_matrix(numpy.abs(s) > thresh)  # 閾値以上の要素だけ非ゼロ
+    s_sparse = csr_matrix(numpy.abs(s) > thresh)  
     n_components, labels = connected_components(s_sparse)
     block_indices = [list(numpy.where(labels == i)[0]) for i in range(n_components)]
 
@@ -67,12 +67,10 @@ def block_inv_sqrt(s, thresh=1e-12):
         e, v = numpy.linalg.eigh(s_block)
         X = v @ numpy.diag(e**-0.5) @ v.T
 
-        # 元の AO インデックス位置に戻す
         for i, ii in enumerate(idx):
             for j, jj in enumerate(idx):
                 s_inv_sqrt[ii, jj] = X[i, j]
 
-    # ブロックを対角に並べる
     return s_inv_sqrt
 
 
