@@ -56,7 +56,7 @@ def block_inv_sqrt(s, thresh=1e-12):
         Approximate ``s**(-1/2)`` assembled from independently transformed
         overlap blocks.
     """
-    s_sparse = csr_matrix(numpy.abs(s) > thresh)  
+    s_sparse = csr_matrix(numpy.abs(s) > thresh)
     n_components, labels = connected_components(s_sparse)
     block_indices = [list(numpy.where(labels == i)[0]) for i in range(n_components)]
 
