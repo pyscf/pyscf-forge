@@ -26,8 +26,21 @@
 #include <stdint.h>
 #include <complex.h>
 
-/* Largest contraction determinant with a fixed-rank kernel */
+/* Largest L_a + L_b with a fixed-rank m_a = m_b = 0 kernel.  This covers
+ * determinant pairs with up to quadruple excitations on each side. */
 #define NOWICK_MAXL     8
+
+/* Apply F(LA, LB) to every (L_a, L_b) with L_a + L_b <= NOWICK_MAXL */
+#define NOWICK_LALB_CASES(F) \
+        F(0,0) F(0,1) F(0,2) F(0,3) F(0,4) F(0,5) F(0,6) F(0,7) F(0,8) \
+        F(1,0) F(1,1) F(1,2) F(1,3) F(1,4) F(1,5) F(1,6) F(1,7) \
+        F(2,0) F(2,1) F(2,2) F(2,3) F(2,4) F(2,5) F(2,6) \
+        F(3,0) F(3,1) F(3,2) F(3,3) F(3,4) F(3,5) \
+        F(4,0) F(4,1) F(4,2) F(4,3) F(4,4) \
+        F(5,0) F(5,1) F(5,2) F(5,3) \
+        F(6,0) F(6,1) F(6,2) \
+        F(7,0) F(7,1) \
+        F(8,0)
 
 /* pairinfo layout */
 #define NOWICK_PAIRLEN  96

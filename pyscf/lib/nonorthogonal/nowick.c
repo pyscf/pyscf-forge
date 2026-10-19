@@ -31,13 +31,53 @@ void NOWICKdhamiltonian_general(double *h, double *s, const NOWICKEnv *env,
 void NOWICKzhamiltonian_general(double complex *h, double complex *s, const NOWICKEnv *env,
                                 const int *dx, const int *dw);
 
+#if defined(NOWICK_X86_SIMD)
+void NOWICKdhs_row_avx2(double *h, double *s, const NOWICKEnv *env,
+                        const int *dx, const int *dws, int nw);
+void NOWICKzhs_row_avx2(double complex *h, double complex *s, const NOWICKEnv *env,
+                        const int *dx, const int *dws, int nw);
+void NOWICKdhs_row_avx512(double *h, double *s, const NOWICKEnv *env,
+                          const int *dx, const int *dws, int nw);
+void NOWICKzhs_row_avx512(double complex *h, double complex *s, const NOWICKEnv *env,
+                          const int *dx, const int *dws, int nw);
+#endif
+
+static int simd_override = -1;
+
+/* SIMD level supported by the CPU and the build */
+int NOWICKsimd_level()
+{
+        int level = NOWICK_SIMD_NONE;
+#if defined(NOWICK_X86_SIMD)
+        __builtin_cpu_init();
+        if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma")) {
+                level = NOWICK_SIMD_AVX2;
+        }
+        if (__builtin_cpu_supports("avx512f")) {
+                level = NOWICK_SIMD_AVX512;
+        }
+#endif
+        if (simd_override >= 0 && simd_override < level) {
+                level = simd_override;
+        }
+        return level;
+}
+
+/* Cap the SIMD level (-1 restores automatic selection).  Returns the level
+ * that will be used. */
+int NOWICKset_simd(int level)
+{
+        simd_override = level;
+        return NOWICKsimd_level();
+}
+
 static void set_env(NOWICKEnv *env, int64_t *pairinfo, double *slab, double *scal,
                     int nref, int kmax, double enuc)
 {
         env->nref = nref;
         env->kmax = kmax;
         env->dstride = NOWICK_DHEAD + 4 * kmax;
-        env->simd = 0;
+        env->simd = NOWICKsimd_level();
         env->enuc = enuc;
         env->pairinfo = pairinfo;
         env->slab = slab;
@@ -107,33 +147,73 @@ void NOWICKhamiltonian_pairs(double *hout, double *sout, int *reqs, size_t nreq,
 }
 }
 
+static void hs_segment(double *h, double *s, const NOWICKEnv *env, const int *dx,
+                       const int *dws, int nw, int cplx)
+{
+        const int64_t *info = env->pairinfo
+                + ((size_t)dx[NOWICK_DPARENT] * env->nref + dws[NOWICK_DPARENT]) * NOWICK_PAIRLEN;
+        double complex *zh = (double complex *)h;
+        double complex *zs = (double complex *)s;
+        int j;
+#if defined(NOWICK_X86_SIMD)
+        if (info[NOWICK_MA] == 0 && info[NOWICK_MB] == 0) {
+                if (env->simd == NOWICK_SIMD_AVX512) {
+                        if (cplx) {
+                                NOWICKzhs_row_avx512(zh, zs, env, dx, dws, nw);
+                        } else {
+                                NOWICKdhs_row_avx512(h, s, env, dx, dws, nw);
+                        }
+                        return;
+                } else if (env->simd == NOWICK_SIMD_AVX2) {
+                        if (cplx) {
+                                NOWICKzhs_row_avx2(zh, zs, env, dx, dws, nw);
+                        } else {
+                                NOWICKdhs_row_avx2(h, s, env, dx, dws, nw);
+                        }
+                        return;
+                }
+        }
+#endif
+        for (j = 0; j < nw; j++) {
+                const int *dw = dws + (size_t)j * env->dstride;
+                if (cplx) {
+                        NOWICKzhamiltonian(zh+j, zs+j, env, dx, dw);
+                } else {
+                        NOWICKdhamiltonian(h+j, s+j, env, dx, dw);
+                }
+        }
+}
+
 /*
  * Dense Hamiltonian and overlap matrices over ndet determinant records.
  * The upper triangle is evaluated and the lower triangle filled by
- * Hermiticity.  Records should be grouped by parent for locality.
+ * Hermiticity.  Records must be sorted by parent: each row is processed in
+ * segments of kets sharing a parent, so packed kernels see one reference
+ * pair at a time.
  */
 void NOWICKhamiltonian_matrix(double *h, double *s, int *dets, int ndet, int kmax,
                               int64_t *pairinfo, double *slab, double *scal, int nref,
                               double enuc, int cplx)
 {
         NOWICKEnv env;
+        const size_t es = cplx ? 2 : 1;
         set_env(&env, pairinfo, slab, scal, nref, kmax, enuc);
 #pragma omp parallel
 {
-        size_t i, j;
-        const int *dx, *dw;
+        size_t i, j, j1;
+        const int *dx;
         double complex *zh = (double complex *)h;
         double complex *zs = (double complex *)s;
 #pragma omp for schedule(dynamic, 1)
         for (i = 0; i < ndet; i++) {
                 dx = dets + i * env.dstride;
-                for (j = i; j < ndet; j++) {
-                        dw = dets + j * env.dstride;
-                        if (cplx) {
-                                NOWICKzhamiltonian(zh+i*ndet+j, zs+i*ndet+j, &env, dx, dw);
-                        } else {
-                                NOWICKdhamiltonian(h+i*ndet+j, s+i*ndet+j, &env, dx, dw);
+                for (j = i; j < ndet; j = j1) {
+                        int pw = dets[j * env.dstride + NOWICK_DPARENT];
+                        for (j1 = j + 1; j1 < ndet; j1++) {
+                                if (dets[j1 * env.dstride + NOWICK_DPARENT] != pw) break;
                         }
+                        hs_segment(h + (i*ndet+j)*es, s + (i*ndet+j)*es, &env, dx,
+                                   dets + j * env.dstride, j1 - j, cplx);
                 }
         }
 #pragma omp barrier

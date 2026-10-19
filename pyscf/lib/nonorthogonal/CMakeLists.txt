@@ -20,6 +20,16 @@ set(NONORTHWICK_SOURCE_FILES
     nowick_z.c
 )
 
+# Packed AVX2 and AVX-512 kernels are compiled separately and selected at run
+# time, so the library does not require either instruction set.
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64"
+   AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+  list(APPEND NONORTHWICK_SOURCE_FILES nowick_avx2.c nowick_avx512.c)
+  set_source_files_properties(nowick_avx2.c PROPERTIES COMPILE_OPTIONS "-mavx2;-mfma")
+  set_source_files_properties(nowick_avx512.c PROPERTIES COMPILE_OPTIONS "-mavx512f")
+  set_source_files_properties(nowick.c PROPERTIES COMPILE_DEFINITIONS NOWICK_X86_SIMD)
+endif()
+
 add_library(clib_nonorthwick SHARED ${NONORTHWICK_SOURCE_FILES})
 
 target_include_directories(clib_nonorthwick PRIVATE
@@ -28,7 +38,7 @@ target_include_directories(clib_nonorthwick PRIVATE
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
   # Inline complex multiplication without the C99 Annex G NaN recovery
-  target_compile_options(clib_nonorthwick PRIVATE -fcx-limited-range)
+  target_compile_options(clib_nonorthwick PRIVATE -O3 -fcx-limited-range)
 endif()
 
 target_link_libraries(clib_nonorthwick m ${OPENMP_C_PROPERTIES})

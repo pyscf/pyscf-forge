@@ -758,10 +758,6 @@ static void FN(hs_general)(DT *hout, DT *sout, const NOWICKEnv *env,
                 FN(hs_m0_fixed)(&h, &s, env, info, scal, &sa, rows_a, cols_a, LA, \
                                 &sb, rows_b, cols_b, LB); \
                 break;
-#define HS_M0_ROW(LA) \
-        HS_M0_CASE(LA, 0) HS_M0_CASE(LA, 1) HS_M0_CASE(LA, 2) \
-        HS_M0_CASE(LA, 3) HS_M0_CASE(LA, 4) HS_M0_CASE(LA, 5) \
-        HS_M0_CASE(LA, 6) HS_M0_CASE(LA, 7) HS_M0_CASE(LA, 8)
 
 /* Hamiltonian and overlap between two determinant records */
 void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, const int *dw)
@@ -792,11 +788,9 @@ void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, co
                    dw+NOWICK_DHEAD, dw+NOWICK_DHEAD+kmax, rwa, sa.nocc, sa.nmo);
         FN(labels)(rows_b, cols_b, dx+NOWICK_DHEAD+2*kmax, dx+NOWICK_DHEAD+3*kmax, rxb,
                    dw+NOWICK_DHEAD+2*kmax, dw+NOWICK_DHEAD+3*kmax, rwb, sb.nocc, sb.nmo);
-        if (sa.m == 0 && sb.m == 0 && la <= NOWICK_MAXL && lb <= NOWICK_MAXL) {
+        if (sa.m == 0 && sb.m == 0 && la + lb <= NOWICK_MAXL) {
                 switch (la * (NOWICK_MAXL + 1) + lb) {
-                HS_M0_ROW(0) HS_M0_ROW(1) HS_M0_ROW(2)
-                HS_M0_ROW(3) HS_M0_ROW(4) HS_M0_ROW(5)
-                HS_M0_ROW(6) HS_M0_ROW(7) HS_M0_ROW(8)
+                NOWICK_LALB_CASES(HS_M0_CASE)
                 }
         } else {
                 FN(hs_general)(&h, &s, env, info, scal, &sa, rows_a, cols_a, la,
