@@ -293,3 +293,9 @@ class WickEngine(lib.StreamObject):
         h, s = _wicks.hamiltonian_matrix(self._env, rec[order], kmax, self.energy_nuc)
         inv = numpy.argsort(order)
         return h[inv[:, None], inv], s[inv[:, None], inv]
+
+    def occupations(self, parent):
+        '''Boolean alpha and beta occupations of a reference'''
+        ca, cb, occa, occb = self._orbs[parent]
+        return occa, occb
+

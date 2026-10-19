@@ -17,7 +17,9 @@
 
 '''
 Nonorthogonal determinant methods: extended nonorthogonal Wick theorem
-matrix elements between arbitrary excitations of nonorthogonal references.
+matrix elements between arbitrary excitations of nonorthogonal references,
+and nonorthogonal configuration interaction (NOCI) over them.
 '''
 
 from pyscf.nonorthogonal.wicks import Determinant, WickEngine
+from pyscf.nonorthogonal.noci import NOCI, NOCISD, NOCISDT, excitations
