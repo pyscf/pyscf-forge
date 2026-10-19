@@ -151,6 +151,7 @@ void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int ns
  * of FCICSFmakecsf is diagonal in the det basis and is applied before (or, for the transpose, after) the
  * sweep. The cost is O(nspin*ndet) per row instead of O(ndet*ncoup).
  */
+// int32 indices cap ndet at INT32_MAX (e.g., nspin = 34, 2M = 0); spin_evecs_dot raises before calling
 typedef struct {
     int32_t in[2];  // index of the m_k = -1/2, +1/2 states before the step (-1 if absent)
     int32_t out[2]; // index of the S_k -/+ 1/2 states after the step (-1 if absent)

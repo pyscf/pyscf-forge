@@ -1013,6 +1013,11 @@ def spin_evecs_dot (x, nspin, neleca, nelecb, smult, transpose=False, max_memory
         return np.tensordot (x, umat, axes=1)
     na = (nspin + neleca - nelecb) // 2
     ndet = int (special.comb (nspin, na, exact=True))
+    if ndet >= 2**31:
+        # check before allocating anything: FCICSFspinevecs_dot indexes states with int32
+        raise NotImplementedError (
+            "spin_evecs_dot: {} spin determinants for nspin={}, 2M={} exceeds the 32-bit "
+            "index limit of the sweep".format (ndet, nspin, neleca-nelecb))
     ncsf = count_csfs (nspin, smult)
     x = np.asarray (x)
     shape = x.shape[:-1]

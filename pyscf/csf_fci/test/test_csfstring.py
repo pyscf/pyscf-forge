@@ -89,6 +89,16 @@ class KnownValues(unittest.TestCase):
             self.assertAlmostEqual (lib.fp (spin_evecs_dot (x, 12, 9, 3, 7)),
                                     lib.fp (np.tensordot (x, umat, axes=1)), 10)
 
+    def test_spin_evecs_dot_int32_limit (self):
+        # C(34,17) > INT32_MAX: must raise before allocating anything, so x can be a dummy
+        sweep_min_nspin = csfstring.SWEEP_MIN_NSPIN
+        csfstring.SWEEP_MIN_NSPIN = 0
+        try:
+            with self.assertRaises (NotImplementedError):
+                spin_evecs_dot (np.zeros ((1,1)), 34, 17, 17, 1)
+        finally:
+            csfstring.SWEEP_MIN_NSPIN = sweep_min_nspin
+
     def test_sweep_dispatch (self):
         # det <-> csf transformations agree whether every nspin goes through the sweep or none does
         norb, neleca, nelecb = 8, 4, 4
