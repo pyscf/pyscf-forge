@@ -151,7 +151,7 @@ class WickEngine(lib.StreamObject):
 
     _keys = {'mol', 'references', 'tol', 'with_nuc', 'nmo', 'nelec'}
 
-    def __init__(self, mol, references, tol=None, hcore=None, eri=None):
+    def __init__(self, mol, references, tol=None, hcore=None, eri=None, ovlp=None):
         self.mol = mol
         self.verbose = mol.verbose
         self.stdout = mol.stdout
@@ -160,6 +160,7 @@ class WickEngine(lib.StreamObject):
             self.tol = tol
         self._hcore = hcore
         self._eri = eri
+        self._ovlp = ovlp
         self._env = None
         self._refs = None
 
@@ -190,7 +191,7 @@ class WickEngine(lib.StreamObject):
         log = logger.new_logger(self)
         cput0 = (logger.process_clock(), logger.perf_counter())
         mol = self.mol
-        s = mol.intor_symmetric('int1e_ovlp')
+        s = self._ovlp if self._ovlp is not None else mol.intor_symmetric('int1e_ovlp')
         h = self._hcore if self._hcore is not None else scf.hf.get_hcore(mol)
         eri = self._eri
         if eri is None:
@@ -234,6 +235,7 @@ class WickEngine(lib.StreamObject):
                 raise ValueError('%s: no such reference' % d)
             orda, ordb, posa, posb, occa, occb = self._occpos[d.parent]
             sign = 1
+            osign = 1
             rec[k, 0] = d.parent
             rec[k, 1:3] = d.rank
             for spin, (holes, parts, order, pos, occ) in enumerate(
@@ -247,13 +249,15 @@ class WickEngine(lib.StreamObject):
                 pp = sorted(pos[a] for a in parts)
                 phase, occset = _excitation_phase(nocc, hp, pp)
                 # sign between occupied-first and original MO order
-                phase *= _parity(order[p] for p in sorted(occset))
-                sign *= phase
+                parity = _parity(order[p] for p in sorted(occset))
+                sign *= phase * parity
+                osign *= parity
                 r = len(hp)
                 base = _wicks.DHEAD + 2 * kmax * spin
                 rec[k, base:base+r] = hp
                 rec[k, base+kmax:base+kmax+r] = pp
             rec[k, 3] = sign
+            rec[k, 4] = osign
         return rec, kmax
 
     @property

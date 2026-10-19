@@ -47,7 +47,9 @@ NSCAL = 24
 SAA, SBB, SVAB0 = 0, 8, 16
 SPHASE, STSP, SF0H, SV0 = 0, 1, 2, 4
 
-DHEAD = 4
+OH_A, OH_B, OAA, OBB, OAB = 91, 92, 93, 94, 95
+
+DHEAD = 5
 
 # Symmetry-unique (m1, m2, m3, m4) branches of the same-spin J intermediate
 J_BRANCHES = ((0, 0, 0, 0), (0, 0, 0, 1), (0, 0, 1, 0), (0, 0, 1, 1),
@@ -236,6 +238,30 @@ def pair_layout(ma, mb, nmo, start):
     return info, i
 
 
+def orthogonal_layout(info, nmo, start):
+    '''Offsets of the same-parent MO integrals of a diagonal pair'''
+    nn2 = nmo * nmo
+    nn4 = nn2 * nn2
+    i = start
+    for k, size in ((OH_A, nn2), (OH_B, nn2), (OAA, nn4), (OBB, nn4), (OAB, nn4)):
+        info[k] = i
+        i += size
+    return i
+
+
+def write_orthogonal(slab, info, h, eri, ca, cb):
+    '''MO integrals of one reference for the same-parent Slater-Condon rules'''
+    nmo = ca.shape[1]
+    nn2 = nmo * nmo
+    nn4 = nn2 * nn2
+    slab[info[OH_A]:info[OH_A]+nn2] = ca.conj().T.dot(h).dot(ca).ravel()
+    slab[info[OH_B]:info[OH_B]+nn2] = cb.conj().T.dot(h).dot(cb).ravel()
+    for k, c in ((OAA, ca), (OBB, cb)):
+        g = _ao2mo(eri, c, c, c, c)
+        slab[info[k]:info[k]+nn4] = (g - g.transpose(0, 3, 2, 1)).ravel()
+    slab[info[OAB]:info[OAB]+nn4] = _ao2mo(eri, ca, ca, cb, cb).ravel()
+
+
 def write_pair(slab, scal, info, pa, pb, sa, sb, ab):
     '''Write the intermediates of one ordered pair into slab and scal'''
     nmo = pa.nmo
@@ -297,6 +323,8 @@ def build(s, h, eri, refs, tol, dtype):
             ma = count_zero_pairs(s, refs[x][0], refs[w][0], nocca, tol)
             mb = count_zero_pairs(s, refs[x][1], refs[w][1], noccb, tol)
             info, end = pair_layout(ma, mb, nmo, end)
+            if x == w:
+                end = orthogonal_layout(info, nmo, end)
             info[MA] = ma
             info[MB] = mb
             info[NOCCA] = nocca
@@ -316,6 +344,8 @@ def build(s, h, eri, refs, tol, dtype):
             sb = _same_spin(pb, h, eri)
             ab = _diff_spin(pa, pb, eri)
             write_pair(slab, scal[k], pairinfo[k], pa, pb, sa, sb, ab)
+            if x == w:
+                write_orthogonal(slab, pairinfo[k], h, eri, refs[x][0], refs[x][1])
     return pairinfo, slab, scal, nref
 
 

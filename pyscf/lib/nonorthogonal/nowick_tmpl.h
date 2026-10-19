@@ -759,6 +759,200 @@ static void FN(hs_general)(DT *hout, DT *sout, const NOWICKEnv *env,
                                 &sb, rows_b, cols_b, LB); \
                 break;
 
+/*
+ * One spin of the excitation taking the ket occupation K to the bra
+ * occupation B, both excitations of the same parent:  K\B are the holes and
+ * B\K the particles.  Returns the rank, or -1 above maxrank.  odd receives
+ * the parity of annihilating the holes (descending) and creating the
+ * particles (ascending) on K.
+ */
+static int FN(relative_excitation)(int *holes, int *parts, int *odd, int nocc,
+                                   const int *hb, const int *pb, int rb,
+                                   const int *hk, const int *pk, int rk, int maxrank)
+{
+        int nh = 0, np = 0, i, j, k, below, found;
+        /* holes: K\B = (hb\hk) + (pk\pb) */
+        for (i = 0; i < rb; i++) {
+                for (found = 0, j = 0; j < rk; j++) found |= (hk[j] == hb[i]);
+                if (!found) {
+                        if (nh == maxrank) return -1;
+                        holes[nh++] = hb[i];
+                }
+        }
+        for (i = 0; i < rk; i++) {
+                for (found = 0, j = 0; j < rb; j++) found |= (pb[j] == pk[i]);
+                if (!found) {
+                        if (nh == maxrank) return -1;
+                        holes[nh++] = pk[i];
+                }
+        }
+        /* particles: B\K = (hk\hb) + (pb\pk) */
+        for (i = 0; i < rk; i++) {
+                for (found = 0, j = 0; j < rb; j++) found |= (hb[j] == hk[i]);
+                if (!found) {
+                        if (np == maxrank) return -1;
+                        parts[np++] = hk[i];
+                }
+        }
+        for (i = 0; i < rb; i++) {
+                for (found = 0, j = 0; j < rk; j++) found |= (pk[j] == pb[i]);
+                if (!found) {
+                        if (np == maxrank) return -1;
+                        parts[np++] = pb[i];
+                }
+        }
+        if (nh != np) return -1;
+        /* holes descending, particles ascending; holes and particles of
+         * each list are already disjoint index ranges in each half */
+        for (i = 0; i < nh; i++) {
+        for (j = i+1; j < nh; j++) {
+                if (holes[j] > holes[i]) { k = holes[i]; holes[i] = holes[j]; holes[j] = k; }
+                if (parts[j] < parts[i]) { k = parts[i]; parts[i] = parts[j]; parts[j] = k; }
+        } }
+        /* occupation changes of K relative to {0..nocc-1}: -hk, +pk, then the
+         * excitation's own removals (-1) and insertions (+1) */
+        *odd = 0;
+        for (i = 0; i < nh; i++) {
+                /* occupied orbitals of the current string below holes[i] */
+                below = holes[i] < nocc ? holes[i] : nocc;
+                for (j = 0; j < rk; j++) below -= (hk[j] < holes[i]);
+                for (j = 0; j < rk; j++) below += (pk[j] < holes[i]);
+                for (j = 0; j < i; j++) below -= (holes[j] < holes[i]);
+                *odd ^= below & 1;
+        }
+        for (i = 0; i < np; i++) {
+                below = parts[i] < nocc ? parts[i] : nocc;
+                for (j = 0; j < rk; j++) below -= (hk[j] < parts[i]);
+                for (j = 0; j < rk; j++) below += (pk[j] < parts[i]);
+                for (j = 0; j < nh; j++) below -= (holes[j] < parts[i]);
+                for (j = 0; j < i; j++) below += (parts[j] < parts[i]);
+                *odd ^= below & 1;
+        }
+        return nh;
+}
+
+/* occupied orbitals of record d (one spin) in the occupied-first order */
+static int FN(occupied)(int *occ, int nocc, const int *h, const int *p, int r)
+{
+        int i, j, k = 0, skip;
+        for (i = 0; i < nocc; i++) {
+                for (skip = 0, j = 0; j < r; j++) skip |= (h[j] == i);
+                if (!skip) occ[k++] = i;
+        }
+        for (j = 0; j < r; j++) {
+                occ[k++] = p[j];
+        }
+        return k;
+}
+
+/*
+ * Same-parent Hamiltonian and overlap with the Slater-Condon rules in the
+ * parent's orthonormal MO basis (noci-rs elements/orthogonal).
+ */
+static void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env,
+                        const int64_t *info, const int *dx, const int *dw)
+{
+        const int kmax = env->kmax;
+        const DT *slab = env->slab;
+        const size_t n = info[NOWICK_NMO];
+        const size_t n2 = n * n;
+        const size_t n3 = n2 * n;
+        const int nocca = info[NOWICK_NOCCA];
+        const int noccb = info[NOWICK_NOCCB];
+        const DT *ha = slab + info[NOWICK_OH_A];
+        const DT *hb = slab + info[NOWICK_OH_B];
+        const DT *aa = slab + info[NOWICK_OAA];
+        const DT *bb = slab + info[NOWICK_OBB];
+        const DT *ab = slab + info[NOWICK_OAB];
+        int ha_[2], pa_[2], hb_[2], pb_[2];
+        int ra, rb, odda, oddb;
+        int oa[nocca + 1];
+        int ob[noccb + 1];
+        int na, nb, i, j;
+        size_t p, q, r, s;
+        DT h = 0;
+        double sign = dx[NOWICK_DOSIGN] * dw[NOWICK_DOSIGN];
+
+        ra = FN(relative_excitation)(ha_, pa_, &odda, nocca,
+                                     dx+NOWICK_DHEAD, dx+NOWICK_DHEAD+kmax, dx[NOWICK_DRA],
+                                     dw+NOWICK_DHEAD, dw+NOWICK_DHEAD+kmax, dw[NOWICK_DRA], 2);
+        rb = FN(relative_excitation)(hb_, pb_, &oddb, noccb,
+                                     dx+NOWICK_DHEAD+2*kmax, dx+NOWICK_DHEAD+3*kmax, dx[NOWICK_DRB],
+                                     dw+NOWICK_DHEAD+2*kmax, dw+NOWICK_DHEAD+3*kmax, dw[NOWICK_DRB], 2);
+        *sout = 0;
+        *hout = 0;
+        if (ra < 0 || rb < 0 || ra + rb > 2) {
+                return;
+        }
+        if ((odda ^ oddb) & 1) {
+                sign = -sign;
+        }
+        /* occupations of the ket K */
+        na = FN(occupied)(oa, nocca, dw+NOWICK_DHEAD, dw+NOWICK_DHEAD+kmax, dw[NOWICK_DRA]);
+        nb = FN(occupied)(ob, noccb, dw+NOWICK_DHEAD+2*kmax, dw+NOWICK_DHEAD+3*kmax, dw[NOWICK_DRB]);
+
+        if (ra == 0 && rb == 0) {
+                h = env->enuc;
+                for (i = 0; i < na; i++) {
+                        p = oa[i];
+                        h += ha[p*n+p];
+                        for (j = 0; j < na; j++) {
+                                q = oa[j];
+                                h += .5 * aa[p*n3+p*n2+q*n+q];
+                        }
+                        for (j = 0; j < nb; j++) {
+                                q = ob[j];
+                                h += ab[p*n3+p*n2+q*n+q];
+                        }
+                }
+                for (i = 0; i < nb; i++) {
+                        p = ob[i];
+                        h += hb[p*n+p];
+                        for (j = 0; j < nb; j++) {
+                                q = ob[j];
+                                h += .5 * bb[p*n3+p*n2+q*n+q];
+                        }
+                }
+                *sout = sign;
+        } else if (ra == 1 && rb == 0) {
+                /* (a <- i): h_ai + sum_{j in K_a} <ai||jj> + sum_{j in K_b} (ai|jj) */
+                p = pa_[0];
+                q = ha_[0];
+                h = ha[p*n+q];
+                for (j = 0; j < na; j++) {
+                        r = oa[j];
+                        h += aa[p*n3+q*n2+r*n+r];
+                }
+                for (j = 0; j < nb; j++) {
+                        r = ob[j];
+                        h += ab[p*n3+q*n2+r*n+r];
+                }
+        } else if (ra == 0 && rb == 1) {
+                p = pb_[0];
+                q = hb_[0];
+                h = hb[p*n+q];
+                for (j = 0; j < nb; j++) {
+                        r = ob[j];
+                        h += bb[p*n3+q*n2+r*n+r];
+                }
+                for (j = 0; j < na; j++) {
+                        r = oa[j];
+                        h += ab[r*n3+r*n2+p*n+q];
+                }
+        } else if (ra == 2) {
+                /* holes descending (i > j), particles ascending (a < b) */
+                p = pa_[0]; q = ha_[1]; r = pa_[1]; s = ha_[0];
+                h = aa[p*n3+q*n2+r*n+s];
+        } else if (rb == 2) {
+                p = pb_[0]; q = hb_[1]; r = pb_[1]; s = hb_[0];
+                h = bb[p*n3+q*n2+r*n+s];
+        } else {
+                /* alpha (a <- i), beta (b <- j): (ai|bj) */
+                h = ab[(size_t)pa_[0]*n3 + (size_t)ha_[0]*n2 + (size_t)pb_[0]*n + hb_[0]];
+        }
+        *hout = sign * h;
+}
+
 /* Hamiltonian and overlap between two determinant records */
 void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, const int *dw)
 {
@@ -775,6 +969,10 @@ void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, co
         int rows_b[2*kmax+1], cols_b[2*kmax+1];
         FN(Spin) sa, sb;
         DT h, s, pref;
+        if (px == pw) {
+                FN(hs_orth)(hout, sout, env, info, dx, dw);
+                return;
+        }
         /* a zero-overlap pair needs a contraction in the operator or in D */
         if (info[NOWICK_MA] > la + 2 || info[NOWICK_MB] > lb + 2
             || info[NOWICK_MA] + info[NOWICK_MB] > la + lb + 2) {

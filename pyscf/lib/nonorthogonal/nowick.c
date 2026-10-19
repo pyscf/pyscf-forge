@@ -156,7 +156,8 @@ static void hs_segment(double *h, double *s, const NOWICKEnv *env, const int *dx
         double complex *zs = (double complex *)s;
         int j;
 #if defined(NOWICK_X86_SIMD)
-        if (info[NOWICK_MA] == 0 && info[NOWICK_MB] == 0) {
+        if (info[NOWICK_MA] == 0 && info[NOWICK_MB] == 0
+            && dx[NOWICK_DPARENT] != dws[NOWICK_DPARENT]) {
                 if (env->simd == NOWICK_SIMD_AVX512) {
                         if (cplx) {
                                 NOWICKzhs_row_avx512(zh, zs, env, dx, dws, nw);

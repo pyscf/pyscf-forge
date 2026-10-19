@@ -52,6 +52,12 @@
 #define NOWICK_AA       5
 #define NOWICK_BB       32
 #define NOWICK_AB       59
+/* orthogonal (same-parent) MO integrals, diagonal pairs (x,x) only */
+#define NOWICK_OH_A     91      /* C_a^+ h C_a */
+#define NOWICK_OH_B     92
+#define NOWICK_OAA      93      /* (pq|rs) - (ps|rq), alpha */
+#define NOWICK_OBB      94
+#define NOWICK_OAB      95      /* (pq|rs), alpha pq, beta rs */
 /* offsets inside one same-spin block */
 #define NOWICK_X        0       /* X^{(mi)} */
 #define NOWICK_Y        2       /* Y^{(mi)} */
@@ -78,12 +84,16 @@
 /* determinant record: header followed by
  * holes_a[kmax] parts_a[kmax] holes_b[kmax] parts_b[kmax]
  * holes and particles are indices in the occupied-first orbital order of
- * the parent, sorted ascending.  sign carries the excitation phase. */
+ * the parent, sorted ascending.  sign converts the excitation operator
+ * string applied to the parent into the determinant (Wick evaluators);
+ * osign converts the canonical determinant in the occupied-first order
+ * into the original MO order (Slater-Condon evaluator). */
 #define NOWICK_DPARENT  0
 #define NOWICK_DRA      1
 #define NOWICK_DRB      2
 #define NOWICK_DSIGN    3
-#define NOWICK_DHEAD    4
+#define NOWICK_DOSIGN   4
+#define NOWICK_DHEAD    5
 
 typedef struct {
         int nref;
