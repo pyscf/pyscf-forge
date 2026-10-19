@@ -60,10 +60,11 @@ J_BRANCHES = ((0, 0, 0, 0), (0, 0, 0, 1), (0, 0, 1, 0), (0, 0, 1, 1),
 def _ao2mo(eri, a, b, c, d):
     '''sum_{mu nu lam sig} (mu nu|lam sig) a*_{mu p} b_{nu q} c*_{lam r} d_{sig s}'''
     n = eri.shape[0]
-    t = eri.reshape(n**3, n).dot(d).reshape(n, n, n, -1)
-    t = lib.einsum('mnls,lr->mnrs', t, c.conj())
-    t = lib.einsum('mnrs,nq->mqrs', t, b)
-    return lib.einsum('mqrs,mp->pqrs', t, a.conj())
+    np_, nq, nr, ns = a.shape[1], b.shape[1], c.shape[1], d.shape[1]
+    t = eri.reshape(n**3, n).dot(d)                                  # mu nu lam s
+    t = numpy.matmul(c.conj().T, t.reshape(n * n, n, ns))            # mu nu r s
+    t = numpy.matmul(b.T, t.reshape(n, n, nr * ns))                  # mu q r s
+    return a.conj().T.dot(t.reshape(n, -1)).reshape(np_, nq, nr, ns)
 
 
 def _coulomb(eri, dm):
@@ -73,7 +74,7 @@ def _coulomb(eri, dm):
 
 def _exchange(eri, dm):
     '''K_{st} = sum_{mu nu} (s mu|nu t) M_{mu nu}'''
-    return lib.einsum('smnt,mn->st', eri, dm)
+    return numpy.tensordot(eri, dm, axes=([1, 2], [0, 1]))
 
 
 class _Pairing:
