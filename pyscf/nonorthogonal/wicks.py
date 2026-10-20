@@ -168,6 +168,8 @@ class WickEngine(lib.StreamObject):
         if not orbs:
             raise ValueError('At least one reference is required')
         nmo = orbs[0][0].shape[1]
+        if nmo > _wicks.MAXMO:
+            raise NotImplementedError('More than %d MOs' % _wicks.MAXMO)
         nelec = (int(orbs[0][2].sum()), int(orbs[0][3].sum()))
         for ca, cb, occa, occb in orbs:
             if ca.shape[1] != nmo or cb.shape[1] != nmo:

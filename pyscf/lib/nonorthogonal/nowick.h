@@ -104,6 +104,33 @@
 #define NOWICK_DOSIGN   4
 #define NOWICK_DHEAD    5
 
+/* Occupation strings of a record in the parent's occupied-first order:
+ * alpha words 0, 1 and beta words 2, 3, for up to NOWICK_MAXMO MOs */
+#define NOWICK_NSTR     4
+#define NOWICK_MAXMO    128
+
+static inline void NOWICKdet_strings(uint64_t *str, const int *d, int kmax,
+                                     int nocca, int noccb)
+{
+        const int nocc[2] = {nocca, noccb};
+        const int *h, *p;
+        uint64_t *w;
+        int spin, i, r;
+        for (spin = 0; spin < 2; spin++) {
+                w = str + 2 * spin;
+                w[0] = nocc[spin] >= 64 ? ~0ULL : (1ULL << nocc[spin]) - 1;
+                w[1] = nocc[spin] <= 64 ? 0
+                     : nocc[spin] >= 128 ? ~0ULL : (1ULL << (nocc[spin] - 64)) - 1;
+                r = d[spin ? NOWICK_DRB : NOWICK_DRA];
+                h = d + NOWICK_DHEAD + 2 * kmax * spin;
+                p = h + kmax;
+                for (i = 0; i < r; i++) {
+                        w[h[i] >> 6] ^= 1ULL << (h[i] & 63);
+                        w[p[i] >> 6] ^= 1ULL << (p[i] & 63);
+                }
+        }
+}
+
 typedef struct {
         int nref;
         int kmax;       /* largest per-spin excitation rank of a record */

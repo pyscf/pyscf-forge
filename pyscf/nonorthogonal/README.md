@@ -45,7 +45,8 @@ See `examples/nonorthogonal/` for complete examples.
 ## Conventions
 
 - References may be real or complex, restricted or unrestricted, and must have
-  the same number of MOs and the same numbers of alpha and beta electrons.
+  the same number of MOs (at most 128) and the same numbers of alpha and beta
+  electrons.
   Occupied orbitals may appear anywhere in the MO order.
 - A `Determinant` is an excitation of one reference, with holes and particles
   given as MO indices of that reference.  It is the Slater determinant of its
@@ -58,8 +59,10 @@ See `examples/nonorthogonal/` for complete examples.
 ## Implementation notes
 
 - Matrix elements between excitations of the same reference use the
-  Slater-Condon rules; all other pairs use the extended nonorthogonal Wick
-  theorem.
+  Slater-Condon rules on occupation bit strings, adapted from
+  `FCIpspace_h0tril_uhf` of `pyscf/lib/mcscf/fci_contract.c` to complex
+  orbitals and up to 128 MOs; all other pairs use the extended nonorthogonal
+  Wick theorem.
 - Singular values of the occupied orbital overlap below `tol` (default 1e-10)
   are treated as zero-overlap orbital pairs.
 - Small nonzero singular values (below 0.1) would put large `1/S_k` terms

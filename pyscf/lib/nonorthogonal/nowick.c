@@ -26,6 +26,11 @@ void NOWICKdhamiltonian(double *h, double *s, const NOWICKEnv *env,
                         const int *dx, const int *dw);
 void NOWICKzhamiltonian(double complex *h, double complex *s, const NOWICKEnv *env,
                         const int *dx, const int *dw);
+void NOWICKdhs_orth_row(double *h, double *s, const NOWICKEnv *env, const int *dx,
+                        const uint64_t *sx, const int *dws, const uint64_t *sws, int nw);
+void NOWICKzhs_orth_row(double complex *h, double complex *s, const NOWICKEnv *env,
+                        const int *dx, const uint64_t *sx, const int *dws,
+                        const uint64_t *sws, int nw);
 void NOWICKdhamiltonian_general(double *h, double *s, const NOWICKEnv *env,
                                 const int *dx, const int *dw);
 void NOWICKzhamiltonian_general(double complex *h, double complex *s, const NOWICKEnv *env,
@@ -173,7 +178,8 @@ static void hs_row(double *h, double *s, const NOWICKEnv *env, const int64_t *in
 #endif
 
 static void hs_segment(double *h, double *s, const NOWICKEnv *env, const int *dx,
-                       const int *dws, int nw, int cplx)
+                       const uint64_t *sx, const int *dws, const uint64_t *sws,
+                       int nw, int cplx)
 {
         const size_t es = cplx ? 2 : 1;
         const size_t k = (size_t)dx[NOWICK_DPARENT] * env->nref + dws[NOWICK_DPARENT];
@@ -182,9 +188,16 @@ static void hs_segment(double *h, double *s, const NOWICKEnv *env, const int *dx
         double complex *zh = (double complex *)h;
         double complex *zs = (double complex *)s;
         int j;
+        if (dx[NOWICK_DPARENT] == dws[NOWICK_DPARENT]) {
+                if (cplx) {
+                        NOWICKzhs_orth_row(zh, zs, env, dx, sx, dws, sws, nw);
+                } else {
+                        NOWICKdhs_orth_row(h, s, env, dx, sx, dws, sws, nw);
+                }
+                return;
+        }
 #if defined(NOWICK_X86_SIMD)
         if (info[NOWICK_MA] == 0 && info[NOWICK_MB] == 0
-            && dx[NOWICK_DPARENT] != dws[NOWICK_DPARENT]
             && env->simd != NOWICK_SIMD_NONE) {
                 /* sum the packed rows of every corner combination */
                 double *buf = NULL;
@@ -230,10 +243,16 @@ void NOWICKhamiltonian_matrix(double *h, double *s, int *dets, int ndet, int kma
 {
         NOWICKEnv env;
         const size_t es = cplx ? 2 : 1;
+        uint64_t *strs = malloc(sizeof(uint64_t) * NOWICK_NSTR * ndet);
         set_env(&env, pairinfo, slab, scal, nref, kmax, enuc);
 #pragma omp parallel
 {
         size_t i, j, j1;
+#pragma omp for schedule(static)
+        for (i = 0; i < ndet; i++) {
+                NOWICKdet_strings(strs + i * NOWICK_NSTR, dets + i * env.dstride, kmax,
+                                  pairinfo[NOWICK_NOCCA], pairinfo[NOWICK_NOCCB]);
+        }
         const int *dx;
         double complex *zh = (double complex *)h;
         double complex *zs = (double complex *)s;
@@ -245,8 +264,10 @@ void NOWICKhamiltonian_matrix(double *h, double *s, int *dets, int ndet, int kma
                         for (j1 = j + 1; j1 < ndet; j1++) {
                                 if (dets[j1 * env.dstride + NOWICK_DPARENT] != pw) break;
                         }
-                        hs_segment(h + (i*ndet+j)*es, s + (i*ndet+j)*es, &env, dx,
-                                   dets + j * env.dstride, j1 - j, cplx);
+                        hs_segment(h + (i*ndet+j)*es, s + (i*ndet+j)*es, &env,
+                                   dx, strs + i * NOWICK_NSTR,
+                                   dets + j * env.dstride, strs + j * NOWICK_NSTR,
+                                   j1 - j, cplx);
                 }
         }
 #pragma omp barrier
@@ -263,4 +284,5 @@ void NOWICKhamiltonian_matrix(double *h, double *s, int *dets, int ndet, int kma
                 }
         }
 }
+        free(strs);
 }

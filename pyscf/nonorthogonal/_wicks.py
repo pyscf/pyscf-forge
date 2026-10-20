@@ -64,6 +64,8 @@ OH_A, OH_B, OAA, OBB, OAB = 91, 92, 93, 94, 95
 CSTART, NCORNER = 96, 97
 
 DHEAD = 5
+# Largest number of MOs of the two-word occupation strings
+MAXMO = 128
 
 # Nonzero singular values below SINGULARTOL are near-zero and evaluated at
 # the corners t_k = 0 and t_k = 1

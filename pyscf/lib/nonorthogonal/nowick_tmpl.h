@@ -781,138 +781,105 @@ static void FN(hs_general)(DT *hout, DT *sout, const NOWICKEnv *env,
                 break;
 
 /*
- * One spin of the excitation taking the ket occupation K to the bra
- * occupation B, both excitations of the same parent:  K\B are the holes and
- * B\K the particles.  Returns the rank, or -1 above maxrank.  odd receives
- * the parity of annihilating the holes (descending) and creating the
- * particles (ascending) on K.
+ * Same-parent Slater-Condon rules on occupation strings, adapted from
+ * FCIpspace_h0tril_uhf of pyscf/lib/mcscf/fci_contract.c to complex orbitals,
+ * two-word strings of up to NOWICK_MAXMO MOs and diagonal elements.  The
+ * integrals are in the parent's orthonormal MO basis, with the same-spin
+ * integrals antisymmetrised.
  */
-static int FN(relative_excitation)(int *holes, int *parts, int *odd, int nocc,
-                                   const int *hb, const int *pb, int rb,
-                                   const int *hk, const int *pk, int rk, int maxrank)
+/* popcount without the POPCNT instruction, as FCIpopcount_1 */
+static inline int popcount64(uint64_t x)
 {
-        int nh = 0, np = 0, i, j, k, below, found;
-        /* holes: K\B = (hb\hk) + (pk\pb) */
-        for (i = 0; i < rb; i++) {
-                for (found = 0, j = 0; j < rk; j++) found |= (hk[j] == hb[i]);
-                if (!found) {
-                        if (nh == maxrank) return -1;
-                        holes[nh++] = hb[i];
-                }
-        }
-        for (i = 0; i < rk; i++) {
-                for (found = 0, j = 0; j < rb; j++) found |= (pb[j] == pk[i]);
-                if (!found) {
-                        if (nh == maxrank) return -1;
-                        holes[nh++] = pk[i];
-                }
-        }
-        /* particles: B\K = (hk\hb) + (pb\pk) */
-        for (i = 0; i < rk; i++) {
-                for (found = 0, j = 0; j < rb; j++) found |= (hb[j] == hk[i]);
-                if (!found) {
-                        if (np == maxrank) return -1;
-                        parts[np++] = hk[i];
-                }
-        }
-        for (i = 0; i < rb; i++) {
-                for (found = 0, j = 0; j < rk; j++) found |= (pk[j] == pb[i]);
-                if (!found) {
-                        if (np == maxrank) return -1;
-                        parts[np++] = pb[i];
-                }
-        }
-        if (nh != np) return -1;
-        /* holes descending, particles ascending; holes and particles of
-         * each list are already disjoint index ranges in each half */
-        for (i = 0; i < nh; i++) {
-        for (j = i+1; j < nh; j++) {
-                if (holes[j] > holes[i]) { k = holes[i]; holes[i] = holes[j]; holes[j] = k; }
-                if (parts[j] < parts[i]) { k = parts[i]; parts[i] = parts[j]; parts[j] = k; }
-        } }
-        /* occupation changes of K relative to {0..nocc-1}: -hk, +pk, then the
-         * excitation's own removals (-1) and insertions (+1) */
-        *odd = 0;
-        for (i = 0; i < nh; i++) {
-                /* occupied orbitals of the current string below holes[i] */
-                below = holes[i] < nocc ? holes[i] : nocc;
-                for (j = 0; j < rk; j++) below -= (hk[j] < holes[i]);
-                for (j = 0; j < rk; j++) below += (pk[j] < holes[i]);
-                for (j = 0; j < i; j++) below -= (holes[j] < holes[i]);
-                *odd ^= below & 1;
-        }
-        for (i = 0; i < np; i++) {
-                below = parts[i] < nocc ? parts[i] : nocc;
-                for (j = 0; j < rk; j++) below -= (hk[j] < parts[i]);
-                for (j = 0; j < rk; j++) below += (pk[j] < parts[i]);
-                for (j = 0; j < nh; j++) below -= (holes[j] < parts[i]);
-                for (j = 0; j < i; j++) below += (parts[j] < parts[i]);
-                *odd ^= below & 1;
-        }
-        return nh;
+        x = x - ((x >> 1) & 0x5555555555555555ULL);
+        x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
+        x = (x + (x >> 4)) & 0x0f0f0f0f0f0f0f0fULL;
+        return (int)((x * 0x0101010101010101ULL) >> 56);
 }
 
-/* occupied orbitals of record d (one spin) in the occupied-first order */
-static int FN(occupied)(int *occ, int nocc, const int *h, const int *p, int r)
+static inline int nbits2(uint64_t w0, uint64_t w1)
 {
-        int i, j, k = 0, skip;
-        for (i = 0; i < nocc; i++) {
-                for (skip = 0, j = 0; j < r; j++) skip |= (h[j] == i);
-                if (!skip) occ[k++] = i;
+        return popcount64(w0) + popcount64(w1);
+}
+
+static inline int first1_2(uint64_t w0, uint64_t w1)
+{
+        return w0 ? __builtin_ctzll(w0) : 64 + __builtin_ctzll(w1);
+}
+
+/* lowest set bit other than bit k */
+static inline int second1_2(uint64_t w0, uint64_t w1, int k)
+{
+        uint64_t w[2] = {w0, w1};
+        w[k >> 6] &= ~(1ULL << (k & 63));
+        return first1_2(w[0], w[1]);
+}
+
+/* number of occupied orbitals of string w below orbital k */
+static inline int below2(const uint64_t *w, int k)
+{
+        if (k <= 64) {
+                return popcount64(k == 64 ? w[0] : w[0] & ((1ULL << k) - 1));
         }
-        for (j = 0; j < r; j++) {
-                occ[k++] = p[j];
+        return popcount64(w[0])
+             + popcount64(k == 128 ? w[1] : w[1] & ((1ULL << (k - 64)) - 1));
+}
+
+/* sign of a^+_p a_q acting on string w, as FCIcre_des_sign */
+static inline int cre_des_sign2(int p, int q, const uint64_t *w)
+{
+        int lo = p < q ? p : q;
+        int hi = p < q ? q : p;
+        return ((below2(w, hi) - below2(w, lo + 1)) & 1) ? -1 : 1;
+}
+
+/* occupied orbitals of string w, ascending */
+static inline int occ_list2(int *occ, const uint64_t *w)
+{
+        uint64_t x;
+        int k, n = 0;
+        for (k = 0; k < 2; k++) {
+                for (x = w[k]; x; x &= x - 1) {
+                        occ[n++] = 64 * k + __builtin_ctzll(x);
+                }
         }
-        return k;
+        return n;
 }
 
 /*
- * Same-parent Hamiltonian and overlap with the Slater-Condon rules in the
- * parent's orthonormal MO basis (noci-rs elements/orthogonal).
+ * <x|H|w> and <x|w> between the strings sx and sw of one parent.  sign
+ * converts the strings in the occupied-first order to the determinants.
  */
-static void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env,
-                        const int64_t *info, const int *dx, const int *dw)
+ALWAYS_INLINE void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env, const int64_t *info,
+                               const uint64_t *sx, const uint64_t *sw, double sign)
 {
-        const int kmax = env->kmax;
         const DT *slab = env->slab;
         const size_t n = info[NOWICK_NMO];
         const size_t n2 = n * n;
         const size_t n3 = n2 * n;
-        const int nocca = info[NOWICK_NOCCA];
-        const int noccb = info[NOWICK_NOCCB];
         const DT *ha = slab + info[NOWICK_OH_A];
         const DT *hb = slab + info[NOWICK_OH_B];
         const DT *aa = slab + info[NOWICK_OAA];
         const DT *bb = slab + info[NOWICK_OBB];
         const DT *ab = slab + info[NOWICK_OAB];
-        int ha_[2], pa_[2], hb_[2], pb_[2];
-        int ra, rb, odda, oddb;
-        int oa[nocca + 1];
-        int ob[noccb + 1];
+        const uint64_t da[2] = {sx[0] ^ sw[0], sx[1] ^ sw[1]};
+        const uint64_t db[2] = {sx[2] ^ sw[2], sx[3] ^ sw[3]};
+        const int n1da = nbits2(da[0], da[1]);
+        const int n1db = nbits2(db[0], db[1]);
+        int oa[NOWICK_MAXMO], ob[NOWICK_MAXMO];
         int na, nb, i, j;
         size_t p, q, r, s;
+        uint64_t str1[2];
         DT h = 0;
-        double sign = dx[NOWICK_DOSIGN] * dw[NOWICK_DOSIGN];
 
-        ra = FN(relative_excitation)(ha_, pa_, &odda, nocca,
-                                     dx+NOWICK_DHEAD, dx+NOWICK_DHEAD+kmax, dx[NOWICK_DRA],
-                                     dw+NOWICK_DHEAD, dw+NOWICK_DHEAD+kmax, dw[NOWICK_DRA], 2);
-        rb = FN(relative_excitation)(hb_, pb_, &oddb, noccb,
-                                     dx+NOWICK_DHEAD+2*kmax, dx+NOWICK_DHEAD+3*kmax, dx[NOWICK_DRB],
-                                     dw+NOWICK_DHEAD+2*kmax, dw+NOWICK_DHEAD+3*kmax, dw[NOWICK_DRB], 2);
-        *sout = 0;
         *hout = 0;
-        if (ra < 0 || rb < 0 || ra + rb > 2) {
+        *sout = 0;
+        if (n1da + n1db > 4) {
                 return;
         }
-        if ((odda ^ oddb) & 1) {
-                sign = -sign;
-        }
-        /* occupations of the ket K */
-        na = FN(occupied)(oa, nocca, dw+NOWICK_DHEAD, dw+NOWICK_DHEAD+kmax, dw[NOWICK_DRA]);
-        nb = FN(occupied)(ob, noccb, dw+NOWICK_DHEAD+2*kmax, dw+NOWICK_DHEAD+3*kmax, dw[NOWICK_DRB]);
 
-        if (ra == 0 && rb == 0) {
+        if (n1da == 0 && n1db == 0) {
+                na = occ_list2(oa, sw);
+                nb = occ_list2(ob, sw + 2);
                 h = env->enuc;
                 for (i = 0; i < na; i++) {
                         p = oa[i];
@@ -935,10 +902,12 @@ static void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env,
                         }
                 }
                 *sout = sign;
-        } else if (ra == 1 && rb == 0) {
-                /* (a <- i): h_ai + sum_{j in K_a} <ai||jj> + sum_{j in K_b} (ai|jj) */
-                p = pa_[0];
-                q = ha_[0];
+        } else if (n1da == 2 && n1db == 0) {
+                /* (p <- q): h_pq + sum_{r in w_a} <pr||qr> + sum_{r in w_b} (pq|rr) */
+                p = first1_2(da[0] & sx[0], da[1] & sx[1]);
+                q = first1_2(da[0] & sw[0], da[1] & sw[1]);
+                na = occ_list2(oa, sw);
+                nb = occ_list2(ob, sw + 2);
                 h = ha[p*n+q];
                 for (j = 0; j < na; j++) {
                         r = oa[j];
@@ -948,9 +917,12 @@ static void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env,
                         r = ob[j];
                         h += ab[p*n3+q*n2+r*n+r];
                 }
-        } else if (ra == 0 && rb == 1) {
-                p = pb_[0];
-                q = hb_[0];
+                sign *= cre_des_sign2(p, q, sw);
+        } else if (n1da == 0 && n1db == 2) {
+                p = first1_2(db[0] & sx[2], db[1] & sx[3]);
+                q = first1_2(db[0] & sw[2], db[1] & sw[3]);
+                na = occ_list2(oa, sw);
+                nb = occ_list2(ob, sw + 2);
                 h = hb[p*n+q];
                 for (j = 0; j < nb; j++) {
                         r = ob[j];
@@ -960,18 +932,57 @@ static void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env,
                         r = oa[j];
                         h += ab[r*n3+r*n2+p*n+q];
                 }
-        } else if (ra == 2) {
-                /* holes descending (i > j), particles ascending (a < b) */
-                p = pa_[0]; q = ha_[1]; r = pa_[1]; s = ha_[0];
+                sign *= cre_des_sign2(p, q, sw + 2);
+        } else if (n1da == 4) {
+                p = first1_2(da[0] & sx[0], da[1] & sx[1]);
+                q = first1_2(da[0] & sw[0], da[1] & sw[1]);
+                r = second1_2(da[0] & sx[0], da[1] & sx[1], p);
+                s = second1_2(da[0] & sw[0], da[1] & sw[1], q);
+                str1[0] = sw[0];
+                str1[1] = sw[1];
+                str1[p >> 6] ^= 1ULL << (p & 63);
+                str1[q >> 6] ^= 1ULL << (q & 63);
                 h = aa[p*n3+q*n2+r*n+s];
-        } else if (rb == 2) {
-                p = pb_[0]; q = hb_[1]; r = pb_[1]; s = hb_[0];
+                sign *= cre_des_sign2(p, q, sw) * cre_des_sign2(r, s, str1);
+        } else if (n1db == 4) {
+                p = first1_2(db[0] & sx[2], db[1] & sx[3]);
+                q = first1_2(db[0] & sw[2], db[1] & sw[3]);
+                r = second1_2(db[0] & sx[2], db[1] & sx[3], p);
+                s = second1_2(db[0] & sw[2], db[1] & sw[3], q);
+                str1[0] = sw[2];
+                str1[1] = sw[3];
+                str1[p >> 6] ^= 1ULL << (p & 63);
+                str1[q >> 6] ^= 1ULL << (q & 63);
                 h = bb[p*n3+q*n2+r*n+s];
+                sign *= cre_des_sign2(p, q, sw + 2) * cre_des_sign2(r, s, str1);
         } else {
-                /* alpha (a <- i), beta (b <- j): (ai|bj) */
-                h = ab[(size_t)pa_[0]*n3 + (size_t)ha_[0]*n2 + (size_t)pb_[0]*n + hb_[0]];
+                /* alpha (p <- q), beta (r <- s): (pq|rs) */
+                p = first1_2(da[0] & sx[0], da[1] & sx[1]);
+                q = first1_2(da[0] & sw[0], da[1] & sw[1]);
+                r = first1_2(db[0] & sx[2], db[1] & sx[3]);
+                s = first1_2(db[0] & sw[2], db[1] & sw[3]);
+                h = ab[p*n3+q*n2+r*n+s];
+                sign *= cre_des_sign2(p, q, sw) * cre_des_sign2(r, s, sw + 2);
         }
         *hout = sign * h;
+}
+
+/*
+ * One row of a same-parent block: the bra dx against the nw kets dws of the
+ * same parent, with the occupation strings sx and sws of NOWICKdet_strings.
+ */
+void FN(hs_orth_row)(DT *hrow, DT *srow, const NOWICKEnv *env, const int *dx,
+                     const uint64_t *sx, const int *dws, const uint64_t *sws, int nw)
+{
+        const int64_t *info = env->pairinfo
+                + ((size_t)dx[NOWICK_DPARENT] * env->nref + dx[NOWICK_DPARENT]) * NOWICK_PAIRLEN;
+        const int *dw;
+        int j;
+        for (j = 0; j < nw; j++) {
+                dw = dws + (size_t)j * env->dstride;
+                FN(hs_orth)(hrow+j, srow+j, env, info, sx, sws + (size_t)j * NOWICK_NSTR,
+                            dx[NOWICK_DOSIGN] * dw[NOWICK_DOSIGN]);
+        }
 }
 
 /* Hamiltonian and overlap between records of different parents at one
@@ -1023,8 +1034,12 @@ void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, co
         DT h, s;
         int64_t c;
         size_t kc;
+        uint64_t sx[NOWICK_NSTR], sw[NOWICK_NSTR];
         if (dx[NOWICK_DPARENT] == dw[NOWICK_DPARENT]) {
-                FN(hs_orth)(hout, sout, env, info, dx, dw);
+                NOWICKdet_strings(sx, dx, env->kmax, info[NOWICK_NOCCA], info[NOWICK_NOCCB]);
+                NOWICKdet_strings(sw, dw, env->kmax, info[NOWICK_NOCCA], info[NOWICK_NOCCB]);
+                FN(hs_orth)(hout, sout, env, info, sx, sw,
+                            dx[NOWICK_DOSIGN] * dw[NOWICK_DOSIGN]);
                 return;
         }
         *hout = 0;
