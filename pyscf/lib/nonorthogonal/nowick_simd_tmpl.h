@@ -254,21 +254,18 @@ static void FN(hs_m0_dispatch)(DT *h, DT *s, const NOWICKEnv *env, const int64_t
 #undef PKT_CASE
 
 /*
- * One row of the m_a = m_b = 0 Hamiltonian block: the bra dx against the
- * nw kets starting at dws, all with the same parent.  Kets with
+ * One row of the m_a = m_b = 0 Hamiltonian block at one corner combination
+ * (info, scal): the bra dx against the nw kets starting at dws, all with the
+ * same parent.  Kets with
  * L_a + L_b <= NOWICK_MAXL are binned by (L_a, L_b) into NLANE packets; a
  * partial packet is padded with copies of a valid lane.  Other kets fall
  * back to the scalar evaluator.
  */
-void FN(hs_row)(DT *hrow, DT *srow, const NOWICKEnv *env, const int *dx,
-                const int *dws, int nw)
+void FN(hs_row)(DT *hrow, DT *srow, const NOWICKEnv *env, const int64_t *info,
+                const DT *scal, const int *dx, const int *dws, int nw)
 {
         const int kmax = env->kmax;
         const int stride = env->dstride;
-        const int px = dx[NOWICK_DPARENT];
-        const int pw = dws[NOWICK_DPARENT];
-        const int64_t *info = env->pairinfo + ((size_t)px * env->nref + pw) * NOWICK_PAIRLEN;
-        const DT *scal = (const DT *)env->scal + ((size_t)px * env->nref + pw) * NOWICK_NSCAL;
         const int nocca = info[NOWICK_NOCCA];
         const int noccb = info[NOWICK_NOCCB];
         const size_t n = info[NOWICK_NMO];
@@ -290,7 +287,7 @@ void FN(hs_row)(DT *hrow, DT *srow, const NOWICKEnv *env, const int *dx,
                         la = rxa + dw[NOWICK_DRA];
                         lb = rxb + dw[NOWICK_DRB];
                         if (la + lb > NOWICK_MAXL) {
-                                HS_SCALAR(hrow+j, srow+j, env, dx, dw);
+                                HS_SCALAR(hrow+j, srow+j, env, info, scal, dx, dw);
                                 continue;
                         }
                         key = la * (NOWICK_MAXL + 1) + lb;

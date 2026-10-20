@@ -358,14 +358,20 @@ static inline DT FN(spin_pref)(const FN(Spin) *sp)
         return sp->scal[NOWICK_SPHASE] * sp->scal[NOWICK_STSP];
 }
 
-/* Overlap between two determinant records */
-DT FN(overlap)(const NOWICKEnv *env, const int *dx, const int *dw)
+#define PAIRINFO(env, k)        ((env)->pairinfo + (size_t)(k) * NOWICK_PAIRLEN)
+#define PAIRSCAL(env, k)        ((const DT *)(env)->scal + (size_t)(k) * NOWICK_NSCAL)
+
+/* Row of corner combination c of the pair whose primary row is info */
+static inline size_t corner_row(const int64_t *info, size_t k, int64_t c)
+{
+        return c == 0 ? k : (size_t)(info[NOWICK_CSTART] + c - 1);
+}
+
+/* Overlap between two determinant records at one corner combination */
+static DT FN(overlap_corner)(const NOWICKEnv *env, const int64_t *info, const DT *scal,
+                             const int *dx, const int *dw)
 {
         const int kmax = env->kmax;
-        const int px = dx[NOWICK_DPARENT];
-        const int pw = dw[NOWICK_DPARENT];
-        const int64_t *info = env->pairinfo + ((size_t)px * env->nref + pw) * NOWICK_PAIRLEN;
-        const DT *scal = (const DT *)env->scal + ((size_t)px * env->nref + pw) * NOWICK_NSCAL;
         int rxa = dx[NOWICK_DRA], rxb = dx[NOWICK_DRB];
         int rwa = dw[NOWICK_DRA], rwb = dw[NOWICK_DRB];
         int la = rxa + rwa;
@@ -389,6 +395,21 @@ DT FN(overlap)(const NOWICKEnv *env, const int *dx, const int *dw)
         ovb = FN(spin_overlap)(&sb, rows, cols, lb);
         return dx[NOWICK_DSIGN] * dw[NOWICK_DSIGN]
                 * FN(spin_pref)(&sa) * FN(spin_pref)(&sb) * ova * ovb;
+}
+
+/* Overlap between two determinant records */
+DT FN(overlap)(const NOWICKEnv *env, const int *dx, const int *dw)
+{
+        const size_t k = (size_t)dx[NOWICK_DPARENT] * env->nref + dw[NOWICK_DPARENT];
+        const int64_t *info = PAIRINFO(env, k);
+        DT out = 0;
+        int64_t c;
+        size_t kc;
+        for (c = 0; c < info[NOWICK_NCORNER]; c++) {
+                kc = corner_row(info, k, c);
+                out += FN(overlap_corner)(env, PAIRINFO(env, kc), PAIRSCAL(env, kc), dx, dw);
+        }
+        return out;
 }
 
 /*
@@ -953,14 +974,13 @@ static void FN(hs_orth)(DT *hout, DT *sout, const NOWICKEnv *env,
         *hout = sign * h;
 }
 
-/* Hamiltonian and overlap between two determinant records */
-void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, const int *dw)
+/* Hamiltonian and overlap between records of different parents at one
+ * corner combination */
+void FN(hamiltonian_corner)(DT *hout, DT *sout, const NOWICKEnv *env,
+                            const int64_t *info, const DT *scal,
+                            const int *dx, const int *dw)
 {
         const int kmax = env->kmax;
-        const int px = dx[NOWICK_DPARENT];
-        const int pw = dw[NOWICK_DPARENT];
-        const int64_t *info = env->pairinfo + ((size_t)px * env->nref + pw) * NOWICK_PAIRLEN;
-        const DT *scal = (const DT *)env->scal + ((size_t)px * env->nref + pw) * NOWICK_NSCAL;
         int rxa = dx[NOWICK_DRA], rxb = dx[NOWICK_DRB];
         int rwa = dw[NOWICK_DRA], rwb = dw[NOWICK_DRB];
         int la = rxa + rwa;
@@ -969,10 +989,6 @@ void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, co
         int rows_b[2*kmax+1], cols_b[2*kmax+1];
         FN(Spin) sa, sb;
         DT h, s, pref;
-        if (px == pw) {
-                FN(hs_orth)(hout, sout, env, info, dx, dw);
-                return;
-        }
         /* a zero-overlap pair needs a contraction in the operator or in D */
         if (info[NOWICK_MA] > la + 2 || info[NOWICK_MB] > lb + 2
             || info[NOWICK_MA] + info[NOWICK_MB] > la + lb + 2) {
@@ -999,15 +1015,36 @@ void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, co
         *sout = pref * s;
 }
 
-/* Hamiltonian between two records with the general evaluator only */
-void FN(hamiltonian_general)(DT *hout, DT *sout, const NOWICKEnv *env,
-                             const int *dx, const int *dw)
+/* Hamiltonian and overlap between two determinant records */
+void FN(hamiltonian)(DT *hout, DT *sout, const NOWICKEnv *env, const int *dx, const int *dw)
+{
+        const size_t k = (size_t)dx[NOWICK_DPARENT] * env->nref + dw[NOWICK_DPARENT];
+        const int64_t *info = PAIRINFO(env, k);
+        DT h, s;
+        int64_t c;
+        size_t kc;
+        if (dx[NOWICK_DPARENT] == dw[NOWICK_DPARENT]) {
+                FN(hs_orth)(hout, sout, env, info, dx, dw);
+                return;
+        }
+        *hout = 0;
+        *sout = 0;
+        for (c = 0; c < info[NOWICK_NCORNER]; c++) {
+                kc = corner_row(info, k, c);
+                FN(hamiltonian_corner)(&h, &s, env, PAIRINFO(env, kc), PAIRSCAL(env, kc),
+                                       dx, dw);
+                *hout += h;
+                *sout += s;
+        }
+}
+
+/* Hamiltonian between two records at one corner combination with the
+ * general evaluator only */
+static void FN(general_corner)(DT *hout, DT *sout, const NOWICKEnv *env,
+                               const int64_t *info, const DT *scal,
+                               const int *dx, const int *dw)
 {
         const int kmax = env->kmax;
-        const int px = dx[NOWICK_DPARENT];
-        const int pw = dw[NOWICK_DPARENT];
-        const int64_t *info = env->pairinfo + ((size_t)px * env->nref + pw) * NOWICK_PAIRLEN;
-        const DT *scal = (const DT *)env->scal + ((size_t)px * env->nref + pw) * NOWICK_NSCAL;
         int rxa = dx[NOWICK_DRA], rxb = dx[NOWICK_DRB];
         int rwa = dw[NOWICK_DRA], rwb = dw[NOWICK_DRB];
         int rows_a[2*kmax+1], cols_a[2*kmax+1];
@@ -1026,3 +1063,25 @@ void FN(hamiltonian_general)(DT *hout, DT *sout, const NOWICKEnv *env,
         *hout = pref * h;
         *sout = pref * s;
 }
+
+/* Hamiltonian between two records with the general evaluator only */
+void FN(hamiltonian_general)(DT *hout, DT *sout, const NOWICKEnv *env,
+                             const int *dx, const int *dw)
+{
+        const size_t k = (size_t)dx[NOWICK_DPARENT] * env->nref + dw[NOWICK_DPARENT];
+        const int64_t *info = PAIRINFO(env, k);
+        DT h, s;
+        int64_t c;
+        size_t kc;
+        *hout = 0;
+        *sout = 0;
+        for (c = 0; c < info[NOWICK_NCORNER]; c++) {
+                kc = corner_row(info, k, c);
+                FN(general_corner)(&h, &s, env, PAIRINFO(env, kc), PAIRSCAL(env, kc), dx, dw);
+                *hout += h;
+                *sout += s;
+        }
+}
+
+#undef PAIRINFO
+#undef PAIRSCAL

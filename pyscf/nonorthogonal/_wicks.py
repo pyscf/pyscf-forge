@@ -26,6 +26,19 @@ Y^{(m_i)} (m_i = 0, 1) are formed together with the one-column (F, V) and
 two-column (J, II) operator intermediates.  All tensors of all pairs are
 stored in one contiguous slab with the offset layout of nowick.h.
 
+A pair with a small nonzero singular value S_k would put 1/S_k into the
+fundamental contractions, and the large terms it generates cancel in the
+matrix elements only after rounding.  Every matrix element is affine in
+t_k = 1/S_k, because the rank-one part of pair k vanishes when it enters two
+contractions, so it is evaluated exactly from the corners t_k = 0 and 1,
+
+    S_k F(1/S_k) = (S_k - 1) F(0) + F(1),
+
+both with O(1) intermediates.  n such pairs give 2^n corners per spin, and the
+Hamiltonian sums over every combination of alpha and beta corners.  The
+primary combination keeps the pair's own pairinfo row; the others follow the
+nref*nref primary rows.
+
 References:
     H. G. A. Burton, J. Chem. Phys. 154, 144109 (2021)
     H. G. A. Burton, J. Chem. Phys. 157, 204109 (2022)
@@ -37,7 +50,7 @@ from pyscf import lib
 
 libwick = lib.load_library('libnonorthwick')
 
-PAIRLEN = 96
+PAIRLEN = 98
 MA, MB, NOCCA, NOCCB, NMO = 0, 1, 2, 3, 4
 AA, BB, AB = 5, 32, 59
 X, Y, FH, V, HCOL0, J = 0, 2, 4, 8, 16, 17
@@ -48,8 +61,13 @@ SAA, SBB, SVAB0 = 0, 8, 16
 SPHASE, STSP, SF0H, SV0 = 0, 1, 2, 4
 
 OH_A, OH_B, OAA, OBB, OAB = 91, 92, 93, 94, 95
+CSTART, NCORNER = 96, 97
 
 DHEAD = 5
+
+# Nonzero singular values below SINGULARTOL are near-zero and evaluated at
+# the corners t_k = 0 and t_k = 1
+SINGULARTOL = 1e-1
 
 # Symmetry-unique (m1, m2, m3, m4) branches of the same-spin J intermediate
 J_BRANCHES = ((0, 0, 0, 0), (0, 0, 0, 1), (0, 0, 1, 0), (0, 0, 1, 1),
@@ -77,9 +95,21 @@ def _exchange(eri, dm):
     return numpy.tensordot(eri, dm, axes=([1, 2], [0, 1]))
 
 
+def _partition(sv, tol, corner):
+    '''Masks of the zero-overlap pairs, the regular pairs, the near-zero pairs
+    removed from W and the near-zero pairs entering W with unit weight.  Bit j
+    of corner selects unit weight for the j-th near-zero pair.'''
+    zero = abs(sv) <= tol
+    near = ~zero & (abs(sv) < SINGULARTOL)
+    unit = numpy.zeros_like(near)
+    unit[near] = [(corner >> j) & 1 == 1 for j in range(near.sum())]
+    return zero, ~zero & ~near, near & ~unit, unit
+
+
 class _Pairing:
-    '''Lowdin pairing of the occupied orbitals of one spin of (x,w)'''
-    def __init__(self, s, cx, cw, nocc, tol):
+    '''Lowdin pairing of the occupied orbitals of one spin of (x,w) at one
+    near-zero corner'''
+    def __init__(self, s, cx, cw, nocc, tol, corner=0):
         nmo = cx.shape[1]
         dtype = numpy.result_type(cx, cw)
         self.nocc = nocc
@@ -97,17 +127,20 @@ class _Pairing:
             phase = 1.
         cxt = cxo.dot(u)
         cwt = cwo.dot(v)
-        nz = abs(sv) > tol
+        zero, reg, removed, unit = _partition(sv, tol, corner)
         self.phase = phase
-        self.tilde_s_prod = numpy.prod(sv[nz])
-        self.m = int(nocc - nz.sum())
+        # removed near-zero pairs carry the corner weight S_k - 1
+        self.tilde_s_prod = numpy.prod(sv[reg]) * numpy.prod(sv[removed] - 1)
+        self.m = int(zero.sum())
         self.singular_values = sv
 
-        # M^{(0)} = W + P^{xw} + P^{ww}, M^{(1)} = P^{xw}
-        cwz = cwt[:, ~nz]
-        cxz = cxt[:, ~nz]
+        # M^{(0)} = W + P^{xw} + P^{ww}, M^{(1)} = P^{xw}.  Near-zero pairs
+        # with unit weight enter W unscaled.
+        cwz = cwt[:, zero]
+        cxz = cxt[:, zero]
         m1 = cwz.dot(cxz.conj().T)
-        m0 = (cwt[:, nz] / sv[nz]).dot(cxt[:, nz].conj().T)
+        m0 = (cwt[:, reg] / sv[reg]).dot(cxt[:, reg].conj().T)
+        m0 = m0 + cwt[:, unit].dot(cxt[:, unit].conj().T)
         m0 = m0 + cwz.dot(cwz.conj().T) + m1
         self.mao = (m0, m1)
 
@@ -198,12 +231,13 @@ def _diff_spin(pa, pb, eri):
 
 
 def count_zero_pairs(s, cx, cw, nocc, tol):
-    '''Number m of zero-overlap occupied orbital pairs'''
+    '''Numbers of zero-overlap and near-zero occupied orbital pairs'''
     if nocc == 0:
-        return 0
+        return 0, 0
     socc = cx[:, :nocc].conj().T.dot(s).dot(cw[:, :nocc])
     sv = numpy.linalg.svd(socc, compute_uv=False)
-    return int((abs(sv) <= tol).sum())
+    zero, reg, removed, unit = _partition(sv, tol, 0)
+    return int(zero.sum()), int(removed.sum())
 
 
 def pair_layout(ma, mb, nmo, start):
@@ -311,18 +345,22 @@ def build(s, h, eri, refs, tol, dtype):
     '''Construct the slab of all ordered reference pairs.
 
     refs: list of (ca, cb, nocca, noccb), occupied orbitals first.
-    Returns (pairinfo, slab, scal, nref).
+    Returns (pairinfo, slab, scal, nref).  Rows k = x*nref+w of pairinfo and
+    scal hold the primary corner of each pair, followed by the other corner
+    combinations of pairs with near-zero singular values.
     '''
     nref = len(refs)
     nmo = refs[0][0].shape[1]
     nocca = refs[0][2]
     noccb = refs[0][3]
     infos = []
+    extra = []
+    ncorners = []
     end = 0
     for x in range(nref):
         for w in range(nref):
-            ma = count_zero_pairs(s, refs[x][0], refs[w][0], nocca, tol)
-            mb = count_zero_pairs(s, refs[x][1], refs[w][1], noccb, tol)
+            ma, na = count_zero_pairs(s, refs[x][0], refs[w][0], nocca, tol)
+            mb, nb = count_zero_pairs(s, refs[x][1], refs[w][1], noccb, tol)
             info, end = pair_layout(ma, mb, nmo, end)
             if x == w:
                 end = orthogonal_layout(info, nmo, end)
@@ -331,20 +369,36 @@ def build(s, h, eri, refs, tol, dtype):
             info[NOCCA] = nocca
             info[NOCCB] = noccb
             info[NMO] = nmo
+            info[NCORNER] = 2**(na + nb)
             infos.append(info)
-    pairinfo = numpy.asarray(infos)
+            ncorners.append((2**na, 2**nb))
+    # the other corner combinations follow all primary rows
+    for k in range(nref * nref):
+        infos[k][CSTART] = len(infos) + len(extra)
+        for c in range(1, infos[k][NCORNER]):
+            info, end = pair_layout(infos[k][MA], infos[k][MB], nmo, end)
+            info[MA:NMO+1] = infos[k][MA:NMO+1]
+            info[NCORNER] = 1
+            extra.append(info)
+    pairinfo = numpy.asarray(infos + extra)
     slab = numpy.zeros(end, dtype=dtype)
-    scal = numpy.zeros((nref*nref, NSCAL), dtype=dtype)
+    scal = numpy.zeros((len(pairinfo), NSCAL), dtype=dtype)
     for x in range(nref):
         for w in range(nref):
             k = x * nref + w
-            pa = _Pairing(s, refs[x][0], refs[w][0], nocca, tol)
-            pb = _Pairing(s, refs[x][1], refs[w][1], noccb, tol)
-            assert pa.m == pairinfo[k, MA] and pb.m == pairinfo[k, MB]
-            sa = _same_spin(pa, h, eri)
-            sb = _same_spin(pb, h, eri)
-            ab = _diff_spin(pa, pb, eri)
-            write_pair(slab, scal[k], pairinfo[k], pa, pb, sa, sb, ab)
+            nca, ncb = ncorners[k]
+            pas = [_Pairing(s, refs[x][0], refs[w][0], nocca, tol, c) for c in range(nca)]
+            pbs = [_Pairing(s, refs[x][1], refs[w][1], noccb, tol, c) for c in range(ncb)]
+            sas = [_same_spin(pa, h, eri) for pa in pas]
+            sbs = [_same_spin(pb, h, eri) for pb in pbs]
+            for ca in range(nca):
+                for cb in range(ncb):
+                    c = ca * ncb + cb
+                    row = k if c == 0 else pairinfo[k, CSTART] + c - 1
+                    pa, pb = pas[ca], pbs[cb]
+                    assert pa.m == pairinfo[row, MA] and pb.m == pairinfo[row, MB]
+                    ab = _diff_spin(pa, pb, eri)
+                    write_pair(slab, scal[row], pairinfo[row], pa, pb, sas[ca], sbs[cb], ab)
             if x == w:
                 write_orthogonal(slab, pairinfo[k], h, eri, refs[x][0], refs[x][1])
     return pairinfo, slab, scal, nref

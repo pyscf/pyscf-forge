@@ -32,13 +32,15 @@ void NOWICKzhamiltonian_general(double complex *h, double complex *s, const NOWI
                                 const int *dx, const int *dw);
 
 #if defined(NOWICK_X86_SIMD)
-void NOWICKdhs_row_avx2(double *h, double *s, const NOWICKEnv *env,
-                        const int *dx, const int *dws, int nw);
+void NOWICKdhs_row_avx2(double *h, double *s, const NOWICKEnv *env, const int64_t *info,
+                        const double *scal, const int *dx, const int *dws, int nw);
 void NOWICKzhs_row_avx2(double complex *h, double complex *s, const NOWICKEnv *env,
+                        const int64_t *info, const double complex *scal,
                         const int *dx, const int *dws, int nw);
-void NOWICKdhs_row_avx512(double *h, double *s, const NOWICKEnv *env,
-                          const int *dx, const int *dws, int nw);
+void NOWICKdhs_row_avx512(double *h, double *s, const NOWICKEnv *env, const int64_t *info,
+                          const double *scal, const int *dx, const int *dws, int nw);
 void NOWICKzhs_row_avx512(double complex *h, double complex *s, const NOWICKEnv *env,
+                          const int64_t *info, const double complex *scal,
                           const int *dx, const int *dws, int nw);
 #endif
 
@@ -147,32 +149,62 @@ void NOWICKhamiltonian_pairs(double *hout, double *sout, int *reqs, size_t nreq,
 }
 }
 
+#if defined(NOWICK_X86_SIMD)
+/* Packed row of one corner combination (info, scal) */
+static void hs_row(double *h, double *s, const NOWICKEnv *env, const int64_t *info,
+                   const double *scal, const int *dx, const int *dws, int nw, int cplx)
+{
+        if (env->simd == NOWICK_SIMD_AVX512) {
+                if (cplx) {
+                        NOWICKzhs_row_avx512((double complex *)h, (double complex *)s, env,
+                                             info, (const double complex *)scal, dx, dws, nw);
+                } else {
+                        NOWICKdhs_row_avx512(h, s, env, info, scal, dx, dws, nw);
+                }
+        } else {
+                if (cplx) {
+                        NOWICKzhs_row_avx2((double complex *)h, (double complex *)s, env,
+                                           info, (const double complex *)scal, dx, dws, nw);
+                } else {
+                        NOWICKdhs_row_avx2(h, s, env, info, scal, dx, dws, nw);
+                }
+        }
+}
+#endif
+
 static void hs_segment(double *h, double *s, const NOWICKEnv *env, const int *dx,
                        const int *dws, int nw, int cplx)
 {
-        const int64_t *info = env->pairinfo
-                + ((size_t)dx[NOWICK_DPARENT] * env->nref + dws[NOWICK_DPARENT]) * NOWICK_PAIRLEN;
+        const size_t es = cplx ? 2 : 1;
+        const size_t k = (size_t)dx[NOWICK_DPARENT] * env->nref + dws[NOWICK_DPARENT];
+        const int64_t *info = env->pairinfo + k * NOWICK_PAIRLEN;
+        const double *scal = (const double *)env->scal;
         double complex *zh = (double complex *)h;
         double complex *zs = (double complex *)s;
         int j;
 #if defined(NOWICK_X86_SIMD)
         if (info[NOWICK_MA] == 0 && info[NOWICK_MB] == 0
-            && dx[NOWICK_DPARENT] != dws[NOWICK_DPARENT]) {
-                if (env->simd == NOWICK_SIMD_AVX512) {
-                        if (cplx) {
-                                NOWICKzhs_row_avx512(zh, zs, env, dx, dws, nw);
-                        } else {
-                                NOWICKdhs_row_avx512(h, s, env, dx, dws, nw);
-                        }
-                        return;
-                } else if (env->simd == NOWICK_SIMD_AVX2) {
-                        if (cplx) {
-                                NOWICKzhs_row_avx2(zh, zs, env, dx, dws, nw);
-                        } else {
-                                NOWICKdhs_row_avx2(h, s, env, dx, dws, nw);
-                        }
-                        return;
+            && dx[NOWICK_DPARENT] != dws[NOWICK_DPARENT]
+            && env->simd != NOWICK_SIMD_NONE) {
+                /* sum the packed rows of every corner combination */
+                double *buf = NULL;
+                int64_t c;
+                size_t kc, i;
+                hs_row(h, s, env, info, scal + k * NOWICK_NSCAL * es, dx, dws, nw, cplx);
+                if (info[NOWICK_NCORNER] > 1) {
+                        buf = malloc(sizeof(double) * es * nw * 2);
                 }
+                for (c = 1; c < info[NOWICK_NCORNER]; c++) {
+                        kc = info[NOWICK_CSTART] + c - 1;
+                        hs_row(buf, buf + es * nw, env, env->pairinfo + kc * NOWICK_PAIRLEN,
+                               scal + kc * NOWICK_NSCAL * es, dx, dws, nw, cplx);
+                        for (i = 0; i < es * nw; i++) {
+                                h[i] += buf[i];
+                                s[i] += buf[es * nw + i];
+                        }
+                }
+                free(buf);
+                return;
         }
 #endif
         for (j = 0; j < nw; j++) {

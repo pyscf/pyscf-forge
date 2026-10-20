@@ -216,10 +216,12 @@ class WickEngine(lib.StreamObject):
                 for ca, cb, na, nb in refs]
         self._env = _wicks.build(s, h, eri, refs, self.tol, dtype)
         log.timer('Wick intermediates', *cput0)
-        pairinfo = self._env[0]
         nref = len(self.references)
+        pairinfo = self._env[0][:nref*nref]
         log.debug('zero-overlap pairs (m_a, m_b):\n%s',
                   pairinfo[:, :2].reshape(nref, nref, 2))
+        log.debug('near-zero corner combinations:\n%s',
+                  pairinfo[:, _wicks.NCORNER].reshape(nref, nref))
         log.debug('intermediate slab: %.1f MB', self._env[1].nbytes / 1e6)
         return self
 

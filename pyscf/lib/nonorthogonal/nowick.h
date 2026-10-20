@@ -20,7 +20,13 @@
  * (2021); 157, 204109 (2022) are built in Python (pyscf/nonorthogonal/
  * _wicks.py) and passed here as one contiguous slab.  Every ordered
  * reference pair (x,w) owns NOWICK_PAIRLEN int64 entries of pairinfo and
- * NOWICK_NSCAL scalars.  Offsets of unallocated tensors are -1.
+ * NOWICK_NSCAL scalars in row x*nref+w.  Offsets of unallocated tensors are
+ * -1.
+ *
+ * A pair with near-zero singular values is evaluated at the corners of its
+ * 1/S_k terms (see _wicks.py).  Row x*nref+w holds its primary corner
+ * combination, and the NOWICK_NCORNER-1 other combinations occupy the rows
+ * from NOWICK_CSTART.  Matrix elements are sums over the combinations.
  */
 
 #include <stdint.h>
@@ -43,7 +49,7 @@
         F(8,0)
 
 /* pairinfo layout */
-#define NOWICK_PAIRLEN  96
+#define NOWICK_PAIRLEN  98
 #define NOWICK_MA       0
 #define NOWICK_MB       1
 #define NOWICK_NOCCA    2
@@ -58,6 +64,9 @@
 #define NOWICK_OAA      93      /* (pq|rs) - (ps|rq), alpha */
 #define NOWICK_OBB      94
 #define NOWICK_OAB      95      /* (pq|rs), alpha pq, beta rs */
+/* near-zero corners, primary rows only */
+#define NOWICK_CSTART   96      /* row of the first other corner combination */
+#define NOWICK_NCORNER  97      /* number of corner combinations */
 /* offsets inside one same-spin block */
 #define NOWICK_X        0       /* X^{(mi)} */
 #define NOWICK_Y        2       /* Y^{(mi)} */

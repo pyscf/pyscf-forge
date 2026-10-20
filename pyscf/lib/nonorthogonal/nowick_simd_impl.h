@@ -32,10 +32,12 @@ typedef struct {
         ISA(vd) im;
 } ISA(vz);
 
-void NOWICKdhamiltonian(double *h, double *s, const NOWICKEnv *env,
-                        const int *dx, const int *dw);
-void NOWICKzhamiltonian(double complex *h, double complex *s, const NOWICKEnv *env,
-                        const int *dx, const int *dw);
+void NOWICKdhamiltonian_corner(double *h, double *s, const NOWICKEnv *env,
+                               const int64_t *info, const double *scal,
+                               const int *dx, const int *dw);
+void NOWICKzhamiltonian_corner(double complex *h, double complex *s, const NOWICKEnv *env,
+                               const int64_t *info, const double complex *scal,
+                               const int *dx, const int *dw);
 
 static void nw_labels(int *rows, int *cols, const int *hx, const int *px, int rx,
                       const int *hw, const int *pw, int rw, int nocc, int nmo)
@@ -120,7 +122,7 @@ ALWAYS_INLINE void ISA(vz_store)(double complex *p, ISA(vz) v)
 #define DT              double
 #define PT              ISA(vd)
 #define FN(name)        ISA(NOWICKd##name)
-#define HS_SCALAR       NOWICKdhamiltonian
+#define HS_SCALAR       NOWICKdhamiltonian_corner
 #define PZERO           ((ISA(vd)){0})
 #define PONE            ((ISA(vd)){0} + 1.)
 #define PADD(a, b)      ((a) + (b))
@@ -149,7 +151,7 @@ ALWAYS_INLINE void ISA(vz_store)(double complex *p, ISA(vz) v)
 #define DT              double complex
 #define PT              ISA(vz)
 #define FN(name)        ISA(NOWICKz##name)
-#define HS_SCALAR       NOWICKzhamiltonian
+#define HS_SCALAR       NOWICKzhamiltonian_corner
 #define PZERO           ((ISA(vz)){(ISA(vd)){0}, (ISA(vd)){0}})
 #define PONE            ((ISA(vz)){(ISA(vd)){0} + 1., (ISA(vd)){0}})
 #define PADD(a, b)      ISA(vz_add)(a, b)
