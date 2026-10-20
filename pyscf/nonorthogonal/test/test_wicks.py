@@ -186,6 +186,16 @@ class KnownValues(unittest.TestCase):
         self.assertEqual(m[0, 2].tolist(), [1, 0])
         self.assertEqual(m[0, 3].tolist(), [2, 1])
 
+    def test_unsorted_determinants(self):
+        refs = _references()
+        dets = _dets(refs, 4, 2, 10)
+        wicks = _engine(refs)
+        h, s = wicks.build_matrices(dets)
+        perm = numpy.random.RandomState(11).permutation(len(dets))
+        h1, s1 = wicks.build_matrices([dets[k] for k in perm])
+        self.assertAlmostEqual(abs(h1 - h[perm][:, perm]).max(), 0, 12)
+        self.assertAlmostEqual(abs(s1 - s[perm][:, perm]).max(), 0, 12)
+
     def test_complex(self):
         refs = _references(cplx=True)
         self.check(refs, _dets(refs, 6, 3, 6))

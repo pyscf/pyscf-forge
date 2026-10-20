@@ -110,18 +110,14 @@ def _parity(seq):
     return -1 if odd else 1
 
 
-def _excitation_phase(nocc, holes, parts):
-    '''Fermionic sign of removing holes (descending) and adding particles
-    (ascending) on the occupied-first orbital string {0..nocc-1}.'''
-    occ = set(range(nocc))
-    odd = 0
-    for i in sorted(holes, reverse=True):
-        odd ^= sum(1 for k in occ if k < i) & 1
-        occ.discard(i)
-    for a in sorted(parts):
-        odd ^= sum(1 for k in occ if k < a) & 1
-        occ.add(a)
-    return (-1 if odd else 1), occ
+def _occ_positions(occ, order, pos):
+    '''Occupied MOs, occupied-first positions and order, number of occupied
+    MOs, and whether the occupied MOs already come first, for one spin of a
+    reference'''
+    nocc = int(occ.sum())
+    aufbau = bool(occ[:nocc].all())
+    return (frozenset(numpy.where(occ)[0].tolist()), pos.tolist(), order.tolist(),
+            nocc, aufbau)
 
 
 class WickEngine(lib.StreamObject):
@@ -211,7 +207,8 @@ class WickEngine(lib.StreamObject):
             posa = numpy.argsort(orda)
             posb = numpy.argsort(ordb)
             refs.append((ca[:, orda], cb[:, ordb], int(occa.sum()), int(occb.sum())))
-            self._occpos.append((orda, ordb, posa, posb, occa, occb))
+            self._occpos.append(tuple(_occ_positions(occ, order, pos)
+                                      for occ, order, pos in ((occa, orda, posa), (occb, ordb, posb))))
             if numpy.iscomplexobj(ca) or numpy.iscomplexobj(cb):
                 dtype = numpy.complex128
         refs = [(numpy.asarray(ca, dtype=dtype), numpy.asarray(cb, dtype=dtype), na, nb)
@@ -233,36 +230,38 @@ class WickEngine(lib.StreamObject):
             self.build()
         dets = list(dets)
         kmax = max([1] + [max(d.rank) for d in dets])
-        rec = numpy.zeros((len(dets), _wicks.DHEAD + 4 * kmax), dtype=numpy.int32)
-        for k, d in enumerate(dets):
-            if not 0 <= d.parent < len(self.references):
+        nref = len(self.references)
+        rows = []
+        for d in dets:
+            if not 0 <= d.parent < nref:
                 raise ValueError('%s: no such reference' % d)
-            orda, ordb, posa, posb, occa, occb = self._occpos[d.parent]
-            sign = 1
-            osign = 1
-            rec[k, 0] = d.parent
-            rec[k, 1:3] = d.rank
-            for spin, (holes, parts, order, pos, occ) in enumerate(
-                    ((d.alpha_holes, d.alpha_particles, orda, posa, occa),
-                     (d.beta_holes, d.beta_particles, ordb, posb, occb))):
-                if not all(occ[i] for i in holes) or any(occ[a] for a in parts):
+            sign = osign = 1
+            row = [d.parent, len(d.alpha_holes), len(d.beta_holes), 0, 0]
+            for holes, parts, (occ, pos, order, nocc, aufbau) in (
+                    (d.alpha_holes, d.alpha_particles, self._occpos[d.parent][0]),
+                    (d.beta_holes, d.beta_particles, self._occpos[d.parent][1])):
+                if (not all(i in occ for i in holes)
+                        or any(a in occ or not 0 <= a < len(pos) for a in parts)):
                     raise ValueError('%s: holes must be occupied and particles '
                                      'virtual in the parent' % d)
-                nocc = int(occ.sum())
                 hp = sorted(pos[i] for i in holes)
                 pp = sorted(pos[a] for a in parts)
-                phase, occset = _excitation_phase(nocc, hp, pp)
-                # sign between occupied-first and original MO order
-                parity = _parity(order[p] for p in sorted(occset))
-                sign *= phase * parity
-                osign *= parity
                 r = len(hp)
-                base = _wicks.DHEAD + 2 * kmax * spin
-                rec[k, base:base+r] = hp
-                rec[k, base+kmax:base+kmax+r] = pp
-            rec[k, 3] = sign
-            rec[k, 4] = osign
-        return rec, kmax
+                # removing the holes (descending) and creating the particles
+                # (ascending) on the occupied-first string {0..nocc-1}
+                if (sum(hp) + r * (nocc - r) + r * (r - 1) // 2) & 1:
+                    sign = -sign
+                if not aufbau:
+                    # sign between occupied-first and original MO order
+                    occset = sorted(set(range(nocc)).difference(hp).union(pp))
+                    if _parity(order[p] for p in occset) < 0:
+                        sign = -sign
+                        osign = -osign
+                row += hp + [0] * (kmax - r) + pp + [0] * (kmax - r)
+            row[3] = sign
+            row[4] = osign
+            rows.append(row)
+        return numpy.array(rows, dtype=numpy.int32).reshape(-1, _wicks.DHEAD + 4 * kmax), kmax
 
     @property
     def energy_nuc(self):
@@ -293,10 +292,14 @@ class WickEngine(lib.StreamObject):
     def build_matrices(self, dets):
         '''Dense Hamiltonian and overlap matrices over dets'''
         rec, kmax = self._records(dets)
-        order = numpy.argsort(rec[:, 0], kind='stable')
+        parents = rec[:, 0]
+        if numpy.all(parents[1:] >= parents[:-1]):
+            return _wicks.hamiltonian_matrix(self._env, rec, kmax, self.energy_nuc)
+        # The C driver needs records sorted by parent
+        order = numpy.argsort(parents, kind='stable')
         h, s = _wicks.hamiltonian_matrix(self._env, rec[order], kmax, self.energy_nuc)
         inv = numpy.argsort(order)
-        return h[inv[:, None], inv], s[inv[:, None], inv]
+        return h[inv][:, inv], s[inv][:, inv]
 
     def occupations(self, parent):
         '''Boolean alpha and beta occupations of a reference'''
