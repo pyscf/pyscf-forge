@@ -172,12 +172,14 @@ class NOCI(lib.StreamObject):
         log.info('tol = %g', self.tol)
         return self
 
-    def build(self):
-        '''Construct the Wick intermediates of every reference pair'''
+    def build(self, h1e=None, eri=None, ovlp=None, ecore=None):
+        '''Construct the Wick intermediates of every reference pair for a
+        Hamiltonian in the AO basis.  See WickEngine.build for the arguments;
+        those not given are taken from the references (get_hamiltonian).'''
         self.wicks = WickEngine(self.mol, self.references, tol=self.tol)
         self.wicks.verbose = self.verbose
         self.wicks.stdout = self.stdout
-        self.wicks.build()
+        self.wicks.build(h1e, eri, ovlp, ecore)
         return self
 
     def make_space(self):
@@ -189,9 +191,15 @@ class NOCI(lib.StreamObject):
             dets.extend(excitations(self.wicks, parent, self.level))
         return dets
 
-    def kernel(self, dets=None):
+    def kernel(self, h1e=None, eri=None, ovlp=None, ecore=None, dets=None):
         '''
         Kwargs:
+            h1e, eri, ovlp, ecore :
+                Hamiltonian in the AO basis: core Hamiltonian, two-electron
+                integrals (ij|kl), AO overlap and constant energy.  Those not
+                given are taken from the first reference that is an SCF object
+                (get_hcore, get_ovlp, energy_nuc and its incore integrals), or
+                computed from mol.
             dets : list of Determinant
                 The NOCI space.  Default is make_space().
 
@@ -199,7 +207,7 @@ class NOCI(lib.StreamObject):
             e_tot, ci
         '''
         self.dump_flags()
-        self.build()
+        self.build(h1e, eri, ovlp, ecore)
         if dets is None:
             dets = self.make_space()
         self.dets = list(dets)

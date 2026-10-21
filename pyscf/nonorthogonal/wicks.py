@@ -38,10 +38,11 @@ References:
 import numpy
 from pyscf import lib
 from pyscf import scf
+from pyscf import ao2mo
 from pyscf.lib import logger
 from pyscf.nonorthogonal import _wicks
 
-__all__ = ['Determinant', 'WickEngine']
+__all__ = ['Determinant', 'WickEngine', 'get_hamiltonian']
 
 
 class Determinant:
@@ -110,6 +111,37 @@ def _parity(seq):
     return -1 if odd else 1
 
 
+def get_hamiltonian(mol, references):
+    '''AO overlap, core Hamiltonian, two-electron integrals and constant energy.
+
+    They are taken from the first reference that is an SCF object, through
+    get_ovlp, get_hcore, energy_nuc and its incore integrals, so that changes
+    to these methods carry over.  Without an SCF reference they are computed
+    from mol.  The two-electron integrals are always the exact 4-index AO
+    integrals, as the Wick intermediates need their full transformations.
+
+    Returns:
+        h1e, eri, ovlp, ecore with eri of shape (nao, nao, nao, nao)
+    '''
+    mf = next((r for r in references if isinstance(r, scf.hf.SCF)), None)
+    if mf is None:
+        ovlp = mol.intor_symmetric('int1e_ovlp')
+        h1e = scf.hf.get_hcore(mol)
+        ecore = mol.energy_nuc()
+        eri = None
+    else:
+        ovlp = mf.get_ovlp()
+        h1e = mf.get_hcore()
+        ecore = mf.energy_nuc()
+        eri = getattr(mf, '_eri', None)
+    nao = ovlp.shape[0]
+    if eri is None:
+        eri = mol.intor('int2e', aosym='s1')
+    else:
+        eri = ao2mo.restore(1, eri, nao)
+    return h1e, eri.reshape(nao, nao, nao, nao), ovlp, ecore
+
+
 def _occ_positions(occ, order, pos):
     '''Occupied MOs, occupied-first positions and order, number of occupied
     MOs, and whether the occupied MOs already come first, for one spin of a
@@ -127,15 +159,18 @@ class WickEngine(lib.StreamObject):
         tol : float
             Singular values of the occupied orbital overlap below tol are
             treated as zero-overlap orbital pairs.
-        with_nuc : bool
-            Whether hamiltonian elements include E_nuc * S.
+
+    Saved results:
+        ecore : float
+            Constant energy of the Hamiltonian passed to build, included as
+            ecore * S in the Hamiltonian elements.
 
     Examples:
 
     >>> mol = gto.M(atom='H 0 0 0; H 0 0 1.5', basis='cc-pvdz')
     >>> mf0 = scf.RHF(mol).run()
     >>> mf1 = scf.UHF(mol).run()
-    >>> wicks = nonorthogonal.WickEngine(mol, [mf0, mf1])
+    >>> wicks = nonorthogonal.WickEngine(mol, [mf0, mf1]).build()
     >>> d0 = nonorthogonal.Determinant(0)
     >>> d1 = nonorthogonal.Determinant(1, alpha_holes=[0], alpha_particles=[2])
     >>> h, s = wicks.matrix_element(d0, d1)
@@ -143,20 +178,17 @@ class WickEngine(lib.StreamObject):
     '''
 
     tol = 1e-10
-    with_nuc = True
 
-    _keys = {'mol', 'references', 'tol', 'with_nuc', 'nmo', 'nelec'}
+    _keys = {'mol', 'references', 'tol', 'nmo', 'nelec', 'ecore'}
 
-    def __init__(self, mol, references, tol=None, hcore=None, eri=None, ovlp=None):
+    def __init__(self, mol, references, tol=None):
         self.mol = mol
         self.verbose = mol.verbose
         self.stdout = mol.stdout
         self.references = list(references)
         if tol is not None:
             self.tol = tol
-        self._hcore = hcore
-        self._eri = eri
-        self._ovlp = ovlp
+        self.ecore = None
         self._env = None
         self._refs = None
 
@@ -184,18 +216,36 @@ class WickEngine(lib.StreamObject):
         log.info('tol = %g', self.tol)
         return self
 
-    def build(self):
-        '''Construct the intermediates of every ordered reference pair'''
+    def build(self, h1e=None, eri=None, ovlp=None, ecore=None):
+        '''Construct the intermediates of every ordered reference pair for a
+        Hamiltonian in the AO basis.
+
+        Kwargs:
+            h1e : (nao, nao) ndarray
+                Core Hamiltonian.
+            eri : ndarray
+                Two-electron integrals (ij|kl), as (nao, nao, nao, nao) or
+                (nao*nao, nao*nao), with 1-fold symmetry.
+            ovlp : (nao, nao) ndarray
+                AO overlap.
+            ecore : float
+                Constant energy.
+
+        Arguments that are not given are taken from get_hamiltonian.
+        '''
         log = logger.new_logger(self)
         cput0 = (logger.process_clock(), logger.perf_counter())
-        mol = self.mol
-        s = self._ovlp if self._ovlp is not None else mol.intor_symmetric('int1e_ovlp')
-        h = self._hcore if self._hcore is not None else scf.hf.get_hcore(mol)
-        eri = self._eri
-        if eri is None:
-            eri = mol.intor('int2e', aosym='s1')
+        if h1e is None or eri is None or ovlp is None or ecore is None:
+            defaults = get_hamiltonian(self.mol, self.references)
+            h1e = defaults[0] if h1e is None else h1e
+            eri = defaults[1] if eri is None else eri
+            ovlp = defaults[2] if ovlp is None else ovlp
+            ecore = defaults[3] if ecore is None else ecore
+        s = numpy.asarray(ovlp)
+        h = numpy.asarray(h1e)
         nao = s.shape[0]
         eri = numpy.asarray(eri).reshape(nao, nao, nao, nao)
+        self.ecore = ecore
 
         refs = []
         self._occpos = []
@@ -263,10 +313,6 @@ class WickEngine(lib.StreamObject):
             rows.append(row)
         return numpy.array(rows, dtype=numpy.int32).reshape(-1, _wicks.DHEAD + 4 * kmax), kmax
 
-    @property
-    def energy_nuc(self):
-        return self.mol.energy_nuc() if self.with_nuc else 0.
-
     def overlap(self, bra, ket):
         '''<bra|ket>'''
         rec, kmax = self._records([bra, ket])
@@ -275,13 +321,13 @@ class WickEngine(lib.StreamObject):
     def matrix_element(self, bra, ket):
         '''(<bra|H|ket>, <bra|ket>)'''
         rec, kmax = self._records([bra, ket])
-        h, s = _wicks.hamiltonian_pairs(self._env, rec, kmax, [[0, 1]], self.energy_nuc)
+        h, s = _wicks.hamiltonian_pairs(self._env, rec, kmax, [[0, 1]], self.ecore)
         return h[0], s[0]
 
     def matrix_elements(self, dets, pairs, general=False):
         '''Hamiltonian and overlap elements for (bra, ket) index pairs of dets'''
         rec, kmax = self._records(dets)
-        return _wicks.hamiltonian_pairs(self._env, rec, kmax, pairs, self.energy_nuc,
+        return _wicks.hamiltonian_pairs(self._env, rec, kmax, pairs, self.ecore,
                                         general=general)
 
     def overlaps(self, dets, pairs):
@@ -294,10 +340,10 @@ class WickEngine(lib.StreamObject):
         rec, kmax = self._records(dets)
         parents = rec[:, 0]
         if numpy.all(parents[1:] >= parents[:-1]):
-            return _wicks.hamiltonian_matrix(self._env, rec, kmax, self.energy_nuc)
+            return _wicks.hamiltonian_matrix(self._env, rec, kmax, self.ecore)
         # The C driver needs records sorted by parent
         order = numpy.argsort(parents, kind='stable')
-        h, s = _wicks.hamiltonian_matrix(self._env, rec[order], kmax, self.energy_nuc)
+        h, s = _wicks.hamiltonian_matrix(self._env, rec[order], kmax, self.ecore)
         inv = numpy.argsort(order)
         return h[inv][:, inv], s[inv][:, inv]
 

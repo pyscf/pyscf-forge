@@ -21,5 +21,5 @@ matrix elements between arbitrary excitations of nonorthogonal references,
 and nonorthogonal configuration interaction (NOCI) over them.
 '''
 
-from pyscf.nonorthogonal.wicks import Determinant, WickEngine
+from pyscf.nonorthogonal.wicks import Determinant, WickEngine, get_hamiltonian
 from pyscf.nonorthogonal.noci import NOCI, NOCISD, NOCISDT, excitations

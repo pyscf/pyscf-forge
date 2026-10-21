@@ -241,7 +241,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(wicks.overlap(d1, d0), s_ref[1, 0].real, 9)
         # The RHF determinant reproduces the SCF energy
         self.assertAlmostEqual(wicks.matrix_element(d0, d0)[0], mf.e_tot, 9)
-        wicks.with_nuc = False
+        wicks.build(ecore=0)
         self.assertAlmostEqual(wicks.matrix_element(d0, d0)[0],
                                mf.e_tot - mol.energy_nuc(), 9)
 

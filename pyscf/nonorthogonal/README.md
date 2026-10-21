@@ -21,12 +21,16 @@ nonorthogonal.NOCI(mol, refs).run()            # reference NOCI
 nonorthogonal.NOCISD(mol, refs).run()          # singles and doubles of every reference
 mynoci = nonorthogonal.NOCI(mol, refs, level=3).run()   # any excitation level
 mynoci.e_tot, mynoci.ci, mynoci.dets
+
+# any Hamiltonian in the AO basis
+h1e, eri, ovlp, ecore = nonorthogonal.get_hamiltonian(mol, refs)
+nonorthogonal.NOCISD(mol, refs).kernel(h1e=h1e, eri=eri, ovlp=ovlp, ecore=ecore)
 ```
 
 Individual matrix elements are available from `WickEngine`:
 
 ```python
-wicks = nonorthogonal.WickEngine(mol, refs)
+wicks = nonorthogonal.WickEngine(mol, refs).build()
 d0 = nonorthogonal.Determinant(0)
 d1 = nonorthogonal.Determinant(1, alpha_holes=[2], alpha_particles=[3])
 h, s = wicks.matrix_element(d0, d1)
@@ -38,7 +42,7 @@ See `examples/nonorthogonal/` for complete examples.
 ## Modules
 
 - `pyscf.nonorthogonal.noci`: `NOCI`, `NOCISD`, `NOCISDT` and `excitations`.
-- `pyscf.nonorthogonal.wicks`: `WickEngine` and `Determinant`.
+- `pyscf.nonorthogonal.wicks`: `WickEngine`, `Determinant` and `get_hamiltonian`.
 - `pyscf.nonorthogonal._wicks`: reference-pair intermediates and the ctypes
   binding to `libnonorthwick` (`pyscf/lib/nonorthogonal`).
 
@@ -53,8 +57,13 @@ See `examples/nonorthogonal/` for complete examples.
   occupied MOs in ascending MO index order, alpha before beta, as in
   `pyscf.fci`.
 - Complex matrix elements are Hermitian, with the bra conjugated.
-- Hamiltonian elements include `E_nuc * S` unless `WickEngine.with_nuc` is
-  False.
+- The Hamiltonian is given in the AO basis as `h1e`, `eri`, `ovlp` and
+  `ecore` to `NOCI.kernel` (or `WickEngine.build`), and Hamiltonian elements
+  include `ecore * S`.  Arguments that are not given are taken from the first
+  reference that is an SCF object, through its `get_hcore`, `get_ovlp`,
+  `energy_nuc` and incore integrals, and are otherwise computed from `mol`
+  (`get_hamiltonian`).  The two-electron integrals are the full 4-index AO
+  integrals, as the intermediates need their 4-index transformations.
 
 ## Implementation notes
 
