@@ -237,10 +237,21 @@ ALWAYS_INLINE void FN(hs_m0_pkt)(DT *hout, DT *sout, const NOWICKEnv *env,
         PSTORE(sout, PMUL(deta, detb));
 }
 
+/* One kernel for each (L_a, L_b) */
+#define PKT_FIXED(LA, LB) \
+NOINLINE void FN(hs_m0_##LA##_##LB)(DT *h, DT *s, const NOWICKEnv *env, const int64_t *info, \
+                                    const DT *scal, size_t n, const FN(Labels) *lba, \
+                                    const FN(Labels) *lbb) \
+{ \
+        FN(hs_m0_pkt)(h, s, env, info, scal, n, lba, LA, lbb, LB); \
+}
+NOWICK_LALB_CASES(PKT_FIXED)
+#undef PKT_FIXED
+
 /* (L_a, L_b) with L_a + L_b <= NOWICK_MAXL */
 #define PKT_CASE(LA, LB) \
         case LA * (NOWICK_MAXL + 1) + LB: \
-                FN(hs_m0_pkt)(h, s, env, info, scal, n, lba, LA, lbb, LB); \
+                FN(hs_m0_##LA##_##LB)(h, s, env, info, scal, n, lba, lbb); \
                 break;
 
 static void FN(hs_m0_dispatch)(DT *h, DT *s, const NOWICKEnv *env, const int64_t *info,
@@ -277,7 +288,16 @@ void FN(hs_row)(DT *hrow, DT *srow, const NOWICKEnv *env, const int64_t *info,
         int counts[(NOWICK_MAXL+1)*(NOWICK_MAXL+1)];
         FN(Labels) lba, lbb;
         DT h[NLANE], s[NLANE];
-        int j, k, key, la, lb, cnt;
+        const int *ha, *pa, *hb, *pb;
+        int i, j, k, key, la, lb, cnt;
+
+        /* The bra labels are shared by every lane of the row */
+        for (k = 0; k < NLANE; k++) {
+                nw_labels(lba.rows[k], lba.cols[k], dx+NOWICK_DHEAD, dx+NOWICK_DHEAD+kmax, rxa,
+                          NULL, NULL, 0, nocca, n);
+                nw_labels(lbb.rows[k], lbb.cols[k], dx+NOWICK_DHEAD+2*kmax, dx+NOWICK_DHEAD+3*kmax,
+                          rxb, NULL, NULL, 0, noccb, n);
+        }
 
         memset(counts, 0, sizeof(counts));
         for (j = 0; j <= nw; j++) {
@@ -313,16 +333,21 @@ void FN(hs_row)(DT *hrow, DT *srow, const NOWICKEnv *env, const int64_t *info,
                         lb = key % (NOWICK_MAXL + 1);
                         j--;    /* revisit the flush step */
                 }
+                /* Ket labels of each lane, after the bra labels */
                 for (k = 0; k < NLANE; k++) {
                         dw = dws + (size_t)bins[key][k] * stride;
-                        nw_labels(lba.rows[k], lba.cols[k],
-                                   dx+NOWICK_DHEAD, dx+NOWICK_DHEAD+kmax, rxa,
-                                   dw+NOWICK_DHEAD, dw+NOWICK_DHEAD+kmax, dw[NOWICK_DRA],
-                                   nocca, n);
-                        nw_labels(lbb.rows[k], lbb.cols[k],
-                                   dx+NOWICK_DHEAD+2*kmax, dx+NOWICK_DHEAD+3*kmax, rxb,
-                                   dw+NOWICK_DHEAD+2*kmax, dw+NOWICK_DHEAD+3*kmax, dw[NOWICK_DRB],
-                                   noccb, n);
+                        ha = dw + NOWICK_DHEAD;
+                        pa = ha + kmax;
+                        hb = pa + kmax;
+                        pb = hb + kmax;
+                        for (i = 0; i < la - rxa; i++) {
+                                lba.rows[k][rxa+i] = (int)n - nocca + ha[i];
+                                lba.cols[k][rxa+i] = pa[i];
+                        }
+                        for (i = 0; i < lb - rxb; i++) {
+                                lbb.rows[k][rxb+i] = (int)n - noccb + hb[i];
+                                lbb.cols[k][rxb+i] = pb[i];
+                        }
                 }
                 FN(hs_m0_dispatch)(h, s, env, info, scal, n, &lba, la, &lbb, lb);
                 for (k = 0; k < cnt; k++) {

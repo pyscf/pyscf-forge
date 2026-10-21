@@ -25,6 +25,7 @@
 #include "nowick.h"
 
 #define ALWAYS_INLINE   static inline __attribute__((always_inline))
+#define NOINLINE        static __attribute__((noinline))
 
 typedef double ISA(vd) __attribute__((vector_size(8 * NLANE)));
 typedef struct {
