@@ -132,6 +132,7 @@ settings = {
     'long_description_content_type': 'text/markdown',
     'author': metadata.get('AUTHOR', None),
     'author_email': metadata.get('AUTHOR_EMAIL', None),
+    'python_requires': '>=3.9',
     'install_requires': metadata.get('DEPENDENCIES', []),
     'extras_require': metadata.get('EXTRAS', {}),
     'cmdclass': {'build_py': CMakeBuildPy},
