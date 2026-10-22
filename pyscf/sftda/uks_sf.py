@@ -181,6 +181,10 @@ class TDA_SF(uhf_sf.TDA_SF):
         from pyscf.grad import tduks_sf
         return tduks_sf.Gradients(self)
 
+    def nac_method(self):
+        from pyscf.nac import tduks_sf
+        return tduks_sf.NAC(self)
+
 class CasidaTDDFT(TDA_SF):
     '''Solve the Casida TDDFT formula
        [ A  B][X]

@@ -109,6 +109,10 @@ This configuration allows Python to locate and load the new `pp_rpa.py` module f
 Note that the `pyscf` core `tdscf` folder already contains an `__init__.py` file.
 To avoid overwriting the existing `__init__.py` file in `pyscf` during the installation of `pyscf-forge`,
 you should not add an `__init__.py` file in the `pyscf-forge/pyscf/tdscf` directory.
+CI fails if any `__init__.py` in `pyscf-forge` has a counterpart in the installed `pyscf`.
+Because the package's `__init__.py` comes from `pyscf` core, `import pyscf.tdscf` (or any other directory that also exists in `pyscf` core) does not import forge modules such as `pp_rpa`; it must be imported explicitly (`from pyscf.tdscf import pp_rpa`).
+For the same reason, code in `pp_rpa.py` that runs at import time, such as attaching methods to existing classes, does not run until then,
+so prefer methods that import the module lazily (e.g. `def nac_method(self): from pyscf.nac import tduks_sf; ...`).
 
 The structure of the core packages and the components of `pyscf-forge` can be organized as follows:
 ```
