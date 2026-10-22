@@ -1,0 +1,357 @@
+#!/usr/bin/env python
+#
+# Copyright 2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+'''
+Matrix elements between arbitrary excitations of nonorthogonal reference
+determinants with the extended nonorthogonal Wick theorem.
+
+A Determinant is an excitation of one reference: occupied orbitals of the
+reference given in ``*_holes`` are replaced by virtual orbitals in
+``*_particles`` (indices of the reference's MO coefficients).  The
+determinant is the Slater determinant of its occupied MOs in ascending MO
+index order, alpha orbitals before beta orbitals, which is the convention of
+pyscf.fci.
+
+Once the intermediates of every ordered reference pair are built, the cost of
+a matrix element depends only on the excitation ranks and the numbers of
+zero-overlap orbital pairs, not on the basis size.
+
+References:
+    H. G. A. Burton, J. Chem. Phys. 154, 144109 (2021)
+    H. G. A. Burton, J. Chem. Phys. 157, 204109 (2022)
+'''
+
+import numpy
+from pyscf import lib
+from pyscf import scf
+from pyscf import ao2mo
+from pyscf.lib import logger
+from pyscf.nonorthogonal import _wicks
+
+__all__ = ['Determinant', 'WickEngine', 'get_hamiltonian']
+
+
+class Determinant:
+    '''Excitation of the reference determinant ``parent``.
+
+    Args:
+        parent : int
+            Index of the reference in WickEngine.references.
+        alpha_holes, alpha_particles, beta_holes, beta_particles : lists of int
+            MO indices of the parent reference.  Each spin must have as many
+            holes as particles.  The order within a list does not matter.
+    '''
+    def __init__(self, parent, alpha_holes=(), alpha_particles=(),
+                 beta_holes=(), beta_particles=()):
+        self.parent = int(parent)
+        self.alpha_holes = tuple(sorted(int(i) for i in alpha_holes))
+        self.alpha_particles = tuple(sorted(int(i) for i in alpha_particles))
+        self.beta_holes = tuple(sorted(int(i) for i in beta_holes))
+        self.beta_particles = tuple(sorted(int(i) for i in beta_particles))
+        if (len(self.alpha_holes) != len(self.alpha_particles) or
+                len(self.beta_holes) != len(self.beta_particles)):
+            raise ValueError('Each spin needs as many holes as particles')
+        if (len(set(self.alpha_holes)) != len(self.alpha_holes) or
+                len(set(self.alpha_particles)) != len(self.alpha_particles) or
+                len(set(self.beta_holes)) != len(self.beta_holes) or
+                len(set(self.beta_particles)) != len(self.beta_particles)):
+            raise ValueError('Repeated orbital in an excitation')
+
+    @property
+    def rank(self):
+        return len(self.alpha_holes), len(self.beta_holes)
+
+    def __repr__(self):
+        return ('Determinant(%d, alpha %s->%s, beta %s->%s)' %
+                (self.parent, self.alpha_holes, self.alpha_particles,
+                 self.beta_holes, self.beta_particles))
+
+
+def _reference_orbitals(ref):
+    '''(ca, cb, occa, occb) of an SCF object or a (mo_coeff, mo_occ) pair'''
+    if isinstance(ref, scf.hf.SCF):
+        if not isinstance(ref, (scf.hf.RHF, scf.uhf.UHF)):
+            raise NotImplementedError('%s reference: only RHF, ROHF and UHF '
+                                      'references are supported' % ref.__class__.__name__)
+        mo_coeff, mo_occ = ref.mo_coeff, ref.mo_occ
+    else:
+        mo_coeff, mo_occ = ref
+    mo_coeff = numpy.asarray(mo_coeff)
+    mo_occ = numpy.asarray(mo_occ)
+    if mo_coeff.ndim == 3:
+        ca, cb = mo_coeff
+        occa = mo_occ[0] > 0
+        occb = mo_occ[1] > 0
+    else:
+        ca = cb = mo_coeff
+        occa = mo_occ > 0
+        occb = mo_occ > 1
+    return ca, cb, occa, occb
+
+
+def _parity(seq):
+    '''Parity of the permutation sorting seq: +1 or -1'''
+    seq = list(seq)
+    odd = 0
+    for i in range(len(seq)):
+        for j in range(i+1, len(seq)):
+            if seq[i] > seq[j]:
+                odd ^= 1
+    return -1 if odd else 1
+
+
+def get_hamiltonian(mol, references):
+    '''AO overlap, core Hamiltonian, two-electron integrals and constant energy.
+
+    They are taken from the first reference that is an SCF object, through
+    get_ovlp, get_hcore, energy_nuc and its incore integrals, so that changes
+    to these methods carry over.  Without an SCF reference they are computed
+    from mol.  The two-electron integrals are always the exact 4-index AO
+    integrals, as the Wick intermediates need their full transformations.  A
+    density-fitted reference therefore does not reproduce mf.e_tot exactly.
+
+    Returns:
+        h1e, eri, ovlp, ecore with eri of shape (nao, nao, nao, nao)
+    '''
+    mf = next((r for r in references if isinstance(r, scf.hf.SCF)), None)
+    if mf is None:
+        ovlp = mol.intor_symmetric('int1e_ovlp')
+        h1e = scf.hf.get_hcore(mol)
+        ecore = mol.energy_nuc()
+        eri = None
+    else:
+        ovlp = mf.get_ovlp()
+        h1e = mf.get_hcore()
+        ecore = mf.energy_nuc()
+        eri = getattr(mf, '_eri', None)
+    nao = ovlp.shape[0]
+    if eri is None:
+        eri = mol.intor('int2e', aosym='s1')
+    else:
+        eri = ao2mo.restore(1, eri, nao)
+    return h1e, eri.reshape(nao, nao, nao, nao), ovlp, ecore
+
+
+def _occ_positions(occ, order, pos):
+    '''Occupied MOs, occupied-first positions and order, number of occupied
+    MOs, and whether the occupied MOs already come first, for one spin of a
+    reference'''
+    nocc = int(occ.sum())
+    aufbau = bool(occ[:nocc].all())
+    return (frozenset(numpy.where(occ)[0].tolist()), pos.tolist(), order.tolist(),
+            nocc, aufbau)
+
+
+class WickEngine(lib.StreamObject):
+    '''Extended nonorthogonal Wick theorem matrix elements.
+
+    Attributes:
+        tol : float
+            Singular values of the occupied orbital overlap below tol are
+            treated as zero-overlap orbital pairs.
+
+    Saved results:
+        ecore : float
+            Constant energy of the Hamiltonian passed to build, included as
+            ecore * S in the Hamiltonian elements.
+
+    Examples:
+
+    >>> mol = gto.M(atom='H 0 0 0; H 0 0 1.5', basis='cc-pvdz')
+    >>> mf0 = scf.RHF(mol).run()
+    >>> mf1 = scf.UHF(mol).run()
+    >>> wicks = nonorthogonal.WickEngine(mol, [mf0, mf1]).build()
+    >>> d0 = nonorthogonal.Determinant(0)
+    >>> d1 = nonorthogonal.Determinant(1, alpha_holes=[0], alpha_particles=[2])
+    >>> h, s = wicks.matrix_element(d0, d1)
+    >>> H, S = wicks.build_matrices([d0, d1])
+    '''
+
+    tol = 1e-10
+
+    _keys = {'mol', 'references', 'tol', 'nmo', 'nelec', 'ecore'}
+
+    def __init__(self, mol, references, tol=None):
+        self.mol = mol
+        self.verbose = mol.verbose
+        self.stdout = mol.stdout
+        self.references = list(references)
+        if tol is not None:
+            self.tol = tol
+        self.ecore = None
+        self._env = None
+        self._refs = None
+
+        orbs = [_reference_orbitals(r) for r in self.references]
+        if not orbs:
+            raise ValueError('At least one reference is required')
+        nmo = orbs[0][0].shape[1]
+        if nmo > _wicks.MAXMO:
+            raise NotImplementedError('More than %d MOs' % _wicks.MAXMO)
+        nelec = (int(orbs[0][2].sum()), int(orbs[0][3].sum()))
+        for ca, cb, occa, occb in orbs:
+            if ca.shape[1] != nmo or cb.shape[1] != nmo:
+                raise ValueError('References must have the same number of MOs')
+            if (occa.sum(), occb.sum()) != nelec:
+                raise ValueError('References must have the same (nalpha, nbeta)')
+        self.nmo = nmo
+        self.nelec = nelec
+        self._orbs = orbs
+
+    def dump_flags(self, verbose=None):
+        log = logger.new_logger(self, verbose)
+        log.info('******** %s ********', self.__class__)
+        log.info('number of references = %d', len(self.references))
+        log.info('nmo = %d, nelec = %s', self.nmo, self.nelec)
+        log.info('tol = %g', self.tol)
+        return self
+
+    def build(self, h1e=None, eri=None, ovlp=None, ecore=None):
+        '''Construct the intermediates of every ordered reference pair for a
+        Hamiltonian in the AO basis.
+
+        Kwargs:
+            h1e : (nao, nao) ndarray
+                Core Hamiltonian.
+            eri : ndarray
+                Two-electron integrals (ij|kl), as (nao, nao, nao, nao) or
+                (nao*nao, nao*nao), with 1-fold symmetry.
+            ovlp : (nao, nao) ndarray
+                AO overlap.
+            ecore : float
+                Constant energy.
+
+        Arguments that are not given are taken from get_hamiltonian.
+        '''
+        log = logger.new_logger(self)
+        cput0 = (logger.process_clock(), logger.perf_counter())
+        if h1e is None or eri is None or ovlp is None or ecore is None:
+            defaults = get_hamiltonian(self.mol, self.references)
+            h1e = defaults[0] if h1e is None else h1e
+            eri = defaults[1] if eri is None else eri
+            ovlp = defaults[2] if ovlp is None else ovlp
+            ecore = defaults[3] if ecore is None else ecore
+        s = numpy.asarray(ovlp)
+        h = numpy.asarray(h1e)
+        nao = s.shape[0]
+        eri = numpy.asarray(eri).reshape(nao, nao, nao, nao)
+        self.ecore = ecore
+
+        refs = []
+        self._occpos = []
+        dtype = numpy.result_type(numpy.double, s, h, eri,
+                                  *[c for orb in self._orbs for c in orb[:2]])
+        for ca, cb, occa, occb in self._orbs:
+            # occupied orbitals first, keeping the relative MO order
+            orda = numpy.argsort(~occa, kind='stable')
+            ordb = numpy.argsort(~occb, kind='stable')
+            posa = numpy.argsort(orda)
+            posb = numpy.argsort(ordb)
+            refs.append((ca[:, orda], cb[:, ordb], int(occa.sum()), int(occb.sum())))
+            self._occpos.append(tuple(_occ_positions(occ, order, pos)
+                                      for occ, order, pos in ((occa, orda, posa), (occb, ordb, posb))))
+        refs = [(numpy.asarray(ca, dtype=dtype), numpy.asarray(cb, dtype=dtype), na, nb)
+                for ca, cb, na, nb in refs]
+        self._env = _wicks.build(s, h, eri, refs, self.tol, dtype)
+        log.timer('Wick intermediates', *cput0)
+        nref = len(self.references)
+        pairinfo = self._env[0][:nref*nref]
+        log.debug('zero-overlap pairs (m_a, m_b):\n%s',
+                  pairinfo[:, :2].reshape(nref, nref, 2))
+        log.debug('near-zero corner combinations:\n%s',
+                  pairinfo[:, _wicks.NCORNER].reshape(nref, nref))
+        log.debug('intermediate slab: %.1f MB', self._env[1].nbytes / 1e6)
+        return self
+
+    def _records(self, dets):
+        '''Pack determinants into the int32 records of nowick.h'''
+        if self._env is None:
+            self.build()
+        dets = list(dets)
+        kmax = max([1] + [max(d.rank) for d in dets])
+        nref = len(self.references)
+        rows = []
+        for d in dets:
+            if not 0 <= d.parent < nref:
+                raise ValueError('%s: no such reference' % d)
+            sign = osign = 1
+            row = [d.parent, len(d.alpha_holes), len(d.beta_holes), 0, 0]
+            for holes, parts, (occ, pos, order, nocc, aufbau) in (
+                    (d.alpha_holes, d.alpha_particles, self._occpos[d.parent][0]),
+                    (d.beta_holes, d.beta_particles, self._occpos[d.parent][1])):
+                if (not all(i in occ for i in holes)
+                        or any(a in occ or not 0 <= a < len(pos) for a in parts)):
+                    raise ValueError('%s: holes must be occupied and particles '
+                                     'virtual in the parent' % d)
+                hp = sorted(pos[i] for i in holes)
+                pp = sorted(pos[a] for a in parts)
+                r = len(hp)
+                # removing the holes (descending) and creating the particles
+                # (ascending) on the occupied-first string {0..nocc-1}
+                if (sum(hp) + r * (nocc - r) + r * (r - 1) // 2) & 1:
+                    sign = -sign
+                if not aufbau:
+                    # sign between occupied-first and original MO order
+                    occset = sorted(set(range(nocc)).difference(hp).union(pp))
+                    if _parity(order[p] for p in occset) < 0:
+                        sign = -sign
+                        osign = -osign
+                row += hp + [0] * (kmax - r) + pp + [0] * (kmax - r)
+            row[3] = sign
+            row[4] = osign
+            rows.append(row)
+        return numpy.array(rows, dtype=numpy.int32).reshape(-1, _wicks.DHEAD + 4 * kmax), kmax
+
+    def overlap(self, bra, ket):
+        '''<bra|ket>'''
+        rec, kmax = self._records([bra, ket])
+        return _wicks.overlap_pairs(self._env, rec, kmax, [[0, 1]])[0]
+
+    def matrix_element(self, bra, ket):
+        '''(<bra|H|ket>, <bra|ket>)'''
+        rec, kmax = self._records([bra, ket])
+        h, s = _wicks.hamiltonian_pairs(self._env, rec, kmax, [[0, 1]], self.ecore)
+        return h[0], s[0]
+
+    def matrix_elements(self, dets, pairs, general=False):
+        '''Hamiltonian and overlap elements for (bra, ket) index pairs of dets'''
+        rec, kmax = self._records(dets)
+        return _wicks.hamiltonian_pairs(self._env, rec, kmax, pairs, self.ecore,
+                                        general=general)
+
+    def overlaps(self, dets, pairs):
+        '''Overlaps for (bra, ket) index pairs of dets'''
+        rec, kmax = self._records(dets)
+        return _wicks.overlap_pairs(self._env, rec, kmax, pairs)
+
+    def build_matrices(self, dets):
+        '''Dense Hamiltonian and overlap matrices over dets'''
+        rec, kmax = self._records(dets)
+        parents = rec[:, 0]
+        if numpy.all(parents[1:] >= parents[:-1]):
+            return _wicks.hamiltonian_matrix(self._env, rec, kmax, self.ecore)
+        # The C driver needs records sorted by parent
+        order = numpy.argsort(parents, kind='stable')
+        h, s = _wicks.hamiltonian_matrix(self._env, rec[order], kmax, self.ecore)
+        inv = numpy.argsort(order)
+        return h[inv][:, inv], s[inv][:, inv]
+
+    def occupations(self, parent):
+        '''Boolean alpha and beta occupations of a reference'''
+        ca, cb, occa, occb = self._orbs[parent]
+        return occa, occb
+

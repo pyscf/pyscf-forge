@@ -237,6 +237,7 @@ set_target_properties (clib_siso PROPERTIES
 
 add_subdirectory(gbci)
 add_subdirectory(pwscf)
+add_subdirectory(nonorthogonal)
 
 else()
 
