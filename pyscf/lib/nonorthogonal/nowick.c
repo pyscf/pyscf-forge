@@ -78,6 +78,15 @@ int NOWICKset_simd(int level)
         return NOWICKsimd_level();
 }
 
+/* Layout sizes for the check in _wicks.py: PAIRLEN, NSCAL, DHEAD, MAXMO */
+void NOWICKlayout(int *sizes)
+{
+        sizes[0] = NOWICK_PAIRLEN;
+        sizes[1] = NOWICK_NSCAL;
+        sizes[2] = NOWICK_DHEAD;
+        sizes[3] = NOWICK_MAXMO;
+}
+
 static void set_env(NOWICKEnv *env, int64_t *pairinfo, double *slab, double *scal,
                     int nref, int kmax, double enuc)
 {

@@ -84,6 +84,9 @@ class Determinant:
 def _reference_orbitals(ref):
     '''(ca, cb, occa, occb) of an SCF object or a (mo_coeff, mo_occ) pair'''
     if isinstance(ref, scf.hf.SCF):
+        if not isinstance(ref, (scf.hf.RHF, scf.uhf.UHF)):
+            raise NotImplementedError('%s reference: only RHF, ROHF and UHF '
+                                      'references are supported' % ref.__class__.__name__)
         mo_coeff, mo_occ = ref.mo_coeff, ref.mo_occ
     else:
         mo_coeff, mo_occ = ref
@@ -118,7 +121,8 @@ def get_hamiltonian(mol, references):
     get_ovlp, get_hcore, energy_nuc and its incore integrals, so that changes
     to these methods carry over.  Without an SCF reference they are computed
     from mol.  The two-electron integrals are always the exact 4-index AO
-    integrals, as the Wick intermediates need their full transformations.
+    integrals, as the Wick intermediates need their full transformations.  A
+    density-fitted reference therefore does not reproduce mf.e_tot exactly.
 
     Returns:
         h1e, eri, ovlp, ecore with eri of shape (nao, nao, nao, nao)
@@ -249,7 +253,8 @@ class WickEngine(lib.StreamObject):
 
         refs = []
         self._occpos = []
-        dtype = numpy.double
+        dtype = numpy.result_type(numpy.double, s, h, eri,
+                                  *[c for orb in self._orbs for c in orb[:2]])
         for ca, cb, occa, occb in self._orbs:
             # occupied orbitals first, keeping the relative MO order
             orda = numpy.argsort(~occa, kind='stable')
@@ -259,8 +264,6 @@ class WickEngine(lib.StreamObject):
             refs.append((ca[:, orda], cb[:, ordb], int(occa.sum()), int(occb.sum())))
             self._occpos.append(tuple(_occ_positions(occ, order, pos)
                                       for occ, order, pos in ((occa, orda, posa), (occb, ordb, posb))))
-            if numpy.iscomplexobj(ca) or numpy.iscomplexobj(cb):
-                dtype = numpy.complex128
         refs = [(numpy.asarray(ca, dtype=dtype), numpy.asarray(cb, dtype=dtype), na, nb)
                 for ca, cb, na, nb in refs]
         self._env = _wicks.build(s, h, eri, refs, self.tol, dtype)

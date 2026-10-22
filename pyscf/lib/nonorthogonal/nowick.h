@@ -51,7 +51,8 @@
         F(7,0) F(7,1) \
         F(8,0)
 
-/* pairinfo layout */
+/* pairinfo layout.  The offsets below are repeated in pyscf/nonorthogonal/
+ * _wicks.py, which checks the sizes through NOWICKlayout at import. */
 #define NOWICK_PAIRLEN  98
 #define NOWICK_MA       0
 #define NOWICK_MB       1

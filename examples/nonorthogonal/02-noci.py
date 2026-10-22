@@ -32,11 +32,13 @@ e_ref = nonorthogonal.NOCI(mol, refs).run().e_tot
 print('reference NOCI  E = %.10f' % e_ref)
 
 mynoci = nonorthogonal.NOCISD(mol, refs).run()
-print('NOCISD (%d determinants)  E = %.10f' % (len(mynoci.dets), mynoci.e_tot))
+print('NOCISD (%d determinants, %d independent)  E = %.10f' %
+      (len(mynoci.dets), mynoci.nindep, mynoci.e_tot))
 
 # Any excitation level, here singles to triples (NOCISDT)
 mynoci = nonorthogonal.NOCI(mol, refs, level=3).run()
-print('NOCISDT (%d determinants)  E = %.10f' % (len(mynoci.dets), mynoci.e_tot))
+print('NOCISDT (%d determinants, %d independent)  E = %.10f' %
+      (len(mynoci.dets), mynoci.nindep, mynoci.e_tot))
 
 e_fci = fci.FCI(mf).kernel()[0]
 print('FCI  E = %.10f' % e_fci)

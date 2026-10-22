@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 # This module is a port of noci-rs (https://github.com/dy-cl/noci-rs), parts
 # of which derive from libgnme (https://github.com/hgaburton/libgnme), used
 # under the following license:
@@ -75,9 +74,13 @@ References:
 import ctypes
 import numpy
 from pyscf import lib
+from pyscf import scf
 
 libwick = lib.load_library('libnonorthwick')
 
+# The layout constants below must match the NOWICK_ macros of
+# pyscf/lib/nonorthogonal/nowick.h.  The sizes PAIRLEN, NSCAL, DHEAD and
+# MAXMO are checked at import.
 PAIRLEN = 98
 MA, MB, NOCCA, NOCCB, NMO = 0, 1, 2, 3, 4
 AA, BB, AB = 5, 32, 59
@@ -95,6 +98,14 @@ DHEAD = 5
 # Largest number of MOs of the two-word occupation strings
 MAXMO = 128
 
+def _check_layout():
+    sizes = numpy.zeros(4, dtype=numpy.int32)
+    libwick.NOWICKlayout(sizes.ctypes.data_as(ctypes.c_void_p))
+    if sizes.tolist() != [PAIRLEN, NSCAL, DHEAD, MAXMO]:
+        raise RuntimeError('libnonorthwick layout %s does not match _wicks.py; '
+                           'rebuild pyscf/lib' % sizes.tolist())
+_check_layout()
+
 # Nonzero singular values below SINGULARTOL are near-zero and evaluated at
 # the corners t_k = 0 and t_k = 1
 SINGULARTOL = 1e-1
@@ -106,7 +117,11 @@ J_BRANCHES = ((0, 0, 0, 0), (0, 0, 0, 1), (0, 0, 1, 0), (0, 0, 1, 1),
 
 
 def _ao2mo(eri, a, b, c, d):
-    '''sum_{mu nu lam sig} (mu nu|lam sig) a*_{mu p} b_{nu q} c*_{lam r} d_{sig s}'''
+    '''sum_{mu nu lam sig} (mu nu|lam sig) a*_{mu p} b_{nu q} c*_{lam r} d_{sig s}
+
+    ao2mo.incore is not used because it is real-only and conjugates the four
+    index sets in the same way.
+    '''
     n = eri.shape[0]
     np_, nq, nr, ns = a.shape[1], b.shape[1], c.shape[1], d.shape[1]
     t = eri.reshape(n**3, n).dot(d)                                  # mu nu lam s
@@ -116,13 +131,13 @@ def _ao2mo(eri, a, b, c, d):
 
 
 def _coulomb(eri, dm):
-    n = dm.shape[0]
-    return eri.reshape(n*n, n*n).dot(dm.ravel()).reshape(n, n)
+    '''J_{st} = sum_{mu nu} (s t|mu nu) M_{mu nu}'''
+    return scf.hf.dot_eri_dm(eri, dm.T, hermi=0, with_k=False)[0]
 
 
 def _exchange(eri, dm):
     '''K_{st} = sum_{mu nu} (s mu|nu t) M_{mu nu}'''
-    return numpy.tensordot(eri, dm, axes=([1, 2], [0, 1]))
+    return scf.hf.dot_eri_dm(eri, dm, hermi=0, with_j=False)[1]
 
 
 def _partition(sv, tol, corner):

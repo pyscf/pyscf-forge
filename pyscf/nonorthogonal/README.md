@@ -15,6 +15,8 @@ zero-overlap orbital pairs, not on the basis size.
 from pyscf import gto, scf, nonorthogonal
 
 mol = gto.M(atom=[('H', (0, 0, 1.8 * i)) for i in range(6)], basis='sto-3g')
+# uhf_a and uhf_b are broken-symmetry UHF solutions, constructed in
+# examples/nonorthogonal/02-noci.py
 refs = [scf.RHF(mol).run(), uhf_a, uhf_b]   # any SCF objects or (mo_coeff, mo_occ)
 
 nonorthogonal.NOCI(mol, refs).run()            # reference NOCI
@@ -48,7 +50,7 @@ See `examples/nonorthogonal/` for complete examples.
 
 ## Conventions
 
-- References may be real or complex, restricted or unrestricted, and must have
+- References may be real or complex RHF, ROHF or UHF determinants, and must have
   the same number of MOs (at most 128) and the same numbers of alpha and beta
   electrons.
   Occupied orbitals may appear anywhere in the MO order.
@@ -63,7 +65,8 @@ See `examples/nonorthogonal/` for complete examples.
   reference that is an SCF object, through its `get_hcore`, `get_ovlp`,
   `energy_nuc` and incore integrals, and are otherwise computed from `mol`
   (`get_hamiltonian`).  The two-electron integrals are the full 4-index AO
-  integrals, as the intermediates need their 4-index transformations.
+  integrals, as the intermediates need their 4-index transformations, so a
+  density-fitted reference does not reproduce its `e_tot` exactly.
 
 ## Implementation notes
 
@@ -71,7 +74,9 @@ See `examples/nonorthogonal/` for complete examples.
   Slater-Condon rules on occupation bit strings, adapted from
   `FCIpspace_h0tril_uhf` of `pyscf/lib/mcscf/fci_contract.c` to complex
   orbitals and up to 128 MOs; all other pairs use the extended nonorthogonal
-  Wick theorem.
+  Wick theorem.  Beyond 64 MOs, NOCISD of one RHF reference matches
+  `ci.CISD` to 4e-16 for He/cc-pV5Z (Cartesian, 70 MOs); this takes about a
+  minute, so it is not a unit test.
 - Singular values of the occupied orbital overlap below `tol` (default 1e-10)
   are treated as zero-overlap orbital pairs.
 - Small nonzero singular values (below 0.1) would put large `1/S_k` terms

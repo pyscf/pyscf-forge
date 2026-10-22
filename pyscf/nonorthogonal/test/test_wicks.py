@@ -69,7 +69,8 @@ def _fci_vector(refs, det):
 def _brute_hs(refs, dets):
     '''Hamiltonian and overlap matrices by FCI-space expansion'''
     norb = mol.nao
-    nelec = mol.nelec
+    occa, occb = refs[0][1]
+    nelec = (int(numpy.sum(occa)), int(numpy.sum(occb)))
     h2 = fci.direct_spin1.absorb_h1e(h1, eri, norb, nelec, .5)
     vecs = [_fci_vector(refs, d) for d in dets]
     hvecs = []
@@ -204,13 +205,52 @@ class KnownValues(unittest.TestCase):
         refs = _references()[:2]
         self.check(refs, _dets(refs, 10, 4, 7))
 
-    def test_scalar_kernels(self):
+    def test_simd_levels(self):
         refs = _references()
+        dets = _dets(refs, 6, 3, 8)
         try:
-            _wicks.libwick.NOWICKset_simd(0)
-            self.check(refs, _dets(refs, 6, 3, 8))
+            for level in range(3):
+                if _wicks.libwick.NOWICKset_simd(level) != level:
+                    continue
+                with self.subTest(simd=level):
+                    self.check(refs, dets)
         finally:
             _wicks.libwick.NOWICKset_simd(-1)
+
+    def test_open_shell(self):
+        # (3, 2) electrons, with zero-overlap pairs in alpha only, beta only
+        # and both
+        c = mf.mo_coeff
+        occa = mf.mo_occ > 0
+        nocc = occa.sum()
+        occb = _swap(occa, [nocc-1], [])
+        oa = _swap(occa, [nocc-1], [nocc])
+        ob = _swap(occb, [nocc-2], [nocc])
+        for cplx in (False, True):
+            c0 = c.astype(complex if cplx else float)
+            refs = [((c0, c0), (occa, occb)),
+                    ((_rotate(c0, occa, .1, 1, cplx), _rotate(c0, occb, .12, 2, cplx)), (occa, occb)),
+                    ((_rotate(c0, oa, .3, 3, cplx, False), c0), (oa, occb)),
+                    ((c0, _rotate(c0, ob, .3, 4, cplx, False)), (occa, ob)),
+                    ((_rotate(c0, oa, .3, 5, cplx, False), _rotate(c0, ob, .3, 6, cplx, False)),
+                     (oa, ob))]
+            with self.subTest(cplx=cplx):
+                self.check(refs, _dets(refs, 4, 3, 12))
+
+    def test_complex_hamiltonian(self):
+        # A complex Hamiltonian with real references gives complex elements
+        refs = _references()[:2]
+        dets = _dets(refs, 4, 2, 13)
+        h1e, eri, ovlp, ecore = nonorthogonal.get_hamiltonian(mol, [])
+        a = numpy.random.RandomState(14).normal(size=h1e.shape)
+        h1e = h1e + .01j * (a - a.T)
+        h, s = _engine(refs).build(h1e, eri, ovlp, ecore).build_matrices(dets)
+        crefs = [((ca.astype(complex), cb.astype(complex)), occ) for (ca, cb), occ in refs]
+        h_ref, s_ref = _engine(crefs).build(h1e, eri, ovlp, ecore).build_matrices(dets)
+        self.assertTrue(numpy.iscomplexobj(h))
+        self.assertAlmostEqual(abs(h.imag).max(), abs(h_ref.imag).max(), 9)
+        self.assertAlmostEqual(abs(h - h_ref).max(), 0, 12)
+        self.assertAlmostEqual(abs(s - s_ref).max(), 0, 12)
 
     def test_near_zero_pairs(self):
         # Near-zero singular values are evaluated at the corners of their
@@ -218,16 +258,17 @@ class KnownValues(unittest.TestCase):
         c = mf.mo_coeff
         occ = mf.mo_occ > 0
         nocc = occ.sum()
-        for sa, sb, phase, ncorner in (([1e-3], [], 0, 2),
-                                       ([0, 1e-3], [], 0, 2),
-                                       ([1e-3, 2e-3], [2e-3], 0, 8),
-                                       ([1e-3], [2e-3], .7, 4)):
-            ca = _rotate_pairs(c, nocc, sa, phase)
-            cb = _rotate_pairs(c, nocc, sb, phase)
-            c0 = c.astype(ca.dtype)
-            refs = [((c0, c0), (occ, occ)), ((ca, cb), (occ, occ))]
-            wicks = self.check(refs, _dets(refs, 12, 3, 9))
-            self.assertEqual(wicks._env[0][1, _wicks.NCORNER], ncorner)
+        for sa, sb, phase, ncorner in (([1e-5], [], 0, 2),
+                                       ([0, 1e-5], [], 0, 2),
+                                       ([1e-5, 2e-5], [2e-5], 0, 8),
+                                       ([1e-5], [2e-5], .7, 4)):
+            with self.subTest(sa=sa, sb=sb, phase=phase):
+                ca = _rotate_pairs(c, nocc, sa, phase)
+                cb = _rotate_pairs(c, nocc, sb, phase)
+                c0 = c.astype(ca.dtype)
+                refs = [((c0, c0), (occ, occ)), ((ca, cb), (occ, occ))]
+                wicks = self.check(refs, _dets(refs, 12, 3, 9))
+                self.assertEqual(wicks._env[0][1, _wicks.NCORNER], ncorner)
 
     def test_matrix_element(self):
         refs = _references()
@@ -255,6 +296,10 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(h[1, 1], mf1.e_tot, 9)
         self.assertAlmostEqual(s[1, 1], 1, 12)
         self.assertAlmostEqual(h[0, 1], h[1, 0], 12)
+        # A reference with another core Hamiltonian
+        mf2 = scf.UHF(mol).x2c().run(dm)
+        self.assertAlmostEqual(WickEngine(mol, [mf2]).matrix_element(
+            Determinant(0), Determinant(0))[0], mf2.e_tot, 9)
 
     def test_invalid_determinants(self):
         refs = _references()
@@ -265,6 +310,7 @@ class KnownValues(unittest.TestCase):
         self.assertRaises(ValueError, wicks.overlap, Determinant(0),
                           Determinant(0, alpha_holes=[5], alpha_particles=[6]))
         self.assertRaises(ValueError, nonorthogonal.WickEngine, mol, [])
+        self.assertRaises(NotImplementedError, nonorthogonal.WickEngine, mol, [scf.GHF(mol)])
 
 
 if __name__ == "__main__":

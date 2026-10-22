@@ -69,6 +69,8 @@ class KnownValues(unittest.TestCase):
         mynoci = nonorthogonal.NOCISD(mol, refs).run()
         e_fci = fci.FCI(mf).kernel()[0]
         self.assertTrue(e_fci < mynoci.e_tot < e_ref < refs[1].e_tot)
+        # From the FCI-space vectors of the 354 determinants, independently of
+        # the Wick engine
         self.assertAlmostEqual(mynoci.e_tot, -2.8875402412, 7)
         self.assertEqual(mynoci.level, 2)
         # the coefficients are normalised in the overlap metric

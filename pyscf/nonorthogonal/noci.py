@@ -79,6 +79,7 @@ def kernel(mynoci, dets, nroots=1, lindep=1e-10):
     Returns:
         e : the lowest nroots energies
         c : coefficients of the determinants, one column per root
+        nindep : number of linearly independent states
     '''
     log = logger.new_logger(mynoci)
     cput0 = (logger.process_clock(), logger.perf_counter())
@@ -92,7 +93,7 @@ def kernel(mynoci, dets, nroots=1, lindep=1e-10):
         log.warn('Only %d linearly independent states for nroots = %d',
                  nindep, nroots)
     nroots = min(nroots, nindep)
-    return e[:nroots], c[:, :nroots]
+    return e[:nroots], c[:, :nroots], nindep
 
 
 class NOCI(lib.StreamObject):
@@ -122,6 +123,8 @@ class NOCI(lib.StreamObject):
             nroots > 1.
         dets : list of Determinant
             The NOCI space.
+        nindep : int
+            Number of linearly independent states of the NOCI space.
         wicks : WickEngine
             Matrix elements between the determinants.
 
@@ -140,7 +143,7 @@ class NOCI(lib.StreamObject):
     tol = 1e-10
 
     _keys = {'mol', 'references', 'level', 'nroots', 'lindep', 'tol',
-             'wicks', 'dets', 'e_tot', 'ci'}
+             'wicks', 'dets', 'nindep', 'e_tot', 'ci'}
 
     def __init__(self, mol, references, level=None):
         '''
@@ -158,6 +161,7 @@ class NOCI(lib.StreamObject):
             self.level = level
         self.wicks = None
         self.dets = None
+        self.nindep = None
         self.e_tot = None
         self.ci = None
 
@@ -212,7 +216,7 @@ class NOCI(lib.StreamObject):
             dets = self.make_space()
         self.dets = list(dets)
         logger.info(self, 'NOCI space of %d determinants', len(self.dets))
-        e, c = kernel(self, self.dets, self.nroots, self.lindep)
+        e, c, self.nindep = kernel(self, self.dets, self.nroots, self.lindep)
         if self.nroots == 1:
             self.e_tot, self.ci = e[0], c[:, 0]
         else:
