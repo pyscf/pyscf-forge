@@ -224,9 +224,8 @@ set_target_properties (clib_siso PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "siso")
+
 add_subdirectory(csf)
-add_subdirectory(sfnoci)
-add_subdirectory(pwscf)
 add_subdirectory(gbci)
 add_subdirectory(pwscf)
 add_subdirectory(nonorthogonal)
