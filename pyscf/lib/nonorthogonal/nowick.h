@@ -12,6 +12,9 @@
     See the License for the specific language governing permissions and
     limitations under the License.
 
+    Parts of this code derive from libgnme, Copyright (c) 2022 Hugh G. A.
+    Burton, under the MIT License reproduced in pyscf/nonorthogonal/_wicks.py.
+
  *
  * Extended nonorthogonal Wick theorem (ENOWT) matrix elements between
  * arbitrary excitations of nonorthogonal reference determinants.
