@@ -1,0 +1,73 @@
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <math.h>
+#include <stdbool.h>
+#include <omp.h>
+
+#if defined __cplusplus
+extern "C" {
+#endif
+
+void dsbmv_(const char *uplo,
+            const int *n,
+            const int *k,
+            const double *alpha,
+            const double *a,
+            const int *lda,
+            const double *x,
+            const int *incx,
+            const double *beta,
+            double *y,
+            const int *incy);
+
+#if defined __cplusplus
+} // end extern "C"
+#endif
+
+#ifndef MAX_PARTICLE
+#define MAX_PARTICLE 64
+#endif
+typedef struct {
+    uint64_t dconf;
+    uint64_t sconf;
+    uint64_t spin;
+} Str3;
+
+
+int first1 (uint64_t r);
+int last1 (uint64_t r);
+unsigned int count_set_bits (uint64_t str);
+
+void FCICSFmakeS2mat (double * S2mat, uint64_t * detstr, size_t ndet, int nspin, int twoMS);
+unsigned int _get_occ (Str3 * addr, unsigned int i);
+unsigned int _get_spinindex (Str3 * addr, unsigned int i);
+int _get_twoM (uint64_t sconfstr, uint64_t detstr);
+unsigned int _get_twoS_running (uint64_t coupstr, unsigned int i, unsigned int nspin);
+double CGC_2e_X (unsigned int * twoSk, unsigned int * twoSb,
+                 unsigned int t, unsigned int q, unsigned int r, unsigned int p,
+                 int nt, int nq, int nr, int np,
+                 unsigned int nspin);
+double CGC_2e_X_core (unsigned int * twoSk, unsigned int * twoSb,
+                   unsigned int r, unsigned int q,
+                   int nr, int nq, bool pphh);
+
+
+void FCICSFhdiag (double * hdiag_csf, double * hdiag_det,
+                  double * h1e_s, double * eri,
+                  uint64_t * dconfstrs, uint64_t * sconfstrs,
+                  uint64_t * coupstrs, uint64_t * detstrs,
+                  double * wrk,
+                  size_t ndoub, size_t nsing,
+                  size_t ncoup, size_t ndet,
+                  unsigned int norb);
+
+void FCICSFddstrs2csdstrs (uint64_t * csdstrs, uint64_t * ddstrs, size_t nstr, int norb, int neleca, int nelecb);
+void FCICSFcsdstrs2ddstrs (uint64_t * ddstrs, uint64_t * csdstrs, size_t nstr, int norb, int neleca, int nelecb);
+void FCICSFmakecsf (double * umat, uint64_t * detstr, uint64_t * coupstr, int nspin, size_t ndet, size_t ncoup, int twoS, int twoMS);
+void FCICSFgetscstrs (uint64_t * scstrs, bool * mask, size_t nstr, int nspin);
+void FCICSFstrs2addr (int * addrs, uint64_t * strings, size_t nstr, int * gentable_ravel, int nspin, int twoS);
+void FCICSFaddrs2str (uint64_t * strings, int * addrs, size_t nstr, int * gentable_ravel, int nspin, int twoS);
+void FCICSFsignrule (int * sgns, uint64_t * dconfs, uint64_t * sconfs, size_t ndet, unsigned int norb);
+
