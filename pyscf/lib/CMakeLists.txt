@@ -215,16 +215,6 @@ set_target_properties (clib_lno PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "lno")
 
-# Build the CSFstring shared library
-set (CSF_SOURCE_FILES "csf/csfstring.c")
-add_library (clib_csf SHARED ${CSF_SOURCE_FILES})
-target_link_libraries (clib_csf ${OPENMP_C_PROPERTIES})
-set_target_properties (clib_csf PROPERTIES
-    LINKER_LANGUAGE C
-    CLEAN_DIRECT_OUTPUT 1
-    LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_NAME "csf")
-
 # Build the SISOhelper shared library
 set (SISO_SOURCE_FILES "siso/sisohelper.c")
 add_library (clib_siso SHARED ${SISO_SOURCE_FILES})
@@ -234,7 +224,9 @@ set_target_properties (clib_siso PROPERTIES
     CLEAN_DIRECT_OUTPUT 1
     LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_NAME "siso")
-
+add_subdirectory(csf)
+add_subdirectory(sfnoci)
+add_subdirectory(pwscf)
 add_subdirectory(gbci)
 add_subdirectory(pwscf)
 add_subdirectory(nonorthogonal)
