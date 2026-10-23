@@ -109,7 +109,7 @@ def _dlogF_dlnf(surface):
     """
     d ln F_i / dlnf for the switching function F_i = prod_J h(d_iJ), with
     d_iJ = (r_iJ - R_in_J)/R_sw_J and R_in_J, R_sw_J both proportional to the
-    cavity radius. Then (SI S1.2.2, with 1/f -> 1)
+    cavity radius. Then with 1/f -> 1:
 
         d d_iJ/dlnf = (d r_iJ/dlnf - r_iJ) / R_sw_J
 
@@ -234,7 +234,7 @@ def _dv_dlnf(pcmobj, dm_tot):
         dv_i/dlnf = grad_{r_i} v_i . u_i - xi_i dv_i/dxi_i,
 
     with, for a unit Gaussian, d/dR [erf(xi R)/R] = -psi(xi R)/R^2 and
-    d/dxi [erf(xi R)/R] = 2/sqrt(pi) exp(-xi^2 R^2) (SI eq:generalform_v).
+    d/dxi [erf(xi R)/R] = 2/sqrt(pi) exp(-xi^2 R^2).
     The width response is therefore an overlap integral (int3c1e) rather than
     a Coulomb one.
 
@@ -415,10 +415,10 @@ def pol_derivatives(pcmobj, dm_tot):
     density: (dE_pol/dlnf, dE_pol/deps).
 
     dE_pol/dlnf is the derivative with respect to a relative scaling of the
-    current cavity radii, R_A -> lambda R_A at lambda = 1. In the article's
-    absolute scaling factor, R_A = f r_A, it equals f dE_pol/df. The volume
-    derivative that the pressure divides by (xppcm) is formed the same way,
-    so the pressure does not depend on this choice.
+    current cavity radii, R_A -> lambda R_A at lambda = 1. In absolute 
+    scaling factor, R_A = f r_A, it equals f dE_pol/df. The volume derivative 
+    that the pressure divides by (xppcm) is formed the same way, so the 
+    pressure does not depend on this choice.
 
     Parameters
     ----------

@@ -74,7 +74,7 @@ def get_z0(solvent_num_valence_elec, solvent_density, solvent_molar_mass):
     Returns
     -------
     float
-        Semi-empirical barrier height / implicit electron density in atomic units.
+        Initial barrier height in Hartree.
     """
     # n_val * rho / M is the solvent valence-electron density in mol e-/cm^3;
     # 0.063 is the semi-empirical proportionality constant of the XP-PCM
@@ -102,7 +102,7 @@ def get_z(volume, volume_0, z0, eta=6):
     Returns
     -------
     float or array
-        Semi-empirical barrier height / implicit electron density in atomic units.
+        Barrier height in Hartree.
     """
     return z0 * _get_scaling_factor(volume, volume_0) ** -(3 + eta)
 
