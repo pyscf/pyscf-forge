@@ -27,6 +27,7 @@ representation, avoiding an explicit Fock diagonalization in each SCF cycle.
 
 import numpy
 import numpy.polynomial.chebyshev as C
+from pyscf.lo.orth import lowdin
 from scipy.optimize import bisect
 from scipy.sparse import block_diag, coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
@@ -36,7 +37,7 @@ from pyscf.lib import logger
 from pyscf.scf import diis, hf
 
 
-def block_inv_sqrt(s, thresh=1e-12):
+def block_inv_sqrt(s, thresh=1e-7):
     """
     Compute a block-local inverse square root of an overlap matrix.
 
@@ -65,8 +66,7 @@ def block_inv_sqrt(s, thresh=1e-12):
 
     for idx in block_indices:
         s_block = s[numpy.ix_(idx, idx)]
-        e, v = numpy.linalg.eigh(s_block)
-        X = v @ numpy.diag(e**-0.5) @ v.conj().T
+        X = lowdin(s_block)
 
         for i, ii in enumerate(idx):
             for j, jj in enumerate(idx):
@@ -75,7 +75,7 @@ def block_inv_sqrt(s, thresh=1e-12):
     return s_inv_sqrt
 
 
-def inv_sqrt(s, thresh=1e-12, full_inv=False):
+def inv_sqrt(s, thresh=1e-7, full_inv=False):
     """
     Compute an inverse square root of a symmetric positive-definite matrix.
 
@@ -202,7 +202,7 @@ class ChebyshevSCF(hf.SCF):
         normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=1e-5)
         return normalized_fock
 
-    def get_ovlp_inv_sqrt(self, thresh=1e-14, full_inv=False):
+    def get_ovlp_inv_sqrt(self, thresh=1e-7, full_inv=False):
         """
         Return the inverse square-root transform of the AO overlap matrix.
 
