@@ -64,7 +64,7 @@ class KnownValues(unittest.TestCase):
     def test_energy_agrees_with_rhf_h2(self):
         mf_ref = scf.RHF(mol_h2).run()
         mf_chb = ChebyshevSCF(mol_h2)
-        mf_chb.chebyshev_degree = 40
+        mf_chb.chebyshev_degree = 50
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)

@@ -12,7 +12,7 @@ from pyscf.scf.chebyshev_scf import ChebyshevSCF
 
 mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='sto-3g', verbose=4)
 mf = ChebyshevSCF(mol)
-mf.chebyshev_degree = 10
+mf.chebyshev_degree = 60
 mf.beta = 40.0
 mf.kernel()
 print('ChebyshevSCF Energy:', mf.e_tot)
