@@ -26,6 +26,8 @@ representation, avoiding an explicit Fock diagonalization in each SCF cycle.
 
 
 import numpy
+import numpy.polynomial.chebyshev as C
+from pyscf.lo.orth import lowdin
 from scipy.optimize import bisect
 from scipy.sparse import block_diag, coo_matrix, csr_matrix
 from scipy.sparse.csgraph import connected_components
@@ -34,8 +36,13 @@ from pyscf import __config__
 from pyscf.lib import logger
 from pyscf.scf import diis, hf
 
+MATRIX_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_MATRIX_THRESHOLD", 1e-5)
+OVLP_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_OVLP_THRESHOLD", 1e-7)
+MU_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_MU_THRESHOLD", 1e-14)
+VEC_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_VEC_THRESHOLD", 1e-6)
 
-def block_inv_sqrt(s, thresh=1e-12):
+
+def block_inv_sqrt(s, thresh=OVLP_THRESHOLD):
     """
     Compute a block-local inverse square root of an overlap matrix.
 
@@ -64,8 +71,7 @@ def block_inv_sqrt(s, thresh=1e-12):
 
     for idx in block_indices:
         s_block = s[numpy.ix_(idx, idx)]
-        e, v = numpy.linalg.eigh(s_block)
-        X = v @ numpy.diag(e**-0.5) @ v.T
+        X = lowdin(s_block)
 
         for i, ii in enumerate(idx):
             for j, jj in enumerate(idx):
@@ -74,7 +80,7 @@ def block_inv_sqrt(s, thresh=1e-12):
     return s_inv_sqrt
 
 
-def inv_sqrt(s, thresh=1e-12, full_inv=False):
+def inv_sqrt(s, thresh=OVLP_THRESHOLD, full_inv=False):
     """
     Compute an inverse square root of a symmetric positive-definite matrix.
 
@@ -95,13 +101,13 @@ def inv_sqrt(s, thresh=1e-12, full_inv=False):
     """
     if full_inv:
         evals, evecs = numpy.linalg.eigh(s)
-        X = evecs @ numpy.diag(evals**-0.5) @ evecs.T
+        X = evecs @ numpy.diag(evals**-0.5) @ evecs.conj().T
         return X
     else:
         return block_inv_sqrt(s, thresh=thresh)
 
 
-def to_csr_matrix(matrix, threshold=1e-5):
+def to_csr_matrix(matrix, threshold=MATRIX_THRESHOLD):
     """
     Convert a dense array to CSR format after dropping small elements.
 
@@ -128,29 +134,8 @@ class ChebyshevSCF(hf.SCF):
     The class follows the :class:`pyscf.scf.hf.SCF` interface but replaces the
     conventional diagonalization-based density update with a Chebyshev
     approximation to the Fermi-Dirac occupation function.  The expansion degree
-    is controlled by ``chebyshev_degree`` (auto-sized from ``beta`` and the
-    Fock spectral width when ``auto_degree`` is true; see :meth:`_auto_degree`)
-    and the filter sharpness by ``beta``, held fixed throughout the SCF
-    iteration (no beta annealing, following the fixed-beta convention used by
-    SIESTA-style Fermi-operator-expansion methods).
-
-    Scope and limitations
-    ----------------------
-    This driver targets closed-shell systems with a reasonably open
-    HOMO-LUMO gap -- the same regime in which Hartree-Fock itself is a
-    meaningful reference. The Chebyshev/Fermi-Dirac occupation filter
-    requires ``beta * gap`` to be large enough that the filter closely
-    approximates a step function; for systems with a small or vanishing
-    gap (stretched/dissociating bonds, near-degenerate or metallic
-    systems, most open-shell and strongly correlated problems), a fixed,
-    moderate ``beta`` such as the default will not resolve occupations
-    accurately, and pushing ``beta`` higher to compensate requires a
-    correspondingly larger ``chebyshev_degree`` (cost scales with
-    ``beta * a``, see :meth:`_auto_degree`). These are exactly the systems
-    where Hartree-Fock itself is a poor reference, so this is treated as
-    an accepted, documented scope limitation rather than a defect to fix
-    in this driver -- benchmarking and validation of this class should
-    likewise be restricted to well-gapped closed-shell systems.
+    is controlled by ``chebyshev_degree`` and the filter sharpness by ``beta``,
+    held fixed throughout the SCF iteration. We have not been able to strictly avoid diagonalization.
     """
 
     def __init__(self, mol):
@@ -166,20 +151,14 @@ class ChebyshevSCF(hf.SCF):
         self.mol = mol
         hf.SCF.__init__(self, mol)
         self.chebyshev_degree = 30
-        # Default beta=50: following the fixed-beta (no annealing) approach
-        # used by SIESTA-style Fermi-operator-expansion methods. This value
-        # is only appropriate for closed-shell systems with a reasonably
-        # open HOMO-LUMO gap -- the same regime where Hartree-Fock itself is
-        # a sensible reference. See the class docstring for the scope this
-        # driver is intended for.
         self.beta = 50
-        self.auto_degree = True
         self.degree_safety_factor = 2.0
-        # Fixed seed for the random starting vector used by the Davidson
-        # eigenvalue estimate in _spectral_bounds. Without this, chebyshev_degree
-        # (via _auto_degree) and the resulting density/energy are not
-        # exactly reproducible run-to-run for the same input.
         self.rng_seed = 0
+        self.chebyshev_moments = None
+        self.ovlp_inv = to_csr_matrix(self.get_ovlp_inv_sqrt(), threshold=MATRIX_THRESHOLD)
+        self.a = None
+        self.b = None
+        self.g = 1
 
     def build(self, mol=None):
         """
@@ -200,21 +179,40 @@ class ChebyshevSCF(hf.SCF):
             [
                 "chebyshev_degree",
                 "chebyshev_filter_interval",
-                "auto_degree",
                 "degree_safety_factor",
                 "rng_seed",
+                "chebyshev_moments",
+                "ovlp_inv",
+                "a",
+                "b",
+                "g",
             ]
         )
         return self
 
-    def get_ovlp_inv_sqrt(self, mol=None, thresh=1e-14, full_inv=False):
+    def _normalize_fock(self, fock_ortho, a=None, b=None):
+        if a is None:
+            a = self.a
+        if b is None:
+            b = self.b
+
+        identity = csr_matrix(
+            (
+                numpy.ones(fock_ortho.shape[0]),
+                (numpy.arange(fock_ortho.shape[0]), numpy.arange(fock_ortho.shape[0])),
+            ),
+            shape=(fock_ortho.shape[0], fock_ortho.shape[0]),
+        )
+        normalized_fock = (fock_ortho - b * identity) / a
+        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
+        return normalized_fock
+
+    def get_ovlp_inv_sqrt(self, thresh=OVLP_THRESHOLD, full_inv=False):
         """
         Return the inverse square-root transform of the AO overlap matrix.
 
         Parameters
         ----------
-        mol : pyscf.gto.Mole, optional
-            Molecule whose AO overlap matrix is used.  Defaults to ``self.mol``.
         thresh : float, optional
             Connectivity threshold for the block-local inverse square root.
         full_inv : bool, optional
@@ -225,45 +223,42 @@ class ChebyshevSCF(hf.SCF):
         ndarray
             AO overlap inverse square-root matrix.
         """
-        if mol is None:
-            mol = self.mol
-        ovlp = mol.intor_symmetric("int1e_ovlp")
+        ovlp = self.get_ovlp()
         ovlp_inv_sqrt = inv_sqrt(ovlp, thresh=thresh, full_inv=full_inv)
         return ovlp_inv_sqrt
 
-    def _power_method(self, fock, x0, max_cycle=50, tol=1e-6):
-        """
-        Estimate the dominant eigenvalue of a matrix with the power method.
-
-        Parameters
-        ----------
-        fock : ndarray
-            Matrix whose largest eigenvalue is estimated.
-        x0 : ndarray
-            Initial vector.
-        max_cycle : int, optional
-            Maximum number of power iterations.
-        tol : float, optional
-            Convergence threshold for the vector update.
-
-        Returns
-        -------
-        float
-            Rayleigh quotient for the final iterate.
-        """
-        x = x0
-        for i in range(max_cycle):
-            x1 = numpy.dot(fock, x)
-            x1 /= numpy.linalg.norm(x1)
-            err = numpy.linalg.norm(x1 - x)
-            x = x1
-            if err < tol:
-                break
-        e_max = numpy.dot(x1.T, numpy.dot(fock, x1)) / numpy.dot(x1.T, x1)
-        return e_max[0, 0]
+    def get_chebyshev_moments(
+        self, normalized_fock, degree=None, vec_threshold=None, nmo=None
+    ):
+        if degree is None:
+            degree = self.chebyshev_degree
+        if nmo is None:
+            nmo = normalized_fock.shape[0]
+        if vec_threshold is None:
+            vec_threshold = getattr(self, "vec_threshold", VEC_THRESHOLD)
+        # T0 v_
+        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
+        self.chebyshev_moments = numpy.zeros(self.chebyshev_degree + 1)
+        for i in range(nmo):
+            v = coo_matrix(([1.0], ([i], [0])), shape=(nmo, 1)).tocsr()
+            v0 = v.copy()
+            # T1 v
+            v1 = normalized_fock @ v0
+            v1 = csr_matrix(v1.reshape(-1, 1))
+            self.chebyshev_moments[0] += v @ v0
+            self.chebyshev_moments[1] += v @ v1
+            if vec_threshold:
+                v1 = to_csr_matrix(v1.toarray(), threshold=vec_threshold)
+            for k in range(2, degree + 1):
+                v2 = 2 * normalized_fock @ v1 - v0
+                if vec_threshold:
+                    v2 = to_csr_matrix(v2.toarray(), threshold=vec_threshold)
+                v0, v1 = v1, v2
+                self.chebyshev_moments[k] += v @ v2
+        return self.chebyshev_moments
 
     def _chebyshev_poly_vec(
-        self, v, fock_ortho, mu, degree, beta, a, vec_threshold=None
+        self, v, normalized_fock, mu, degree, beta, a, vec_threshold=None
     ):
         """
         Apply the Chebyshev occupation polynomial to a basis vector.
@@ -272,7 +267,7 @@ class ChebyshevSCF(hf.SCF):
         ----------
         v : scipy.sparse.spmatrix
             Column vector to filter.
-        fock_ortho : scipy.sparse.spmatrix
+        normalized_fock : scipy.sparse.spmatrix
             Normalized Fock matrix in the orthogonal AO representation.
         mu : float
             Chemical potential in the normalized spectral interval.
@@ -287,46 +282,32 @@ class ChebyshevSCF(hf.SCF):
             magnitude below this value are dropped (set to zero) after
             every Chebyshev step. Defaults to ``self.vec_threshold``.
 
-            Without this, each application of ``fock_ortho`` spreads the
-            nonzero pattern of the vector outward by one hop, and after
-            ``degree`` steps (which, per :meth:`_auto_degree`, can be in
-            the hundreds) the vector densifies regardless of how sparse
-            ``fock_ortho`` itself is. That silently turns every matvec in
-            this loop into an ``O(N^2)``-ish dense operation and defeats
-            the point of using sparse matrices at all. Truncating after
-            each step keeps the vector's support close to what a
-            near-sighted (localized) system actually has, which is what
-            makes near-linear scaling achievable for large, sparse
-            ``fock_ortho`` in the first place. This is the same
-            "truncated Chebyshev" trick used in linear-scaling
-            density-matrix purification / polynomial-filter methods.
-
         Returns
         -------
         scipy.sparse.spmatrix
             Filtered vector contribution to the density matrix.
         """
         if vec_threshold is None:
-            vec_threshold = getattr(self, "vec_threshold", 1e-6)
+            vec_threshold = getattr(self, "vec_threshold", VEC_THRESHOLD)
 
         coeffs = self._calc_coeff(degree, beta=beta, mu=mu, a=a)
         # T0 v_
         v0 = v.copy()
         # T1 v
-        v1 = fock_ortho @ v0
+        v1 = normalized_fock @ v0
         v1 = csr_matrix(v1.reshape(-1, 1))
         if vec_threshold:
             v1 = to_csr_matrix(v1.toarray(), threshold=vec_threshold)
         y = coeffs[0] * v0 + coeffs[1] * v1
         for k in range(2, degree + 1):
-            v2 = 2 * fock_ortho @ v1 - v0
+            v2 = 2 * normalized_fock @ v1 - v0
             if vec_threshold:
                 v2 = to_csr_matrix(v2.toarray(), threshold=vec_threshold)
             y += coeffs[k] * v2
             v0, v1 = v1, v2
         return y
 
-    def _calc_coeff(self, n, N=8192, beta=100.0, mu=0.0, a=1.0):
+    def _calc_coeff(self, n, beta=100.0, mu=0.0, a=1.0):
         """
         Compute Chebyshev coefficients for the Fermi-Dirac occupation filter.
 
@@ -334,8 +315,6 @@ class ChebyshevSCF(hf.SCF):
         ----------
         n : int
             Highest Chebyshev polynomial order.
-        N : int, optional
-            Number of sampling points used for the cosine-grid transform.
         beta : float, optional
             Inverse-temperature parameter.
         mu : float, optional
@@ -348,15 +327,47 @@ class ChebyshevSCF(hf.SCF):
         ndarray
             Coefficients from order zero through ``n``.
         """
-        theta = numpy.pi * numpy.arange(N) / (N - 1)
         beta_tilde = beta * a
-        f = 1.0 / (1.0 + numpy.exp(beta_tilde * (numpy.cos(theta) - mu)))
-        coeffs = numpy.fft.fft(numpy.r_[f, f[-2:0:-1]]).real[: n + 1]
-        coeffs *= 2.0 / (N - 1)
-        coeffs[0] *= 0.5
+
+        def occupation(x):
+            return 1.0 / (1.0 + numpy.exp(beta_tilde * (x - mu)))
+
+        # f = 1.0 / (1.0 + numpy.exp(beta_tilde * (numpy.cos(theta) - mu)))
+        # coeffs = numpy.fft.fft(numpy.r_[f, f[-2:0:-1]]).real[: n + 1]
+        # coeffs *= 2.0 / (N - 1)
+        # coeffs[0] *= 0.5
+        coeffs = C.chebinterpolate(occupation, n)
         return coeffs
 
-    def _spectral_bounds(self, fock):
+    def _get_chebyshev_vec(self, coeffs):
+        assert len(coeffs) == len(self.chebyshev_sequences)
+        vec = self.chebyshev_sequences[0] * coeffs[0]
+        for v in self.chebyshev_sequences[1:]:
+            k = self.chebyshev_sequences.index(v)
+            vec += v * coeffs[k]
+        return vec
+
+    def _orthogonalize_fock(self, fock):
+        """
+        Orthogonalize the AO-basis Fock matrix using the inverse square-root
+        of the AO overlap matrix.
+
+        Parameters
+        ----------
+        fock : ndarray
+            AO-basis Fock matrix.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Orthogonalized AO-basis Fock matrix.
+        """
+        X = self.ovlp_inv
+        fock_ortho = X @ fock @ X.T
+        fock_ortho = to_csr_matrix(fock_ortho.toarray(), threshold=MATRIX_THRESHOLD)
+        return fock_ortho
+
+    def _spectral_bounds(self, fock_ortho):
         """
         Estimate the orthogonalized-Fock spectral bounds ``(a, b, emin, emax)``
         used to normalize the Chebyshev expansion interval.
@@ -368,22 +379,15 @@ class ChebyshevSCF(hf.SCF):
 
         Parameters
         ----------
-        fock : ndarray
-            AO-basis Fock matrix.
+        fock_ortho : ndarray
+            Orthogonalized AO-basis Fock matrix.
 
         Returns
         -------
         tuple
-            ``(a, b, emin, emax, fock_ortho)`` where ``fock_ortho`` is the
-            orthogonalized-AO Fock matrix, kept as a ``scipy.sparse.csr_matrix``
-            (not densified) so this estimate and the Davidson call below stay
-            near-linear-cost for large, sparse ``fock``.
+            ``(a, b, emin, emax)`` where ``a`` and ``b`` are the spectral bounds,
+            and ``emin`` and ``emax`` are the estimated minimum and maximum eigenvalues.
         """
-        X = self.get_ovlp_inv_sqrt()
-        X = to_csr_matrix(X, threshold=1e-5)
-        fock_sp = to_csr_matrix(fock, threshold=1e-5)
-        fock_ortho = X.T @ fock_sp @ X
-        fock_ortho = fock_ortho.tocsr()
 
         nmo = fock_ortho.shape[0]
         diag = numpy.asarray(fock_ortho.diagonal())
@@ -411,113 +415,20 @@ class ChebyshevSCF(hf.SCF):
         delta = 0.1
         a = delta + (emax - emin) / 2.0
         b = (emax + emin) / 2.0
-        return a, b, emin, emax, fock_ortho
-
-    def _degree_for_beta_a(
-        self, beta, a, safety_factor=2.0, min_degree=10, max_degree=2000
-    ):
-        """
-        Pure formula: suggested Chebyshev degree for a given ``beta`` and
-        spectral half-width ``a``, without re-estimating ``a`` from a Fock
-        matrix. Used by :meth:`_auto_degree` (which estimates ``a`` first)
-        and directly by the beta-annealing schedule in :meth:`kernel`,
-        which reuses a single cached ``a`` across cycles rather than paying
-        for :meth:`_spectral_bounds` (a Davidson call) at every beta step.
-
-        Parameters
-        ----------
-        beta : float
-            Inverse-temperature parameter for this evaluation.
-        a : float
-            Spectral half-width, e.g. from :meth:`_spectral_bounds`.
-        safety_factor, min_degree, max_degree
-            See :meth:`_auto_degree`.
-
-        Returns
-        -------
-        int
-            Suggested Chebyshev degree.
-        """
-        beta_tilde = beta * a
-        degree = int(numpy.ceil(safety_factor * beta_tilde))
-        return max(min_degree, min(max_degree, degree))
-
-    def _auto_degree(
-        self, fock, beta=None, safety_factor=2.5, min_degree=10, max_degree=2000
-    ):
-        """
-        Estimate a Chebyshev expansion degree sufficient to resolve the
-        Fermi-Dirac occupation step for the given Fock matrix and ``beta``.
-
-        The number of Chebyshev terms needed to approximate a Fermi-Dirac
-        step of sharpness ``beta_tilde = beta * a`` (``a`` being the
-        orthogonalized-Fock spectral half-width) scales approximately
-        linearly with ``beta_tilde``. Using a fixed, geometry-independent
-        ``chebyshev_degree`` (as in the original implementation) under-resolves
-        this step for systems with a wide Fock spectrum -- e.g. short bond
-        lengths, where strong nuclear repulsion and orbital-energy splitting
-        inflate ``a`` -- producing large total-energy errors even though the
-        SCF density-matrix and energy changes appear "converged" by the
-        stated ``conv_dm``/``conv_e`` thresholds.
-
-        Parameters
-        ----------
-        fock : ndarray
-            AO-basis Fock matrix used to estimate the spectral width.
-        beta : float, optional
-            Inverse-temperature parameter.  Defaults to ``self.beta``.
-        safety_factor : float, optional
-            Multiplier on ``beta_tilde``. Measured on H2/STO-3G across
-            bond lengths 0.2-2.0 A: ~1.0x gives ~1e-3 to 1e-4 Ha accuracy,
-            ~1.5x gives ~1e-4 to 1e-5 Ha, and ~2.0x gives ~1e-5 Ha or
-            better while keeping degree (and thus cost) noticeably lower
-            than 2.5x. 2.0 is used as the default; raise it if higher
-            accuracy is needed for a given system.
-        min_degree, max_degree : int, optional
-            Clamp on the returned degree, to avoid pathologically small or
-            expensive expansions from bad spectral-bound estimates.
-
-        Returns
-        -------
-        int
-            Suggested ``chebyshev_degree``.
-        """
-        if beta is None:
-            beta = self.beta
-        a, _b, _emin, _emax, _ = self._spectral_bounds(fock)
-        degree = self._degree_for_beta_a(
-            beta,
-            a,
-            safety_factor=safety_factor,
-            min_degree=min_degree,
-            max_degree=max_degree,
-        )
-        logger.info(
-            self,
-            "Auto-selected chebyshev_degree = %d "
-            "(beta=%.3g, a=%.4f, beta*a=%.3g, safety_factor=%.2f)",
-            degree,
-            beta,
-            a,
-            beta * a,
-            safety_factor,
-        )
-        return degree
+        return a, b, emin, emax
 
     def make_rdm1_chebyshev(
-        self, fock, mu, ovlp=None, nmo=None, degree=None, beta=None
+        self, normalized_fock, mu, nmo=None, degree=None, beta=None, a=None, b=None
     ):
         """
         Construct an AO-basis one-particle density matrix by Chebyshev filtering.
 
         Parameters
         ----------
-        fock : ndarray
-            AO-basis Fock matrix.
+        normalized_fock : ndarray
+            Normalized AO-basis Fock matrix.
         mu : float
             Chemical potential in the normalized spectral interval.
-        ovlp : ndarray, optional
-            AO overlap matrix.  If omitted, ``self.get_ovlp()`` is used.
         nmo : int, optional
             Number of filtered columns.  Defaults to the Fock dimension.
         degree : int, optional
@@ -530,40 +441,42 @@ class ChebyshevSCF(hf.SCF):
         ndarray
             Approximate AO-basis density matrix.
         """
-        if ovlp is None:
-            ovlp = self.get_ovlp()
         if degree is None:
             degree = self.chebyshev_degree
         if nmo is None:
-            nmo = fock.shape[0]
+            nmo = normalized_fock.shape[0]
         if beta is None:
             beta = self.beta
+        if a is None:
+            a = self.a
+        if b is None:
+            b = self.b
 
-        a, b, _emin, _emax, fock_ortho = self._spectral_bounds(fock)
-        self.a = a
-        self.b = b
+        X = self.ovlp_inv
 
-        X = self.get_ovlp_inv_sqrt()
-        X = to_csr_matrix(X, threshold=1e-5)
+        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
 
-        dm = numpy.zeros((fock.shape[0], fock.shape[0]))
+        dm = numpy.zeros((normalized_fock.shape[0], normalized_fock.shape[0]))
 
         identity = csr_matrix(
             (
-                numpy.ones(fock.shape[0]),
-                (numpy.arange(fock.shape[0]), numpy.arange(fock.shape[0])),
+                numpy.ones(normalized_fock.shape[0]),
+                (
+                    numpy.arange(normalized_fock.shape[0]),
+                    numpy.arange(normalized_fock.shape[0]),
+                ),
             ),
-            shape=(fock.shape[0], fock.shape[0]),
+            shape=(normalized_fock.shape[0], normalized_fock.shape[0]),
         )
-        normalized_fock = (fock_ortho - b * identity) / a
-        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=1e-5)
 
-        for i in range(nmo):
-            v = coo_matrix(([1.0], ([i], [0])), shape=(nmo, 1)).tocsr()
-            y = self._chebyshev_poly_vec(v, normalized_fock, mu, degree, beta, a)
-            dm[:, i] = y.toarray().flatten()
+        # for i in range(nmo):
+        #     v = coo_matrix(([1.0], ([i], [0])), shape=(nmo, 1)).tocsr()
+        #     y = self._chebyshev_poly_vec(v, normalized_fock, mu, degree, beta, a)
+        #     dm[:, i] = y.toarray().flatten()
+        y = self._chebyshev_poly_vec(identity, normalized_fock, mu, degree, beta, a)
+        dm = y.toarray()
 
-        dm = to_csr_matrix(dm, threshold=1e-5)
+        dm = to_csr_matrix(dm, threshold=MATRIX_THRESHOLD)
         dm_ao = X @ dm @ X.T
         return dm_ao.toarray()
 
@@ -597,7 +510,7 @@ class ChebyshevSCF(hf.SCF):
             )
         return self._dm1
 
-    def _diff_ne(self, nelec, mu, fock):
+    def _diff_ne(self, nelec, mu, moments):
         """
         Return the electron-number residual for a trial chemical potential.
 
@@ -607,20 +520,19 @@ class ChebyshevSCF(hf.SCF):
             Target number of electrons.
         mu : float
             Trial chemical potential.
-        fock : ndarray
-            AO-basis Fock matrix used to build the filtered density.
 
         Returns
         -------
         float
             Difference between filtered electron count and ``nelec``.
         """
-        dm = self.make_rdm1_chebyshev(fock, mu)
-        ovlp = self.get_ovlp()
-        ne = numpy.trace(dm @ ovlp)
+        coeffs = self._calc_coeff(
+            self.chebyshev_degree, beta=self.beta, mu=mu, a=self.a
+        )
+        ne = self.g * coeffs @ moments
         return ne - nelec
 
-    def bisect_search_mu(self, nelectrons, fock):
+    def bisect_search_mu(self, nelectrons, moments=None):
         """
         Find the chemical potential that gives the target electron count.
 
@@ -628,9 +540,8 @@ class ChebyshevSCF(hf.SCF):
         ----------
         nelectrons : float
             Target number of electrons.
-        fock : ndarray or None
-            AO-basis Fock matrix.  If ``None``, a Fock matrix is built from the
-            initial guess density.
+        moments : ndarray or None
+            Chebyshev moments.  If None, use ``self.chebyshev_moments``.
 
         Returns
         -------
@@ -639,15 +550,15 @@ class ChebyshevSCF(hf.SCF):
         """
         mu_lo = -1.0
         mu_hi = 1.0
-        if fock is None:
-            fock = self.get_fock(self.get_init_guess(self.mol))
+        if moments is None:
+            moments = self.chebyshev_moments
         mu = bisect(
-            lambda mu: self._diff_ne(nelectrons, mu, fock), mu_lo, mu_hi, xtol=1e-14
+            lambda mu: self._diff_ne(nelectrons, mu, moments), mu_lo, mu_hi, xtol=MU_THRESHOLD
         )
         return mu
 
     def kernel(
-        self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, mixing_beta=0.3, dm1=None
+        self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, dm1=None
     ):
         """
         Run the Chebyshev-filtered SCF iteration.
@@ -660,8 +571,6 @@ class ChebyshevSCF(hf.SCF):
             Convergence threshold for the total-energy change.
         max_cycle : int, optional
             Maximum number of SCF iterations.
-        mixing_beta : float, optional
-            Reserved mixing parameter for API experimentation.
         dm1 : ndarray, optional
             Initial AO-basis density matrix.
 
@@ -670,36 +579,12 @@ class ChebyshevSCF(hf.SCF):
         float
             Final total SCF energy.
         """
-        # The standard pyscf.scf.hf.SCF.kernel() calls self.build() before
-        # iterating; this driver has its own kernel() and previously skipped
-        # that call. That silently broke mixins such as sgx.sgx_fit, whose
-        # SGXHF.build() sets up state (e.g. self._nsteps_direct) that
-        # get_veff() depends on -- without calling build() here, sgx-fitted
-        # ChebyshevSCF instances raised AttributeError on the first get_veff
-        # call.
         self.build(self.mol)
 
         dm1 = self.get_init_guess(self.mol, dm1=dm1)
-        ## get_fock_dm
         fock = self.get_fock(dm=dm1)
         ovlp = self.get_ovlp()
 
-        if self.auto_degree:
-            auto_deg = self._auto_degree(
-                fock, beta=self.beta, safety_factor=self.degree_safety_factor
-            )
-            if auto_deg > self.chebyshev_degree:
-                logger.info(
-                    self,
-                    "auto_degree: raising chebyshev_degree "
-                    "%d -> %d for this geometry/beta",
-                    self.chebyshev_degree,
-                    auto_deg,
-                )
-                self.chebyshev_degree = auto_deg
-
-        mu = self.bisect_search_mu(self.mol.nelectron, fock)
-        self.mu = mu
         e_save = 1e9
         diis_obj = diis.ADIIS(self)
         fock_diis = fock
@@ -708,15 +593,18 @@ class ChebyshevSCF(hf.SCF):
         dm_new = dm1
         for cycle in range(max_cycle):
             fock = fock_diis
-            mu = self.bisect_search_mu(self.mol.nelectron, fock)
-            dm_new = self.make_rdm1_chebyshev(fock, mu)
+            fock_ortho = self._orthogonalize_fock(fock)
+            self.a, self.b, _, _ = self._spectral_bounds(fock_ortho)
+            normalized_fock = self._normalize_fock(fock_ortho)
+            moments = self.get_chebyshev_moments(normalized_fock)
+            self.mu = self.bisect_search_mu(self.mol.nelectron, moments=moments)
+            dm_new = self.make_rdm1_chebyshev(normalized_fock, self.mu)
             h1e = self.get_hcore()
             veff = self.get_veff(self.mol, dm_new)
             F = h1e + veff
             fock_diis = diis_obj.update(ovlp, dm_new, F, self, h1e, veff)
             ne = numpy.trace(dm_new @ ovlp)
             diff = numpy.linalg.norm(dm_new - dm1)
-            ## energy_elec_dm
             e = self.energy_elec(dm_new, h1e, veff)[0] + self.mol.energy_nuc()
             logger.info(
                 self,
@@ -745,24 +633,12 @@ class ChebyshevSCF(hf.SCF):
                 conv_e,
             )
 
-        ## energy_elec_dm
         e_tot = self.energy_elec(dm_new, h1e, veff)[0] + self.mol.energy_nuc()
 
-        # Cache the converged density matrix so make_rdm1() works without
-        # relying on mo_coeff/mo_occ, which this diagonalization-free driver
-        # never explicitly constructs while iterating.
         self._dm1 = dm_new
         self.e_tot = e_tot
         self.converged = converged
 
-        # For interface compatibility with the rest of pyscf.scf.hf.SCF
-        # (analyze(), stability analysis, gradients/properties code that
-        # expects mo_energy / mo_coeff / mo_occ), perform a single final
-        # diagonalization of the converged Fock matrix. This is a post-hoc
-        # summary of the converged mean-field potential and does not feed
-        # back into the Chebyshev density construction above -- similar in
-        # spirit to reporting orbital energies from a converged
-        # density-matrix-purification calculation.
         mo_energy, mo_coeff = self.eig(fock_diis, ovlp)
         mo_occ = self.get_occ(mo_energy, mo_coeff)
         self.mo_energy = mo_energy
@@ -774,13 +650,13 @@ class ChebyshevSCF(hf.SCF):
         return e_tot
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     from pyscf import gto
 
-    mol = gto.M(atom='H 0 0 0; H 0 0 0.74', basis='sto-3g', verbose=4)
+    mol = gto.M(atom="H 0 0 0; H 0 0 0.74", basis="sto-3g", verbose=4)
     mf = ChebyshevSCF(mol)
     mf.chebyshev_degree = 10
     mf.beta = 40.0
     mf.kernel()
 
-    print('ChebyshevSCF Energy:', mf.e_tot)
+    print("ChebyshevSCF Energy:", mf.e_tot)

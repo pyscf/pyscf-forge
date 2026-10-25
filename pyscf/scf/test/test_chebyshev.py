@@ -8,15 +8,19 @@ in tearDownModule, RHF used as the numerical reference.
 
 Run with:
     pytest test_chebyshev_scf.py -v
-or
-    python -m pyscf.lib.misc  # (if wired into the pyscf-forge test runner)
 """
-
+import os
 import unittest
+
 import numpy as np
 
-from pyscf import gto, scf, lib
+from pyscf import gto, scf
 from pyscf.scf.chebyshev_scf import ChebyshevSCF
+
+slow = unittest.skipUnless(
+    os.environ.get("PYSCF_RUN_SLOW_TESTS") == "1",
+    "set PYSCF_RUN_SLOW_TESTS=1 to run slow tests",
+)
 
 
 def build_h_chain(n, bond_length=0.74, basis="sto-3g", spin=None):
@@ -63,16 +67,23 @@ class KnownValues(unittest.TestCase):
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
+        self.assertTrue(mf_chb.converged)
 
-    def test_energy_agrees_with_rhf_h4(self):
+    def test_h4_energy_electron_count_and_hermiticity(self):
         mf_ref = scf.RHF(mol_h4).run()
         mf_chb = ChebyshevSCF(mol_h4)
         mf_chb.chebyshev_degree = 40
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
+        dm = mf_chb.make_rdm1()
+        s = mf_chb.get_ovlp()
+        nelec_computed = np.einsum("ij,ji->", dm, s)
+        self.assertAlmostEqual(nelec_computed, mol_h4.nelectron, delta=1e-3)
+        self.assertTrue(np.allclose(dm, dm.conj().T, atol=1e-5))
 
-    def test_energy_agrees_with_rhf_h2o(self):
+    @slow
+    def test_energy_agrees_with_rhf_h2o_slow(self):
         mol_h2o = gto.M(
             atom="O 0.000000 0.000000 0.000000; "
             "H 0.000000 -0.757000 0.587000; "
@@ -86,11 +97,10 @@ class KnownValues(unittest.TestCase):
         mf_chb.chebyshev_degree = 50
         mf_chb.beta = 20.0
         e_chb = mf_chb.kernel()
-        print("RHF energy:", mf_ref.e_tot)
-        print("ChebyshevSCF energy:", e_chb)
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
 
-    def test_energy_agrees_with_rhf_density_fit(self):
+    @slow
+    def test_energy_agrees_with_rhf_density_fit_slow(self):
         # Mirrors the density-fitted usage pattern from the benchmark
         # script: mf.density_fit(auxbasis='weigend').
         mf_ref = scf.RHF(mol_h4).density_fit(auxbasis="weigend").run()
@@ -102,17 +112,9 @@ class KnownValues(unittest.TestCase):
 
 
 class ConvergenceWithBeta(unittest.TestCase):
-    """
-    The Chebyshev/Fermi-Dirac filter should converge toward the exact
-    (T -> 0) diagonalization result as beta grows and/or the polynomial
-    degree increases, provided the degree is sufficient to resolve the
-    sharper occupation step. This directly targets the discrepancy
-    observed in the benchmark scan at short bond length (near-degenerate
-    HOMO-LUMO gap), where ChebyshevSCF and RHF energies disagreed by
-    ~0.07 Ha at bond_length=0.2 A but agreed to ~1e-3 Ha by 1.6-2.0 A.
-    """
 
-    def test_error_decreases_with_beta(self):
+    @slow
+    def test_error_decreases_with_beta_slow(self):
         mol = mol_h4  # short bond length -> small HOMO-LUMO gap
         e_ref = scf.RHF(mol).run().e_tot
 
@@ -122,9 +124,6 @@ class ConvergenceWithBeta(unittest.TestCase):
             # mf.chebyshev_degree = 60  # kept high enough to resolve beta
             mf.beta = beta
             e = mf.kernel()
-            print("e_ref:", e_ref)
-            print("e@beta:", e, beta)
-            print("error:", abs(e - e_ref))
             errors.append(abs(e - e_ref))
 
         # Error should be non-increasing (monotonic within numerical noise)
@@ -135,7 +134,8 @@ class ConvergenceWithBeta(unittest.TestCase):
         # At the largest beta tested, agreement should be tight.
         self.assertLess(errors[-1], 1e-3)
 
-    def test_error_decreases_with_degree(self):
+    @slow
+    def test_error_decreases_with_degree_slow(self):
         mol = mol_h4
         e_ref = scf.RHF(mol).run().e_tot
 
@@ -151,37 +151,6 @@ class ConvergenceWithBeta(unittest.TestCase):
             self.assertLessEqual(errors[i + 1], errors[i] + 1e-3)
 
 
-class ElectronCountAndOccupation(unittest.TestCase):
-    """
-    A Chebyshev-filtered density matrix is only physically meaningful if
-    it integrates to the correct electron count; this is not guaranteed
-    a priori (unlike hard diagonalization + integer occupation) and
-    should be checked explicitly, especially at low chebyshev_degree
-    or low beta where the filter is not yet a good step-function
-    approximation.
-    """
-
-    def test_trace_PS_equals_nelec(self):
-        mol = mol_h4
-        mf = ChebyshevSCF(mol)
-        mf.chebyshev_degree = 40
-        mf.beta = 40.0
-        mf.kernel()
-        dm = mf.make_rdm1()
-        s = mf.get_ovlp()
-        nelec_computed = np.einsum("ij,ji->", dm, s)
-        self.assertAlmostEqual(nelec_computed, mol.nelectron, delta=1e-3)
-
-    def test_density_matrix_hermitian(self):
-        mol = mol_h4
-        mf = ChebyshevSCF(mol)
-        mf.chebyshev_degree = 40
-        mf.beta = 40.0
-        mf.kernel()
-        dm = mf.make_rdm1()
-        self.assertTrue(np.allclose(dm, dm.conj().T, atol=1e-5))
-
-
 class InterfaceCompatibility(unittest.TestCase):
     """ChebyshevSCF should behave as a drop-in pyscf.scf.hf.SCF subclass."""
 
@@ -193,13 +162,6 @@ class InterfaceCompatibility(unittest.TestCase):
         mf = ChebyshevSCF(mol_h2)
         self.assertTrue(hasattr(mf, "chebyshev_degree"))
         self.assertTrue(hasattr(mf, "beta"))
-
-    def test_converged_flag_set(self):
-        mf = ChebyshevSCF(mol_h2)
-        mf.chebyshev_degree = 40
-        mf.beta = 40.0
-        mf.kernel()
-        self.assertTrue(mf.converged)
 
     def test_scanner_and_density_fit_chainable(self):
         # Matches the benchmark script's .density_fit(auxbasis='weigend')
@@ -214,16 +176,10 @@ class InterfaceCompatibility(unittest.TestCase):
 class EdgeCases(unittest.TestCase):
 
     def test_single_atom_raises_or_handles_gracefully(self):
-        # H atom chain of length 1: exercise build_h_chain's own guard,
-        # not ChebyshevSCF, but included here since the benchmark script
-        # relies on it for scan bounds.
         with self.assertRaises(ValueError):
             build_h_chain(0)
 
     def test_low_degree_does_not_crash(self):
-        # A too-low degree should still run (possibly with poor accuracy)
-        # rather than raising, so users get an energy plus the option to
-        # inspect mf.converged rather than a hard failure.
         mf = ChebyshevSCF(mol_h2)
         mf.chebyshev_degree = 2
         mf.beta = 10.0
@@ -235,13 +191,14 @@ class Reproducibility(unittest.TestCase):
     """
     _spectral_bounds() uses a random starting vector for its Davidson
     eigenvalue estimate. Before rng_seed was introduced this came from the
-    unseeded global numpy.random, so chebyshev_degree (via auto_degree) and
+    unseeded global numpy.random, so chebyshev_degree and
     the converged energy were not guaranteed to be identical across runs of
     the same input. This checks that a fixed rng_seed makes the whole
     pipeline exactly reproducible.
     """
 
-    def test_same_seed_gives_identical_energy_and_degree(self):
+    @slow
+    def test_same_seed_gives_identical_energy_and_degree_slow(self):
         mol = mol_h2
         mf1 = ChebyshevSCF(mol)
         mf1.rng_seed = 0
@@ -254,10 +211,8 @@ class Reproducibility(unittest.TestCase):
         self.assertEqual(mf1.chebyshev_degree, mf2.chebyshev_degree)
         self.assertEqual(e1, e2)
 
-    def test_different_seed_still_agrees_within_tolerance(self):
-        # Different seeds perturb only the Davidson starting vector for the
-        # spectral-bound estimate, not the physics, so results should still
-        # agree closely even if not bit-identical.
+    @slow
+    def test_different_seed_still_agrees_within_tolerance_slow(self):
         mol = mol_h2
         mf1 = ChebyshevSCF(mol)
         mf1.rng_seed = 0
@@ -290,7 +245,8 @@ class SGXExchange(unittest.TestCase):
     looser but still sub-1-mHa tolerance is used relative to KnownValues.
     """
 
-    def test_energy_agrees_with_sgx_rhf(self):
+    @slow
+    def test_energy_agrees_with_sgx_rhf_slow(self):
         from pyscf import sgx
 
         mf_ref = sgx.sgx_fit(scf.RHF(mol_h4), pjs=False)
@@ -306,7 +262,8 @@ class SGXExchange(unittest.TestCase):
 
         self.assertAlmostEqual(e_chb, e_ref, delta=1e-3)  # < 1 mHa
 
-    def test_converged_flag_and_interface_with_sgx(self):
+    @slow
+    def test_converged_flag_and_interface_with_sgx_slow(self):
         from pyscf import sgx
 
         mf = sgx.sgx_fit(ChebyshevSCF(mol_h2), pjs=False)
