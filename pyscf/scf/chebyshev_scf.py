@@ -42,7 +42,7 @@ MU_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_MU_THRESHOLD", 1e-14)
 VEC_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_VEC_THRESHOLD", 1e-6)
 
 
-def block_inv_sqrt(s, thresh=1e-7):
+def block_inv_sqrt(s, thresh=OVLP_THRESHOLD):
     """
     Compute a block-local inverse square root of an overlap matrix.
 
@@ -80,7 +80,7 @@ def block_inv_sqrt(s, thresh=1e-7):
     return s_inv_sqrt
 
 
-def inv_sqrt(s, thresh=1e-7, full_inv=False):
+def inv_sqrt(s, thresh=OVLP_THRESHOLD, full_inv=False):
     """
     Compute an inverse square root of a symmetric positive-definite matrix.
 
@@ -107,7 +107,7 @@ def inv_sqrt(s, thresh=1e-7, full_inv=False):
         return block_inv_sqrt(s, thresh=thresh)
 
 
-def to_csr_matrix(matrix, threshold=1e-5):
+def to_csr_matrix(matrix, threshold=MATRIX_THRESHOLD):
     """
     Convert a dense array to CSR format after dropping small elements.
 
