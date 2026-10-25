@@ -36,6 +36,11 @@ from pyscf import __config__
 from pyscf.lib import logger
 from pyscf.scf import diis, hf
 
+MATRIX_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_MATRIX_THRESHOLD", 1e-5)
+OVLP_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_OVLP_THRESHOLD", 1e-7)
+MU_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_MU_THRESHOLD", 1e-14)
+VEC_THRESHOLD = getattr(__config__, "scf_chebyshev_scf_VEC_THRESHOLD", 1e-6)
+
 
 def block_inv_sqrt(s, thresh=1e-7):
     """
@@ -150,7 +155,7 @@ class ChebyshevSCF(hf.SCF):
         self.degree_safety_factor = 2.0
         self.rng_seed = 0
         self.chebyshev_moments = None
-        self.ovlp_inv = to_csr_matrix(self.get_ovlp_inv_sqrt(), threshold=1e-5)
+        self.ovlp_inv = to_csr_matrix(self.get_ovlp_inv_sqrt(), threshold=MATRIX_THRESHOLD)
         self.a = None
         self.b = None
         self.g = 1
@@ -199,10 +204,10 @@ class ChebyshevSCF(hf.SCF):
             shape=(fock_ortho.shape[0], fock_ortho.shape[0]),
         )
         normalized_fock = (fock_ortho - b * identity) / a
-        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=1e-5)
+        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
         return normalized_fock
 
-    def get_ovlp_inv_sqrt(self, thresh=1e-7, full_inv=False):
+    def get_ovlp_inv_sqrt(self, thresh=OVLP_THRESHOLD, full_inv=False):
         """
         Return the inverse square-root transform of the AO overlap matrix.
 
@@ -230,9 +235,9 @@ class ChebyshevSCF(hf.SCF):
         if nmo is None:
             nmo = normalized_fock.shape[0]
         if vec_threshold is None:
-            vec_threshold = getattr(self, "vec_threshold", 1e-6)
+            vec_threshold = getattr(self, "vec_threshold", VEC_THRESHOLD)
         # T0 v_
-        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=1e-5)
+        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
         self.chebyshev_moments = numpy.zeros(self.chebyshev_degree + 1)
         for i in range(nmo):
             v = coo_matrix(([1.0], ([i], [0])), shape=(nmo, 1)).tocsr()
@@ -283,7 +288,7 @@ class ChebyshevSCF(hf.SCF):
             Filtered vector contribution to the density matrix.
         """
         if vec_threshold is None:
-            vec_threshold = getattr(self, "vec_threshold", 1e-6)
+            vec_threshold = getattr(self, "vec_threshold", VEC_THRESHOLD)
 
         coeffs = self._calc_coeff(degree, beta=beta, mu=mu, a=a)
         # T0 v_
@@ -359,7 +364,7 @@ class ChebyshevSCF(hf.SCF):
         """
         X = self.ovlp_inv
         fock_ortho = X @ fock @ X.T
-        fock_ortho = to_csr_matrix(fock_ortho.toarray(), threshold=1e-5)
+        fock_ortho = to_csr_matrix(fock_ortho.toarray(), threshold=MATRIX_THRESHOLD)
         return fock_ortho
 
     def _spectral_bounds(self, fock_ortho):
@@ -449,7 +454,7 @@ class ChebyshevSCF(hf.SCF):
 
         X = self.ovlp_inv
 
-        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=1e-5)
+        normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
 
         dm = numpy.zeros((normalized_fock.shape[0], normalized_fock.shape[0]))
 
@@ -471,7 +476,7 @@ class ChebyshevSCF(hf.SCF):
         y = self._chebyshev_poly_vec(identity, normalized_fock, mu, degree, beta, a)
         dm = y.toarray()
 
-        dm = to_csr_matrix(dm, threshold=1e-5)
+        dm = to_csr_matrix(dm, threshold=MATRIX_THRESHOLD)
         dm_ao = X @ dm @ X.T
         return dm_ao.toarray()
 
@@ -548,12 +553,12 @@ class ChebyshevSCF(hf.SCF):
         if moments is None:
             moments = self.chebyshev_moments
         mu = bisect(
-            lambda mu: self._diff_ne(nelectrons, mu, moments), mu_lo, mu_hi, xtol=1e-14
+            lambda mu: self._diff_ne(nelectrons, mu, moments), mu_lo, mu_hi, xtol=MU_THRESHOLD
         )
         return mu
 
     def kernel(
-        self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, mixing_beta=0.3, dm1=None
+        self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, dm1=None
     ):
         """
         Run the Chebyshev-filtered SCF iteration.
@@ -566,8 +571,6 @@ class ChebyshevSCF(hf.SCF):
             Convergence threshold for the total-energy change.
         max_cycle : int, optional
             Maximum number of SCF iterations.
-        mixing_beta : float, optional
-            Reserved mixing parameter for API experimentation.
         dm1 : ndarray, optional
             Initial AO-basis density matrix.
 
