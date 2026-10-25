@@ -8,17 +8,14 @@ in tearDownModule, RHF used as the numerical reference.
 
 Run with:
     pytest test_chebyshev_scf.py -v
-or
-    python -m pyscf.lib.misc  # (if wired into the pyscf-forge test runner)
 """
-
-import unittest
 import os
+import unittest
+
 import numpy as np
 
-from pyscf import gto, scf, lib
+from pyscf import gto, scf
 from pyscf.scf.chebyshev_scf import ChebyshevSCF
-
 
 slow = unittest.skipUnless(
     os.environ.get("PYSCF_RUN_SLOW_TESTS") == "1",
