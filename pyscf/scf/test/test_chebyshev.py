@@ -13,14 +13,15 @@ import os
 import unittest
 
 import numpy as np
+from scipy.sparse import csr_matrix
 
 from pyscf import gto, scf
 from pyscf.scf.chebyshev_scf import ChebyshevSCF
 
-slow = unittest.skipUnless(
-    os.environ.get("PYSCF_RUN_SLOW_TESTS") == "1",
-    "set PYSCF_RUN_SLOW_TESTS=1 to run slow tests",
-)
+# slow = unittest.skipUnless(
+#     os.environ.get("PYSCF_RUN_SLOW_TESTS") == "1",
+#     "set PYSCF_RUN_SLOW_TESTS=1 to run slow tests",
+# )
 
 
 def build_h_chain(n, bond_length=0.74, basis="sto-3g", spin=None):
@@ -72,7 +73,7 @@ class KnownValues(unittest.TestCase):
     def test_h4_energy_electron_count_and_hermiticity(self):
         mf_ref = scf.RHF(mol_h4).run()
         mf_chb = ChebyshevSCF(mol_h4)
-        mf_chb.chebyshev_degree = 40
+        mf_chb.chebyshev_degree = 80
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
@@ -82,7 +83,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual(nelec_computed, mol_h4.nelectron, delta=1e-3)
         self.assertTrue(np.allclose(dm, dm.conj().T, atol=1e-5))
 
-    @slow
+    #@slow
     def test_energy_agrees_with_rhf_h2o_slow(self):
         mol_h2o = gto.M(
             atom="O 0.000000 0.000000 0.000000; "
@@ -94,18 +95,18 @@ class KnownValues(unittest.TestCase):
         )
         mf_ref = scf.RHF(mol_h2o).run()
         mf_chb = ChebyshevSCF(mol_h2o)
-        mf_chb.chebyshev_degree = 50
+        mf_chb.chebyshev_degree = 280
         mf_chb.beta = 20.0
         e_chb = mf_chb.kernel()
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
 
-    @slow
+    #@slow
     def test_energy_agrees_with_rhf_density_fit_slow(self):
         # Mirrors the density-fitted usage pattern from the benchmark
         # script: mf.density_fit(auxbasis='weigend').
         mf_ref = scf.RHF(mol_h4).density_fit(auxbasis="weigend").run()
         mf_chb = ChebyshevSCF(mol_h4).density_fit(auxbasis="weigend")
-        mf_chb.chebyshev_degree = 40
+        mf_chb.chebyshev_degree = 80
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
         self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
@@ -113,7 +114,7 @@ class KnownValues(unittest.TestCase):
 
 class ConvergenceWithBeta(unittest.TestCase):
 
-    @slow
+    #@slow
     def test_error_decreases_with_beta_slow(self):
         mol = mol_h4  # short bond length -> small HOMO-LUMO gap
         e_ref = scf.RHF(mol).run().e_tot
@@ -121,7 +122,8 @@ class ConvergenceWithBeta(unittest.TestCase):
         errors = []
         for beta in (50.0, 75.0, 100.0):
             mf = ChebyshevSCF(mol)
-            # mf.chebyshev_degree = 60  # kept high enough to resolve beta
+            # Keep the expansion degree high enough to resolve all beta values.
+            mf.chebyshev_degree = 120
             mf.beta = beta
             e = mf.kernel()
             errors.append(abs(e - e_ref))
@@ -134,7 +136,7 @@ class ConvergenceWithBeta(unittest.TestCase):
         # At the largest beta tested, agreement should be tight.
         self.assertLess(errors[-1], 1e-3)
 
-    @slow
+    #@slow
     def test_error_decreases_with_degree_slow(self):
         mol = mol_h4
         e_ref = scf.RHF(mol).run().e_tot
@@ -186,6 +188,16 @@ class EdgeCases(unittest.TestCase):
         e = mf.kernel()
         self.assertTrue(np.isfinite(e))
 
+    def test_chebyshev_moments_are_diagonal_traces(self):
+        mf = ChebyshevSCF(mol_h2)
+        matrix = csr_matrix(np.diag([-0.5, 0.25]))
+
+        moments = mf.get_chebyshev_moments(matrix, degree=3)
+        np.testing.assert_allclose(moments, [2.0, -0.25, -1.375, 0.3125])
+
+        partial_moments = mf.get_chebyshev_moments(matrix, degree=3, nmo=1)
+        np.testing.assert_allclose(partial_moments, [1.0, -0.5, -0.5, 1.0])
+
 
 class Reproducibility(unittest.TestCase):
     """
@@ -197,7 +209,7 @@ class Reproducibility(unittest.TestCase):
     pipeline exactly reproducible.
     """
 
-    @slow
+    #@slow
     def test_same_seed_gives_identical_energy_and_degree_slow(self):
         mol = mol_h2
         mf1 = ChebyshevSCF(mol)
@@ -211,7 +223,7 @@ class Reproducibility(unittest.TestCase):
         self.assertEqual(mf1.chebyshev_degree, mf2.chebyshev_degree)
         self.assertEqual(e1, e2)
 
-    @slow
+    #@slow
     def test_different_seed_still_agrees_within_tolerance_slow(self):
         mol = mol_h2
         mf1 = ChebyshevSCF(mol)
@@ -245,7 +257,7 @@ class SGXExchange(unittest.TestCase):
     looser but still sub-1-mHa tolerance is used relative to KnownValues.
     """
 
-    @slow
+    #@slow
     def test_energy_agrees_with_sgx_rhf_slow(self):
         from pyscf import sgx
 
@@ -258,11 +270,12 @@ class SGXExchange(unittest.TestCase):
         mf_chb.with_df.dfj = True
         mf_chb.with_df.optk = True
         mf_chb.rng_seed = 0
+        mf_chb.chebyshev_degree = 80
         e_chb = mf_chb.kernel()
 
         self.assertAlmostEqual(e_chb, e_ref, delta=1e-3)  # < 1 mHa
 
-    @slow
+    #@slow
     def test_converged_flag_and_interface_with_sgx_slow(self):
         from pyscf import sgx
 
