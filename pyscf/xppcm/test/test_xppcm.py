@@ -212,6 +212,16 @@ class KnownValues(unittest.TestCase):
         cm[1, 2] -= h
         fd = (run(cp).e_tot - run(cm).e_tot) / (2 * h)
         self.assertAlmostEqual(de[1, 2], fd, delta=3e-4)
+        # post-HF gradients take hcore_generator() and grad_nuc() from the
+        # reference gradient, so they carry the XPCav terms with them
+        def ccsd(m):
+            mycc = cc.CCSD(m)
+            mycc.conv_tol, mycc.conv_tol_normt = 1e-10, 1e-8
+            return mycc.run()
+        g_cc = ccsd(mf).nuc_grad_method()
+        g_cc.verbose = 0
+        fd_cc = (ccsd(run(cp)).e_tot - ccsd(run(cm)).e_tot) / (2 * h)
+        self.assertAlmostEqual(g_cc.kernel()[1, 2], fd_cc, delta=3e-4)
 
     def test_pressure_requires_xp(self):
         mf = scf.RHF(mol_be).run()

@@ -13,6 +13,8 @@ and evaluates the pressure with their one-particle density:
 exact for variational methods (SCF, FCI, CASSCF), approximate for CCSD/CISD
 whose unrelaxed density misses some orbital response. The missed orbital
 response is small for CCSD and CISD, but would be large for MP2 (not implemented).
+Nuclear gradients need an XPCav reference (03-xpcav_gradient_and_geometry.py);
+post-HF gradients built on one include the XPCav terms.
 '''
 
 from pyscf import gto, scf, cc, ci, mcscf

@@ -25,7 +25,8 @@ XP-PCM (eXtreme-Pressure Polarizable Continuum Model) for PySCF.
 # ---------------------------------------------------------------------------
 # XP, XPCav: main classes for XP-PCM and XP-PCM with cavitation energy
 #   - E_cav via mf.get_e_cav() (XPCav only)
-#   - XPCav nuclear gradients via mf.nuc_grad_method()
+#   - XPCav nuclear gradients via mf.nuc_grad_method(); post-HF gradients built on an
+#     XPCav reference (MP2, CISD, CCSD, CASCI, CASSCF, TDDFT) include the XPCav terms
 #   - Built via factory functions ks.XP(...) and ks.XPCav(...), which wrap standard SCF objects
 # get_e_rep: Pauli repulsion energy of an SCF-with-XP or post-HF object
 # get_z0, get_z, get_eps: helpers for calculating XP-PCM parameters from solvent properties
@@ -596,16 +597,15 @@ def _get_S_out(mol, radii_table, grid_level=3):
         S_out += ao.T @ (ao * weights[p0:p1, np.newaxis])
     return S_out
 
-def _get_S_out_nuc_grad(mol, dm, radii_table, grid_level=3):
+def _get_S_out_ip(mol, radii_table, grid_level=3):
     """
-    Analytical nuclear gradient of S_out w.r.t. nuclear coordinates.
+    Derivative of _get_S_out, shape (3, nao, nao).
+    The exterior-grid analogue of mol.intor('int1e_ipovlp').
 
     Parameters
     ----------
     mol : gto.Mole
         Molecule object.
-    dm : array, shape (nao, nao)
-        Density matrix in the AO basis.
     radii_table : array
         Cavity radii in Bohr, indexed by nuclear charge.
     grid_level : int, default 3
@@ -613,25 +613,16 @@ def _get_S_out_nuc_grad(mol, dm, radii_table, grid_level=3):
 
     Returns
     -------
-    array, shape (natm, 3)
-        In atomic units (Bohr^-1).
+    array, shape (3, nao, nao)
     """
     coords, weights = _build_grid(mol, radii_table, grid_level=grid_level)
-
-    contrib = np.zeros((3, mol.nao))
+    s_ip = np.zeros((3, mol.nao, mol.nao))
     for p0, p1 in lib.prange(0, len(weights), _xp_grid_blksize(mol) // 4):   # deriv=1: 4 AO arrays
         ao_all = dft.numint.eval_ao(mol, coords[p0:p1], deriv=1)
-        ao  = ao_all[0]        # (nblk, nao)
-        dao = ao_all[1:4]      # (3, nblk, nao)
-        Vphi = (ao * weights[p0:p1, np.newaxis]) @ dm        # (nblk, nao)
-        contrib += np.einsum('kgm,gm->km', dao, Vphi)        # (3, nao)
-
-    grad = np.zeros((mol.natm, 3))
-    ao_slices = mol.aoslice_by_atom()
-    for A in range(mol.natm):
-        p0, p1 = ao_slices[A][2], ao_slices[A][3]
-        grad[A, :] = -2.0 * contrib[:, p0:p1].sum(axis=1)
-    return grad
+        aow = ao_all[0] * weights[p0:p1, np.newaxis]                          # (nblk, nao)
+        for k in range(3):
+            s_ip[k] += ao_all[1 + k].T @ aow
+    return s_ip
 
 def _get_cavity_surface_grid(mol, radii_table, lebedev_order=47):
     """
@@ -805,6 +796,8 @@ class _SCFWithXP:
         return super().reset(mol)
 
     def get_hcore(self, mol=None):
+        if mol is None:
+            mol = self.mol
         return super().get_hcore(mol) + self.with_xp.get_h_rep(mol)
 
     def nuc_grad_method(self):
@@ -874,8 +867,8 @@ class _XPCav(_XP):
     Encapsulates Pauli repulsion and approximate cavitation plus gradient calculations.
 
     Extends _XP with fixed-pressure cavitation: computes E_cav = pV in addition to
-    h_rep and E_rep. Also provides analytical nuclear gradients for geometry optimisation
-    under constant external pressure.
+    h_rep and E_rep, and the two derivative terms the nuclear gradient needs,
+    d(h_rep)/dR_A (hcore_deriv_generator) and dE_cav/dR_A (grad_cav).
 
     Intended for internal use by _SCFWithXPCav; not for direct instantiation.
     Use XPCav() factory function or mf.XPCav().
@@ -907,45 +900,71 @@ class _XPCav(_XP):
         V = get_cavity_volume(mol, self.radii_table)
         return V * self.p_gpa / EH_BOHR3_TO_GPA
 
-    def grad(self, dm, mol=None):
-        """Nuclear gradient of (E_rep + E_cav), shape (natm, 3), Hartree/Bohr.
+    def hcore_deriv_generator(self, mol=None):
+        """
+        Derivative of h_rep, d(h_rep)/dR_A, shape (3, nao, nao), Hartree/Bohr.
 
-        Computes three contributions:
-        1. Cavitation:  dE_cav/dR_A = p · R_A^2 · 4π · Σ_l w_l n_{l,k}
-        2. Boundary:    dE_rep/dR_A|_bnd = −z · R_A^2 · 4π · Σ_l w_l ρ_l n_{l,k}
-        3. Volume:      z · d/dR Tr[P · S_out]
+        Two contributions to d(h_rep)/dR_A:
+        1. Volume:    the basis functions on A move with it,
+                      -z [d_S_out] + transpose
+        2. Boundary:  sphere A moves and the exterior region with it,
+                      -z R_A^2 4π Σ_l w_l n_{l,k} rho(r_l)
+        PySCF's gradient codes contract these with the density, see
+        WithXPCavGrad.hcore_generator.
         """
         mol = mol if mol is not None else self.mol
-        dm = _as_total_dm(dm)
-        p_au = self.p_gpa / EH_BOHR3_TO_GPA  # pressure in atomic units
-
-        # Surface integrals (cavitation + boundary)
+        nao = mol.nao
+        aoslices = mol.aoslice_by_atom()
+        s_ip = _get_S_out_ip(mol, self.radii_table, grid_level=self.grid_level)
         surface_data = _get_cavity_surface_grid(
             mol, self.radii_table, lebedev_order=self.lebedev_order)
 
-        grad = np.zeros((mol.natm, 3))
-        for atom in range(mol.natm):
-            sd = surface_data[atom]
-            R  = sd['radius']
-            w  = sd['weights']
-            n  = sd['normals']
-            prefactor = R**2 * 4.0 * np.pi
-
-            # Cavitation: p · dV/dR_A
-            wn = np.einsum('l,lk->k', w, n)
-            grad[atom] += p_au * prefactor * wn
-
-            # Boundary response of h_rep
+        def hcore_deriv(atm_id):
+            p0, p1 = aoslices[atm_id, 2:]
+            h = np.zeros((3, nao, nao))
+            h[:, p0:p1] -= s_ip[:, p0:p1]
+            h = h + h.transpose(0, 2, 1)
+            sd = surface_data[atm_id]
             if len(sd['coords']) > 0:
-                ao  = dft.numint.eval_ao(mol, sd['coords'], deriv=0)
-                rho = np.einsum('lm,lm->l', ao @ dm, ao)
-                grad[atom] -= self.z * prefactor * np.einsum('l,l,lk->k', w, rho, n)
+                ao = dft.numint.eval_ao(mol, sd['coords'], deriv=0)
+                wn = sd['radius']**2 * 4.0 * np.pi * sd['weights'][:, np.newaxis] * sd['normals']
+                for k in range(3):
+                    h[k] -= (ao * wn[:, k:k + 1]).T @ ao
+            return self.z * h
+        return hcore_deriv
 
-        # Volume-integral contribution from h_rep
-        grad += self.z * _get_S_out_nuc_grad(
-            mol, dm, self.radii_table, grid_level=self.grid_level)
+    def grad_cav(self, mol=None, atmlst=None):
+        """
+        Derivative of the cavitation energy, dE_cav/dR_A, shape (len(atmlst), 3), Hartree/Bohr.
 
-        return grad
+        dE_cav/dR_A = p R_A^2 4π Σ_l w_l n_l over the exposed surface of sphere A. Assuming fixed p.
+        """
+        mol = mol if mol is not None else self.mol
+        surface_data = _get_cavity_surface_grid(
+            mol, self.radii_table, lebedev_order=self.lebedev_order)
+        p_au = self.p_gpa / EH_BOHR3_TO_GPA
+        de = np.zeros((mol.natm, 3))
+        for A, sd in enumerate(surface_data):
+            de[A] = p_au * sd['radius']**2 * 4.0 * np.pi * (sd['weights'] @ sd['normals'])
+        if atmlst is not None:
+            de = de[np.asarray(atmlst)]
+        return de
+
+    def grad(self, dm, mol=None):
+        """
+        XPCav part of the nuclear gradient for a given density.
+
+        For analysis (e.g. separating the pressure forces from the vacuum ones).
+        The SCF and post-HF gradients do not call this; they receive the same
+        terms through WithXPCavGrad.
+        """
+        mol = mol if mol is not None else self.mol
+        dm = _as_total_dm(dm)
+        hcore_deriv = self.hcore_deriv_generator(mol)
+        de = self.grad_cav(mol)
+        for A in range(mol.natm):
+            de[A] += np.einsum('xij,ij->x', hcore_deriv(A), dm)
+        return de
 
 class _SCFWithXPCav(_SCFWithXP):
     """
@@ -959,7 +978,7 @@ class _SCFWithXPCav(_SCFWithXP):
 
     def energy_nuc(self):
         """Nuclear repulsion plus the cavitation work E_cav = p V_c."""
-        return super().energy_nuc() + self.with_xp.get_e_cav()
+        return super().energy_nuc() + self.with_xp.get_e_cav(self.mol)
 
     def nuc_grad_method(self):
         """Return gradient object supporting XPCav gradients."""
@@ -989,40 +1008,38 @@ class _SCFWithXPCav(_SCFWithXP):
 
 class WithXPCavGrad:
     """
-    Gradient mixin for XPCav — adds cavitation + boundary + volume
-    gradient to whatever gradient object is underneath (vanilla SCF, PCM, …).
+    Gradient decorator for XPCav.
+
+    XPCav adds h_rep = z S_out to the core Hamiltonian and E_cav = p V_c to the
+    nuclear energy, so its derivatives enter at the two matching points of
+    PySCF's gradient interface: hcore_generator() gains d(h_rep)/dR_A and
+    grad_nuc() gains dE_cav/dR_A, as QM/MM does for its terms. 
     """
-    _keys = {'de_xp'}
 
     def __init__(self, grad_method):
         self.__dict__.update(grad_method.__dict__)
-        self.de_xp = None
 
     def undo_xp(self):
-        cls = self.__class__
-        obj = lib.view(self, lib.drop_class(cls, WithXPCavGrad, 'XPCav'))
-        del obj.de_xp
-        return obj
+        """Remove the XPCav terms, returning the underlying gradient object."""
+        return lib.view(self, lib.drop_class(self.__class__, WithXPCavGrad, 'XPCav'))
 
-    def kernel(self, *args, dm=None, **kwargs):
-        if dm is None:
-            dm = self.base.make_rdm1()
-        dm_tot = _as_total_dm(dm)
+    def hcore_generator(self, mol=None):
+        """Derivative of the core Hamiltonian including repulsion contributions."""
+        if mol is None:
+            mol = self.mol
+        hcore_deriv = super().hcore_generator(mol)
+        h_rep_deriv = self.base.with_xp.hcore_deriv_generator(mol)
 
-        # XPCav gradient: cavitation + boundary + volume, for all atoms
-        self.de_xp = self.base.with_xp.grad(dm_tot)
+        def hcore_deriv_xp(atm_id):
+            return hcore_deriv(atm_id) + h_rep_deriv(atm_id)
+        return hcore_deriv_xp
 
-        # Inner gradient (vanilla SCF, and/or PCM). GradientsBase.kernel records
-        # the atmlst it used on self.atmlst and returns (len(atmlst), 3).
-        de_inner = super().kernel(*args, **kwargs)
-
-        de_xp = self.de_xp
-        if self.atmlst is not None:
-            de_xp = de_xp[np.asarray(self.atmlst)]
-        self.de = de_inner + de_xp
-        return self.de
-
-    grad = kernel
+    def grad_nuc(self, mol=None, atmlst=None):
+        """Nuclear gradient including cav contributions."""
+        if mol is None:
+            mol = self.mol
+        return (super().grad_nuc(mol, atmlst)
+                + self.base.with_xp.grad_cav(mol, atmlst))
 
 def XPCav(mf, z, radii_table, p_gpa=None, grid_level=3, lebedev_order=47):
     """

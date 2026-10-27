@@ -10,6 +10,8 @@ XP alone keeps the cavity fixed, so it has no meaningful nuclear gradient.
 XPCav adds the cavitation work E_cav = p V_c at a fixed external pressure p
 and provides the analytical gradient of E_rep + E_cav, so that the decorated
 SCF object can be used for geometry optimisation at constant pressure.
+Post-HF gradients built on the XPCav reference (MP2, CCSD, CASSCF, ...)
+include the same terms.
 
 Note on grids: the exterior integration grid is cut at the cavity surface, so
 the energy carries grid noise while the analytical gradient is smooth.  Use
@@ -18,7 +20,7 @@ energy criterion tighter than about 1e-6 Eh.
 '''
 
 import numpy as np
-from pyscf import gto, scf
+from pyscf import gto, scf, cc
 from pyscf import xppcm
 from pyscf.xppcm import Rahm, get_cavity_volume, get_e_rep
 
@@ -56,14 +58,15 @@ de = grad.kernel()
 print('\nAnalytical gradient (Ha/Bohr):')
 print(np.array2string(de, precision=6, suppress_small=True))
 
-def energy_at(coords_bohr):
+def energy_at(coords_bohr, post_hf=None):
     m = mol.copy()
     m.set_geom_(coords_bohr, unit='Bohr')
     m.build()
     mf_ = scf.RHF(m).XPCav(z=z, radii_table=radii, p_gpa=p_gpa, grid_level=5)
     mf_.conv_tol = 1e-12
     mf_.verbose = 0
-    return mf_.kernel()
+    mf_.kernel()
+    return mf_.e_tot if post_hf is None else post_hf(mf_).run().e_tot
 
 h = 2e-3
 coords = mol.atom_coords()
@@ -75,7 +78,19 @@ print('dE/dy(H1): analytical %.6f   finite difference %.6f   (difference %.1e, g
       % (de[1, 1], fd, de[1, 1] - fd))
 
 #
-# 3. Geometry optimisation at constant pressure (needs geomeTRIC or PyBerny)
+# 3. Post-HF gradient. PySCF's post-HF gradient codes take hcore_generator()
+#    and grad_nuc() from the reference gradient, so the XPCav terms come along.
+#
+mycc = cc.CCSD(mf).run()
+grad_ccsd = mycc.nuc_grad_method()
+grad_ccsd.verbose = 0
+de_ccsd = grad_ccsd.kernel()
+fd_ccsd = (energy_at(cp, cc.CCSD) - energy_at(cm, cc.CCSD)) / (2 * h)
+print('CCSD dE/dy(H1): analytical %.6f   finite difference %.6f   (difference %.1e)'
+      % (de_ccsd[1, 1], fd_ccsd, de_ccsd[1, 1] - fd_ccsd))
+
+#
+# 4. Geometry optimisation at constant pressure (needs geomeTRIC or PyBerny)
 #
 try:
     from pyscf.geomopt.geometric_solver import optimize
