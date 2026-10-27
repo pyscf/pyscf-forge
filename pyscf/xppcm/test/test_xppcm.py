@@ -213,16 +213,46 @@ class KnownValues(unittest.TestCase):
         cm[1, 2] -= h
         fd = (run(cp).e_tot - run(cm).e_tot) / (2 * h)
         self.assertAlmostEqual(de[1, 2], fd, delta=3e-4)
-        # post-HF gradients take hcore_generator() and grad_nuc() from the
-        # reference gradient, so they carry the XPCav terms with them
-        def ccsd(m):
-            mycc = cc.CCSD(m)
+
+    def test_ccsd_gradient(self):
+        # PySCF's CCSD gradient takes hcore_generator() and grad_nuc() from the
+        # reference gradient, so the XPCav terms carry over without any code of
+        # their own. For two electrons CCSD is exact, so its gradient must equal
+        # the FCI one from PySCF's independent CASCI gradient code (every
+        # orbital active), for RHF and UHF references, and both must match a
+        # finite difference of the CCSD energy up to the grid noise.
+        radii = Rahm * 0.9
+        z, p_gpa, grid_level = 0.3, 5.0, 7
+        coords = np.array([[0., 0., 0.], [0., 0., 1.4]])
+
+        def ccsd_at(coords, scf_method=scf.RHF):
+            m = gto.M(atom=[['H', c] for c in coords], basis='cc-pvdz', unit='Bohr', verbose=0)
+            mf = scf_method(m).XPCav(z=z, radii_table=radii, p_gpa=p_gpa, grid_level=grid_level)
+            mf.conv_tol = 1e-12
+            mf.kernel()
+            mycc = cc.CCSD(mf)
             mycc.conv_tol, mycc.conv_tol_normt = 1e-10, 1e-8
             return mycc.run()
-        g_cc = ccsd(mf).nuc_grad_method()
-        g_cc.verbose = 0
-        fd_cc = (ccsd(run(cp)).e_tot - ccsd(run(cm)).e_tot) / (2 * h)
-        self.assertAlmostEqual(g_cc.kernel()[1, 2], fd_cc, delta=3e-4)
+
+        def grad(obj):
+            g = obj.nuc_grad_method()
+            g.verbose = 0
+            return g.kernel()
+
+        mycc = ccsd_at(coords)
+        de = grad(mycc)
+        self.assertEqual(de.shape, (2, 3))
+        mf = mycc._scf
+        de_fci = grad(mcscf.CASCI(mf, mf.mol.nao, mf.mol.nelec).run())
+        self.assertAlmostEqual(abs(de - de_fci).max(), 0.0, 7)
+        de_u = grad(ccsd_at(coords, scf.UHF))
+        self.assertAlmostEqual(abs(de_u - de_fci).max(), 0.0, 7)
+        h = 2e-3
+        cp, cm = coords.copy(), coords.copy()
+        cp[1, 2] += h
+        cm[1, 2] -= h
+        fd = (ccsd_at(cp).e_tot - ccsd_at(cm).e_tot) / (2 * h)
+        self.assertAlmostEqual(de[1, 2], fd, delta=3e-4)
 
     def test_xpcav_gradient_translational_invariance(self):
         # The forces sum to zero in the continuum. For the two surface terms
