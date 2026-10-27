@@ -79,7 +79,7 @@ def get_z0(solvent_num_valence_elec, solvent_density, solvent_molar_mass):
     """
     # n_val * rho / M is the solvent valence-electron density in mol e-/cm^3;
     # 0.063 is the semi-empirical proportionality constant of the XP-PCM
-    # parametrisation that maps it onto the barrier height z0 (a.u.).
+    # parametrisation that maps it onto the barrier height z0 (Hartree).
     return (solvent_num_valence_elec * solvent_density / solvent_molar_mass) * 0.063
 
 def get_z(volume, volume_0, z0, eta=6):
@@ -1013,7 +1013,7 @@ class WithXPCavGrad:
     XPCav adds h_rep = z S_out to the core Hamiltonian and E_cav = p V_c to the
     nuclear energy, so its derivatives enter at the two matching points of
     PySCF's gradient interface: hcore_generator() gains d(h_rep)/dR_A and
-    grad_nuc() gains dE_cav/dR_A, as QM/MM does for its terms. 
+    grad_nuc() gains dE_cav/dR_A, as QM/MM does for its terms.
     """
 
     def __init__(self, grad_method):
