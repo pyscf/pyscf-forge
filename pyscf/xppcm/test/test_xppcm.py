@@ -21,7 +21,7 @@ from pyscf.solvent import pcm
 from pyscf import xppcm
 from pyscf.xppcm import (Rahm, get_z0, get_z, get_eps, get_cavity_volume,
                          get_cavity_volume_atom, calculate_analytical_pressure,
-                         get_e_rep, EH_BOHR3_TO_GPA)
+                         get_e_rep)
 from pyscf.xppcm.analytical_cavity import union_of_spheres_volume
 from pyscf.xppcm.pcm_derivatives import pol_derivatives
 
@@ -29,6 +29,7 @@ from pyscf.xppcm.pcm_derivatives import pol_derivatives
 Z0 = get_z0(36, 0.7781, 84.1595)
 EPS_0 = 2.0165
 F_0 = 1.30
+EH_BOHR3_TO_GPA = 29421.026484
 
 
 def setUpModule():
@@ -222,6 +223,24 @@ class KnownValues(unittest.TestCase):
         g_cc.verbose = 0
         fd_cc = (ccsd(run(cp)).e_tot - ccsd(run(cm)).e_tot) / (2 * h)
         self.assertAlmostEqual(g_cc.kernel()[1, 2], fd_cc, delta=3e-4)
+
+    def test_xpcav_gradient_translational_invariance(self):
+        # The forces sum to zero in the continuum. For the two surface terms
+        # (cavitation and boundary) this relies on the switched exposure
+        # weights of _get_cavity_surface_grid: with a hard exposed/buried cut
+        # the net force on this molecule is 4.5e-4 Ha/Bohr, above the gradient
+        # thresholds of geometry optimisers. H2 cannot catch this, its errors
+        # cancel by symmetry.
+        mol = gto.M(atom='''C 0 0 0; O 1.427 0 0; H 1.76 0.9 0; H -0.36 1.03 0;
+                            H -0.36 -0.515 0.892; H -0.36 -0.515 -0.892''',
+                    basis='sto-3g', verbose=0)
+        mf = scf.RHF(mol).XPCav(z=0.3, radii_table=Rahm * 0.9, p_gpa=10.0, grid_level=5)
+        mf.conv_tol = 1e-10
+        mf.kernel()
+        g = mf.nuc_grad_method()
+        g.verbose = 0
+        de = g.kernel()
+        self.assertLess(abs(de.sum(axis=0)).max(), 2e-4)
 
     def test_pressure_requires_xp(self):
         mf = scf.RHF(mol_be).run()

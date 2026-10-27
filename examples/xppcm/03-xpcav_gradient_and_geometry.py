@@ -10,7 +10,7 @@ XP alone keeps the cavity fixed, so it has no meaningful nuclear gradient.
 XPCav adds the cavitation work E_cav = p V_c at a fixed external pressure p
 and provides the analytical gradient of E_rep + E_cav, so that the decorated
 SCF object can be used for geometry optimisation at constant pressure.
-Post-HF gradients built on the XPCav reference (MP2, CCSD, CASSCF, ...)
+Post-HF gradients built on the XPCav reference (CCSD, CASSCF, ...)
 include the same terms.
 
 Note on grids: the exterior integration grid is cut at the cavity surface, so

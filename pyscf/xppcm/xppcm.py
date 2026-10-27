@@ -43,6 +43,7 @@ from pyscf import lib, scf, dft, gto, ci, cc, mcscf
 from pyscf.lib.parameters import BOHR
 from pyscf.data.radii import VDW
 from pyscf.dft.gen_grid import MakeAngularGrid, LEBEDEV_ORDER, _default_ang, _default_rad, get_partition
+from pyscf.solvent.pcm import switch_h
 from .pcm_derivatives import get_pcm_obj, pol_derivatives
 from .analytical_cavity import union_of_spheres_volume
 from .radii import RAHM
@@ -203,7 +204,7 @@ def calculate_numerical_pressure(energies, volumes):
 
     return -pressure
 
-def calculate_analytical_pressure(method_obj, volume_cavity, eta=6, lebedev_order=47,
+def calculate_analytical_pressure(method_obj, volume_cavity, eta=6, lebedev_order=89,
                                   polarisation=True, return_terms=False, dm=None):
     """
     Calculate pressure from the XP-PCM SCF analytical expression.
@@ -228,8 +229,8 @@ def calculate_analytical_pressure(method_obj, volume_cavity, eta=6, lebedev_orde
         Cavity volume (Bohr^3, atomic units).
     eta : float, default 6
         Repulsive exponent.
-    lebedev_order : int, default 47
-        Lebedev quadrature order for surface grids (47 = 770 points per sphere).
+    lebedev_order : int, default 89
+        Lebedev quadrature order for surface grids (89 = 3470 points per sphere).
     polarisation : bool, default True
         Include the PCM polarisation terms when a PCM solvent is attached.
         Ignored if no PCM is attached.
@@ -553,8 +554,9 @@ def _build_grid(mol, radii_table, grid_level=3):
     # Hard cut at the cavity surface. An atom's own shells start at its radius,
     # but shells of other atoms cross this sphere and their points switch in and
     # out as the nuclei move, so the energy is only piecewise smooth in the
-    # nuclear coordinates (noise ~1e-6 Eh at grid_level 3 for z ~ 0.3). The
-    # analytical gradient is the continuum limit and is unaffected.
+    # nuclear coordinates (noise ~1e-5 Eh for molecules at grid_level 3, a few
+    # 1e-6 Eh at grid_level 7). The analytical gradient is the continuum limit
+    # and is unaffected.
     atom_coords = mol.atom_coords()
     inside = np.zeros(len(coords), dtype=bool)
     for ia in range(mol.natm):
@@ -624,22 +626,27 @@ def _get_S_out_ip(mol, radii_table, grid_level=3):
             s_ip[k] += ao_all[1 + k].T @ aow
     return s_ip
 
-def _get_cavity_surface_grid(mol, radii_table, lebedev_order=47):
+def _get_cavity_surface_grid(mol, radii_table, lebedev_order=89):
     """
-    Exposed Lebedev surface grid on each atom's cavity sphere.
+    Lebedev quadrature of the exposed cavity surface, one grid per atomic sphere.
+    Uses the ISWIG scheme to switch out points that fall inside other spheres,
+    and weights them by the exposed fraction of the sphere.
+
     Parameters
     ----------
     mol : gto.Mole
         Molecule object.
     radii_table : array
         Cavity radii in Bohr, indexed by nuclear charge.
-    lebedev_order : int, default 47
-        Order of the Lebedev grid.
+    lebedev_order : int, default 89
+        Order of the Lebedev grid (89 = 3470 points per sphere).
 
     Returns
     -------
     list of dict
         One dict per atom with keys 'coords', 'normals', 'weights', 'radius'.
+        The weights are Lebedev weights times the switching factor; they sum
+        to the exposed fraction of the sphere (Lebedev weights sum to 1).
     """
     atom_coords = mol.atom_coords()                          # (natm, 3) Bohr
     cavity_radii = _get_cavity_radii(mol, radii_table)
@@ -649,22 +656,27 @@ def _get_cavity_surface_grid(mol, radii_table, lebedev_order=47):
     dirs  = grid[:, :3]
     leb_w = grid[:, 3]
 
+    # Switching region of each sphere: centred on its surface, width r_sw
+    r_sw  = cavity_radii * (14.0 / npts)**0.5
+    alpha = 0.5 + cavity_radii / r_sw - ((cavity_radii / r_sw)**2 - 1.0 / 28)**0.5
+    r_in  = cavity_radii - alpha * r_sw
+
     surface_data = []
     for A in range(mol.natm):
         R_A = cavity_radii[A]
         surf_pts = atom_coords[A] + R_A * dirs                # (m, 3)
 
-        exposed = np.ones(len(dirs), dtype=bool)
-        for B in range(mol.natm):
-            if B == A:
-                continue
-            dist2 = np.sum((surf_pts - atom_coords[B])**2, axis=1)
-            exposed &= dist2 > cavity_radii[B]**2
+        dist = np.linalg.norm(surf_pts[:, None, :] - atom_coords[None, :, :], axis=2)
+        x = (dist - r_in) / r_sw                              # (m, natm)
+        x[:, A] = 1.0
+        swf = np.prod(switch_h(x), axis=1)                    # 1 exposed ... 0 buried
+        weights = leb_w * swf
+        keep = weights > 1e-16
 
         surface_data.append({
-            'coords':  surf_pts[exposed],
-            'normals': dirs[exposed],
-            'weights': leb_w[exposed],
+            'coords':  surf_pts[keep],
+            'normals': dirs[keep],
+            'weights': weights[keep],
             'radius':  R_A,
         })
 
@@ -884,12 +896,12 @@ class _XPCav(_XP):
         External pressure (GPa).
     grid_level : int, default 3
         PySCF grid level for volume and overlap integrals.
-    lebedev_order : int, default 47
-        Lebedev quadrature order for surface integrals (→ 770 points).
+    lebedev_order : int, default 89
+        Lebedev quadrature order for surface integrals (89 = 3470 points per sphere).
     """
 
     def __init__(self, mol, z, radii_table, p_gpa=None, grid_level=3,
-                 lebedev_order=47):
+                 lebedev_order=89):
         super().__init__(mol, z, radii_table, grid_level=grid_level)
         self.p_gpa = p_gpa
         self.lebedev_order = int(lebedev_order)
@@ -1041,7 +1053,7 @@ class WithXPCavGrad:
         return (super().grad_nuc(mol, atmlst)
                 + self.base.with_xp.grad_cav(mol, atmlst))
 
-def XPCav(mf, z, radii_table, p_gpa=None, grid_level=3, lebedev_order=47):
+def XPCav(mf, z, radii_table, p_gpa=None, grid_level=3, lebedev_order=89):
     """
     Attach XPCav (Pauli repulsion + cavitation) to an SCF method
     for geometry optimisation under fixed pressure.
@@ -1065,8 +1077,8 @@ def XPCav(mf, z, radii_table, p_gpa=None, grid_level=3, lebedev_order=47):
         External pressure in GPa.
     grid_level : int, default 3
         PySCF grid level for volume and overlap integrals.
-    lebedev_order : int, default 47
-        Lebedev quadrature order for surface integrals (→ 770 points).
+    lebedev_order : int, default 89
+        Lebedev quadrature order for surface integrals (89 = 3470 points per sphere).
 
     Returns
     -------
@@ -1077,11 +1089,15 @@ def XPCav(mf, z, radii_table, p_gpa=None, grid_level=3, lebedev_order=47):
     The exterior grid (_build_grid) is cut hard at the cavity surface, so the
     repulsion energy is only piecewise smooth in the nuclear coordinates: as
     nuclei move, points of one atom's shells cross another atom's sphere and
-    switch in or out of the integral. The analytical gradient is the derivative
-    of the underlying continuum expression and is essentially converged at
-    grid_level 3, but the energy carries grid noise.
+    switch in or out of the integral. The noise is about 1e-5 Eh for molecules
+    at grid_level 3 and a few 1e-6 Eh at grid_level 7. The analytical gradient 
+    is the derivative of the underlying continuum expression: its volume term 
+    converges with grid_level and its surface terms with lebedev_order. 
+    With the defaults the net force on an asymmetric molecule from quadrature 
+    error is about 1e-4 Ha/Bohr, a few 1e-5 at grid_level 7.
+    
     For geometry optimisations use grid_level >= 5 and do not rely on
-    energy-based convergence criteria tighter than ~1e-6 Eh; converge on the
+    energy-based convergence criteria tighter than ~1e-5 Eh; converge on the
     gradient and the step instead.
     """
     if p_gpa is None:
@@ -1108,7 +1124,7 @@ def _xp_method(self, z, radii_table, grid_level=3):
     return XP(self, z, radii_table, grid_level=grid_level)
 
 def _xpcav_method(self, z, radii_table, p_gpa=None, grid_level=3,
-                  lebedev_order=47):
+                  lebedev_order=89):
     """Method-style XPCav wrapper: ks = ks.XPCav(...)."""
     return XPCav(self, z, radii_table, p_gpa=p_gpa, grid_level=grid_level,
                  lebedev_order=lebedev_order)
