@@ -1090,12 +1090,12 @@ def XPCav(mf, z, radii_table, p_gpa=None, grid_level=3, lebedev_order=89):
     repulsion energy is only piecewise smooth in the nuclear coordinates: as
     nuclei move, points of one atom's shells cross another atom's sphere and
     switch in or out of the integral. The noise is about 1e-5 Eh for molecules
-    at grid_level 3 and a few 1e-6 Eh at grid_level 7. The analytical gradient 
-    is the derivative of the underlying continuum expression: its volume term 
-    converges with grid_level and its surface terms with lebedev_order. 
-    With the defaults the net force on an asymmetric molecule from quadrature 
+    at grid_level 3 and a few 1e-6 Eh at grid_level 7. The analytical gradient
+    is the derivative of the underlying continuum expression: its volume term
+    converges with grid_level and its surface terms with lebedev_order.
+    With the defaults the net force on an asymmetric molecule from quadrature
     error is about 1e-4 Ha/Bohr, a few 1e-5 at grid_level 7.
-    
+
     For geometry optimisations use grid_level >= 5 and do not rely on
     energy-based convergence criteria tighter than ~1e-5 Eh; converge on the
     gradient and the step instead.

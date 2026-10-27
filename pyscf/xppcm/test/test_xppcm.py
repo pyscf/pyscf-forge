@@ -22,6 +22,7 @@ from pyscf import xppcm
 from pyscf.xppcm import (Rahm, get_z0, get_z, get_eps, get_cavity_volume,
                          get_cavity_volume_atom, calculate_analytical_pressure,
                          get_e_rep)
+from pyscf.xppcm.xppcm import EH_BOHR3_TO_GPA
 from pyscf.xppcm.analytical_cavity import union_of_spheres_volume
 from pyscf.xppcm.pcm_derivatives import pol_derivatives
 
@@ -29,7 +30,6 @@ from pyscf.xppcm.pcm_derivatives import pol_derivatives
 Z0 = get_z0(36, 0.7781, 84.1595)
 EPS_0 = 2.0165
 F_0 = 1.30
-EH_BOHR3_TO_GPA = 29421.026484
 
 
 def setUpModule():
