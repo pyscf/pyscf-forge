@@ -415,9 +415,9 @@ def pol_derivatives(pcmobj, dm_tot):
     density: (dE_pol/dlnf, dE_pol/deps).
 
     dE_pol/dlnf is the derivative with respect to a relative scaling of the
-    current cavity radii, R_A -> lambda R_A at lambda = 1. In absolute 
-    scaling factor, R_A = f r_A, it equals f dE_pol/df. The volume derivative 
-    that the pressure divides by (xppcm) is formed the same way, so the 
+    current cavity radii, R_A -> lambda R_A at lambda = 1. In absolute
+    scaling factor, R_A = f r_A, it equals f dE_pol/df. The volume derivative
+    that the pressure divides by (xppcm) is formed the same way, so the
     pressure does not depend on this choice.
 
     Parameters
