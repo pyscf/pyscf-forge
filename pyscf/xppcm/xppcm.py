@@ -24,10 +24,10 @@ XP-PCM (eXtreme-Pressure Polarizable Continuum Model) for PySCF.
 #  Public API
 # ---------------------------------------------------------------------------
 # XP, XPCav: main classes for XP-PCM and XP-PCM with cavitation energy
-#   - E_rep available via mf.get_e_rep()
-#   - E_cav available via mf.with_xp.get_e_cav() (XPCav only)
-#   - XPCav gradients available via mf.with_xp.nuc_grad_method()
+#   - E_cav via mf.get_e_cav() (XPCav only)
+#   - XPCav nuclear gradients via mf.nuc_grad_method()
 #   - Built via factory functions ks.XP(...) and ks.XPCav(...), which wrap standard SCF objects
+# get_e_rep: Pauli repulsion energy of an SCF-with-XP or post-HF object
 # get_z0, get_z, get_eps: helpers for calculating XP-PCM parameters from solvent properties
 # calculate_fitted_pressure: fit E(V) to an equation of state and compute pressure
 # calculate_numerical_pressure: compute pressure by numerical differentiation of E(V)
@@ -709,6 +709,25 @@ def _polarisation_pressure_terms(pcmobj, dm_tot, volume_cavity, dvc_dlnf):
     else:
         p_eps = (pcmobj.eps - 1.0) / volume_cavity * dG_deps
     return p_pol, p_eps
+
+def _get_post_hf_dm_tot(method_obj):
+    """Helper to compute the total AO density matrix from a post-HF method object."""
+    mf = method_obj._scf
+    if isinstance(mf, scf.ghf.GHF):
+        raise NotImplementedError(
+            "XP for post-HF methods on a GHF reference is not supported.")
+    if isinstance(method_obj, mcscf.casci.CASBase):
+        # CASCI/CASSCF (and their solvent-decorated subclasses) return the
+        # AO-basis density, unlike CISD/CCSD which return the MO basis.
+        return _as_total_dm(method_obj.make_rdm1())
+    if isinstance(mf, scf.uhf.UHF):   # UKS is a subclass of UHF
+        dm_mo_a, dm_mo_b = method_obj.make_rdm1()
+        dm_a = np.einsum('pi,ij,qj->pq', method_obj.mo_coeff[0], dm_mo_a, method_obj.mo_coeff[0].conj())
+        dm_b = np.einsum('pi,ij,qj->pq', method_obj.mo_coeff[1], dm_mo_b, method_obj.mo_coeff[1].conj())
+        return dm_a + dm_b
+    else:
+        dm_mo = method_obj.make_rdm1()
+        return np.einsum('pi,ij,qj->pq', method_obj.mo_coeff, dm_mo, method_obj.mo_coeff.conj())
 
 # ---------------------------------------------------------------------------
 #  XP (Pauli repulsion only)

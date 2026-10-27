@@ -158,7 +158,7 @@ class KnownValues(unittest.TestCase):
         # must coincide with those of FCI (CASCI with every orbital active).
         radii = Rahm * 0.9
         vc = get_cavity_volume(mol_h2, radii)
-        mf = scf.RHF(mol_h2).XP(z=0.3, radii_table=radii).run(conv_tol=1e-11)
+        mf = scf.RHF(mol_h2).XPCav(z=0.3, radii_table=radii, p_gpa=5.0).run(conv_tol=1e-11)
         mycc = cc.CCSD(mf)
         mycc.conv_tol = 1e-10
         mycc.conv_tol_normt = 1e-8
