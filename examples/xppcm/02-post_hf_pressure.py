@@ -18,7 +18,7 @@ response is small for CCSD and CISD, but would be large for MP2 (not implemented
 from pyscf import gto, scf, cc, ci, mcscf
 from pyscf import xppcm
 from pyscf.xppcm import (Rahm, get_z0, get_z, get_eps, get_cavity_volume_atom,
-                         calculate_analytical_pressure)
+                         get_e_rep, calculate_analytical_pressure)
 
 mol = gto.M(atom='Be 0 0 0', basis='cc-pvtz', verbose=0)
 
@@ -39,13 +39,16 @@ mf.kernel()
 mycc = cc.CCSD(mf).run()
 myci = ci.CISD(mf).run()
 # CASCI with all orbitals active is FCI; its density is variational.
+# Use this rather than fci.FCI(mf): the FCI factory takes h_rep from
+# mf.get_hcore() but drops any PCM, and its solver carries no reference, so
+# it cannot be passed to get_e_rep or calculate_analytical_pressure.
 myfci = mcscf.CASCI(mf, mol.nao, mol.nelec).run()
 
 print('Pauli repulsion only, f = 0.90, V_c = %.3f Bohr^3' % vc)
 print('  method     E_tot (Ha)        E_rep (Ha)    p (GPa)')
 for name, obj in (('RHF', mf), ('CISD', myci), ('CCSD', mycc), ('FCI', myfci)):
     print('  %-8s %16.8f   %10.6f   %8.3f'
-          % (name, obj.e_tot, obj.get_e_rep(), calculate_analytical_pressure(obj, vc)))
+          % (name, obj.e_tot, get_e_rep(obj), calculate_analytical_pressure(obj, vc)))
 
 #
 # 2. Pauli repulsion + PCM polarisation.  Post-HF methods take the solvent

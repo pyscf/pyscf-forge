@@ -17,7 +17,7 @@ Both terms use the same (pre-scaled) cavity radii.
 
 from pyscf import gto, dft
 from pyscf import xppcm   # registers mf.XP() and mf.XPCav() on SCF objects
-from pyscf.xppcm import Rahm, get_cavity_volume_atom
+from pyscf.xppcm import Rahm, get_cavity_volume_atom, get_e_rep
 
 mol = gto.M(atom='Be 0 0 0', basis='cc-pvtz', verbose=0)
 
@@ -46,9 +46,9 @@ mf_xppcm.run()
 
 print('Cavity volume            %10.3f Bohr^3' % get_cavity_volume_atom(mol, scaled_radii))
 print('E(vacuum)                %14.8f Ha' % mf.e_tot)
-print('E(vacuum + E_rep)        %14.8f Ha   E_rep = %.6f Ha' % (mf_xp.e_tot, mf_xp.get_e_rep()))
+print('E(vacuum + E_rep)        %14.8f Ha   E_rep = %.6f Ha' % (mf_xp.e_tot, get_e_rep(mf_xp)))
 print('E(vacuum + E_rep + E_pol)%14.8f Ha   E_rep = %.6f Ha   E_pol = %.6f Ha'
-      % (mf_xppcm.e_tot, mf_xppcm.get_e_rep(), mf_xppcm.with_solvent.e))
+      % (mf_xppcm.e_tot, get_e_rep(mf_xppcm), mf_xppcm.with_solvent.e))
 
 # xppcm.XP(mf, ...) is equivalent to mf.XP(...), and undo_xp() strips it again.
 mf_plain = mf_xppcm.undo_xp()

@@ -38,7 +38,7 @@ XP-PCM (eXtreme-Pressure Polarizable Continuum Model) for PySCF.
 import numpy as np
 import warnings
 from scipy.optimize import curve_fit
-from pyscf import lib, scf, dft, gto, ci, cc, mcscf, fci
+from pyscf import lib, scf, dft, gto, ci, cc, mcscf
 from pyscf.lib.parameters import BOHR
 from pyscf.data.radii import VDW
 from pyscf.dft.gen_grid import MakeAngularGrid, LEBEDEV_ORDER, _default_ang, _default_rad, get_partition
@@ -387,6 +387,48 @@ def get_cavity_volume(mol, radii_table):
     radii_arr = _get_cavity_radii(mol, radii_table)
     return union_of_spheres_volume(mol.atom_coords(), radii_arr)
 
+def get_e_rep(method_obj, dm=None, mol=None):
+    """
+    Pauli repulsion energy E_rep = z Tr[P S_out].
+
+    Parameters
+    ----------
+    method_obj : SCF object with XP attached, or a post-HF object (CISD, CCSD,
+        CASCI, CASSCF) built on one.
+    dm : array, optional
+        AO density matrix, (nao, nao) or (2, nao, nao), used instead of the one
+        from method_obj (e.g. a relaxed post-HF density).
+    mol : gto.Mole, optional
+
+    Returns
+    -------
+    float
+        E_rep in Hartree.
+
+    Notes
+    -----
+    fci.FCI(mf) on an XP reference also includes h_rep (through mf.get_hcore())
+    but drops any PCM and returns a solver without a reference, so it cannot be
+    passed here or to calculate_analytical_pressure. mcscf.CASCI(mf, mol.nao,
+    mol.nelec) is the same FCI and works with both, and with .PCM().
+    """
+    xp = getattr(method_obj, 'with_xp', None)
+    post_hf = xp is None and hasattr(method_obj, '_scf')
+    if post_hf:
+        xp = getattr(method_obj._scf, 'with_xp', None)
+    if xp is None:
+        raise ValueError(
+            "get_e_rep: no XP attached to method_obj (or to its underlying SCF "
+            "object). Build the reference with XP(mf, ...).")
+    if post_hf and not isinstance(method_obj, (ci.cisd.CISD, cc.ccsd.CCSDBase,
+                                               mcscf.casci.CASBase)):
+        raise ValueError(
+            "get_e_rep: post-HF method must be a CISD, CCSD, CASCI or CASSCF "
+            f"object. Found: {method_obj.__class__.__name__}")
+    if dm is None:
+        dm = _get_post_hf_dm_tot(method_obj) if post_hf else method_obj.make_rdm1()
+    return xp.get_e_rep(dm, mol=mol if mol is not None else method_obj.mol)
+
 # ---------------------------------------------------------------------------
 #  Internal helpers
 # ---------------------------------------------------------------------------
@@ -731,16 +773,6 @@ class _SCFWithXP:
         self.__dict__.update(mf.__dict__)
         self.with_xp = xp_params
 
-    @property
-    def radii_table(self):
-        """Expose radii_table for PCM compatibility."""
-        return self.with_xp.radii_table
-
-    @radii_table.setter
-    def radii_table(self, value):
-        """Allow setting radii_table for PCM compatibility."""
-        self.with_xp.radii_table = value
-
     def undo_xp(self):
         """Remove XP, returning the underlying SCF object."""
         cls = self.__class__
@@ -755,12 +787,6 @@ class _SCFWithXP:
 
     def get_hcore(self, mol=None):
         return super().get_hcore(mol) + self.with_xp.get_h_rep(mol)
-
-    def get_e_rep(self, dm=None, mol=None):
-        """Get Pauli repulsion energy for diagnostics."""
-        if dm is None:
-            dm = self.make_rdm1()
-        return self.with_xp.get_e_rep(dm, mol)
 
     def nuc_grad_method(self):
         raise NotImplementedError(
@@ -912,19 +938,9 @@ class _SCFWithXPCav(_SCFWithXP):
         """Get cavitation energy."""
         return self.with_xp.get_e_cav(mol)
 
-    def grad(self, dm=None, mol=None):
-        """Compute nuclear gradients."""
-        if dm is None:
-            dm = self.make_rdm1()
-        return self.with_xp.grad(dm, mol)
-
-    def energy_tot(self, dm=None, h1e=None, vhf=None):
-        """Total energy including cavitation energy."""
-        e_tot = super().energy_tot(dm, h1e, vhf)
-        e_cav = self.with_xp.get_e_cav()
-        e_tot += e_cav
-        self.scf_summary['e_cav'] = e_cav
-        return e_tot
+    def energy_nuc(self):
+        """Nuclear repulsion plus the cavitation work E_cav = p V_c."""
+        return super().energy_nuc() + self.with_xp.get_e_cav()
 
     def nuc_grad_method(self):
         """Return gradient object supporting XPCav gradients."""
@@ -1061,108 +1077,9 @@ def _xpcav_method(self, z, radii_table, p_gpa=None, grid_level=3,
     return XPCav(self, z, radii_table, p_gpa=p_gpa, grid_level=grid_level,
                  lebedev_order=lebedev_order)
 
-def _patch_scf_factory_methods():
-    """Enable ks.XP(...) and ks.XPCav(...) on PySCF SCF/KS objects."""
-    from pyscf.scf import hf as scf_hf
-
-    if getattr(scf_hf.SCF, "_xppcm_factory_methods_patched", False):
-        return
-
-    scf_hf.SCF.XP = _xp_method
-    scf_hf.SCF.XPCav = _xpcav_method
-    scf_hf.SCF._xppcm_factory_methods_patched = True
-
-# ---------------------------------------------------------------------------
-#  XP for post-HF (CCSD, CISD, CASCI/CASSCF)
-# ---------------------------------------------------------------------------
-
-def _get_post_hf_dm_tot(method_obj):
-    """Helper to compute the total AO density matrix from a post-HF method object."""
-    mf = method_obj._scf
-    if isinstance(mf, scf.ghf.GHF):
-        raise NotImplementedError(
-            "XP for post-HF methods on a GHF reference is not supported.")
-    if isinstance(method_obj, mcscf.casci.CASBase):
-        # CASCI/CASSCF (and their solvent-decorated subclasses) return the
-        # AO-basis density, unlike CISD/CCSD which return the MO basis.
-        return _as_total_dm(method_obj.make_rdm1())
-    if isinstance(mf, scf.uhf.UHF):   # UKS is a subclass of UHF
-        dm_mo_a, dm_mo_b = method_obj.make_rdm1()
-        dm_a = np.einsum('pi,ij,qj->pq', method_obj.mo_coeff[0], dm_mo_a, method_obj.mo_coeff[0].conj())
-        dm_b = np.einsum('pi,ij,qj->pq', method_obj.mo_coeff[1], dm_mo_b, method_obj.mo_coeff[1].conj())
-        return dm_a + dm_b
-    else:
-        dm_mo = method_obj.make_rdm1()
-        return np.einsum('pi,ij,qj->pq', method_obj.mo_coeff, dm_mo, method_obj.mo_coeff.conj())
-
-def _get_e_rep_post_hf(self, dm=None, mol=None):
-    """Computes the Pauli repulsion energy for a post-HF method with XP attached."""
-    if not hasattr(self, '_scf') or getattr(self._scf, 'with_xp', None) is None:
-        raise AttributeError("Underlying SCF object does not use XP-PCM.")
-
-    mf = self._scf
-    xp_obj = mf.with_xp
-    mol = mol if mol is not None else self.mol
-    if not isinstance(self, (ci.cisd.CISD, cc.ccsd.CCSDBase, mcscf.casci.CASBase)):
-        raise ValueError(
-            f"Post-HF method must be a CISD, CCSD, CASCI or CASSCF object. "
-            f"Found: {self.__class__.__name__}")
-
-    if dm is None:
-        dm = _get_post_hf_dm_tot(self)
-
-    return xp_obj.get_e_rep(dm, mol=mol)
-
-def _patch_post_scf_kernel_for_xp(cls):
-    """Patch a post-SCF class to allow get_e_rep access."""
-    if not hasattr(cls, 'with_xp'):
-        setattr(cls, 'with_xp', property(lambda self: getattr(self._scf, 'with_xp', None)))
-    if not hasattr(cls, 'get_e_rep'):
-        setattr(cls, 'get_e_rep', _get_e_rep_post_hf)
-
-def _patch_post_scf_kernels_for_xp():
-    """Allow get_e_rep access for supported post-SCF methods."""
-    #_patch_post_scf_kernel_for_xp(mp.mp2.MP2) # No MP2 because orbital relaxation too important for pressure.
-    #_patch_post_scf_kernel_for_xp(mp.ump2.UMP2)
-    _patch_post_scf_kernel_for_xp(ci.cisd.CISD)
-    _patch_post_scf_kernel_for_xp(ci.ucisd.UCISD)
-    _patch_post_scf_kernel_for_xp(cc.ccsd.CCSD)
-    _patch_post_scf_kernel_for_xp(cc.uccsd.UCCSD)
-    _patch_post_scf_kernel_for_xp(cc.rccsd.RCCSD)
-    _patch_post_scf_kernel_for_xp(mcscf.casci.CASBase)   # CASCI, CASSCF, FCI via CASCI(mf, nao, nelec)
-    # CCSDT or higher not natively supported because cannot get DM.
-
-def _patch_fci_factory_for_xp():
-    """
-    Warn when fci.FCI is built on an XP reference. The factory takes h_rep from
-    mf.get_hcore() but only mf.energy_nuc() for the constant, so any PCM is
-    silently dropped, and the returned solver has no _scf, so the pressure
-    cannot be evaluated from it. CASCI with every orbital active is the same
-    FCI and works with .PCM() and calculate_analytical_pressure.
-    """
-    if getattr(fci, '_xppcm_factory_patched', False):
-        return
-    _orig_FCI = fci.FCI
-
-    def FCI(mol_or_mf, *args, **kwargs):
-        if getattr(mol_or_mf, 'with_xp', None) is not None:
-            warnings.warn(
-                "fci.FCI(mf) on an XP reference includes the Pauli operator (via "
-                "mf.get_hcore()) but drops any PCM solvent, and its solver cannot be "
-                "passed to calculate_analytical_pressure. Use "
-                "mcscf.CASCI(mf, mf.mol.nao, mf.mol.nelec) instead (the same FCI; "
-                ".PCM() for a self-consistent PCM).",
-                UserWarning, stacklevel=2)
-        return _orig_FCI(mol_or_mf, *args, **kwargs)
-
-    FCI.__doc__ = _orig_FCI.__doc__
-    fci.FCI = FCI
-    fci._xppcm_factory_patched = True
-
 # ---------------------------------------------------------------------------
 # Patch at import time
 # ---------------------------------------------------------------------------
 
-_patch_post_scf_kernels_for_xp()
-_patch_fci_factory_for_xp()
-_patch_scf_factory_methods()
+scf.hf.SCF.XP = _xp_method
+scf.hf.SCF.XPCav = _xpcav_method

@@ -20,7 +20,7 @@ energy criterion tighter than about 1e-6 Eh.
 import numpy as np
 from pyscf import gto, scf
 from pyscf import xppcm
-from pyscf.xppcm import Rahm, get_cavity_volume
+from pyscf.xppcm import Rahm, get_cavity_volume, get_e_rep
 
 radii = Rahm * 0.90
 z = 0.30          # barrier height (Hartree)
@@ -45,7 +45,7 @@ mf.conv_tol = 1e-10
 mf.kernel()
 print('Cavity volume %.3f Bohr^3' % get_cavity_volume(mol, radii))
 print('E_tot = %.8f Ha   E_rep = %.6f Ha   E_cav = pV = %.6f Ha'
-      % (mf.e_tot, mf.get_e_rep(), mf.get_e_cav()))
+      % (mf.e_tot, get_e_rep(mf), mf.get_e_cav()))
 
 #
 # 2. Analytical gradient, checked against a central finite difference

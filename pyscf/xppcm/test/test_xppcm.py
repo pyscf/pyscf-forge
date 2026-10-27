@@ -16,12 +16,12 @@
 
 import unittest
 import numpy as np
-from pyscf import gto, scf, cc, mcscf, fci
+from pyscf import gto, scf, cc, mcscf
 from pyscf.solvent import pcm
 from pyscf import xppcm
 from pyscf.xppcm import (Rahm, get_z0, get_z, get_eps, get_cavity_volume,
                          get_cavity_volume_atom, calculate_analytical_pressure,
-                         EH_BOHR3_TO_GPA)
+                         get_e_rep, EH_BOHR3_TO_GPA)
 from pyscf.xppcm.analytical_cavity import union_of_spheres_volume
 from pyscf.xppcm.pcm_derivatives import pol_derivatives
 
@@ -98,7 +98,7 @@ class KnownValues(unittest.TestCase):
     def test_xp_scf_energy(self):
         mf_vac = scf.RHF(mol_be).run(conv_tol=1e-11)
         mf, _ = be_xp(0.9)
-        self.assertGreater(mf.get_e_rep(), 0)
+        self.assertGreater(get_e_rep(mf), 0)
         self.assertGreater(mf.e_tot, mf_vac.e_tot)
         self.assertEqual(mf.__class__.__name__, 'XPRHF')
         # undo_xp() gives back a plain RHF object
@@ -165,11 +165,11 @@ class KnownValues(unittest.TestCase):
         mycc.kernel()
         myfci = mcscf.CASCI(mf, mol_h2.nao, mol_h2.nelec).run()
         self.assertAlmostEqual(mycc.e_tot, myfci.e_tot, 7)
-        self.assertAlmostEqual(mycc.get_e_rep(), myfci.get_e_rep(), 7)
+        self.assertAlmostEqual(get_e_rep(mycc), get_e_rep(myfci), 7)
         self.assertAlmostEqual(calculate_analytical_pressure(mycc, vc),
                                calculate_analytical_pressure(myfci, vc), 5)
         # correlation lowers the exterior density, hence E_rep
-        self.assertLess(myfci.get_e_rep(), mf.get_e_rep())
+        self.assertLess(get_e_rep(myfci), get_e_rep(mf))
 
     def test_xpcav_energy_terms(self):
         radii = Rahm * 0.9
@@ -179,7 +179,7 @@ class KnownValues(unittest.TestCase):
         e_cav = p_gpa / EH_BOHR3_TO_GPA * get_cavity_volume(mol_h2, radii)
         self.assertAlmostEqual(mf_cav.get_e_cav(), e_cav, 10)
         self.assertAlmostEqual(mf_cav.e_tot, mf_xp.e_tot + e_cav, 9)
-        self.assertAlmostEqual(mf_cav.scf_summary['e_cav'], e_cav, 10)
+        self.assertAlmostEqual(mf_cav.energy_nuc(), mol_h2.energy_nuc() + e_cav, 10)
         with self.assertRaises(ValueError):
             scf.RHF(mol_h2).XPCav(z=z, radii_table=radii)   # p_gpa is required
         with self.assertRaises(NotImplementedError):
@@ -217,11 +217,6 @@ class KnownValues(unittest.TestCase):
         mf = scf.RHF(mol_be).run()
         with self.assertRaises(ValueError):
             calculate_analytical_pressure(mf, 1.0)
-
-    def test_fci_factory_warns(self):
-        mf, _ = be_xp(0.9)
-        with self.assertWarns(UserWarning):
-            fci.FCI(mf)
 
 
 if __name__ == "__main__":
