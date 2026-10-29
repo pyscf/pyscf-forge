@@ -114,6 +114,54 @@ class WaterDimer(unittest.TestCase):
             # self.assertAlmostEqual(keccsd_t, seccsd_t, 6)
 
 
+class H4Chain(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cell = gto.Cell()
+        cell.verbose = 0
+        cell.atom = 'H 0 0 0; H 0 0 0.74; H 1.85 0 0; H 1.85 0 0.74'
+        cell.a = np.diag([3.7, 4.0, 4.0])
+        cell.basis = '6-31g'
+        cell.precision = 1e-10
+        cell.build()
+        kmf = scf.KRHF(cell, kpts=cell.make_kpts([2,1,1])).density_fit().run(conv_tol=1e-11)
+        cls.cell = cell
+        cls.kmf = kmf
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.cell, cls.kmf
+
+    def test_klnoccsd_t_outcore(self):
+        ''' Outcore ovL for the LNO step, alone and with the DF impurity CCSD integrals
+            (vvL), against incore energies. The aux blocks are split and every q block is
+            zero padded (naux > naux_by_q) so the blocked and padded writes are exercised.
+        '''
+        from pyscf import lib
+        from pyscf.pbc.lno import klno, klnoccsd
+        from pyscf.pbc.lno import tools as ktools
+        kmf = self.kmf
+        smf = k2s_scf(kmf)
+        kocc_coeff = [c[:,o>1e-6] for c,o in zip(kmf.mo_coeff, kmf.mo_occ)]
+        lo_coeff = k2s_iao(self.cell, kocc_coeff, kmf.kpts, minao='sto-3g', orth=True)
+        frag_lolist = autofrag_iao(lo.iao.reference_mol(self.cell, 'sto-3g'))
+        # incore KLNO-CCSD(T): e_corr_pt2, e_corr_ccsd, e_corr_ccsd_t
+        ref = [-0.0335002580, -0.0484248396, -0.0484581416]
+        naux_pad = property(lambda k2sdf: k2sdf.get_naoaux().max() + 3)
+        for force_dfkcc in (False, True):
+            with lib.temporary_env(klno, DEBUG_BLKSIZE=True), \
+                 lib.temporary_env(klnoccsd, DEBUG_BLKSIZE=True, FORCE_DFKCC=force_dfkcc), \
+                 lib.temporary_env(ktools.K2SDF, naux=naux_pad):
+                mcc = KLNOCCSD_T(kmf, lo_coeff, frag_lolist, mf=smf)
+                mcc.lno_thresh = [1e-5, 1e-6]
+                mcc.kwargs_imp = {'conv_tol': 1e-10, 'conv_tol_normt': 1e-8}
+                mcc.force_outcore_ao2mo = True
+                mcc.kernel()
+            self.assertAlmostEqual(mcc.e_corr_pt2, ref[0], 8)
+            self.assertAlmostEqual(mcc.e_corr_ccsd, ref[1], 8)
+            self.assertAlmostEqual(mcc.e_corr_ccsd_t, ref[2], 8)
+
+
 
 if __name__ == "__main__":
     print("Full Tests for LNO-CCSD and LNO-CCSD(T)")
