@@ -149,17 +149,18 @@ class H4Chain(unittest.TestCase):
         ref = [-0.0335002580, -0.0484248396, -0.0484581416]
         naux_pad = property(lambda k2sdf: k2sdf.get_naoaux().max() + 3)
         for force_dfkcc in (False, True):
-            with lib.temporary_env(klno, DEBUG_BLKSIZE=True), \
-                 lib.temporary_env(klnoccsd, DEBUG_BLKSIZE=True, FORCE_DFKCC=force_dfkcc), \
-                 lib.temporary_env(ktools.K2SDF, naux=naux_pad):
-                mcc = KLNOCCSD_T(kmf, lo_coeff, frag_lolist, mf=smf)
-                mcc.lno_thresh = [1e-5, 1e-6]
-                mcc.kwargs_imp = {'conv_tol': 1e-10, 'conv_tol_normt': 1e-8}
-                mcc.force_outcore_ao2mo = True
-                mcc.kernel()
-            self.assertAlmostEqual(mcc.e_corr_pt2, ref[0], 8)
-            self.assertAlmostEqual(mcc.e_corr_ccsd, ref[1], 8)
-            self.assertAlmostEqual(mcc.e_corr_ccsd_t, ref[2], 8)
+            with self.subTest(force_dfkcc=force_dfkcc):
+                with lib.temporary_env(klno, DEBUG_BLKSIZE=True), \
+                     lib.temporary_env(klnoccsd, DEBUG_BLKSIZE=True, FORCE_DFKCC=force_dfkcc), \
+                     lib.temporary_env(ktools.K2SDF, naux=naux_pad):
+                    mcc = KLNOCCSD_T(kmf, lo_coeff, frag_lolist, mf=smf)
+                    mcc.lno_thresh = [1e-5, 1e-6]
+                    mcc.kwargs_imp = {'conv_tol': 1e-10, 'conv_tol_normt': 1e-8}
+                    mcc.force_outcore_ao2mo = True
+                    mcc.kernel()
+                self.assertAlmostEqual(mcc.e_corr_pt2, ref[0], 8)
+                self.assertAlmostEqual(mcc.e_corr_ccsd, ref[1], 8)
+                self.assertAlmostEqual(mcc.e_corr_ccsd_t, ref[2], 8)
 
 
 
