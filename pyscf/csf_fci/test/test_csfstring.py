@@ -3,6 +3,7 @@ import numpy as np
 from scipy import special
 from pyscf.csf_fci.csfstring import *
 from pyscf import lib
+from pyscf.csf_fci import csfstring
 
 def case_spin_evecs (ks, nspin, ms):
     neleca = int (round (nspin/2 + ms))
@@ -38,6 +39,12 @@ def case_spin_evecs (ks, nspin, ms):
 
 class KnownValues(unittest.TestCase):
 
+    def setUp (self):
+        self.sweep_min_nspin = csfstring.SWEEP_MIN_NSPIN
+
+    def tearDown (self):
+        csfstring.SWEEP_MIN_NSPIN = self.sweep_min_nspin
+
     def test_addrs2str_strs2addr (self):
         for nspin in range (21):
             for s in np.arange ((nspin%2)/2, (nspin/2)+0.1, 1):
@@ -55,6 +62,66 @@ class KnownValues(unittest.TestCase):
             for ms in np.arange (-(nspin/2), (nspin/2)+0.1, 1):
                 with self.subTest (nspin=nspin, ms=ms):
                     case_spin_evecs (self, nspin, ms)
+
+    def test_spin_evecs_dot (self):
+        # The sequential-coupling sweep (FCICSFspinevecs_dot) must reproduce the dense umat, both ways
+        csfstring.SWEEP_MIN_NSPIN = 0
+        rng = np.random.default_rng (0)
+        for nspin in range (13):
+            for twoS in range (nspin%2, nspin+1, 2):
+                for twoM in range (-twoS, twoS+1, 2):
+                    # paired electrons don't enter umat
+                    neleca, nelecb = (nspin+twoM)//2 + 1, (nspin-twoM)//2 + 1
+                    umat = get_spin_evecs (nspin, neleca, nelecb, twoS+1)
+                    # 1 row: parallel over pairs; 17 rows: parallel over row blocks
+                    for nrow in (1, 17):
+                        with self.subTest (nspin=nspin, twoS=twoS, twoM=twoM, nrow=nrow):
+                            x = rng.standard_normal ((nrow, umat.shape[0]))
+                            y = rng.standard_normal ((nrow, umat.shape[1]))
+                            self.assertAlmostEqual (lib.fp (spin_evecs_dot (x, nspin, neleca, nelecb, twoS+1)),
+                                                    lib.fp (np.dot (x, umat)), 10)
+                            self.assertAlmostEqual (lib.fp (spin_evecs_dot (y, nspin, neleca, nelecb, twoS+1,
+                                                                            transpose=True)),
+                                                    lib.fp (np.dot (y, umat.T)), 10)
+        with self.subTest ('3-index input'):
+            umat = get_spin_evecs (12, 9, 3, 7)
+            x = rng.standard_normal ((2, 5, umat.shape[0]))
+            self.assertAlmostEqual (lib.fp (spin_evecs_dot (x, 12, 9, 3, 7)),
+                                    lib.fp (np.tensordot (x, umat, axes=1)), 10)
+
+    def test_spin_evecs_dot_int32_limit (self):
+        # C(34,17) > INT32_MAX: must raise before allocating anything, so x can be a dummy
+        sweep_min_nspin = csfstring.SWEEP_MIN_NSPIN
+        csfstring.SWEEP_MIN_NSPIN = 0
+        try:
+            with self.assertRaises (NotImplementedError):
+                spin_evecs_dot (np.zeros ((1,1)), 34, 17, 17, 1)
+        finally:
+            csfstring.SWEEP_MIN_NSPIN = sweep_min_nspin
+
+    def test_sweep_dispatch (self):
+        # det <-> csf transformations agree whether every nspin goes through the sweep or none does
+        norb, neleca, nelecb = 8, 4, 4
+        rng = np.random.default_rng (1)
+        for smult in (1, 3, 5):
+            t = CSFTransformer (norb, neleca, nelecb, smult)
+            x = rng.standard_normal (t.ndet)
+            c = rng.standard_normal (t.ncsf)
+            confs = np.arange (0, t.econf_det_mask.max ()+1, 7)
+            ndet_confs = np.count_nonzero (np.isin (t.econf_det_mask, confs))
+            op = rng.standard_normal ((ndet_confs, ndet_confs))
+            op += op.T
+            results = []
+            for cutoff in (0, 99):
+                csfstring.SWEEP_MIN_NSPIN = cutoff
+                results.append ([t.vec_det2csf (x, normalize=False),
+                                 t.vec_csf2det (c, normalize=False),
+                                 csfstring._transform_det2csf (x[None,:], norb, neleca, nelecb, smult,
+                                                               csd_mask=t.csd_mask, project=True),
+                                 t.mat_det2csf_confspace (op, confs)[0]])
+            for lbl, r0, r1 in zip (('det2csf', 'csf2det', 'project', 'confspace'), *results):
+                with self.subTest (smult=smult, transform=lbl):
+                    self.assertAlmostEqual (lib.fp (r0), lib.fp (r1), 10)
 
     def test_memory_management (self):
         # Currently only the get_spin_evecs function

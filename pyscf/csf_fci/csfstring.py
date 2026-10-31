@@ -5,12 +5,17 @@ import warnings
 from pyscf.csf_fci import csdstring
 from pyscf.fci import cistring
 from pyscf.fci.spin_op import spin_square0
-from pyscf import lib
+from pyscf import lib, __config__
 from pyscf.lib import numpy_helper, param
 from scipy import special, linalg
 from functools import reduce
 from pyscf.fci.direct_spin1_symm import _gen_strs_irrep
 libcsf = lib.load_library ('libcsf')
+
+# Below this many unpaired electrons, det <-> csf transformations multiply by the dense umat array built by
+# get_spin_evecs. At or above it they apply umat one spin at a time (FCICSFspinevecs_dot) without building
+# it. This is a performance crossover, not a memory limit: umat is small below it.
+SWEEP_MIN_NSPIN = getattr (__config__, 'csf_fci_csfstring_sweep_min_nspin', 14)
 
 class ImpossibleCIvecError (RuntimeError):
     def __init__(self, message, ndet=None, ncsf=None, norb=None, neleca=None, nelecb=None):
@@ -221,6 +226,57 @@ class CSFTransformer (lib.StreamObject):
         printer ('wfnsym = {}'.format (self.wfnsym))
         printer ('ndeta, ndetb = {}, {}'.format (self.ndeta, self.ndetb))
         printer ('ncsf = {}'.format (self.ncsf))
+
+    def csfaddrs2str (self, addrs):
+        return csfaddrs2str (self._norb, self._neleca, self._nelecb, self._smult, addrs)
+
+def det2csf_sign_rule (norb, neleca, nelecb, addrs):
+    '''Compute the sign shift between CSF and determinant bases, except for the part accounted
+       for in get_spin_evecs. This means accounting for anticommutations of creation operators
+       in doubly-occupied orbitals specifically is ... a2' a1' a0' ... b2' b1' b0' |vac>
+       = A' B' |vac>. This function shifts that to A'(unpaired) B'(unpaired) C'(pairs) |vac>.
+
+    Args:
+        norb : integer
+        neleca : integer
+        nelecb : integer
+        addrs : ndarray of shape (ndet,)
+            Flat determinant (DD) addresses
+
+    Returns:
+        sgn : ndarray of shape (ndet,)
+    '''
+    addrs_shape = addrs.shape
+    addrs = addrs.ravel ()
+
+    csdstrs = csdstring.ddaddrs2csdstrs (norb, neleca, nelecb, addrs)
+    csdaddrs = csdstring.csdstrs2csdaddrs (norb, neleca, nelecb, csdstrs)
+    _, dconf, sconf, spins = tuple (csdstrs)
+    sgn = np.zeros (len (addrs), dtype=np.int32)
+
+    # Separately commute a' and b' that participate in pairs to the beginnings of the strings
+    # A' and B'.
+    # TODO: check if dconf is handled properly here when npair = 0
+    libcsf.FCICSFsignrule (sgn.ctypes.data_as (ctypes.c_void_p),
+                           dconf.ctypes.data_as (ctypes.c_void_p),
+                           sconf.ctypes.data_as (ctypes.c_void_p),
+                           ctypes.c_size_t (len (addrs)),
+                           ctypes.c_uint (norb))
+
+    # Second pass: commute paired a' and b' together
+    csdaddrs_shape = csdstring.get_csdaddrs_shape (norb, neleca, nelecb)
+    min_npair, offset, dsize, ssize, tsize = csdaddrs_shape
+    max_npair = min (neleca, nelecb)
+    psize = dsize*ssize*tsize
+    for ipair, npair in enumerate (range (min_npair, max_npair+1)):
+        o0 = offset[ipair]
+        o1 = o0 + psize[ipair]
+        idx = (csdaddrs >= o0) & (csdaddrs < o1)
+        ncomm = npair * (npair+1) // 2 # A'(paired) B'(paired) -> C'(pairs)
+        ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
+        sgn[idx] *= (-1) ** (ncomm % 2)
+
+    return sgn.reshape (*addrs_shape)
 
 def unpack_sym_ci (ci, idx, vec_on_cols=False):
     if idx is None: return ci
@@ -570,10 +626,10 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
                         project=False, max_memory=param.MAX_MEMORY):
     ''' Must take an array of shape (*, ndet) or (*, ncsf) '''
     #t_start = lib.logger.perf_counter ()
-    time_umat = 0
+    #time_umat = 0
     time_mult = 0
     time_getdet = 0
-    size_umat = 0
+    #size_umat = 0
 
     min_npair, npair_csd_offset, npair_dconf_size, npair_sconf_size, npair_sdet_size = csdstring.get_csdaddrs_shape (
         norb, neleca, nelecb)
@@ -620,24 +676,8 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
             inparr[:,det_addrs] = 0
             continue
 
-        # sign convention of PySCF is A' B' |vac>
-        # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
-        ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
-        ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
-        sgn = (-1) ** (ncomm % 2)
 
-        t_ref = lib.logger.perf_counter ()
-        umat = sgn * get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
-        umat = np.asarray_chkfinite (umat)
-        size_umat = max (size_umat, umat.nbytes)
-        ncsf_blk = ncsf # later on I can use this variable to implement a generator form of get_spin_evecs to save
-        #                 memory when there are too many csfs
-        assert (umat.shape[0] == ndet)
-        assert (umat.shape[1] == ncsf_blk)
-        if project:
-            Pmat = np.dot (umat, umat.T)
-        time_umat += lib.logger.perf_counter () - t_ref
-
+        ncsf_blk = ncsf
         if not project:
             csf_addrs_ipair[:,:ncsf_blk] = True # Note: edits csf_addrs
 
@@ -648,14 +688,23 @@ def _transform_det2csf (inparr, norb, neleca, nelecb, smult, reverse=False, csd_
         # For the lvalues, I think it's necessary to flatten csf_addrs and det_addrs to avoid an exception
         # Hopefully this is parallel under the hood, and hopefully the OpenMP reduction epsilon doesn't ruin the spin
         # eigenvectors
+
+
+        # TODO: sign consistency
+        sgn = det2csf_sign_rule (norb, neleca, nelecb, det_addrs[:,0])[None,:,None]
         t_ref = lib.logger.perf_counter ()
         if project:
-            inparr[:,det_addrs] = np.tensordot (inparr[:,det_addrs], Pmat, axes=1)
+            inparr[:,det_addrs] = spin_evecs_dot (
+                spin_evecs_dot (inparr[:,det_addrs], nspin, neleca, nelecb, smult, max_memory=max_memory),
+                nspin, neleca, nelecb, smult, transpose=True, max_memory=max_memory)
         elif not reverse:
-            outarr[:,csf_addrs] = np.tensordot (inparr[:,det_addrs], umat, axes=1).reshape (nrow, ncsf_blk*nconf)
+            outarr[:,csf_addrs] = spin_evecs_dot (inparr[:,det_addrs] * sgn, nspin, neleca, nelecb, smult,
+                                                  max_memory=max_memory).reshape (nrow, ncsf_blk*nconf)
         else:
-            outarr[:,det_addrs] = np.tensordot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk), umat,
-                                                axes=((2,),(1,)))
+            outarr[:,det_addrs] = spin_evecs_dot (inparr[:,csf_addrs].reshape (nrow, nconf, ncsf_blk),
+                                                  nspin, neleca, nelecb, smult, transpose=True,
+                                                  max_memory=max_memory)
+            outarr[:,det_addrs] *= sgn
         time_mult += lib.logger.perf_counter () - t_ref
 
     if project:
@@ -759,17 +808,9 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
             dj = di + nconf*ndet
             mat_ij = mat[:,di:dj].reshape (nrow, nconf, ndet)
 
-            # sign convention of PySCF is A' B' |vac>
-            # sign convention of get_spin_evecs is A'(unpaired) B'(unpaired) C'(pairs) |vac>
-            ncomm = npair * (npair-1) // 2 # A'(paired) B'(paired) -> C'(pairs)
-            ncomm += npair * max (0, nelecb-npair) # A'B' -> AB'(unpaired) AB'(paired)
-            sgn = (-1) ** (ncomm % 2)
-
             nspin = neleca + nelecb - 2*npair
-            umat = sgn * get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory)
-            umat = np.asarray_chkfinite (umat)
-
-            outmat[:,ci:cj] = np.tensordot (mat_ij, umat, axes=1).reshape (nrow, ncsf*nconf, order='C')
+            outmat[:,ci:cj] = spin_evecs_dot (mat_ij, nspin, neleca, nelecb, smult,
+                                              max_memory=max_memory).reshape (nrow, ncsf*nconf, order='C')
 
             det_offset += nconf*ndet
             csf_offset += nconf*ncsf
@@ -780,6 +821,9 @@ def transform_opmat_det2csf_pspace (op, econfs, norb, neleca, nelecb, smult, csd
         assert (csf_offset == ncsf_all), "{} {}".format (csf_offset, ncsf_all)
         return outmat
 
+    sgn = det2csf_sign_rule (norb, neleca, nelecb, det_addrs)
+    op = op * sgn[:,None]
+    op = op * sgn[None,:]
     op = ax_b (op).conj ().T
     op = ax_b (op).conj ().T
     return op, csf_addrs
@@ -958,6 +1002,43 @@ def get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=param.MAX_MEMORY):
                         ctypes.c_int (twoMS))
 
     return umat
+
+def spin_evecs_dot (x, nspin, neleca, nelecb, smult, transpose=False, max_memory=param.MAX_MEMORY):
+    ''' x . umat, or x . umat.T if transpose, contracted over the last axis of x, where
+    umat = get_spin_evecs (nspin, neleca, nelecb, smult). For nspin >= SWEEP_MIN_NSPIN, umat is applied one
+    spin at a time and never built. '''
+    if nspin < SWEEP_MIN_NSPIN:
+        umat = np.asarray_chkfinite (get_spin_evecs (nspin, neleca, nelecb, smult, max_memory=max_memory))
+        if transpose: umat = umat.T
+        return np.tensordot (x, umat, axes=1)
+    na = (nspin + neleca - nelecb) // 2
+    ndet = int (special.comb (nspin, na, exact=True))
+    if ndet >= 2**31:
+        # check before allocating anything: FCICSFspinevecs_dot indexes states with int32
+        raise NotImplementedError (
+            "spin_evecs_dot: {} spin determinants for nspin={}, 2M={} exceeds the 32-bit "
+            "index limit of the sweep".format (ndet, nspin, neleca-nelecb))
+    ncsf = count_csfs (nspin, smult)
+    x = np.asarray (x)
+    shape = x.shape[:-1]
+    assert (x.shape[-1] == (ncsf if transpose else ndet))
+    x = np.ascontiguousarray (x.reshape (-1, x.shape[-1]), dtype=np.float64)
+    nrow = x.shape[0]
+    y = np.empty ((nrow, ndet if transpose else ncsf), dtype=np.float64)
+    spinstrs = np.ascontiguousarray (cistring.addrs2str (nspin, na, list (range (ndet))), dtype=np.uint64)
+    scstrs = np.ascontiguousarray (addrs2str (nspin, smult, list (range (ncsf))), dtype=np.uint64)
+    libcsf.FCICSFspinevecs_dot (y.ctypes.data_as (ctypes.c_void_p),
+                                x.ctypes.data_as (ctypes.c_void_p),
+                                spinstrs.ctypes.data_as (ctypes.c_void_p),
+                                scstrs.ctypes.data_as (ctypes.c_void_p),
+                                ctypes.c_int (nspin),
+                                ctypes.c_size_t (ndet),
+                                ctypes.c_size_t (ncsf),
+                                ctypes.c_int (smult-1),
+                                ctypes.c_int (neleca-nelecb),
+                                ctypes.c_size_t (nrow),
+                                ctypes.c_int (int (transpose)))
+    return y.reshape (*shape, y.shape[-1])
 
 def _test_spin_evecs (nspin, neleca, nelecb, smult, S2mat=None):
     s = (smult - 1) / 2
