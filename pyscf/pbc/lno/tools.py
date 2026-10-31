@@ -1,6 +1,5 @@
 import sys
 import numpy as np
-import scipy.linalg
 from functools import reduce
 
 from pyscf.pbc.df.df import _load3c
@@ -17,12 +16,11 @@ MINAO = getattr(__config__, 'lo_iao_minao', 'minao')
 def k2s_scf(kmf, fock_imag_tol=1e-6):
     r''' Supercell RHF object from a k-point RHF one.
 
-    If pyscf.scf.hf.remove_overlap_zero_eigenvalue is set (as for the k-point SCF), the
-    supercell Fock is diagonalized by canonical orthogonalization, dropping the overlap
-    eigenvectors with eigenvalue <= pyscf.scf.hf.overlap_zero_eigenvalue_threshold. The
-    supercell then has fewer MOs than AOs if the overlap is near-singular.
+    The supercell Fock is diagonalized by canonical orthogonalization, as in the SCF. If
+    pyscf.scf.hf.remove_overlap_zero_eigenvalue is set, the overlap eigenvectors with
+    eigenvalue <= pyscf.scf.hf.overlap_zero_eigenvalue_threshold are dropped and the
+    supercell has fewer MOs than AOs.
     '''
-    from pyscf.scf import hf as mol_hf
     from pyscf.pbc import scf
 
     if not kmf.istype('KRHF'):
@@ -55,23 +53,6 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
     h1e = _k2s_aoint(kh1e, kpts, phase, 'h1e')
     fock = _k2s_aoint(kfock, kpts, phase, 'fock')
 
-    mask = None
-    if mol_hf.remove_overlap_zero_eigenvalue:
-        e, v = scipy.linalg.eigh(s1e)
-        mask = e > mol_hf.overlap_zero_eigenvalue_threshold
-    if mask is not None and not mask.all():
-        # the supercell overlap has the near-null space of the k-point overlaps, for which
-        # the Cholesky factorization of a generalized eigh fails
-        lib.logger.info(kmf, 'k2s_scf: %d small eigenvectors of the supercell overlap removed',
-                        np.count_nonzero(~mask))
-        x = v[:,mask] / np.sqrt(e[mask])
-        mo_energy, c = scipy.linalg.eigh(reduce(np.dot, (x.conj().T, fock, x)))
-        mo_coeff = np.dot(x, c)
-        if hasattr(mol_hf, '_adjust_phase_'):   # phase convention of mol_hf.eig (pyscf >= 2.13)
-            mo_coeff = mol_hf._adjust_phase_(mo_coeff)
-    else:
-        mo_energy, mo_coeff = mol_hf.eig(fock, s1e)
-
     if isinstance(dfobj, RSDF):
         mf = scf.RHF(scell, kpt=kpts[0]).rs_density_fit(auxbasis=dfobj.auxbasis)
     elif isinstance(dfobj, GDF):
@@ -83,6 +64,7 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
             f"{dfobj.__class__.__module__}.{dfobj.__class__.__name__}"
         )
 
+    mo_energy, mo_coeff = mf.eig(fock, s1e, x=mf.check_linear_dependency(s1e))
     mf.mo_coeff = mo_coeff
     mf.mo_energy = mo_energy
     mf.mo_occ = mf.get_occ()
