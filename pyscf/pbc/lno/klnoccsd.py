@@ -320,8 +320,11 @@ def _make_df_eris(mycc, mo_coeff=None):
                                          chunks=(nocc,1,nvir,nocc))
     eris.oovv = eris.feri.create_dataset('oovv', (nocc,nocc,nvir,nvir), 'f8',
                                          chunks=(nocc,nocc,1,nvir))
-    # nrow ~ 4e9/8/blockdim to ensure hdf5 chunk < 4GB
-    chunks = (min(nvir_pair,int(4e8/k2sdf.blockdim)), min(Naux,k2sdf.blockdim))
+    # one q block (naux columns) per chunk so q-block writes fill whole chunks; rows split
+    # evenly into chunks of <= 2.5e7 elements (200 MB), as hdf5 holds a whole chunk in memory
+    # when writing it and stores a partially filled last chunk at full size
+    nrow_chunks = max(1, int(np.ceil(nvir_pair*naux / 2.5e7)))
+    chunks = (int(np.ceil(nvir_pair / nrow_chunks)), naux)
     eris.vvLR = eris.feri.create_dataset('vvLR', (nvir_pair,Naux), 'f8', chunks=chunks)
     eris.vvLI = eris.feri.create_dataset('vvLI', (nvir_pair,Naux), 'f8', chunks=chunks)
 
@@ -343,11 +346,9 @@ def _make_df_eris(mycc, mo_coeff=None):
 
     for qi,q in enumerate(k2sdf.ibz2bz):
         nauxq = naux_by_q[q]
-        if nauxq < naux:
-            eris.vvLR[:,naux*qi+nauxq:naux*(qi+1)] = 0
-            eris.vvLI[:,naux*qi+nauxq:naux*(qi+1)] = 0
-        for r0,r1 in lib.prange(0,nauxq,aux_blksize):
-            auxslice = (r0,r1)
+        # loop over the padded range [0,naux) so the zero pad [nauxq,naux) is written
+        # together with the data rather than by a separate strided write
+        for r0,r1 in lib.prange(0,naux,aux_blksize):
             dr = r1-r0
             p0 = naux*qi + r0
             p1 = p0 + dr
@@ -355,17 +356,20 @@ def _make_df_eris(mycc, mo_coeff=None):
             LvvI = np.ndarray((dr,nvir_pair), dtype=REAL, buffer=bufI)
             LvvR.fill(0)
             LvvI.fill(0)
-            for (ki,kj),LpqR,LpqI in k2sdf.loop_ao2mo(q,mo_coeff,mo_coeff,buf=buf,
-                                                      real_and_imag=True,auxslice=auxslice):
-                LpqR = LpqR.reshape(dr,nmo,nmo)
-                LpqI = LpqI.reshape(dr,nmo,nmo)
-                LooR[p0:p1] += LpqR[:,:nocc,:nocc]
-                LooI[p0:p1] += LpqI[:,:nocc,:nocc]
-                LovR[p0:p1] += LpqR[:,:nocc,nocc:]
-                LovI[p0:p1] += LpqI[:,:nocc,nocc:]
-                LvvR[:dr] += lib.pack_tril(LpqR[:,nocc:,nocc:])
-                LvvI[:dr] += lib.pack_tril(LpqI[:,nocc:,nocc:])
-                LpqR = LpqI = None
+            drq = min(r1, nauxq) - r0
+            if drq > 0:
+                auxslice = (r0,r0+drq)
+                for (ki,kj),LpqR,LpqI in k2sdf.loop_ao2mo(q,mo_coeff,mo_coeff,buf=buf,
+                                                          real_and_imag=True,auxslice=auxslice):
+                    LpqR = LpqR.reshape(drq,nmo,nmo)
+                    LpqI = LpqI.reshape(drq,nmo,nmo)
+                    LooR[p0:p0+drq] += LpqR[:,:nocc,:nocc]
+                    LooI[p0:p0+drq] += LpqI[:,:nocc,:nocc]
+                    LovR[p0:p0+drq] += LpqR[:,:nocc,nocc:]
+                    LovI[p0:p0+drq] += LpqI[:,:nocc,nocc:]
+                    LvvR[:drq] += lib.pack_tril(LpqR[:,nocc:,nocc:])
+                    LvvI[:drq] += lib.pack_tril(LpqI[:,nocc:,nocc:])
+                    LpqR = LpqI = None
             w = k2sdf.qpts_ibz_weights[qi]
             LooR[p0:p1] *= w
             LooI[p0:p1] *= w

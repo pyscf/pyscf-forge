@@ -14,7 +14,13 @@ MINAO = getattr(__config__, 'lo_iao_minao', 'minao')
 
 
 def k2s_scf(kmf, fock_imag_tol=1e-6):
-    from pyscf.scf.hf import eig
+    r''' Supercell RHF object from a k-point RHF one.
+
+    The supercell Fock is diagonalized by canonical orthogonalization, as in the SCF. If
+    pyscf.scf.hf.remove_overlap_zero_eigenvalue is set, the overlap eigenvectors with
+    eigenvalue <= pyscf.scf.hf.overlap_zero_eigenvalue_threshold are dropped and the
+    supercell has fewer MOs than AOs.
+    '''
     from pyscf.pbc import scf
 
     if not kmf.istype('KRHF'):
@@ -47,8 +53,6 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
     h1e = _k2s_aoint(kh1e, kpts, phase, 'h1e')
     fock = _k2s_aoint(kfock, kpts, phase, 'fock')
 
-    mo_energy, mo_coeff = eig(fock, s1e)
-
     if isinstance(dfobj, RSDF):
         mf = scf.RHF(scell, kpt=kpts[0]).rs_density_fit(auxbasis=dfobj.auxbasis)
     elif isinstance(dfobj, GDF):
@@ -60,6 +64,7 @@ def k2s_scf(kmf, fock_imag_tol=1e-6):
             f"{dfobj.__class__.__module__}.{dfobj.__class__.__name__}"
         )
 
+    mo_energy, mo_coeff = mf.eig(fock, s1e, x=mf.check_linear_dependency(s1e))
     mf.mo_coeff = mo_coeff
     mf.mo_energy = mo_energy
     mf.mo_occ = mf.get_occ()
