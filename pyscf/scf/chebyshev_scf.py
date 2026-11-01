@@ -462,7 +462,7 @@ class ChebyshevSCF(hf.SCF):
 
         normalized_fock = to_csr_matrix(normalized_fock.toarray(), threshold=MATRIX_THRESHOLD)
 
-        dm = numpy.zeros((nmo, nmo), dtype=normalized_fock.dtype1)
+        dm = numpy.zeros((nmo, nmo), dtype=normalized_fock.dtype)
 
         identity = csr_matrix(
             (
