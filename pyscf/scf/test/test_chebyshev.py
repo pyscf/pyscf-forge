@@ -64,23 +64,23 @@ class KnownValues(unittest.TestCase):
     def test_energy_agrees_with_rhf_h2(self):
         mf_ref = scf.RHF(mol_h2).run()
         mf_chb = ChebyshevSCF(mol_h2)
-        mf_chb.chebyshev_degree = 50
+        mf_chb.chebyshev_degree = 100
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
-        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
+        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-5)
         self.assertTrue(mf_chb.converged)
 
     def test_h4_energy_electron_count_and_hermiticity(self):
         mf_ref = scf.RHF(mol_h4).run()
         mf_chb = ChebyshevSCF(mol_h4)
-        mf_chb.chebyshev_degree = 80
+        mf_chb.chebyshev_degree = 150
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
-        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
+        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-5)
         dm = mf_chb.make_rdm1()
         s = mf_chb.get_ovlp()
         nelec_computed = np.einsum("ij,ji->", dm, s)
-        self.assertAlmostEqual(nelec_computed, mol_h4.nelectron, delta=1e-3)
+        self.assertAlmostEqual(nelec_computed, mol_h4.nelectron, delta=1e-4)
         self.assertTrue(np.allclose(dm, dm.conj().T, atol=1e-5))
 
     #@slow
@@ -95,10 +95,10 @@ class KnownValues(unittest.TestCase):
         )
         mf_ref = scf.RHF(mol_h2o).run()
         mf_chb = ChebyshevSCF(mol_h2o)
-        mf_chb.chebyshev_degree = 280
-        mf_chb.beta = 20.0
+        mf_chb.chebyshev_degree = 1000
+        mf_chb.beta = 30.0
         e_chb = mf_chb.kernel()
-        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
+        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-5)
 
     #@slow
     def test_energy_agrees_with_rhf_density_fit_slow(self):
@@ -106,10 +106,10 @@ class KnownValues(unittest.TestCase):
         # script: mf.density_fit(auxbasis='weigend').
         mf_ref = scf.RHF(mol_h4).density_fit(auxbasis="weigend").run()
         mf_chb = ChebyshevSCF(mol_h4).density_fit(auxbasis="weigend")
-        mf_chb.chebyshev_degree = 80
+        mf_chb.chebyshev_degree = 150
         mf_chb.beta = 40.0
         e_chb = mf_chb.kernel()
-        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-3)
+        self.assertAlmostEqual(e_chb, mf_ref.e_tot, delta=1e-5)
 
 
 class ConvergenceWithBeta(unittest.TestCase):
@@ -234,7 +234,7 @@ class Reproducibility(unittest.TestCase):
         mf2.rng_seed = 1
         e2 = mf2.kernel()
 
-        self.assertAlmostEqual(e1, e2, delta=1e-4)
+        self.assertAlmostEqual(e1, e2, delta=1e-5)
 
 
 class SGXExchange(unittest.TestCase):
@@ -270,10 +270,10 @@ class SGXExchange(unittest.TestCase):
         mf_chb.with_df.dfj = True
         mf_chb.with_df.optk = True
         mf_chb.rng_seed = 0
-        mf_chb.chebyshev_degree = 80
+        mf_chb.chebyshev_degree = 400
         e_chb = mf_chb.kernel()
 
-        self.assertAlmostEqual(e_chb, e_ref, delta=1e-3)  # < 1 mHa
+        self.assertAlmostEqual(e_chb, e_ref, delta=1e-5)  # < 1 mHa
 
     #@slow
     def test_converged_flag_and_interface_with_sgx_slow(self):
