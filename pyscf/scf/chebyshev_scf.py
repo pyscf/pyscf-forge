@@ -159,6 +159,9 @@ class ChebyshevSCF(hf.SCF):
         # Restricted orbitals are shared by alpha and beta electrons.
         self.g = 2
         self.mu = None
+        self.conv_dm = 1e-3
+        self.conv_tol = 1e-6
+        self.max_cycle = 100
 
     def build(self, mol=None):
         """
@@ -186,6 +189,7 @@ class ChebyshevSCF(hf.SCF):
                 "b",
                 "g",
                 "mu",
+                "conv_dm",
             ]
         )
         return self
@@ -568,32 +572,42 @@ class ChebyshevSCF(hf.SCF):
         )
         return mu
 
-    def kernel(
-        self, conv_dm=1e-3, conv_e=1e-6, max_cycle=100, dm1=None
-    ):
+    def kernel(self, dm0=None, conv_dm=None, conv_tol=None, max_cycle=None):
         """
         Run the Chebyshev-filtered SCF iteration.
 
         Parameters
         ----------
-        conv_dm : float, optional
-            Convergence threshold for the density-matrix change.
-        conv_e : float, optional
-            Convergence threshold for the total-energy change.
-        max_cycle : int, optional
-            Maximum number of SCF iterations.
-        dm1 : ndarray, optional
+        dm0 : ndarray, optional
             Initial AO-basis density matrix.
+        conv_dm : float, optional
+            Convergence threshold for the density-matrix change.  Defaults to
+            ``self.conv_dm``.
+        conv_tol : float, optional
+            Convergence threshold for the total-energy change.  Defaults to
+            ``self.conv_tol``.
+        max_cycle : int, optional
+            Maximum number of SCF iterations.  Defaults to ``self.max_cycle``.
 
         Returns
         -------
         float
             Final total SCF energy.
         """
+        if conv_dm is None:
+            conv_dm = self.conv_dm
+        if conv_tol is None:
+            conv_tol = self.conv_tol
+        if max_cycle is None:
+            max_cycle = self.max_cycle
+
         self.build(self.mol)
         self.ovlp_inv = to_csr_matrix(self.get_ovlp_inv_sqrt(), threshold=MATRIX_THRESHOLD)
 
-        dm1 = self.get_init_guess(self.mol, dm1=dm1)
+        if dm0 is None:
+            dm1 = self.get_init_guess(self.mol, 'minao')
+        else:
+            dm1 = dm0
         fock = self.get_fock(dm=dm1)
         ovlp = self.get_ovlp()
 
@@ -627,7 +641,7 @@ class ChebyshevSCF(hf.SCF):
                 e,
                 ne,
             )
-            if diff < conv_dm and abs(e - e_save) < conv_e:
+            if diff < conv_dm and abs(e - e_save) < conv_tol:
                 converged = True
                 break
             dm1 = dm_new
@@ -638,11 +652,11 @@ class ChebyshevSCF(hf.SCF):
                 self,
                 "ChebyshevSCF did not converge after %d cycles "
                 "(final |ddm|/|dE| still above conv_dm=%.3g / "
-                "conv_e=%.3g). Try increasing max_cycle, "
+                "conv_tol=%.3g). Try increasing max_cycle, "
                 "chebyshev_degree, or beta.",
                 max_cycle,
                 conv_dm,
-                conv_e,
+                conv_tol,
             )
 
         e_tot = self.energy_elec(dm_new, h1e, veff)[0] + self.mol.energy_nuc()
