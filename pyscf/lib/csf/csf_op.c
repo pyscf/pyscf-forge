@@ -1552,6 +1552,27 @@ void FCICSFpspace_h0tril(double *hmat,
                          size_t np,
                          unsigned int norb, int twoM)
 {
+/*
+    Output:
+        hmat : array of shape (np,np) (must be zero on entry)
+            Lower triangle contains Hamiltonian matrix elements between states indicated
+            by dconfstrs, sconfstrs, and coupstrs. Upper triangle and diagonal is zero.
+
+    Hamiltonian = h1e_c[p,q] E^p_q + h1e_s[p,q] 2*Sz^p_q + 1/2 g2e[p,q,r,s] e^pr_qs
+
+    Input:
+        h1e_c : array of shape (norb,norb)
+        h1e_s : array of shape (norb,norb)
+        g2e : array of shape (norb,norb,norb,norb)
+        dconfstrs : array of shape (np,)
+            Strings for doubly-occupied orbitals
+        sconfstrs : array of shape (np,)
+            Strings for singly-occupied orbitals in the non-doubly-occupied subspace
+        coupstrs : array of shape (np,)
+            Strings for S coupling in CSFs
+        twoM : neleca - nelecb
+            This is necessary to correctly evaluate the matrix elements of Sz^p_q
+*/
 #pragma omp parallel default(shared)
 {
     unsigned int p,q,r,t;
@@ -1562,17 +1583,17 @@ void FCICSFpspace_h0tril(double *hmat,
     double fac = 1.0;
     double hop;
 #pragma omp for schedule(dynamic)
-    for (size_t ibra=0; ibra<np; ibra++){
-    bra.dconf = dconfstrs[ibra];
-    bra.sconf = sconfstrs[ibra];
-    bra.spin = coupstrs[ibra];
-    if (bra.sconf == 0){ bra.spin = 0ULL; }
-    for (size_t iket=0; iket<ibra; iket++){
-    ihmat = (iket*np) + ibra;
+    for (size_t iket=0; iket<np; iket++){
     ket.dconf = dconfstrs[iket];
     ket.sconf = sconfstrs[iket];
     ket.spin = coupstrs[iket];
     if (ket.sconf == 0){ ket.spin = 0ULL; }
+    for (size_t ibra=0; ibra<iket; ibra++){
+    ihmat = (iket*np) + ibra;
+    bra.dconf = dconfstrs[ibra];
+    bra.sconf = sconfstrs[ibra];
+    bra.spin = coupstrs[ibra];
+    if (bra.sconf == 0){ bra.spin = 0ULL; }
     nch = Str3_link (&bra, &ket, &p, &r, &q, &t);
     switch (nch) {
         case 0: // spin interaction only
