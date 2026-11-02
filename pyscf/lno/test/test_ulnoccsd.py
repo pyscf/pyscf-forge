@@ -108,6 +108,42 @@ class WaterDimer(unittest.TestCase):
             self.assertAlmostEqual(eccsd, ref[1], 6)
             self.assertAlmostEqual(eccsd_t, ref[2], 6)
 
+    def test_ulno_pm_outcore(self):
+        # outcore ovL for the LNO step with split occ/aux blocks against the incore
+        # thresh=2e-5 energies above (the impurity UCCSD integrals are always outcore with DF)
+        from pyscf import lib
+        from pyscf.lno import ulno
+        mol = self.mol
+        mf = self.mf
+        frozen = self.frozen
+
+        lo_coeff = list()
+        nocc = list()
+        for s in range(2):
+            orbocc = mf.mo_coeff[s][:,frozen:np.count_nonzero(mf.mo_occ[s])]
+            mlo = lo.PipekMezey(mol, orbocc)
+            lo_coeff_s = mlo.kernel()
+            for i in range(100):
+                lo_coeff1_s, stable = mlo.stability_jacobi(return_status=True)
+                if stable:
+                    break
+                mlo = lo.PipekMezey(mf.mol, lo_coeff1_s).set(verbose=4)
+                mlo.init_guess = None
+                lo_coeff_s = mlo.kernel()
+            lo_coeff.append(lo_coeff_s)
+            nocc.append(orbocc.shape[1])
+        frag_lolist = [[[i],[]] for i in range(nocc[0])] + [[[],[i]] for i in range(nocc[1])]
+
+        ref = [-0.3995407761,-0.4185382023,-0.4231105742]
+        with lib.temporary_env(ulno, DEBUG_BLKSIZE=True):
+            mcc = ULNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc.force_outcore_ao2mo = True
+            mcc.lno_thresh = [2e-4,2e-5]
+            mcc.kernel()
+        self.assertAlmostEqual(mcc.e_corr_pt2, ref[0], 6)
+        self.assertAlmostEqual(mcc.e_corr_ccsd, ref[1], 6)
+        self.assertAlmostEqual(mcc.e_corr_ccsd_t, ref[2], 6)
+
 
 if __name__ == "__main__":
     print("Full Tests for LNO-CCSD and LNO-CCSD(T)")

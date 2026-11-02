@@ -233,9 +233,12 @@ class _KLNODFOUTCOREERIS_REAL(_KLNODFINCOREERIS_REAL):
             else:
                 self.feri = lib.H5TmpFile()
             log.info('ovL is saved to %s', self.feri.filename)
-            # TODO: determine a chunks size
-            self.ovLR = self.feri.create_dataset('ovLR', ovL_shape, ovL_dtype)
-            self.ovLI = self.feri.create_dataset('ovLI', ovL_shape, ovL_dtype)
+            # one chunk per (i, q) so that each q block written by _init_mp_df_eris_real
+            # fills whole chunks; an unchunked dataset turns every ovL[:,:,q-block] write
+            # into a read-modify-write of each (i,a) row
+            chunks = (1,self.nvir,self.naux)
+            self.ovLR = self.feri.create_dataset('ovLR', ovL_shape, ovL_dtype, chunks=chunks)
+            self.ovLI = self.feri.create_dataset('ovLI', ovL_shape, ovL_dtype, chunks=chunks)
             _init_mp_df_eris_real(self, self.orbocc, self.orbvir, self.max_memory,
                                   ovLR=self.ovLR, ovLI=self.ovLI, log=log)
         elif isinstance(self._ovL, str):
@@ -296,21 +299,22 @@ def _init_mp_df_eris_real(k2sdf, orbocc, orbvir, max_memory, ovLR=None, ovLI=Non
 
     for qi,q in enumerate(k2sdf.ibz2bz):
         nauxq = naux_by_q[q]
-        if nauxq < naux:
-            ovLR[:,:,naux*qi+nauxq:naux*(qi+1)] = 0
-            ovLI[:,:,naux*qi+nauxq:naux*(qi+1)] = 0
-        for p0,p1 in lib.prange(0, nauxq, aux_blksize):
-            auxslice = (p0,p1)
+        # loop over the padded range [0,naux) so the zero pad [nauxq,naux) is written
+        # together with the data rather than by a separate strided write
+        for p0,p1 in lib.prange(0, naux, aux_blksize):
             dp = p1 - p0
             LovR = np.ndarray((dp,nocc,nvir), dtype=REAL, buffer=bufR)
             LovI = np.ndarray((dp,nocc,nvir), dtype=REAL, buffer=bufI)
             LovR.fill(0)
             LovI.fill(0)
-            for (ki,kj),LpqR,LpqI in k2sdf.loop_ao2mo(q, orbocc, orbvir, buf=buf,
-                                                      real_and_imag=True, auxslice=auxslice):
-                LovR += LpqR.reshape(dp,nocc,nvir)
-                LovI += LpqI.reshape(dp,nocc,nvir)
-                LpqR = LpqI = None
+            dpq = min(p1, nauxq) - p0
+            if dpq > 0:
+                auxslice = (p0,p0+dpq)
+                for (ki,kj),LpqR,LpqI in k2sdf.loop_ao2mo(q, orbocc, orbvir, buf=buf,
+                                                          real_and_imag=True, auxslice=auxslice):
+                    LovR[:dpq] += LpqR.reshape(dpq,nocc,nvir)
+                    LovI[:dpq] += LpqI.reshape(dpq,nocc,nvir)
+                    LpqR = LpqI = None
             w = k2sdf.qpts_ibz_weights[qi]
             LovR *= w
             LovI *= w

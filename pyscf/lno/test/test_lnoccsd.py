@@ -168,6 +168,32 @@ class WaterDimer(unittest.TestCase):
             self.assertAlmostEqual(eccsd, ref[1], 6)
             self.assertAlmostEqual(eccsd_t, ref[2], 6)
 
+    def test_lno_iao_outcore(self):
+        # outcore ovL for the LNO step with split occ/aux blocks, and the DF-CCSD impurity solver
+        # (vvL on disk) in place of the vvvv one, against the incore thresh=1e-5 energies above
+        from pyscf import lib
+        from pyscf.lno import lno, lnoccsd
+        mol = self.mol
+        mf = self.mf
+        frozen = self.frozen
+
+        orbocc = mf.mo_coeff[:,frozen:np.count_nonzero(mf.mo_occ)]
+        iao_coeff = lo.iao.iao(mol, orbocc)
+        lo_coeff = lo.orth.vec_lowdin(iao_coeff, mf.get_ovlp())
+        frag_lolist = autofrag_iao(lo.iao.reference_mol(mol))
+
+        ref = [-0.4054784012,-0.4240686326,-0.4303996712]
+        dfccsd = lambda mf, frozen=None, mo_coeff=None, mo_occ=None: \
+                lnoccsd.MODIFIED_DFCCSD(mf, frozen, mo_coeff, mo_occ)
+        with lib.temporary_env(lno, DEBUG_BLKSIZE=True), \
+             lib.temporary_env(lnoccsd, CCSD=dfccsd):
+            mcc = LNOCCSD_T(mf, lo_coeff, frag_lolist, frozen=frozen).set(verbose=5)
+            mcc.force_outcore_ao2mo = True
+            mcc.lno_thresh = [1e-4,1e-5]
+            mcc.kernel()
+        self.assertAlmostEqual(mcc.e_corr_pt2, ref[0], 6)
+        self.assertAlmostEqual(mcc.e_corr_ccsd, ref[1], 6)
+        self.assertAlmostEqual(mcc.e_corr_ccsd_t, ref[2], 6)
 
 
 if __name__ == "__main__":
