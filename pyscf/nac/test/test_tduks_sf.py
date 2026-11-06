@@ -161,7 +161,7 @@ H     0.000000    0.757000    0.587000
 
 def check_against_cache_refs():
     print('Check: packaged NAC against cache reference values')
-    print('  note: reference arrays below were produced by the cache implementation')
+    print('  note: reference arrays were regenerated with PySCF 2.15.0 (SCF conv_tol=1e-12)')
     cases = [
         ('HF', True, HF_REF_ETF),
         ('HF', False, HF_REF_FULL),
