@@ -9,7 +9,6 @@ sudo apt-get -qq install \
     curl
 
 python -m pip install --upgrade pip
-pip install "scipy<1.16"
 pip install pytest
 
 # Forge must not ship an __init__.py that already exists in PySCF core: a regular
