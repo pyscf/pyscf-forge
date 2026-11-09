@@ -87,7 +87,6 @@ class _N2Fixture:
         )
 
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         mf.conv_tol = 1e-12
         mf.max_cycle = 100
         mf.kernel()
@@ -150,7 +149,6 @@ class TestInputs(unittest.TestCase):
     def test_constructor_gasci_model_and_defaults(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         model = (2, (1, 1), (1, 1), ((1, 1), (2, 2)), 'cumulative-occ')
         reference = gasci.GASCI(mf, *model, ncore=0)
         cases = (
@@ -198,7 +196,6 @@ class TestInputs(unittest.TestCase):
     def test_constructor_rejects_invalid_or_missing_arguments(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         solver = fci_gas.FCISolver(mol, gas_orbs=(2,))
         cases = [((3, (1, 1)), model, ValueError, 'ncas.*sum')
                  for model in ({'gas_orbs': (1, 1)}, {'fcisolver': solver})]
@@ -219,7 +216,6 @@ class TestInputs(unittest.TestCase):
     def test_constructor_explicit_and_inferred_ncas(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         for factory, reference in ((gasscf.GASSCF, mf),
                                    (gasscf.DFGASSCF, mf.density_fit(auxbasis='weigend'))):
             cases = [
@@ -500,8 +496,6 @@ class TestInputs(unittest.TestCase):
         expected = gasci.GASCI(ref, 2, (1, 1)).kernel()[0]
         for method in ('gasci', 'kernel'):
             mf = scf.RHF(mol)
-            if getattr(mf, '_chkfile', None) is not None:
-                self.addCleanup(mf._chkfile.close)
             mc = gasscf.GASSCF(mf, 2, (1, 1))
             self.addCleanup(mc.close)
             mc.canonicalization = False
@@ -554,8 +548,6 @@ class TestInputs(unittest.TestCase):
     def test_unadapted_native_wrappers_fail_before_calculation(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         wrappers = (
             ('sa', lambda mc: addons.state_average(mc, (.5, .5))),
             ('sa-inplace', lambda mc: addons.state_average_(mc, (.5, .5))),
@@ -593,8 +585,6 @@ class TestInputs(unittest.TestCase):
     def test_native_approx_hessian_wrapper_is_rejected(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for sa in (False, True):
             source = gasscf.GASSCF(mf, 2, (1, 1))
             if sa:
@@ -621,7 +611,6 @@ class TestInputs(unittest.TestCase):
             nelec = (1 + spin // 2, 1 - spin // 2)
             for factory in (scf.UHF, dft.UKS):
                 base = factory(mol).run()
-                self.addCleanup(base._chkfile.close)
                 for kind in ('plain', 'df', 'newton', 'df-newton'):
                     source = base.copy()
                     if 'df' in kind:
@@ -667,12 +656,9 @@ class TestInputs(unittest.TestCase):
                                     (gasscf.DFGASSCF, mcscf.DFCASSCF)):
             mc, ref = constructor(mol, 2, (1, 1)), native(mol, 2, (1, 1))
             self.addCleanup(mc.close)
-            self.addCleanup(mc._scf._chkfile.close)
-            self.addCleanup(ref._scf._chkfile.close)
             self.assertEqual(type(mc._scf), type(ref._scf))
             self.assertEqual(isinstance(mc, mcdf._DFCAS), isinstance(ref, mcdf._DFCAS))
         mf = scf.RHF(mol).density_fit()
-        self.addCleanup(mf._chkfile.close)
         for kwargs in ({}, {'auxbasis': 'weigend'},
                        {'with_df': df.DF(mol)},
                        {'auxbasis': 'weigend', 'with_df': df.DF(mol, 'weigend')}):
@@ -698,13 +684,11 @@ class TestInputs(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         for factory in (scf.GHF, dft.GKS, scf.DHF, dft.DKS):
             source = factory(mol)
-            self.addCleanup(source._chkfile.close)
             for constructor in (gasscf.GASSCF, gasscf.DFGASSCF):
                 with self.subTest(scf=factory.__name__, constructor=constructor.__name__):
                     with self.assertRaisesRegex(NotImplementedError, 'spinor SCF'):
                         constructor(source, 2, (1, 1))
             ordinary = scf.RHF(mol)
-            self.addCleanup(ordinary._chkfile.close)
             mc = gasscf.GASSCF(ordinary, 2, (1, 1))
             self.addCleanup(mc.close)
             mc._scf = source
@@ -714,7 +698,6 @@ class TestInputs(unittest.TestCase):
 
         # Native UHF conversion must not erase an unsupported decoration.
         source = scf.UHF(mol)
-        self.addCleanup(source._chkfile.close)
         for decorated, message in ((source.sfx2c1e(), 'X2C'),
                                    (solvent.ddCOSMO(source), 'solvent models')):
             with mock.patch.object(decorated, 'to_rhf',
@@ -728,7 +711,6 @@ class TestInputs(unittest.TestCase):
             atom="H 0 0 0; H 0 0 0.9; H 0 0 2.2; H 0 0 3.1",
             basis="sto-3g", verbose=0)
         mf = scf.RHF(mol).density_fit().run()
-        self.addCleanup(mf._chkfile.close)
         for constructor in (gasscf.GASSCF, gasscf.DFGASSCF):
             mc = constructor(mf, 2, (1, 1), gas_orbs=(2,), ncore=1)
             self.addCleanup(mc.close)
@@ -750,7 +732,6 @@ class TestInputs(unittest.TestCase):
             mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g',
                         symmetry=symmetry, verbose=0)
             mf = scf.UHF(mol)
-            self.addCleanup(mf._chkfile.close)
             with mock.patch.object(mf, 'to_rhf', side_effect=AssertionError('conversion')):
                 for source in (mol, mf):
                     for constructor in (gasscf.GASSCF, gasscf.DFGASSCF):
@@ -759,7 +740,6 @@ class TestInputs(unittest.TestCase):
                                 constructor(source, 2, (1, 1))
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         solver = fci_gas.FCISolver(mol, gas_orbs=(2,))
         for target, name, value in (
                 (solver, 'orbsym', [0, 0]), (solver, 'wfnsym', 0),
@@ -772,7 +752,6 @@ class TestInputs(unittest.TestCase):
     def test_symmetry_settings_and_tagged_orbitals_rejected(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         tagged = lib.tag_array(mf.mo_coeff.copy(), orbsym=[0, 0])
         for kind in ('plain', 'df', 'sa', 'df-sa', 'sa-df'):
             mc = gasscf.GASSCF(mf, 2, (1, 1))
@@ -1226,8 +1205,6 @@ class TestSolverAdapter(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .9; H 0 0 2.2; H 0 0 3.1',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         donor = fci_gas.FCISolver(
             gas_orbs=(1, 2), gas_restr=((0, 0), (2, 2)),
             gas_restr_type='cumulative-occ')
@@ -1462,8 +1439,6 @@ class TestNewton(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 1; H 0 0 2.2; H 0 0 3.4',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for use_df in (False, True):
             for weights in (None, (.3, .7), (1., 0.)):
                 with self.subTest(df=use_df, weights=weights):
@@ -1491,8 +1466,6 @@ class TestNewton(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 1; H 0 0 2.2; H 0 0 3.4',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for use_df in (False, True):
             mc = gasscf.GASSCF(
                 mf, 2, (1, 1), gas_orbs=(1, 1),
@@ -1736,7 +1709,6 @@ class TestNewton(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .9; H 0 0 2.2; H 0 0 3.1',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         for canonicalization in (False, True):
             with self.subTest(canonicalization=canonicalization):
                 mc = gasscf.GASSCF(
@@ -1779,8 +1751,6 @@ class TestNewton(_N2Fixture, unittest.TestCase):
     def test_full_active_kernel_preserves_ci_convergence(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for use_df in (False, True):
             for weights in (None, (.5, .5), (1., 0.)):
                 for canonical in (False, True):
@@ -1838,7 +1808,6 @@ class TestNewton(_N2Fixture, unittest.TestCase):
                                  (0., .8, 1.8, 2.6, 3.7, 4.8)),
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         cases = ((False, None, None, None),
                  (True, None, None, [5]),
                  (False, (.3, .7), 0., None),
@@ -2093,7 +2062,6 @@ class TestNewton(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .8; H 0 0 1.8; H 0 0 2.6',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).density_fit(auxbasis='weigend').run()
-        self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(mf, 2, (1, 1))
         self.addCleanup(mc.close)
         ref = mcscf.CASSCF(mf, 2, (1, 1))
@@ -2142,7 +2110,6 @@ class TestStateAverageAndSpin(unittest.TestCase):
 
         self.addCleanup(mc.close)
         self.addCleanup(sa.close)
-        self.addCleanup(mf._chkfile.close)
         plan = sa.fcisolver._get_rdm_plan(2, (1, 1))
         undone = sa.undo_state_average()
         self.addCleanup(undone.close)
@@ -2182,8 +2149,6 @@ class TestStateAverageAndSpin(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .9; H 0 0 2.2; H 0 0 3.1',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for weights in ((.4, .6), (1., 0.)):
             mc = gasscf.GASSCF(
                 mf, 3, (1, 1), ncore=1, gas_orbs=(1, 2),
@@ -2360,6 +2325,8 @@ class TestStateAverageAndSpin(unittest.TestCase):
         for use_df in (False, True):
             for weights in (None, (.4, .6), (1., 0.)):
                 with self.subTest(df=use_df, weights=weights):
+                    tmpdir = tempfile.TemporaryDirectory()
+                    self.addCleanup(tmpdir.cleanup)
                     mc = gasscf.GASSCF(
                         mf, 3, (1, 1), ncore=1, gas_orbs=(1, 2),
                         gas_restr=((0, 1), (2, 2)), gas_restr_type="cumulative-occ")
@@ -2368,6 +2335,7 @@ class TestStateAverageAndSpin(unittest.TestCase):
                     if weights is not None:
                         mc = mc.state_average(weights)
                     self.addCleanup(mc.close)
+                    mc.chkfile = str(Path(tmpdir.name) / "gas.chk")
                     # Intentionally nonzero penalty; one macro also exercises
                     # the public energy convention for an unconverged result.
                     mc.fix_spin_(shift=.001, ss=0.)
@@ -2512,7 +2480,6 @@ class TestProperties(_N2Fixture, unittest.TestCase):
     def test_density_transition_and_spin_wrapper_dispatch(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(mf, 2, (1, 1), gas_orbs=(2,), ncore=0)
         self.addCleanup(mc.close)
         solver = mc.fcisolver
@@ -2774,7 +2741,6 @@ class TestProperties(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .8; H 0 0 1.8; H 0 0 2.6; '
                         'H 0 0 3.7; H 0 0 4.5', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         overlap = mf.get_ovlp()
         for driver in (gasci.GASCI, gasscf.GASSCF):
             for sa in (False, True):
@@ -3058,8 +3024,6 @@ class TestCanonicalization(_N2Fixture, unittest.TestCase):
                                  (0., .9, 1.9, 3., 4.2, 5.5)),
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for use_df in (False, True):
             for pseudo in (False, True):
                 with self.subTest(df=use_df, pseudo=pseudo):
@@ -3097,8 +3061,6 @@ class TestCanonicalization(_N2Fixture, unittest.TestCase):
                                  (0., .9, 1.9, 3., 4.2, 5.5)),
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(
             mf, 2, (1, 1), gas_orbs=(1, 1),
             gas_restr=((1, 1), (2, 2)), gas_restr_type='cumulative-occ')
@@ -3125,8 +3087,6 @@ class TestCanonicalization(_N2Fixture, unittest.TestCase):
                                  (0., .8, 1.7, 2.7, 3.8, 5., 6.3, 7.7, 9.2, 10.8)),
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for use_df in (False, True):
             for weights in (None, (1., 0.)):
                 mc = gasscf.GASSCF(
@@ -3236,7 +3196,6 @@ class TestLifecycle(unittest.TestCase):
     def test_solver_and_mc_copy_detach_owned_plan_caches(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         for level in ('solver', 'mc'):
             with self.subTest(copy=level):
                 mc = gasscf.GASSCF(mf, 2, (1, 1), gas_orbs=(2,), ncore=0)
@@ -3269,8 +3228,6 @@ class TestLifecycle(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .9; H 0 0 2.; H 0 0 3.2',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for method in ('gasci', 'kernel', 'get_grad', 'scanner'):
             # Both fixed occupations have four determinants, with different
             # meanings; the unrestricted variant changes the vector length.
@@ -3314,8 +3271,6 @@ class TestLifecycle(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .9; H 0 0 2.; H 0 0 3.2',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for method in ('gasci', 'kernel'):
             mc = gasscf.GASSCF(
                 mf, 3, (1, 1), ncore=1, gas_orbs=(1, 2),
@@ -3344,8 +3299,6 @@ class TestLifecycle(unittest.TestCase):
     def test_state_average_root_count_invalidates_implicit_ci(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for method in ('gasci', 'kernel'):
             mc = gasscf.GASSCF(mf, 2, (1, 1), ncore=0)
             self.addCleanup(mc.close)
@@ -3372,8 +3325,6 @@ class TestLifecycle(unittest.TestCase):
     def test_checkpoint_ci_requires_explicit_guess_without_gas_signature(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(mf, 2, (1, 1), ncore=0)
         self.addCleanup(mc.close)
         mc.gasci()
@@ -3416,8 +3367,6 @@ class TestLifecycle(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .9; H 0 0 2.2; H 0 0 3.1',
                     basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         kappa = numpy.zeros((4, 4))
         kappa[1, 0], kappa[0, 1] = .18, -.18
         moved = mf.mo_coeff @ scipy.linalg.expm(kappa)
@@ -3493,8 +3442,6 @@ class TestLifecycle(unittest.TestCase):
     def test_checkpoint_read_failure_preserves_completed_results(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(mf, 2, (1, 1)).state_average((.4, .6))
         self.addCleanup(mc.close)
         mc.fix_spin_(shift=.001, ss=0.)
@@ -3557,7 +3504,6 @@ class TestLifecycle(unittest.TestCase):
                     if kind not in ('plain', 'mc-df'):
                         mf = mf.density_fit(auxbasis='weigend')
                     mf.run()
-                    self.addCleanup(mf._chkfile.close)
                     mc = gasscf.GASSCF(
                         mf, 2, (1, 1), ncore=1, gas_orbs=(1, 1),
                         gas_restr=((1, 1), (2, 2)),
@@ -3623,7 +3569,6 @@ class TestLifecycle(unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         moved = mol.set_geom_('H 0 0 0; H 0 0 1.05', inplace=False)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         for storage, sa in (('named', False), ('temporary', False),
                             ('named', True), ('temporary', True)):
             with self.subTest(storage=storage, sa=sa), ExitStack() as files:
@@ -3732,8 +3677,6 @@ class TestScanner(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         moved = mol.set_geom_('H 0 0 0; H 0 0 .8', inplace=False)
         mf = scf.RHF(mol).run()
-        if getattr(mf, '_chkfile', None) is not None:
-            self.addCleanup(mf._chkfile.close)
         for use_df, weights in ((False, None), (True, (.5, .5))):
             with self.subTest(df=use_df, weights=weights):
                 mc = gasscf.GASSCF(mf, 2, (1, 1), ncore=0)
@@ -3804,7 +3747,6 @@ class TestScanner(_N2Fixture, unittest.TestCase):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         moved = mol.set_geom_('H 0 0 0; H 0 0 .95', inplace=False)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         for use_df, weights in ((False, None), (True, (.5, .5))):
             mc = gasscf.GASSCF(mf, 2, (1, 1))
             self.addCleanup(mc.close)
@@ -3858,7 +3800,6 @@ class TestScanner(_N2Fixture, unittest.TestCase):
     def test_scanner_rejects_symmetry_before_reset_or_scf(self):
         mol = gto.M(atom='H 0 0 0; H 0 0 .75', basis='sto-3g', verbose=0)
         mf = scf.RHF(mol).run()
-        self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(mf, 2, (1, 1))
         self.addCleanup(mc.close)
         tagged = lib.tag_array(mf.mo_coeff.copy(), orbsym=[0, 0])
@@ -3912,7 +3853,6 @@ class TestScanner(_N2Fixture, unittest.TestCase):
             basis='sto-3g', verbose=0)
         # Model rejection must precede reset and SCF; no electronic solve needed.
         mf = scf.RHF(mol)
-        self.addCleanup(mf._chkfile.close)
         mc = gasscf.GASSCF(
             mf, 2, (1, 1), gas_orbs=(1, 1), gas_restr=((1, 1), (2, 2)),
             gas_restr_type='cumulative-occ', ncore=1)
