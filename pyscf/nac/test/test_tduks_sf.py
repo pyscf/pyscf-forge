@@ -63,6 +63,9 @@ def solve_shared_tddft(mf, extype=1, collinear_samples=50):
         [-B_baab_2d, -A_baba_2d],
     ])
     eigenvals, eigenvecs = np.linalg.eig(casida_matrix)
+    # Since numpy 2.5, eig returns complex arrays even when all eigenvalues are real
+    assert not eigenvecs.imag.any()
+    eigenvals, eigenvecs = eigenvals.real, eigenvecs.real
     idx = eigenvals.real.argsort()
     eigenvals = eigenvals[idx].real
     eigenvecs = eigenvecs[:, idx]

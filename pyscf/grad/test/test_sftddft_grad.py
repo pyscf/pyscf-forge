@@ -35,6 +35,9 @@ def cal_exact_sf_tddft_gradient(mf, extype=1, collinear_samples=50, state=1):
     Casida_matrix = np.block([[A_abab_2d, B_abba_2d], [-B_baab_2d, -A_baba_2d]])
 
     eigenvals, eigenvecs = np.linalg.eig(Casida_matrix)
+    # Since numpy 2.5, eig returns complex arrays even when all eigenvalues are real
+    assert not eigenvecs.imag.any()
+    eigenvals, eigenvecs = eigenvals.real, eigenvecs.real
     idx = eigenvals.real.argsort()
     eigenvals = eigenvals[idx]
     eigenvecs = eigenvecs[:, idx]
