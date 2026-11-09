@@ -184,16 +184,15 @@ def get_C_from_ibz2bz_info(mesh, kpt_ibz, kpt_bz, rot, tr, C_k_ibz,
         if tr:
             out[i] = out[i].conj()
     if realspace:
-        outshape = out.shape
-        out.shape = (-1, mesh[0], mesh[1], mesh[2])
+        out_r = out.reshape(-1, mesh[0], mesh[1], mesh[2])
+        assert np.may_share_memory(out_r, out)  # phases must be written into out
         wt = 1.0 / mesh[v]
         phases = []
         for v in range(3):
             phases.append(np.exp(2j * np.pi * kshift[v] * np.arange(mesh[v]) * wt))
-        out[:] *= phases[0][None, :, None, None]
-        out[:] *= phases[1][None, None, :, None]
-        out[:] *= phases[2][None, None, None, :]
-        out.shape = outshape
+        out_r[:] *= phases[0][None, :, None, None]
+        out_r[:] *= phases[1][None, None, :, None]
+        out_r[:] *= phases[2][None, None, None, :]
     return out
 
 

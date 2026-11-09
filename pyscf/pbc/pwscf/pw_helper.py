@@ -676,15 +676,12 @@ class _Mixing:
         f_list = np.concatenate([f.ravel() for f in f_list])
         ferr_list = np.concatenate(ferr_list)
         result = self._next_step(mf, f_list, ferr_list)
-        tagged_result = result[0 : sizes[0]]
-        tagged_result.shape = shapes[0]
+        tagged_result = result[0 : sizes[0]].reshape(shapes[0])
         start = sizes[0]
         mid = start + sizes[1]
-        kwargs["vxc_R"] = result[start:mid]
-        kwargs["vxc_R"].shape = shapes[1]
+        kwargs["vxc_R"] = result[start:mid].reshape(shapes[1])
         if kw in kwargs and kwargs[kw] is not None:
-            kwargs[kw] = result[mid:]
-            kwargs[kw].shape = shapes[2]
+            kwargs[kw] = result[mid:].reshape(shapes[2])
         return self._tag(tagged_result, kwargs)
 
 
