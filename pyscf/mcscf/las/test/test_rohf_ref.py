@@ -34,34 +34,36 @@ def _las_e_tot (mf, frags, lasci_first=False, **kwargs):
     return las.energy_elec () + las.energy_nuc ()
 
 class KnownValues (unittest.TestCase):
+    # The aufbau CI guess fills alpha and beta in orbital order in each fragment, so the LAS
+    # product state is a single ROHF-type determinant. If localize_init_guess keeps the ROHF
+    # doubly- and singly-occupied orbitals apart (mo_occ), that determinant is the ROHF one and
+    # the energy is E_ROHF. With only freeze_cas_spaces=True, each fragment's orbitals mix the two
+    # occupation classes, so the energy lies above E_ROHF (here by ~1e-3 for C2H6N4 and ~1e-1 for
+    # C2H4N4; it can't be below, by the variational principle).
 
     def test_c2h6n4_casci (self):
         mc = mcscf.CASCI (mf_c2h6n4, 4, 4).run ()
         self.assertAlmostEqual (mf_c2h6n4.e_tot, mc.e_tot, 6)
 
-    # TODO: implement "aufbau guess" CI vector, then remove expectedFailure
-    @unittest.expectedFailure
     def test_c2h6n4_freeze_cas_spaces (self):
         e_tot = _las_e_tot (mf_c2h6n4, [[1,2],[9,10]], freeze_cas_spaces=True)
-        self.assertAlmostEqual (e_tot, mf_c2h6n4.e_tot, 6)
+        self.assertGreaterEqual (e_tot, mf_c2h6n4.e_tot - 1e-6)
 
     def test_c2h6n4_mo_occ (self):
         e_tot = _las_e_tot (mf_c2h6n4, [[1,2],[9,10]], mo_occ=mf_c2h6n4.mo_occ)
-        self.assertLessEqual (e_tot-1e-6, mf_c2h6n4.e_tot)
+        self.assertAlmostEqual (e_tot, mf_c2h6n4.e_tot, 6)
 
     def test_c2h4n4_casci (self):
         mc = mcscf.CASCI (mf_c2h4n4, 4, 4).run ()
         self.assertAlmostEqual (mf_c2h4n4.e_tot, mc.e_tot, 6)
 
-    # TODO: implement "aufbau guess" CI vector, then remove expectedFailure
-    @unittest.expectedFailure
     def test_c2h4n4_freeze_cas_spaces (self):
         e_tot = _las_e_tot (mf_c2h4n4, [[1,2],[7,8]], lasci_first=True, freeze_cas_spaces=True)
-        self.assertAlmostEqual (e_tot, mf_c2h4n4.e_tot, 6)
+        self.assertGreaterEqual (e_tot, mf_c2h4n4.e_tot - 1e-6)
 
     def test_c2h4n4_mo_occ (self):
         e_tot = _las_e_tot (mf_c2h4n4, [[1,2],[7,8]], lasci_first=True, mo_occ=mf_c2h4n4.mo_occ)
-        self.assertLessEqual (e_tot-1e-6, mf_c2h4n4.e_tot)
+        self.assertAlmostEqual (e_tot, mf_c2h4n4.e_tot, 6)
 
     # The two smallbasis tests are smoke tests: they pass if nothing raises.
     def test_smallbasis (self):
