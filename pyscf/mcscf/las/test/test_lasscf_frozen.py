@@ -14,13 +14,10 @@
 # limitations under the License.
 
 # Partially frozen orbitals. With one fragment, LASSCF is CASSCF, so LASSCF with las.frozen must
-# match CASSCF with mc.frozen, and (with canonicalization off) leave the frozen columns of
-# mo_coeff untouched, as CASSCF does.
-#
-# TODO: both fail, also in mrh before the migration. Every macrocycle of lasscf_sync_o0.kernel
-# rediagonalizes the inactive and virtual blocks (_eig_inactive_virtual) regardless of
-# las.frozen, mixing frozen orbitals into unfrozen ones. Frozen 1s cores: energy ~1e-7 below
-# CASSCF; frozen virtuals: ~1e-3 below. Remove expectedFailure when fixed.
+# match CASSCF with mc.frozen, and leave the frozen columns of mo_coeff untouched, as CASSCF does,
+# both with and without the final canonicalization. (Until the frozen-aware
+# _eig_inactive_virtual, every macrocycle mixed frozen inactive/virtual orbitals with unfrozen
+# ones, giving energies ~1e-7 (frozen 1s cores) to ~1e-3 (frozen virtuals) below CASSCF.)
 
 import unittest
 import numpy as np
@@ -44,22 +41,22 @@ def tearDownModule():
 class KnownValues (unittest.TestCase):
 
     def _check (self, frozen):
-        mc = mcscf.CASSCF (mf, 4, 4).set (frozen=frozen, conv_tol=1e-11, conv_tol_grad=1e-7)
-        mc.canonicalization = False
-        mc.kernel ()
-        las = LASSCF (mf, (4,), (4,), spin_sub=(1,)).set (conv_tol_grad=1e-7, frozen=frozen)
-        las.canonicalization = False
-        las.kernel ()
-        self.assertTrue (las.converged)
-        self.assertAlmostEqual (las.e_tot, mc.e_tot, 8)
-        self.assertAlmostEqual (np.abs (las.mo_coeff[:,frozen] - mf.mo_coeff[:,frozen]).max (),
-                                0, 8)
+        for canon in (False, True):
+            mc = mcscf.CASSCF (mf, 4, 4).set (frozen=frozen, conv_tol=1e-11, conv_tol_grad=1e-7)
+            mc.canonicalization = canon
+            mc.kernel ()
+            las = LASSCF (mf, (4,), (4,), spin_sub=(1,)).set (conv_tol_grad=1e-7, frozen=frozen)
+            las.canonicalization = canon
+            las.kernel ()
+            with self.subTest (canonicalization=canon):
+                self.assertTrue (las.converged)
+                self.assertAlmostEqual (las.e_tot, mc.e_tot, 8)
+                dmo = np.abs (las.mo_coeff[:,frozen] - mf.mo_coeff[:,frozen]).max ()
+                self.assertAlmostEqual (dmo, 0, 8)
 
-    @unittest.expectedFailure
     def test_frozen_core (self):
         self._check ([0,1,2,3])
 
-    @unittest.expectedFailure
     def test_frozen_virtual (self):
         self._check ([20,21])
 

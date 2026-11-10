@@ -169,8 +169,22 @@ def get_fock (las, mo_coeff=None, ci=None, eris=None, casdm1s=None, verbose=None
     fock = las.get_hcore () + vj - (vk/2)
     return fock
 
+def _unfrozen_inactive_virtual (las, nmo):
+    '''Indices of the inactive and of the virtual orbitals which are not in las.frozen'''
+    ncore = las.ncore
+    nocc = ncore + las.ncas
+    mask = np.ones (nmo, dtype=bool)
+    frozen = getattr (las, 'frozen', None)
+    if frozen is not None:
+        if isinstance (frozen, (int, np.integer)):
+            mask[:frozen] = False
+        else:
+            mask[frozen] = False
+    return np.where (mask[:ncore])[0], np.where (mask[nocc:])[0] + nocc
+
 def _eig_inactive_virtual (las, fock, orbsym=None):
     '''Generate the unitary matrix canonicalizing the inactive and virtual orbitals only.
+    Orbitals in las.frozen are not mixed with any others.
 
     Args:
         las : object of :class:`LASCINoSymm`
@@ -185,18 +199,12 @@ def _eig_inactive_virtual (las, fock, orbsym=None):
         ene : ndarray of shape (nmo,)
         umat : ndarray of shape (nmo, nmo)'''
     nmo = fock.shape[0]
-    ncore = las.ncore
-    nocc = ncore + las.ncas
     ene = np.zeros (nmo)
     umat = np.eye (nmo)
-    if ncore:
-        orbsym_i = None if orbsym is None else orbsym[:ncore]
-        fock_i = fock[:ncore,:ncore]
-        ene[:ncore], umat[:ncore,:ncore] = las._eig (fock_i, 0, 0, orbsym_i)
-    if nmo-nocc:
-        orbsym_i = None if orbsym is None else orbsym[nocc:]
-        fock_i = fock[nocc:,nocc:]
-        ene[nocc:], umat[nocc:,nocc:] = las._eig (fock_i, 0, 0, orbsym_i)
+    for idx in _unfrozen_inactive_virtual (las, nmo):
+        if not idx.size: continue
+        orbsym_i = None if orbsym is None else np.asarray (orbsym)[idx]
+        ene[idx], umat[np.ix_(idx,idx)] = las._eig (fock[np.ix_(idx,idx)], 0, 0, orbsym_i)
     return ene, umat
 
 def canonicalize (las, mo_coeff=None, ci=None, casdm1fs=None, natorb_casdm1=None, veff=None,
@@ -248,8 +256,8 @@ def canonicalize (las, mo_coeff=None, ci=None, casdm1fs=None, natorb_casdm1=None
     # Inactive-inactive and virtual-virtual
     ene, umat = _eig_inactive_virtual (las, fock, orbsym=orbsym)
     idx = np.arange (nmo, dtype=int)
-    if ncore: idx[:ncore] = idx[:ncore][np.argsort (ene[:ncore])]
-    if nmo-nocc: idx[nocc:] = idx[nocc:][np.argsort (ene[nocc:])]
+    for sub in _unfrozen_inactive_virtual (las, nmo): # Frozen orbitals keep their positions
+        idx[sub] = sub[np.argsort (ene[sub])]
     umat = umat[:,idx]
     if orbsym is not None: orbsym = orbsym[idx]
     t = log.timer_debug1 ('Canonicalize inactive-inactive and virtual-virtual', *t)
