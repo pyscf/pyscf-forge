@@ -48,8 +48,17 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
         # Have to pass this due to dump_chk, which won't work for LAS.
         def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
                                  grids_level=None, grids_attr=None, dump_chk=False, **kwargs):
-            return _pdft_class.compute_pdft_energy_(self, mo_coeff=mo_coeff, ci=ci, ot=ot, otxc=otxc,
-                    grids_level=grids_level, grids_attr=grids_attr, dump_chk=False, **kwargs)
+            e_tot, e_ot, e_states = _pdft_class.compute_pdft_energy_(self, mo_coeff=mo_coeff,
+                    ci=ci, ot=ot, otxc=otxc, grids_level=grids_level, grids_attr=grids_attr,
+                    dump_chk=False, **kwargs)
+            # LAS isn't a StateAverageMCSCFSolver, so the parent treats nroots>1 like multi-root
+            # CASCI: per-state energies in e_tot, e_states untouched (still the values from before
+            # the MC-SCF step). Store them in e_states as well. (Unlike SA-MC-PDFT, e_tot remains
+            # the per-state list rather than the weighted average.) Not for LASSI-PDFT (mrh), where
+            # e_states holds the LAS rootspace energies.
+            if self.nroots > 1 and not getattr (self, 'DoLASSI', False):
+                self.e_states = list (e_states)
+            return e_tot, e_ot, e_states
 
         def analyze(self):
             raise NotImplementedError('Analyze function is not yet implemented for LAS-PDFT')

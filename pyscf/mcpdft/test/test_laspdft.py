@@ -59,12 +59,11 @@ class KnownValues(unittest.TestCase):
             with self.assertRaises (NotImplementedError):
                 mc.get_energy_decomposition ()
 
-    # TODO: after kernel, LAS-PDFT leaves the e_states attribute at zero. Remove expectedFailure
-    # when fixed.
-    @unittest.expectedFailure
     def test_h4_state_average_e_states_attribute (self):
         mc, mc_ref = _h4_sa_cas_limit ()
-        self.assertAlmostEqual (mc.e_states[0], mc_ref.e_states[0], 7)
+        for i in range (2):
+            with self.subTest (state=i):
+                self.assertAlmostEqual (mc.e_states[i], mc_ref.e_states[i], 7)
 
 _cache = {}
 def _h4_sa_cas_limit ():
