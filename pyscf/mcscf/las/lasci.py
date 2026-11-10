@@ -2356,7 +2356,8 @@ class LASCISymm (casci_symm.CASCI, LASCINoSymm):
         raise RuntimeError (("Cannot assign the whole-system symmetry of a LASCI wave function. "
                              "Address fciboxes[ifrag].fcisolvers[istate].wfnsym instead."))
 
-    def kernel(self, mo_coeff=None, ci0=None, casdm0_fr=None, verbose=None, assert_no_dupes=False):
+    def kernel(self, mo_coeff=None, ci0=None, lroots=None, lweights=None, verbose=None,
+               assert_no_dupes=False, _dry_run=False):
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
         if ci0 is None:
@@ -2367,8 +2368,9 @@ class LASCISymm (casci_symm.CASCI, LASCINoSymm):
                                 "symmetry of the whole molecule but not of the individual "
                                 "subspaces"))
         mo_coeff = self.mo_coeff = self.label_symmetry_(mo_coeff)
-        return LASCINoSymm.kernel(self, mo_coeff=mo_coeff, ci0=ci0,
-            casdm0_fr=casdm0_fr, verbose=verbose, assert_no_dupes=assert_no_dupes)
+        return LASCINoSymm.kernel(self, mo_coeff=mo_coeff, ci0=ci0, lroots=lroots,
+            lweights=lweights, verbose=verbose, assert_no_dupes=assert_no_dupes,
+            _dry_run=_dry_run)
 
     def canonicalize (self, mo_coeff=None, ci=None, casdm1fs=None, natorb_casdm1=None, veff=None,
                       h2eff_sub=None):

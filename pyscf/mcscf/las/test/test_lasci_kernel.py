@@ -59,9 +59,6 @@ class KnownValues (unittest.TestCase):
         self.assertTrue (las.converged)
         self.assertAlmostEqual (las.e_tot, mc.e_tot, 8)
 
-    # TODO: LASCISymm.kernel passes casdm0_fr to LASCINoSymm.kernel, which doesn't take it
-    # (TypeError). Present in mrh before the migration. Remove expectedFailure when fixed.
-    @unittest.expectedFailure
     def test_symm (self):
         las, mc = _run (mf_symm)
         self.assertIsInstance (las, LASCISymm)
