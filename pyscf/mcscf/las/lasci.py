@@ -1520,9 +1520,10 @@ class LASCINoSymm (casci.CASCI):
             dma2r, dmb2r = dm1rs2[:,0], dm1rs2[:,1]
             # Coulomb slice
             casdm2s[0][i:j, i:j, k:l, k:l] = lib.einsum ('r,rij,rkl->ijkl', weights, dma1r, dma2r)
-            casdm2s[1][i:j, i:j, k:l, k:l] = lib.einsum ('r,rij,rkl->ijkl', weights, dma1r, dmb2r) # ab = ba
+            casdm2s[1][i:j, i:j, k:l, k:l] = lib.einsum ('r,rij,rkl->ijkl', weights, dma1r, dmb2r)
+            casdm2s[1][k:l, k:l, i:j, i:j] = lib.einsum ('r,rij,rkl->ijkl', weights, dma2r, dmb1r)
             casdm2s[2][i:j, i:j, k:l, k:l] = lib.einsum ('r,rij,rkl->ijkl', weights, dmb1r, dmb2r)
-            for spin in [0,1,2]:
+            for spin in [0,2]:
                 casdm2s[spin][k:l, k:l, i:j, i:j] = casdm2s[spin][i:j, i:j, k:l, k:l].transpose (2,3,0,1)
             # Exchange slice
             d2exc_aa = lib.einsum ('rij,rkl->rilkj', dma1r, dma2r)
@@ -1882,8 +1883,8 @@ class LASCINoSymm (casci.CASCI):
             casdm3s[0][i:j, m:n, k:l, k:l, m:n, i:j] -= np.tensordot(weights, d5sigma0, axes=1)
             _transpose_dm3_(casdm3s[0], i,j, m,n, k,l, k,l, m,n, i,j)
 
-            d5sigma12 = lib.einsum('r,rij,rkl,rmn->rinmjkl',weights,dma1r,dma2r,dmb3r)
-            d5sigma13 = lib.einsum('r,rij,rkl,rmn->rmjinkl',weights,dma1r,dma2r,dmb3r)
+            d5sigma12 = lib.einsum('r,rij,rkl,rmn->rinmjkl',weights,dma1r,dmb2r,dma3r)
+            d5sigma13 = lib.einsum('r,rij,rkl,rmn->rmjinkl',weights,dma1r,dmb2r,dma3r)
             casdm3s[1][i:j, m:n, m:n, i:j, k:l, k:l] -= np.tensordot(weights, d5sigma12, axes=1)
             casdm3s[1][m:n, i:j, i:j, m:n, k:l, k:l] -= np.tensordot(weights, d5sigma13, axes=1)
 

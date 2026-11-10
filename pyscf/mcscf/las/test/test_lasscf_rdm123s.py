@@ -165,13 +165,9 @@ class KnownValues(unittest.TestCase):
         self._check_rdm3s (SPIN_CASES[4])
 
 # Every case above has M=0 fragments, so N_alpha = N_beta and the hard-coded trace-down factors
-# never see a high-spin case. Here N_alpha = 6, N_beta = 2.
-#
-# TODO: the mixed-spin (ab, aab, abb) blocks of make_casdm2s/make_casdm3s are wrong when
-# fragments have different spin polarizations, also in mrh before the migration. In
-# LASCINoSymm.make_casdm2s, the inter-fragment Coulomb ab block (J,I) is filled by transposing
-# block (I,J) ("ab = ba"), giving dm1a_I dm1b_J where dm1a_J dm1b_I is needed. Spin-summed
-# make_casdm2/make_casdm3 are correct. Remove expectedFailure when fixed.
+# never see a high-spin case. Here N_alpha = 6, N_beta = 2. (Until fixed, the inter-fragment
+# Coulomb ab block of make_casdm2s and two exchange terms of the aab block of make_casdm3s used
+# the wrong fragment's alpha/beta density when fragments differed in spin polarization.)
 HIGH_SPIN = dict (spin_sub=(3,1,3,1), nelecas_sub=((2,0),(1,1),(2,0),(1,1)))
 
 def _trace_down_checks (las):
@@ -210,17 +206,37 @@ class HighSpin (unittest.TestCase):
     def test_rdm_h8_sto3g_high_spin_trace_down_same_spin (self):
         self._check_traces (_trace_down_checks (run_las (**HIGH_SPIN)[0])[0])
 
-    @unittest.expectedFailure
     def test_rdm_h8_sto3g_high_spin_trace_down_mixed_spin (self):
         self._check_traces (_trace_down_checks (run_las (**HIGH_SPIN)[0])[1])
 
-    @unittest.expectedFailure
     def test_rdm_h8_sto3g_high_spin (self):
         self._check_fast (HIGH_SPIN['spin_sub'], HIGH_SPIN['nelecas_sub'], trace_down=False)
 
-    @unittest.expectedFailure
     def test_rdm3s_h8_sto3g_high_spin_slow (self):
         self._check_rdm3s (HIGH_SPIN['spin_sub'], HIGH_SPIN['nelecas_sub'])
+
+class MixedSpinH6 (unittest.TestCase):
+    '''Spin-separated 2- and 3-RDMs against FCI for every assignment of (2,0), (1,1) and (0,2) to
+    three fragments. A 3-RDM involves at most three fragments, so this reaches every term.'''
+
+    def test_rdm23s_h6_sto3g_all_polarizations (self):
+        import itertools
+        mol6 = gto.M (atom=generate_geom (natom=6), basis='sto-3g', verbose=0, output='/dev/null')
+        mf6 = scf.RHF (mol6).run ()
+        smult = {(2,0): 3, (1,1): 1, (0,2): 3}
+        for nelecas_sub in itertools.product (smult, repeat=3):
+            las = LASSCF (mf6, (2,2,2), nelecas_sub, spin_sub=[smult[n] for n in nelecas_sub])
+            # Only consistency with the CI vectors matters, so skip orbital optimization
+            las.lasci (las.localize_init_guess (((0,1),(2,3),(4,5)), mf6.mo_coeff))
+            ci, nelec = las2cas_civec (las)
+            ref2, ref3 = fci.direct_spin1.make_rdm123s (np.array (ci), 6, nelec[0])[1:]
+            dm2s, dm3s = las.make_casdm2s (), las.make_casdm3s ()
+            with self.subTest (nelecas_sub=nelecas_sub):
+                for spin in range (3):
+                    self.assertAlmostEqual (np.abs (dm2s[spin] - ref2[spin]).max (), 0, 10)
+                for spin in range (4):
+                    self.assertAlmostEqual (np.abs (dm3s[spin] - ref3[spin]).max (), 0, 10)
+        mol6.stdout.close ()
 
 if __name__ == "__main__":
     print("Full Tests for LASSCF 3-RDMs")
