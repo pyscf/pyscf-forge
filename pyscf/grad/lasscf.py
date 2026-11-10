@@ -44,9 +44,12 @@ from pyscf.grad import rhf as rhf_grad  # noqa
 from pyscf.grad.mp2 import _shell_prange
 from pyscf.mcscf.addons import StateAverageMCSCFSolver
 from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las import _DFLASCI
 
 def grad_elec(las_grad, mo_coeff=None, ci=None, atmlst=None, verbose=None):
     las =las_grad.base
+    if isinstance (las, _DFLASCI) or getattr (las._scf, 'with_df', None) is not None:
+        raise NotImplementedError ("LASSCF nuclear gradients with density fitting")
     print (las)
     if mo_coeff is None: mo_coeff = las.mo_coeff
     #if ci is None: ci = mc.ci

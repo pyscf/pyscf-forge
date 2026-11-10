@@ -20,7 +20,7 @@
 import unittest
 import numpy as np
 from pyscf import gto, scf, lib
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF, LASSCFNoSymm
 
 atoms = ['H', 'H', 'H', 'H']
 coords0 = np.array ([[0.0, 0.0,  0.0],
@@ -72,15 +72,18 @@ class KnownValues (unittest.TestCase):
     def test_state_average (self):
         self._check (sa=True)
 
-    # TODO: grad/lasscf.py has no density-fitting support, but doesn't raise either: for DF
-    # LASSCF it returns a gradient that is ~1e-5 off finite differences, and isn't the
-    # conventional-integral gradient either. Remove expectedFailure when implemented.
-    @unittest.expectedFailure
-    def test_df (self):
+    def test_df_raises (self):
+        # Density fitting isn't implemented; the gradient used to come out ~1e-5 off finite
+        # differences without warning
         las = run_las (coords0, df=True)
-        self.assertTrue (las.converged)
-        de = las.nuc_grad_method ().kernel ()
-        self.assertAlmostEqual (de[0,0], finite_difference (0, 0, df=True), 6)
+        with self.subTest ('DF LAS object'):
+            with self.assertRaises (NotImplementedError):
+                las.nuc_grad_method ().kernel ()
+        with self.subTest ('conventional LAS object on a DF mean field'):
+            las1 = LASSCFNoSymm (las._scf, (2,2), (2,2), spin_sub=(1,1))
+            las1.mo_coeff, las1.ci = las.mo_coeff, las.ci
+            with self.assertRaises (NotImplementedError):
+                las1.nuc_grad_method ().kernel ()
 
 if __name__ == "__main__":
     print("Full Tests for LASSCF gradients against finite differences")
