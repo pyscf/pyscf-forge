@@ -4,7 +4,6 @@ from pyscf.mcscf import df as mc_df
 from pyscf.csf_fci.csfstring import ImpossibleCIvecError
 from pyscf.mcscf.las import _DFLASCI, lasci, lasscf_guess
 from scipy.sparse import linalg as sparse_linalg
-from pyscf.mcscf.las._sparse_df import sparsedf_array
 from scipy import linalg 
 import numpy as np
 
@@ -1798,16 +1797,12 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         escape = bmPu is None
         escape = escape or (not isinstance (self, _DFLASCI))
         escape = escape or (not isinstance (self.with_df._cderi, np.ndarray))
-        try:
-            bPmn = sparsedf_array (self.with_df._cderi)
-        except Exception as err:
-            escape = True
         if escape:
             dm1s = np.dot (mo_cas, np.dot (casdm1s, moH_cas)).transpose (1,0,2)
             return self.get_veff (dm = dm1s)
         casdm1 = casdm1s.sum (0)
         dm1 = np.dot (mo_cas, np.dot (casdm1, moH_cas))
-        bPmn = sparsedf_array (self.with_df._cderi)
+        bPmn = self.with_df._cderi
 
         # vj
         dm_tril = dm1 + dm1.T - np.diag (np.diag (dm1.T))

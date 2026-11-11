@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import linalg
 from pyscf import ao2mo, lib
-from pyscf.mcscf.las._sparse_df import sparsedf_array
 
 def get_h2eff_df (las, mo_coeff):
     # Store intermediate with one contracted ao index for faster calculation of exchange!
@@ -27,13 +26,10 @@ def get_h2eff_df (las, mo_coeff):
     safety_factor = 1.1
     mem_per_aux = nao*ncas # bmuP
     mem_per_aux += ncas*ncas # buvP
-    mem_per_aux += nao*lib.num_threads () # wrk in contract1
+    mem_per_aux += nao*nao # bPmn (unpacked)
+    mem_per_aux += nao*ncas # bPmu (before transposing to bmuP1)
     if not isinstance (getattr (las.with_df, '_cderi', None), np.ndarray):
-        mem_per_aux += 3*nao*(nao+1)//2 # cderi / bPmn
-        # NOTE: I think a linalg.norm operation in sparsedf_array might be doubling the memory
-        # footprint of bPmn below
-    else:
-        mem_per_aux += nao*(nao+1) # see note above
+        mem_per_aux += nao*(nao+1)//2 # cderi block read from disk
     mem_per_aux *= safety_factor * 8 / 1e6
     mem_per_aux = max (1, mem_per_aux)
     blksize = max (1, min (naux, int (mem_av / mem_per_aux)))
@@ -43,14 +39,10 @@ def get_h2eff_df (las, mo_coeff):
     log.debug2 ("LAS DF ERI naux = %d, nao = %d, nmo = %d", naux, nao, nmo)
     eri = 0
     for cderi in las.with_df.loop (blksize=blksize):
-        #t1 = lib.logger.timer (las, 'Sparsedf', *t0)
-        bPmn = sparsedf_array (cderi)
-        bmuP1 = bPmn.contract1 (mo_cas)
-        #t1 = lib.logger.timer (las, 'contract1', *t1)
-        log.debug2 ("LAS DF ERI bPmn shape = %s; shares memory? %s %s; C_CONTIGUOUS? %s",
-                 str (bPmn.shape), str (np.shares_memory (bPmn, cderi)),
-                 str (np.may_share_memory (bPmn, cderi)),
-                 str (bPmn.flags['C_CONTIGUOUS']))
+        naux1 = cderi.shape[0]
+        bPmn = lib.unpack_tril (cderi).reshape (naux1*nao, nao)
+        bmuP1 = np.dot (bPmn, mo_cas).reshape (naux1, nao, ncas)
+        bmuP1 = np.ascontiguousarray (bmuP1.transpose (1,2,0))
         if mem_enough_int : bmuP.append (bmuP1)
         buvP = np.tensordot (mo_cas.conjugate (), bmuP1, axes=((0),(0)))
         eri1 = np.tensordot (bmuP1, buvP, axes=((2),(2)))

@@ -229,7 +229,6 @@ add_subdirectory(csf)
 add_subdirectory(gbci)
 add_subdirectory(pwscf)
 add_subdirectory(nonorthogonal)
-add_subdirectory(las)
 
 else()
 
