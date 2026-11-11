@@ -300,8 +300,7 @@ class PWKohnShamDFT(rks.KohnShamDFT):
         small_size = np.prod(self.wf_mesh)
         big_size = np.prod(self.xc_mesh)
         ratio = big_size / small_size
-        func_xR = func_xR.view()
-        func_xR.shape = (-1, small_size)
+        func_xR = func_xR.reshape(-1, small_size)
         rhovec_G = tools.fft(func_xR, self.wf_mesh)
         dense_size = np.prod(self.xc_mesh)
         if func_xR.ndim == 1:
@@ -317,7 +316,8 @@ class PWKohnShamDFT(rks.KohnShamDFT):
             rhovec_r = out_xr
             rhovec_r[:] = tools.ifft(rhovec_g, self.xc_mesh).real
         rhovec_r[:] *= ratio
-        rhovec_r.shape = xshape + (big_size,)
+        rhovec_r = rhovec_r.reshape(xshape + (big_size,))
+        assert out_xr is None or np.may_share_memory(rhovec_r, out_xr)
         return rhovec_r
 
     def dense_to_coarse_grid(self, func_xr, out_xR=None):
