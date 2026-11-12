@@ -10,7 +10,6 @@ from pyscf.mcscf.las.addons import state_average_n_mix, get_h1e_zipped_fcisolver
 from pyscf.mcscf.las import _DFLASCI, lasscf_guess, las_ao2mo
 from pyscf.mcscf.las import chkfile
 from pyscf.mcscf.las.productstate import ImpureProductStateFCISolver, state_average_fcisolver
-from pyscf.mcscf.las._la import matrix_svd_control_options
 from itertools import combinations, permutations, product
 from scipy.sparse import linalg as sparse_linalg
 from scipy import linalg
@@ -843,6 +842,92 @@ def get_sym_fr (las):
             sym_r.append (sym)
         sym_fr.append (sym_r)
     return np.asarray (sym_fr)
+
+def _svd_subspaces (s, lspace, rspace, zero_atol=1e-8):
+    '''SVD of lspace^H s rspace, with the singular vectors in the original basis
+
+    Args:
+        s: ndarray of shape (nao,nao)
+        lspace: ndarray of shape (nao,m)
+        rspace: ndarray of shape (nao,n)
+
+    Kwargs:
+        zero_atol: float
+            If every element of lspace^H s rspace, or its norm divided by its size, is
+            below this, the matrix is treated as zero.
+
+    Returns:
+        lvecs: ndarray of shape (nao,m)
+            lspace @ u, including the null space
+        svals: ndarray of shape (min (m,n),)
+            In descending order; all zero if the matrix is treated as zero
+        rvecs: ndarray of shape (nao,n)
+            rspace @ v, including the null space. If the matrix is treated as zero,
+            lspace and rspace are returned unchanged.
+    '''
+    lspace, rspace = np.asarray (lspace), np.asarray (rspace)
+    k = min (lspace.shape[1], rspace.shape[1])
+    if k == 0: return lspace, np.zeros (0), rspace
+    mat = lspace.conjugate ().T @ s @ rspace
+    if ((np.amax (np.abs (mat)) < zero_atol)
+            or (linalg.norm (mat) / mat.size < zero_atol)):
+        return lspace, np.zeros (k), rspace
+    u, svals, vh = linalg.svd (mat, full_matrices=True)
+    idx = np.abs (svals).argsort ()[::-1]
+    svals = svals[idx]
+    u[:,:k] = u[:,:k][:,idx]
+    v = vh.conjugate ().T
+    v[:,:k] = v[:,:k][:,idx]
+    return lspace @ u, svals, rspace @ v
+
+def _svd_subspaces_symm (s, lspace, rspace, lsymm, rsymm, zero_atol=1e-8):
+    '''Like _svd_subspaces, but block-diagonal in the irreps labeling the columns of lspace
+    (lsymm) and rspace (rsymm); singular vectors couple only columns with the same label.
+
+    Returns:
+        lvecs, svals, rvecs: as in _svd_subspaces, except that the null-space columns
+            of lvecs and rvecs come last, grouped by irrep, and that svals is padded with
+            zeros to length min (m,n) if the blocks give fewer
+        llabels: ndarray of shape (m,)
+            Irrep of each column of lvecs
+        rlabels: ndarray of shape (n,)
+            Irrep of each column of rvecs
+    '''
+    lspace, rspace = np.asarray (lspace), np.asarray (rspace)
+    k = min (lspace.shape[1], rspace.shape[1])
+    if k == 0: return lspace, np.zeros (0), rspace, lsymm, rsymm
+    mat = lspace.conjugate ().T @ s @ rspace
+    if ((np.amax (np.abs (mat)) < zero_atol)
+            or (linalg.norm (mat) / mat.size < zero_atol)):
+        return lspace, np.zeros (k), rspace, lsymm, rsymm
+    lsymm = np.asarray (lsymm).astype (int)
+    rsymm = np.asarray (rsymm).astype (int)
+    svals = []
+    vecs = [[], []]
+    vecs_null = [[], []]
+    labels = [[], []]
+    labels_null = [[], []]
+    for lbl in np.unique (np.append (lsymm, rsymm)):
+        vecs_blk = [None, None]
+        vecs_blk[0], svals_blk, vecs_blk[1] = _svd_subspaces (
+            s, lspace[:,lsymm==lbl], rspace[:,rsymm==lbl], zero_atol=zero_atol)
+        nvals = len (svals_blk)
+        svals.append (svals_blk)
+        for i in range (2):
+            vecs[i].append (vecs_blk[i][:,:nvals])
+            vecs_null[i].append (vecs_blk[i][:,nvals:])
+            labels[i].extend ([lbl,]*nvals)
+            labels_null[i].extend ([lbl,]*(vecs_blk[i].shape[1]-nvals))
+    svals = np.concatenate (svals)
+    nvals = len (svals)
+    idx = svals.argsort ()[::-1]
+    svals = svals[idx]
+    vecs = [np.concatenate (x, axis=1)[:,idx] for x in vecs]
+    labels = [np.asarray (x)[idx] for x in labels]
+    vecs = [np.append (x, np.concatenate (y, axis=1), axis=1) for x, y in zip (vecs, vecs_null)]
+    labels = [np.append (x, np.asarray (y).astype (int)) for x, y in zip (labels, labels_null)]
+    if nvals < k: svals = np.append (svals, np.zeros (k - nvals))
+    return vecs[0], svals, vecs[1], labels[0], labels[1]
 
 def _shift_svals (l, sv, r, rng):
     k = len (sv)
@@ -2216,8 +2301,7 @@ class LASCINoSymm (casci.CASCI):
 
     def _svd1 (self, mo_lspace, mo_rspace, s=None, rng=None, **kwargs):
         if s is None: s = self._scf.get_ovlp ()
-        l, sv, r = matrix_svd_control_options (s, lspace=mo_lspace, rspace=mo_rspace,
-                                               full_matrices=True)[:4]
+        l, sv, r = _svd_subspaces (s, mo_lspace, mo_rspace)
         return _shift_svals (l, sv, r, rng)
 
     def dump_flags (self, verbose=None, _method_name='CI'):
@@ -2471,11 +2555,8 @@ class LASCISymm (casci_symm.CASCI, LASCINoSymm):
 
     def _svd1 (self, mo_lspace, mo_rspace, lsymm, rsymm, s=None, rng=None, **kwargs):
         if s is None: s = self._scf.get_ovlp ()
-        decomp = matrix_svd_control_options (s,
-            lspace=mo_lspace, rspace=mo_rspace,
-            lspace_symmetry=lsymm, rspace_symmetry=rsymm,
-            full_matrices=True, strong_symm=True)
-        mo_lvecs, svals, mo_rvecs, lsymm, rsymm = decomp
+        mo_lvecs, svals, mo_rvecs, lsymm, rsymm = _svd_subspaces_symm (s, mo_lspace, mo_rspace,
+                                                                       lsymm, rsymm)
         mo_lvecs = lib.tag_array (mo_lvecs, orbsym=lsymm)
         mo_rvecs = lib.tag_array (mo_rvecs, orbsym=rsymm)
         return _shift_svals (mo_lvecs, svals, mo_rvecs, rng)
