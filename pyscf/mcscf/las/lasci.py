@@ -1240,22 +1240,6 @@ class LASCINoSymm (casci.CASCI):
             casdm3s.append (np.stack ([dm3aaa, dm3aab, dm3abb, dm3bbb], axis=0))
         return casdm3s
 
-    #SV casdm3s_sub from external fake_rdm.py file
-    def make_casdm3s_sub_1 (self, ncas_sub=None, nelecas_sub=None, dm3s_sub_spinless=None, **kwargs):
-        '''Spin-separated 3-RDMs in the MO basis for each subspace in sequence'''
-        if ncas_sub is None: ncas_sub = self.ncas_sub
-        if nelecas_sub is None: nelecas_sub = self.nelecas_sub
-        dm3s_sub = dm3s_sub_spinless
-        casdm3s = []
-
-        for dm3, ncas in zip (dm3s_sub, ncas_sub):
-            dm3aaa = dm3[:ncas,:ncas,:ncas,:ncas,:ncas,:ncas]
-            dm3aab = dm3[:ncas,:ncas,:ncas,:ncas,ncas:,ncas:]
-            dm3abb = dm3[:ncas,:ncas,ncas:,ncas:,ncas:,ncas:]
-            dm3bbb = dm3[ncas:,ncas:,ncas:,ncas:,ncas:,ncas:]
-            casdm3s.append (np.stack ([dm3aaa, dm3aab, dm3abb, dm3bbb], axis=0))
-        return casdm3s
-
     def states_make_rdm1s (self, mo_coeff=None, ci=None, ncas_sub=None,
             nelecas_sub=None, casdm1rs=None, casdm1frs=None, **kwargs):
         ''' Get spin-separated, rootspace-separated, locally state-averaged 1-RDMs in the AO basis.
@@ -1437,47 +1421,6 @@ class LASCINoSymm (casci.CASCI):
         '''
         return self.make_casdm1s (ci=ci, **kwargs).sum (0)
 
-    def states_make_casdm2 (self, ci=None, ncas_sub=None, nelecas_sub=None, 
-            casdm1frs=None, casdm2fr=None, **kwargs):
-        ''' Make the full-dimensional casdm2 spanning the collective active space. ILLEGAL FUNCTION
-        DO NOT USE. '''
-        raise DeprecationWarning (
-            ("states_make_casdm2 is BANNED. There is no reason to EVER make an array this huge.\n"
-             "Use states_make_casdm*_sub instead, and substitute the factorization into your "
-             "expressions.")
-        )
-        if ci is None: ci = self.ci
-        if ncas_sub is None: ncas_sub = self.ncas_sub
-        if nelecas_sub is None: nelecas_sub = self.nelecas_sub
-        if casdm1frs is None: casdm1frs = self.states_make_casdm1s_sub (ci=ci)
-        if casdm2fr is None: casdm2fr = self.states_make_casdm2_sub (ci=ci,
-            ncas_sub=ncas_sub, nelecas_sub=nelecas_sub, **kwargs)
-        ncas = sum (ncas_sub)
-        ncas_cum = np.cumsum ([0] + ncas_sub.tolist ())
-        casdm2r = np.zeros ((self.nroots,ncas,ncas,ncas,ncas))
-        # Diagonal 
-        for isub, dm2 in enumerate (casdm2fr):
-            i = ncas_cum[isub]
-            j = ncas_cum[isub+1]
-            casdm2r[:, i:j, i:j, i:j, i:j] = dm2
-        # Off-diagonal
-        for (isub1, dm1s1_r), (isub2, dm1s2_r) in combinations (enumerate (casdm1frs), 2):
-            i = ncas_cum[isub1]
-            j = ncas_cum[isub1+1]
-            k = ncas_cum[isub2]
-            l = ncas_cum[isub2+1]
-            for dm1s1, dm1s2, casdm2 in zip (dm1s1_r, dm1s2_r, casdm2r):
-                dma1, dmb1 = dm1s1[0], dm1s1[1]
-                dma2, dmb2 = dm1s2[0], dm1s2[1]
-                # Coulomb slice
-                casdm2[i:j, i:j, k:l, k:l] = np.multiply.outer (dma1+dmb1, dma2+dmb2)
-                casdm2[k:l, k:l, i:j, i:j] = casdm2[i:j, i:j, k:l, k:l].transpose (2,3,0,1)
-                # Exchange slice
-                casdm2[i:j, k:l, k:l, i:j] = -(np.multiply.outer (dma1, dma2)
-                                               +np.multiply.outer (dmb1, dmb2)).transpose (0,3,2,1)
-                casdm2[k:l, i:j, i:j, k:l] = casdm2[i:j, k:l, k:l, i:j].transpose (1,0,3,2)
-        return casdm2r 
-
     def state_make_casdm1s(self, ci=None, state=0,  ncas_sub=None, nelecas_sub=None,
         casdm1frs=None, **kwargs):
         ''' Get spin-separated, locally state-averaged 1-RDM of all active orbitals collectively
@@ -1639,7 +1582,7 @@ class LASCINoSymm (casci.CASCI):
             nelecas_sub: sequence of integers
                 number of orbitals in each fragment in the reference rootspace 
             casdm2r: ndarray of shape [nroots,] + [ncas,]*4
-                output of states_make_casdm2
+                rootspace-separated 2-RDMs of the whole active space
             casdm2f: sequence of ndarrays of shape [ncas_sub[i],]*4
                 output of make_casdm2_sub
             casdm1frs: sequence of ndarrays of shape [nroots,] + [ncas_sub[i],]*2

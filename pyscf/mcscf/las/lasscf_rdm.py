@@ -117,9 +117,6 @@ def get_init_guess_rdm (las, mo_coeff=None, h2eff_sub=None):
     casdm2fr = [[r[1] for r in f] for f in fakeci]
     return casdm1frs, casdm2fr
 
-def _ddm (dm1frs0, dm1frs1):
-    return np.concatenate ([(d1 - d0).ravel () for d1, d0 in zip (dm1frs0, dm1frs1)])
-
 
 def rdm_cycle (las, mo_coeff, casdm1frs, veff, h2eff_sub, log, max_cycle_rdmjk=3, conv_tol_rdmjkddm=3e-4,
                conv_tol_rdmjkde=1e-8):

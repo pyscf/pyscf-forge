@@ -43,14 +43,12 @@ from pyscf.grad import casci as casci_grad
 from pyscf.grad import rhf as rhf_grad  # noqa
 from pyscf.grad.mp2 import _shell_prange
 from pyscf.mcscf.addons import StateAverageMCSCFSolver
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
 from pyscf.mcscf.las import _DFLASCI
 
 def grad_elec(las_grad, mo_coeff=None, ci=None, atmlst=None, verbose=None):
     las =las_grad.base
     if isinstance (las, _DFLASCI) or getattr (las._scf, 'with_df', None) is not None:
         raise NotImplementedError ("LASSCF nuclear gradients with density fitting")
-    print (las)
     if mo_coeff is None: mo_coeff = las.mo_coeff
     #if ci is None: ci = mc.ci
     #if mc.frozen is not None:
@@ -169,7 +167,6 @@ def as_scanner(mcscf_grad):
     >>> etot, grad = mc_grad_scanner(gto.M(atom='N 0 0 0; N 0 0 1.1'))
     >>> etot, grad = mc_grad_scanner(gto.M(atom='N 0 0 0; N 0 0 1.5'))
     '''
-    print ("SV Entering as_scanner in lasscf")
     if isinstance(mcscf_grad, lib.GradScanner):
         return mcscf_grad
 
@@ -201,11 +198,9 @@ class LASSCF_GradScanner(lib.GradScanner):
 
 class Gradients(casci_grad.Gradients):
     '''Non-relativistic restricted Hartree-Fock gradients'''
-    print ("SV entering Gradients in LASSCF")
     grad_elec = grad_elec
 
     def kernel(self, mo_coeff=None, ci=None, atmlst=None, verbose=None):
-        print ("SV entering kernel")
         log = logger.new_logger(self, verbose)
         if atmlst is None:
             atmlst = self.atmlst
