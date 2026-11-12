@@ -14,13 +14,17 @@
 # limitations under the License.
 
 # Tests of LAS utility methods that the rest of this test suite doesn't otherwise check:
-# get_single_state_las (from mrh's tests/lasscf/test_utilities.py), h1e_for_las, get_sym_fr, and
-# LASSCF.lasci/lasci_ against LASCI.kernel.
+# get_single_state_las (from mrh's tests/lasscf/test_utilities.py), h1e_for_las and its get_h1las
+# alias, get_sym_fr, make_rdm1_sub, LASSCF.lasci/lasci_ against LASCI.kernel, and
+# addons.state_average_n_mix_.
 
 import unittest
 import numpy as np
-from pyscf import gto, scf, symm
+from pyscf import gto, scf, symm, mcscf
+from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.lasci import LASCI
+from pyscf.mcscf.las.addons import state_average_n_mix, state_average_n_mix_
+from pyscf.mcscf.las.addons import StateAverageNMixFCISolver
 from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
 
 # Planar, so that each fragment is invariant under the Cs mirror plane
@@ -87,6 +91,44 @@ class KnownValues (unittest.TestCase):
                 self.assertAlmostEqual (np.amax (np.abs (h1e_r - h1e_r.transpose (0,1,3,2))),
                                         0, 12)
 
+    def test_get_h1las (self):
+        # get_h1las and get_h1eff are aliases of h1e_for_las
+        for label, my_mf in (('nosymm', mf), ('symm', mf_symm)):
+            las, mo = _sa_las (LASCI, my_mf)
+            las.kernel (mo)
+            ref = las.h1e_for_las ()
+            for method in ('get_h1las', 'get_h1eff'):
+                with self.subTest (label, method=method):
+                    h1e_fr = getattr (las, method) ()
+                    self.assertEqual (len (h1e_fr), len (ref))
+                    for h1e_r, h1e_r_ref in zip (h1e_fr, ref):
+                        self.assertEqual (h1e_r.shape, h1e_r_ref.shape)
+                        self.assertAlmostEqual (np.amax (np.abs (h1e_r - h1e_r_ref)), 0, 12)
+
+    def test_make_rdm1_sub (self):
+        las, mo = _sa_las (LASCI, mf)
+        las.kernel (mo)
+        nao = mf.mol.nao_nr ()
+        s0 = mf.get_ovlp ()
+        dm1f = las.make_rdm1_sub ()
+        self.assertEqual (dm1f.shape, (len (ncas_sub), nao, nao))
+        self.assertAlmostEqual (np.amax (np.abs (dm1f - las.make_rdm1s_sub ().sum (1))), 0, 12)
+        for ifrag, (dm1, nelec) in enumerate (zip (dm1f, nelecas_sub)):
+            with self.subTest (frag=ifrag):
+                self.assertAlmostEqual (np.trace (dm1 @ s0), nelec, 9)
+        # With the inactive orbitals (which the H4 system doesn't have), the fragments add up to the
+        # whole 1-RDM
+        las = LASCI (mf_n2, (3,3), ((3,0),(0,3)))
+        las.kernel (las.localize_init_guess (([0],[1]), mf_n2.mo_coeff))
+        nao = mf_n2.mol.nao_nr ()
+        s0 = mf_n2.get_ovlp ()
+        self.assertTrue (las.ncore > 0)
+        dm1f = las.make_rdm1_sub (include_core=True)
+        self.assertEqual (dm1f.shape, (3, nao, nao))
+        for ifrag, nelec in enumerate ((2*las.ncore, 3, 3)):
+            self.assertAlmostEqual (np.trace (dm1f[ifrag] @ s0), nelec, 9)
+        self.assertAlmostEqual (np.amax (np.abs (dm1f.sum (0) - las.make_rdm1 ())), 0, 9)
+
     def test_get_sym_fr (self):
         las = _sa_las (LASCI, mf)[0]
         sym_fr = las.get_sym_fr ()
@@ -120,6 +162,29 @@ class KnownValues (unittest.TestCase):
                     self.assertAlmostEqual (las.e_tot, las_ref.e_tot, 9)
                     for e, e_ref in zip (las.e_states, las_ref.e_states):
                         self.assertAlmostEqual (e, e_ref, 9)
+
+    def test_state_average_n_mix_ (self):
+        # In-place version of state_average_n_mix, like state_average_ vs. state_average
+        def fcisolvers ():
+            neutral = csf_solver (mf.mol, smult=1)
+            cation = csf_solver (mf.mol, smult=2)
+            cation.spin = 1
+            cation.charge = 1
+            return [neutral, cation]
+        mc_ref = state_average_n_mix (mcscf.CASCI (mf, 4, 4), fcisolvers (), [0.5,0.5])
+        mc_ref.kernel ()
+        mc = mcscf.CASCI (mf, 4, 4)
+        mc1 = state_average_n_mix_(mc, fcisolvers (), [0.5,0.5])
+        self.assertIs (mc1, mc)
+        self.assertIs (mc.__class__, mc_ref.__class__)
+        self.assertIsInstance (mc.fcisolver, StateAverageNMixFCISolver)
+        mc.kernel ()
+        self.assertAlmostEqual (mc.e_tot, mc_ref.e_tot, 9)
+        for e, e_ref in zip (mc.e_states, mc_ref.e_states):
+            self.assertAlmostEqual (e, e_ref, 9)
+        dm1_states = mc.fcisolver.states_make_rdm1 (mc.ci, mc.ncas, mc.nelecas)
+        self.assertAlmostEqual (np.trace (dm1_states[0]), 4.0, 9)
+        self.assertAlmostEqual (np.trace (dm1_states[1]), 3.0, 9)
 
 if __name__ == "__main__":
     print("Full Tests for LAS utility methods")
