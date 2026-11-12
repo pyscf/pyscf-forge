@@ -455,7 +455,7 @@ def _combine_init_guess_ci (las, ci0i, ci0g, norb, nelec, nroots):
     existing CI vectors (ci0i) already stored. '''
     nroots0 = 0
     ndet = tuple ([cistring.num_strings (norb, n) for n in nelec])
-    ci0g = np.asarray (ci0g) # TODO: this leads to deprecated behavior in lasscf_rdm
+    ci0g = np.asarray (ci0g)
     if isinstance (ci0g, np.ndarray) and ci0g.size % ndet[0]*ndet[1] == 0:
         ci0g = ci0g.reshape (-1, ndet[0], ndet[1])
     if isinstance (ci0i, np.ndarray) and ci0i.size % ndet[0]*ndet[1] == 0:
@@ -1294,9 +1294,8 @@ class LASCINoSymm (casci.CASCI):
 
     def make_rdm1s_sub (self, mo_coeff=None, ci=None, ncas_sub=None,
             nelecas_sub=None, include_core=False, casdm1s_sub=None, **kwargs):
-        ''' Get spin-separated, rootspace- and state-averaged 1-RDMs of the active orbitals iun the
-        AO basis for each fragment in sequence. This function is suboptimal but retained for
-        compatibility with the old DMET-based LASSCF implementation.
+        ''' Get spin-separated, rootspace- and state-averaged 1-RDMs of the active orbitals in the
+        AO basis for each fragment in sequence.
 
         Kwargs:
             mo_coeff: ndarray of shape (nao,nmo)
@@ -1337,9 +1336,8 @@ class LASCINoSymm (casci.CASCI):
         return rdm1s
 
     def make_rdm1_sub (self, **kwargs):
-        ''' Get spin-summed, rootspace- and state-averaged 1-RDMs of the active orbitals iun the
-        AO basis for each fragment in sequence. This function is suboptimal but retained for
-        compatibility with the old DMET-based LASSCF implementation.
+        ''' Get spin-summed, rootspace- and state-averaged 1-RDMs of the active orbitals in the
+        AO basis for each fragment in sequence.
 
         Kwargs:
             mo_coeff: ndarray of shape (nao,nmo)

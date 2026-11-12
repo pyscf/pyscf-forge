@@ -72,7 +72,7 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
         # TODO: compatibility with MC-PDFT checkpoint dumping
         dump_chk = mc.__class__.dump_chk
 
-        # TODO: in pyscf-forge/pyscf/mcpdft/mcpdft.py::optimize_mcscf_, generalize the number
+        # TODO: in pyscf/mcpdft/mcpdft.py::optimize_mcscf_, generalize the number
         # of return arguments. Then the redefinition below will be unnecessary. 
         def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
             '''Optimize the MC-SCF wave function underlying an MC-PDFT calculation.
