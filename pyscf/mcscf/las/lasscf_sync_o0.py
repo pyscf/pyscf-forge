@@ -4,7 +4,7 @@ from pyscf.mcscf import df as mc_df
 from pyscf.csf_fci.csfstring import ImpossibleCIvecError
 from pyscf.mcscf.las import _DFLASCI, lasci, lasscf_guess
 from scipy.sparse import linalg as sparse_linalg
-from scipy import linalg 
+from scipy import linalg
 import numpy as np
 
 # This must be locked to CSF solver for the forseeable future, because I know of no other way to
@@ -21,16 +21,15 @@ class MicroIterInstabilityException (Exception):
 
 def get_level_shift (trust_radius, prec_op, g, tol=1e-8):
     x = prec_op (-g)
-    sign = x.dot (g) / np.sqrt (linalg.norm (x) * linalg.norm (g))
     g = linalg.norm (g)
     x = linalg.norm (x)
     if x <= trust_radius: return 0
-    x0 = trust_radius 
+    x0 = trust_radius
     shift = (g/x) + (g/x0)
     assert (shift>=0), "{} {} {} {}".format (g, x, x0, shift)
     return shift
 
-def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4, 
+def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
         assert_no_dupes=False, verbose=lib.logger.NOTE):
     from pyscf.mcscf.las.lasci import _eig_inactive_virtual
     if mo_coeff is None: mo_coeff = las.mo_coeff
@@ -51,7 +50,7 @@ def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
         for idx, casdm1s in enumerate (casdm0_sub):
             mo = las.get_mo_slice (idx, mo_coeff=mo_coeff)
             moH = mo.conjugate ().T
-            dm1s_sub.append (np.tensordot (mo, np.dot (casdm1s, moH), 
+            dm1s_sub.append (np.tensordot (mo, np.dot (casdm1s, moH),
                                            axes=((1),(1))).transpose (1,0,2))
         dm1s_sub = np.stack (dm1s_sub, axis=0)
         dm1s = dm1s_sub.sum (0)
@@ -100,7 +99,7 @@ def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
         if isinstance (las, _DFLASCI):
             dcasdm1s = [dm_new - dm_old for dm_new, dm_old in zip (casdm1s_new, casdm1s_sub)]
             bmPu = getattr (h2eff_sub, 'bmPu', None)
-            veff += las.fast_veffa (dcasdm1s, bmPu, mo_coeff=mo_coeff, ci=ci1) 
+            veff += las.fast_veffa (dcasdm1s, bmPu, mo_coeff=mo_coeff, ci=ci1)
         casdm1s_sub = casdm1s_new
 
         t1 = log.timer ('LASSCF get_veff after ci', *t1)
@@ -120,7 +119,7 @@ def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
                 j = i + ugg.ncsf_sub[isub].sum ()
                 k = i + ugg.nvar_orb
                 l = j + ugg.nvar_orb
-                log.debug ('GRADIENT IMPLEMENTATION TEST: |D g_ci({})| = %.15g'.format (isub), 
+                log.debug ('GRADIENT IMPLEMENTATION TEST: |D g_ci({})| = %.15g'.format (isub),
                            linalg.norm (g_ci_test[i:j] - g_vec[k:l]))
             err = linalg.norm (g_ci_test - g_vec[ugg.nvar_orb:])
             assert (err < 1e-5), '{}'.format (err)
@@ -137,21 +136,16 @@ def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
         norm_gci = linalg.norm (g_vec[ugg.nvar_orb:]) if ugg.ncsf_sub.sum () else 0.0
         norm_gx = linalg.norm (gx) if gx.size else 0.0
         x0 = prec_op._matvec (-g_vec)
-        norm_xorb = linalg.norm (x0[:ugg.nvar_orb]) if ugg.nvar_orb else 0.0
-        norm_xci = linalg.norm (x0[ugg.nvar_orb:]) if ugg.ncsf_sub.sum () else 0.0
         lib.logger.info (
             las, 'LASSCF macro %d : E = %.15g ; |g_int| = %.15g ; |g_ci| = %.15g ; |g_x| = %.15g',
             it, H_op.e_tot, norm_gorb, norm_gci, norm_gx)
-        #log.info (
-        #    ('LASSCF micro init : E = %.15g ; |g_orb| = %.15g ; |g_ci| = %.15g ; |x0_orb| = %.15g '
-        #    '; |x0_ci| = %.15g'), H_op.e_tot, norm_gorb, norm_gci, norm_xorb, norm_xci)
         las.dump_chk (mo_coeff=mo_coeff, ci=ci1)
         if (((norm_gorb<conv_tol_grad and norm_gci<conv_tol_grad)
              or ((norm_gorb+norm_gci)<norm_gx/10))
             and (it>=las.min_cycle_macro)):
-                converged = True
-                break
-        H_op._init_eri_() 
+            converged = True
+            break
+        H_op._init_eri_()
         # ^ This is down here to save time in case I am already converged at initialization
         t1 = log.timer ('LASSCF Hessian constructor', *t1)
         microit = [0]
@@ -242,7 +236,7 @@ def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
                         for state in range (las.nroots)], axis=0)
     veff_c = las.get_veff (dm=dm_core)
     # veff's spin-summed component should be correct because I called get_veff with spin-summed rdm
-    veff = veff_c[None,None,:,:] + veff_a 
+    veff = veff_c[None,None,:,:] + veff_a
     veff = lib.tag_array (veff, c=veff_c, sa=np.einsum ('rsij,r->sij', veff, las.weights))
     e_states = las.energy_nuc () + np.array (las.states_energy_elec (mo_coeff=mo_coeff, ci=ci1,
                                                                      h2eff=h2eff_sub, veff=veff))
@@ -285,7 +279,7 @@ def ci_cycle (las, mo, ci0, veff, h2eff_sub, casdm1frs, log):
     ncas_cum = np.cumsum ([0] + las.ncas_sub.tolist ()) + las.ncore
     e_cas = []
     ci1 = []
-    e0 = 0.0 
+    e0 = 0.0
     for isub, (fcibox, ncas, nelecas, h1e, fcivec) in enumerate (zip (las.fciboxes, las.ncas_sub,
                                                                       las.nelecas_sub, h1eff_sub,
                                                                       ci0)):
@@ -303,16 +297,16 @@ def ci_cycle (las, mo, ci0, veff, h2eff_sub, casdm1frs, log):
             log.info ("LASSCF subspace {} with orbsyms {}".format (isub, orbsym_io))
         else:
             log.info ("LASSCF subspace {} with no orbsym information".format (isub))
-        if log.verbose > lib.logger.DEBUG: 
-         for state, solver in enumerate (fcibox.fcisolvers):
-            wfnsym = getattr (solver, 'wfnsym', None)
-            if (wfnsym is not None) and (orbsym is not None):
-                if isinstance (wfnsym, str):
-                    wfnsym_str = wfnsym
-                else:
-                    wfnsym_str = symm.irrep_id2name (las.mol.groupname, wfnsym)
-                log.debug1 ("LASSCF subspace {} state {} with wfnsym {}".format (isub, state,
-                                                                                wfnsym_str))
+        if log.verbose > lib.logger.DEBUG:
+            for state, solver in enumerate (fcibox.fcisolvers):
+                wfnsym = getattr (solver, 'wfnsym', None)
+                if (wfnsym is not None) and (orbsym is not None):
+                    if isinstance (wfnsym, str):
+                        wfnsym_str = wfnsym
+                    else:
+                        wfnsym_str = symm.irrep_id2name (las.mol.groupname, wfnsym)
+                    log.debug1 ("LASSCF subspace {} state {} with wfnsym {}".format (isub, state,
+                                                                                    wfnsym_str))
 
         if isub not in frozen_ci:
             e_sub, fcivec = fcibox.kernel(h1e, eri_cas, ncas, nelecas,
@@ -576,7 +570,7 @@ class LASSCFSymm_UnitaryGroupGenerators (LASSCF_UnitaryGroupGenerators):
     uniq_orb_idx to False and reduces the values of nvar_orb, ncsf_sub, and nvar_tot.
     '''
 
-    def __init__(self, las, mo_coeff, ci): 
+    def __init__(self, las, mo_coeff, ci):
         self.nmo = mo_coeff.shape[-1]
         self.frozen = las.frozen
         self.frozen_ci = las.frozen_ci
@@ -585,7 +579,7 @@ class LASSCFSymm_UnitaryGroupGenerators (LASSCF_UnitaryGroupGenerators):
         orbsym = mo_coeff.orbsym
         self._init_orb (las, mo_coeff, ci, orbsym)
         self._init_ci (las, mo_coeff, ci, orbsym)
-    
+
     def _init_orb (self, las, mo_coeff, ci, orbsym):
         LASSCF_UnitaryGroupGenerators._init_orb (self, las, mo_coeff, ci)
         self.symm_forbid = (orbsym[:,None] ^ orbsym[None,:]).astype (np.bool_)
@@ -735,14 +729,14 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         self.mo_coeff = mo_coeff
         sparse_linalg.LinearOperator.__init__(self, dtype=self.mo_coeff.dtype,
                                               shape=(ugg.nvar_tot, ugg.nvar_tot))
-        self.ci = ci = [[c.ravel () for c in cr] for cr in ci] 
+        self.ci = ci = [[c.ravel () for c in cr] for cr in ci]
         self.ncore = ncore
         self.ncas_sub = ncas_sub
         self.nelecas_sub = nelecas_sub
         self.ncas = ncas = sum (ncas_sub)
-        self.nao = nao = mo_coeff.shape[0]
-        self.nmo = nmo = mo_coeff.shape[-1]
-        self.nocc = nocc = ncore + ncas
+        self.nao = mo_coeff.shape[0]
+        self.nmo = mo_coeff.shape[-1]
+        self.nocc = ncore + ncas
         self.fciboxes = las.fciboxes
         self.nroots = las.nroots
         self.weights = las.weights
@@ -760,7 +754,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
 
     def _init_dms_(self, casdm1frs, casdm2fr):
         las, ncore, nocc = self.las, self.ncore, self.nocc
-        self.casdm1frs = casdm1frs 
+        self.casdm1frs = casdm1frs
         self.casdm1fs = las.make_casdm1s_sub (casdm1frs=self.casdm1frs)
         self.casdm1rs = las.states_make_casdm1s (casdm1frs=self.casdm1frs)
         self.casdm2fr = casdm2fr
@@ -777,11 +771,11 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         self.dm1s[0,ncore:nocc,ncore:nocc] = casdm1a
         self.dm1s[1,ncore:nocc,ncore:nocc] = casdm1b
         self.dm1s[:,nocc:,nocc:] = 0
-        
+
     def _init_ham_(self, h2eff_sub, veff):
         las, mo_coeff, ncas_sub = self.las, self.mo_coeff, self.ncas_sub
         ncore, ncas, nocc = self.ncore, self.ncas, self.nocc
-        nao, nmo, nocc = self.nao, self.nmo, ncore+ncas
+        nmo, nocc = self.nmo, ncore+ncas
         casdm1a, casdm1b = tuple (self.casdm1s)
         casdm1 = casdm1a + casdm1b
         moH_coeff = mo_coeff.conjugate ().T
@@ -833,7 +827,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         self.linkstrl = []
         self.linkstr = []
         for fcibox, no, ne in zip (self.fciboxes, ncas_sub, nelecas_sub):
-            self.linkstrl.append (fcibox.states_gen_linkstr (no, ne, True)) 
+            self.linkstrl.append (fcibox.states_gen_linkstr (no, ne, True))
             self.linkstr.append (fcibox.states_gen_linkstr (no, ne, False))
         self.hci0 = self.Hci_all (None, self.h1frs, self.eri_cas, ci)
         self.e0 = [[hc.dot (c) for hc, c in zip (hcr, cr)] for hcr, cr in zip (self.hci0, ci)]
@@ -847,8 +841,8 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         else:
             self.cas_type_eris = mc_ao2mo._ERIS (self.las, self.mo_coeff,
                 method='incore', level=2) # level=2 -> ppaa, papa only
-                # level=1 computes more stuff; it's only useful if I
-                # want the honest hdiag in get_prec ()
+            # level=1 computes more stuff; it's only useful if I
+            # want the honest hdiag in get_prec ()
         ncore, ncas = self.ncore, self.ncas
         nocc = ncore + ncas
         paaa_test = np.zeros_like (self.eri_paaa)
@@ -910,7 +904,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         if h0fr is None: h0fr = [[0.0 for h1r in h1rs] for h1rs in h1frs]
         hcfr = []
         for isub, (fcibox, h0, h1rs, ci) in enumerate (zip (self.fciboxes, h0fr, h1frs, ci_sub)):
-            if self.linkstrl is not None: linkstrl = self.linkstrl[isub] 
+            if self.linkstrl is not None: linkstrl = self.linkstrl[isub]
             ncas = self.ncas_sub[isub]
             nelecas = self.nelecas_sub[isub]
             i = sum (self.ncas_sub[:isub])
@@ -922,7 +916,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
 
     def make_tdm1s2c_sub (self, ci1):
         ''' Make effective 1-body and 2-body cumulant density matrices to first order
-        in a CI rotation vector. 
+        in a CI rotation vector.
 
         Args:
             ci : list (length = nfrags) of lists (length = nroots) of ndarrays
@@ -937,8 +931,8 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         tdm1rs = np.zeros ((self.nroots, 2, self.ncas, self.ncas), dtype=self.dtype)
         tcm2 = np.zeros ([self.ncas,]*4, dtype=self.dtype)
         for isub, (fcibox, ncas, nelecas, c1, c0, casdm1rs, casdm1s, casdm2r) in enumerate (
-          zip (self.fciboxes, self.ncas_sub, self.nelecas_sub, ci1, self.ci,
-          self.casdm1frs, self.casdm1fs, self.casdm2fr)):
+                zip (self.fciboxes, self.ncas_sub, self.nelecas_sub, ci1, self.ci,
+                     self.casdm1frs, self.casdm1fs, self.casdm2fr)):
             s01 = [c1i.dot (c0i) for c1i, c0i in zip (c1, c0)]
             i = sum (self.ncas_sub[:isub])
             j = i + ncas
@@ -951,7 +945,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
             dm2 = np.stack ([(sum (t) - (c*s)) / 2
                              for t, c, s, in zip (dm2, casdm2r, s01)], axis=0)
             dm2 = np.einsum ('rijkl,r->ijkl', dm2, fcibox.weights)
-            #tdm1frs[isub,:,:,i:j,i:j] = tdm1rs 
+            #tdm1frs[isub,:,:,i:j,i:j] = tdm1rs
             tcm2[i:j,i:j,i:j,i:j] = dm2
 
         # Cumulant decomposition so I only have to do one jk call for orbrot response
@@ -963,12 +957,12 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         tcm2 += np.multiply.outer (tdm1s[0], cdm1s[0]).transpose (0,3,2,1)
         tcm2 += np.multiply.outer (tdm1s[1], cdm1s[1]).transpose (0,3,2,1)
 
-        # Two transposes 
-        tdm1rs += tdm1rs.transpose (0,1,3,2) 
-        tcm2 += tcm2.transpose (1,0,3,2)        
-        tcm2 += tcm2.transpose (2,3,0,1)        
+        # Two transposes
+        tdm1rs += tdm1rs.transpose (0,1,3,2)
+        tcm2 += tcm2.transpose (1,0,3,2)
+        tcm2 += tcm2.transpose (2,3,0,1)
 
-        return tdm1rs, tcm2    
+        return tdm1rs, tcm2
 
     def get_veff_Heff (self, odm1s, tdm1rs):
         ''' Compute first-order effective potential (relevant to the orbital-rotation sector of the
@@ -1001,10 +995,8 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         tdm1s_sa = np.einsum ('rspq,r->spq', tdm1rs, self.weights)
         dm1s_mo = odm1s + odm1s.transpose (0,2,1)
         dm1s_mo[:,ncore:nocc,ncore:nocc] += 2*tdm1s_sa
-        mo = self.mo_coeff
-        moH = mo.conjugate ().T
         t1 = lib.logger.timer (self.las, 'LASSCF get_veff_Heff 1', *t0)
-        
+
         # Overall veff for gradient: the one and only jk call per microcycle that I will allow.
         veff_mo = self.get_veff (dm1s_mo=dm1s_mo)
         t2 = lib.logger.timer (self.las, 'LASSCF get_veff_Heff 2', *t1)
@@ -1027,7 +1019,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         veff_ci /= 2.0
         veff_ci += veff_mo[:,ncore:nocc,ncore:nocc]
         t4 = lib.logger.timer (self.las, 'LASSCF get_veff_Heff 4', *t3)
-        
+
         # SO, individual CI problems!
         # 1) There is NO constant term. Constant terms immediately drop out via the ugg defs!
         # 2) veff_ci is correctfor the orbrots, so long as I don't explicitly add h.c. at the end
@@ -1042,7 +1034,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
             h1frs[isub][:,:,:,:] = veff_ci[None,:,i:j,i:j]
             eri_tmp[:,:,:,:] = self.eri_cas[:,:,:,:]
             eri_tmp[i:j,i:j,:,:] = 0.0
-            err_h1rs = 2.0 * np.tensordot (tdm1rs, eri_tmp, axes=2) 
+            err_h1rs = 2.0 * np.tensordot (tdm1rs, eri_tmp, axes=2)
             err_h1rs += err_h1rs[:,::-1] # ja + jb
             eri_tmp[:,:,:,:] = self.eri_cas[:,:,:,:]
             eri_tmp[i:j,:,:,i:j] = 0.0
@@ -1052,14 +1044,13 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
             #err_h1rs += err_h1rs[:,::-1] # ja + jb
             #err_h1rs -= np.tensordot (err_dm1rs, self.eri_cas, axes=((2,3),(0,3)))
             h1frs[isub][:,:,:,:] += err_h1rs[:,:,i:j,i:j]
-        t5 = lib.logger.timer (self.las, 'LASSCF get_veff_Heff 5', *t4)
-        
+        lib.logger.timer (self.las, 'LASSCF get_veff_Heff 5', *t4)
+
         return veff_mo, h1frs
-        
+
     def get_veff (self, dm1s_mo=None):
         mo = self.mo_coeff
         moH = mo.conjugate ().T
-        nmo = mo.shape[-1]
         dm1_mo = dm1s_mo.sum (0)
         dm1_ao = np.dot (mo, np.dot (dm1_mo, moH))
         veff_ao = np.squeeze (self.las.get_veff (dm=dm1_ao))
@@ -1078,7 +1069,6 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
         for p, v1 in enumerate (vk_pa):
             praa = self.cas_type_eris.ppaa[p]
             para = self.cas_type_eris.papa[p]
-            paaa = praa[ncore:nocc]
             v1[:]  = np.tensordot (sdm_ra, praa, axes=2)
             v1[:] += np.tensordot (sdm_ar, para, axes=2)
         veff_s[:,:] *= -0.5
@@ -1243,7 +1233,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
                 Contains unpacked CI sector of partial Hessian-vector product
         '''
         # Since h1frs contains + h.c., I do NOT explicitly add + h.c. in this function
-        ncore, nocc, ncas_sub, nroots = self.ncore, self.nocc, self.ncas_sub, self.nroots
+        ncore, nocc, ncas_sub = self.ncore, self.nocc, self.ncas_sub
         kappa1_cas = kappa1[ncore:nocc,:]
         h1frs = [np.zeros_like (h1) for h1 in h1frs_prime]
         h1_core = -np.tensordot (kappa1_cas, self.h1s_cas, axes=((1),(1))).transpose (1,0,2)
@@ -1286,7 +1276,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
                 Contains unpacked CI sector of partial Hessian-vector product
         '''
         # IMPORTANT: this disagrees with PySCF, but I still think it's right and PySCF is wrong
-        ci1HmEci0 = [[c.dot (Hci) for c, Hci in zip (cr, Hcir)] 
+        ci1HmEci0 = [[c.dot (Hci) for c, Hci in zip (cr, Hcir)]
                      for cr, Hcir in zip (ci1, self.hci0)]
         s01 = [[c1.dot (c0) for c1,c0 in zip (c1r, c0r)] for c1r, c0r in zip (ci1, self.ci)]
         ci2 = self.Hci_all ([[-e for e in er] for er in self.e0], self.h1frs, self.eri_cas, ci1)
@@ -1351,7 +1341,6 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
             return Mx
 
     def _get_Horb_diag_presymm_fock (self):
-        ncore, nocc = self.ncore, self.nocc
         fock = np.stack ([np.diag (h) for h in list (self.h1s)], axis=0)
         num = np.stack ([np.diag (d) for d in list (self.dm1s)], axis=0)
         Horb_diag = sum ([np.multiply.outer (f,n) for f,n in zip (fock, num)])
@@ -1443,7 +1432,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
 
     def _get_Hci_diag (self):
         Hci_diag = []
-        for ix, (fcibox, norb, nelec, h1rs, csf_list) in enumerate (zip (self.fciboxes, 
+        for ix, (fcibox, norb, nelec, h1rs, csf_list) in enumerate (zip (self.fciboxes,
          self.ncas_sub, self.nelecas_sub, self.h1frs, self.ugg.ci_transformers)):
             if ix in self.ugg.frozen_ci: continue
             i = sum (self.ncas_sub[:ix])
@@ -1497,7 +1486,7 @@ class LASSCF_HessianOperator (sparse_linalg.LinearOperator):
             ci1.append (ci1_r)
         return ci1
 
-      
+
 
     def _update_h2eff_sub (self, mo1, umat, h2eff_sub):
         return self.las.ao2mo (mo1)
@@ -1527,12 +1516,12 @@ def LASSCF (mf_or_mol, ncas_sub, nelecas_sub, **kwargs):
         mf = scf.RHF(mf_or_mol)
     else:
         mf = mf_or_mol
-    if mf.mol.symmetry: 
+    if mf.mol.symmetry:
         las = LASSCFSymm (mf, ncas_sub, nelecas_sub, **kwargs)
     else:
         las = LASSCFNoSymm (mf, ncas_sub, nelecas_sub, **kwargs)
     if getattr (mf, 'with_df', None):
-        las = density_fit (las, with_df = mf.with_df) 
+        las = density_fit (las, with_df = mf.with_df)
     return las
 
 def get_grad (las, mo_coeff=None, ci=None, ugg=None, h1eff_sub=None, h2eff_sub=None,
@@ -1692,7 +1681,6 @@ def get_grad_ci (las, mo_coeff=None, ci=None, h1eff_sub=None, h2eff_sub=None, ve
             las.fciboxes, h1eff_sub, ci, las.ncas_sub, las.nelecas_sub)):
         eri_cas = las.get_h2eff_slice (h2eff_sub, isub, compact=8)
         linkstrl = fcibox.states_gen_linkstr (ncas, nelecas, True)
-        linkstr  = fcibox.states_gen_linkstr (ncas, nelecas, False)
         h2eff = fcibox.states_absorb_h1e(h1e, eri_cas, ncas, nelecas, .5)
         hc0 = fcibox.states_contract_2e(h2eff, ci0, ncas, nelecas, link_index=linkstrl)
         hc0 = [hc.ravel () for hc in hc0]
@@ -1748,7 +1736,7 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         if do_warn: log.warn ("Discarding all but the first root of guess CI vectors!")
 
         self.converged, self.e_tot, self.e_states, self.mo_energy, self.mo_coeff, self.e_cas, \
-                self.ci, h2eff_sub, veff = _kern(mo_coeff=mo_coeff, ci0=ci0, verbose=verbose, \
+                self.ci, h2eff_sub, veff = _kern(mo_coeff=mo_coeff, ci0=ci0, verbose=verbose,
                 casdm0_fr=casdm0_fr, conv_tol_grad=conv_tol_grad, assert_no_dupes=assert_no_dupes)
 
         self._finalize ()
@@ -1786,7 +1774,6 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         nao, nmo = mo_coeff.shape
         mo_cas = mo_coeff[:,ncore:nocc]
         moH_cas = mo_cas.conjugate ().T
-        moH_coeff = mo_coeff.conjugate ().T
         dma = linalg.block_diag (*[dm[0] for dm in casdm1s_sub])
         dmb = linalg.block_diag (*[dm[1] for dm in casdm1s_sub])
         casdm1s = np.stack ([dma, dmb], axis=0)
@@ -1819,13 +1806,13 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         super().check_sanity ()
         self.get_ugg () # constructor encounters impossible states and raises error
 
-    #SV 
-    def nuc_grad_method(self): 
-        from pyscf.grad import lasscf 
-        return lasscf.Gradients(self) 
- 
-    #SV 
-    Gradients = nuc_grad_method 
+    #SV
+    def nuc_grad_method(self):
+        from pyscf.grad import lasscf
+        return lasscf.Gradients(self)
+
+    #SV
+    Gradients = nuc_grad_method
 
 class LASSCFSymm (lasci.LASCISymm, LASSCFNoSymm):
 
@@ -1846,5 +1833,3 @@ class LASSCFSymm (lasci.LASCISymm, LASSCFNoSymm):
         mo_coeff = self.mo_coeff = self.label_symmetry_(mo_coeff)
         return LASSCFNoSymm.kernel(self, mo_coeff=mo_coeff, ci0=ci0,
             casdm0_fr=casdm0_fr, verbose=verbose, assert_no_dupes=assert_no_dupes)
-
- 

@@ -30,7 +30,7 @@ class _LASPDFT(_PDFT):
         return eri
 
     def multi_state(self, method='Lin'):
-        raise NotImplementedError(f"MS-PDFT not avaialble for the LAS wave functions.")
+        raise NotImplementedError("MS-PDFT not available for the LAS wave functions.")
 
 def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
     mc_doc = (mc.__class__.__doc__ or 'No docstring for MC-SCF parent method')
@@ -44,7 +44,7 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
                 return mc.__class__.get_h2eff(self, mo_coeff=mo_coeff)
             else:
                 return _pdft_class.get_h2eff(self, mo_coeff=mo_coeff)
-        
+
         # Have to pass this due to dump_chk, which won't work for LAS.
         def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
                                  grids_level=None, grids_attr=None, dump_chk=False, **kwargs):
@@ -73,7 +73,7 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
         dump_chk = mc.__class__.dump_chk
 
         # TODO: in pyscf/mcpdft/mcpdft.py::optimize_mcscf_, generalize the number
-        # of return arguments. Then the redefinition below will be unnecessary. 
+        # of return arguments. Then the redefinition below will be unnecessary.
         def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
             '''Optimize the MC-SCF wave function underlying an MC-PDFT calculation.
             Has the same calling signature as the parent kernel method. '''

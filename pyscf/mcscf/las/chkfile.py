@@ -6,7 +6,7 @@ KEYS_CONFIG_LASSCF = ['ncas', 'nelecas', 'ncore', 'ncas_sub', 'nelecas_sub']
 KEYS_SACONSTR_LASSCF = ['weights', 'charges', 'spins', 'smults', 'wfnsyms']
 KEYS_RESULTS_LASSCF = ['e_states', 'states_converged', 'e_tot', 'mo_coeff']
 
-def load_las_(mc, chkfile=None, method_key='las', 
+def load_las_(mc, chkfile=None, method_key='las',
               keys_config=KEYS_CONFIG_LASSCF,
               keys_saconstr=KEYS_SACONSTR_LASSCF,
               keys_results=KEYS_RESULTS_LASSCF):
@@ -22,7 +22,7 @@ def load_las_(mc, chkfile=None, method_key='las',
     mc = _load_las_ci_(mc, data)
     return mc
 
-def _load_las_1_(mc, data, 
+def _load_las_1_(mc, data,
                  keys_config=KEYS_CONFIG_LASSCF,
                  keys_saconstr=KEYS_SACONSTR_LASSCF,
                  keys_results=KEYS_RESULTS_LASSCF):
@@ -36,7 +36,7 @@ def _load_las_1_(mc, data,
         sakwargs = {key: data[key] for key in keys_saconstr}
         try:
             mc.state_average_(**sakwargs)
-        except AttributeError as err:
+        except AttributeError:
             las = mc._las.state_average (**sakwargs)
             mc.fciboxes = las.fciboxes
             for fcibox, norb, ne in zip (mc.fciboxes, mc.ncas_sub, mc.nelecas_sub):
@@ -63,7 +63,7 @@ def _load_las_1_(mc, data,
         mc.mo_coeff = tag_array (mc.mo_coeff, orbsym=data['mo_coeff_orbsym'])
     return mc
 
-def _load_las_ci_(mc, data): 
+def _load_las_ci_(mc, data):
     # special handling for ragged CI vector
     ci = data['ci']
     mc.ci = []
@@ -147,6 +147,3 @@ if __name__=='__main__':
     las.kernel (mo)
     dump_las (las, chkfile='chkfile.chk')
     load_las_(las, 'chkfile.chk')
-
-
-

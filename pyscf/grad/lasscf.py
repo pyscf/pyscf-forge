@@ -52,7 +52,7 @@ def grad_elec(las_grad, mo_coeff=None, ci=None, atmlst=None, verbose=None):
     if mo_coeff is None: mo_coeff = las.mo_coeff
     #if ci is None: ci = mc.ci
     #if mc.frozen is not None:
-        #raise NotImplementedError
+    #    raise NotImplementedError
 
     time0 = logger.process_clock(), logger.perf_counter()
     log = logger.new_logger(las_grad, verbose)
@@ -60,7 +60,6 @@ def grad_elec(las_grad, mo_coeff=None, ci=None, atmlst=None, verbose=None):
     ncore = las.ncore
     ncas = las.ncas
     nocc = ncore + ncas
-    nelecas = las.nelecas
     nao, nmo = mo_coeff.shape
     nao_pair = nao * (nao+1) // 2
 
@@ -218,7 +217,7 @@ class Gradients(casci_grad.Gradients):
             self.de = self.symmetrize(self.de, atmlst)
         self._finalize()
         return self.de
-   
+
     def _finalize(self):
         if self.verbose >= logger.NOTE:
             logger.note(self, '--------------- %s gradients ---------------',
@@ -233,4 +232,4 @@ class Gradients(casci_grad.Gradients):
 #Grad = Gradients
 
 #from pyscf import mcscf
-#mcscf.mc1step.CASSCF.Gradients = lib.class_as_method(Gradients)                                                                                                                                             
+#mcscf.mc1step.CASSCF.Gradients = lib.class_as_method(Gradients)

@@ -21,12 +21,12 @@ def LASCI (mf_or_mol, ncas_sub, nelecas_sub, **kwargs):
         mf = scf.RHF(mf_or_mol)
     else:
         mf = mf_or_mol
-    if mf.mol.symmetry: 
+    if mf.mol.symmetry:
         las = LASCISymm (mf, ncas_sub, nelecas_sub, **kwargs)
     else:
         las = LASCINoSymm (mf, ncas_sub, nelecas_sub, **kwargs)
     if getattr (mf, 'with_df', None):
-        las = density_fit (las, with_df = mf.with_df) 
+        las = density_fit (las, with_df = mf.with_df)
     return las
 
 def density_fit (las, auxbasis=None, with_df=None):
@@ -62,7 +62,7 @@ def h1e_for_las (las, mo_coeff=None, ncas=None, ncore=None, nelecas=None, ci=Non
 
     Kwargs:
         mo_coeff: ndarray of shape (nao,nmo)
-            Orbital coefficients ordered on the columns as: 
+            Orbital coefficients ordered on the columns as:
             core orbitals, subspace 1, subspace 2, ..., external orbitals
         ncas: integer
             As in PySCF's existing CASCI/CASSCF implementation
@@ -101,11 +101,11 @@ def h1e_for_las (las, mo_coeff=None, ncas=None, ncore=None, nelecas=None, ci=Non
     if veff is None:
         veff = las.get_veff (dm = las.make_rdm1s (mo_coeff=mo_coeff, casdm1s_sub=casdm1s_sub))
 
-    # First pass: split by root  
+    # First pass: split by root
     nocc = ncore + ncas
     nmo = mo_coeff.shape[-1]
     mo_cas = mo_coeff[:,ncore:nocc]
-    moH_cas = mo_cas.conj ().T 
+    moH_cas = mo_cas.conj ().T
     h1e = moH_cas @ (las.get_hcore ()[None,:,:] + veff) @ mo_cas
     h1e_r = np.empty ((las.nroots, 2, ncas, ncas), dtype=h1e.dtype)
     if eri_cas is None:
@@ -119,7 +119,7 @@ def h1e_for_las (las, mo_coeff=None, ncas=None, ncore=None, nelecas=None, ci=Non
     for state in range (las.nroots):
         statedm1s = np.stack ([linalg.block_diag (*[dm[state][spin] for dm in casdm1frs])
                                for spin in range (2)], axis=0)
-        dm1s = statedm1s - avgdm1s 
+        dm1s = statedm1s - avgdm1s
         j = np.tensordot (dm1s, h2e, axes=((1,2),(2,3)))
         k = np.tensordot (dm1s, h2e, axes=((1,2),(2,1)))
         h1e_r[state] = h1e + j + j[::-1] - k
@@ -290,7 +290,7 @@ def canonicalize (las, mo_coeff=None, ci=None, casdm1fs=None, natorb_casdm1=None
                     ci[isub], ncas, nelecas, umat[i:j,i:j])
             t = log.timer_debug1 ('Canonicalize diag setup for fci', *t)
     else: # You can't get proper LAS-type CI vectors w/out active space fragmentation
-        ci = None 
+        ci = None
         orbsym_cas = None if orbsym is None else orbsym[ncore:nocc]
         occ, umat[ncore:nocc,ncore:nocc] = las._eig (natorb_casdm1, 0, 0, orbsym_cas)
         idx = np.argsort (occ)[::-1]
@@ -309,7 +309,7 @@ def canonicalize (las, mo_coeff=None, ci=None, casdm1fs=None, natorb_casdm1=None
     mo_coeff = mo_coeff @ umat
     if orbsym is not None:
         '''
-        print ("This is the second call to label_orb_symm inside of canonicalize") 
+        print ("This is the second call to label_orb_symm inside of canonicalize")
         orbsym = symm.label_orb_symm (las.mol, las.mol.irrep_id,
                                       las.mol.symm_orb, mo_coeff,
                                       s=las._scf.get_ovlp ())
@@ -367,10 +367,7 @@ def get_init_guess_ci (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri_cas=Non
 def get_init_guess_ci_aufbau0 (las, mo_coeff=None, ci0=None):
     if mo_coeff is None: mo_coeff = las.mo_coeff
     if ci0 is None: ci0 = [[None for i in range (las.nroots)] for j in range (las.nfrags)]
-    nmo = mo_coeff.shape[-1]
-    ncore, ncas = las.ncore, las.ncas
-    nocc = ncore + ncas
-    casdm1frs = []
+    ncore = las.ncore
     for ix, (fcibox, norb, nelecas) in enumerate (zip (las.fciboxes,las.ncas_sub,las.nelecas_sub)):
         i = sum (las.ncas_sub[:ix])
         j = i + norb
@@ -402,8 +399,6 @@ def get_init_guess_ci_aufbau1 (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri
     for ix, (fcibox, norb, nelecas) in enumerate (zip (las.fciboxes,las.ncas_sub,las.nelecas_sub)):
         i = sum (las.ncas_sub[:ix])
         j = i + norb
-        mo = mo_coeff[:,ncore+i:ncore+j]
-        moH = mo.conj ().T
         h1e = h1eff[ix]
         eri = eri_cas[i:j,i:j,i:j,i:j]
         for iy, solver in enumerate (fcibox.fcisolvers):
@@ -481,28 +476,19 @@ def get_space_info (las):
     charges = np.zeros ((nroots, nfrags), dtype=np.int32)
     wfnsyms, spins, smults = charges.copy (), charges.copy (), charges.copy ()
     for ifrag, fcibox in enumerate (las.fciboxes):
-     for iroot, solver in enumerate (fcibox.fcisolvers):
-        nelec = fcibox._get_nelec (solver, las.nelecas_sub[ifrag])
-        charges[iroot,ifrag] = np.sum (las.nelecas_sub[ifrag]) - np.sum (nelec)
-        spins[iroot,ifrag] = nelec[0]-nelec[1]
-        smults[iroot,ifrag] = getattr (solver, 'smult', abs(spins[iroot,ifrag])+1)
-        try:
-            wfnsyms[iroot,ifrag] = getattr (solver, 'wfnsym', None) or 0
-        except ValueError as e:
-            wfnsyms[iroot,ifrag] = symm.irrep_name2id (las.mol.groupname, solver.wfnsym)
+        for iroot, solver in enumerate (fcibox.fcisolvers):
+            nelec = fcibox._get_nelec (solver, las.nelecas_sub[ifrag])
+            charges[iroot,ifrag] = np.sum (las.nelecas_sub[ifrag]) - np.sum (nelec)
+            spins[iroot,ifrag] = nelec[0]-nelec[1]
+            smults[iroot,ifrag] = getattr (solver, 'smult', abs(spins[iroot,ifrag])+1)
+            try:
+                wfnsyms[iroot,ifrag] = getattr (solver, 'wfnsym', None) or 0
+            except ValueError:
+                wfnsyms[iroot,ifrag] = symm.irrep_name2id (las.mol.groupname, solver.wfnsym)
     return charges, spins, smults, wfnsyms
-  
+
 def get_smults_fr (las):
     return las.get_space_info ()[2].T
-
-def get_nelec_frs (las):
-    charges_rf, spins_rf = las.get_space_info ()[:2]
-    nelec_f = np.asarray ([np.sum (nelec) for nelec in las.nelecas_sub])
-    nelec_fr = nelec_f - charges_rf.T
-    nelec_frs = np.stack ([nelec_fr + spins_rf.T,
-                           nelec_fr - spins_rf.T],
-                          axis=-1) // 2
-    return nelec_frs
 
 def assert_no_duplicates (las, tab=None):
     log = lib.logger.new_logger (las, las.verbose)
@@ -517,8 +503,6 @@ def assert_no_duplicates (las, tab=None):
                    'to the kernel, lasci, and state_average(_) functions.)')
         assert (~np.any (idx_dupe)), err_str
     except AssertionError as e:
-        dupe_idx = uniq_idx[idx_dupe]
-        dupe_cnts = uniq_cnts[idx_dupe]
         for i, (ix, cnt, col) in enumerate (zip (uniq_idx, uniq_cnts, tab_uniq)):
             if cnt==1: continue
             log.info ('State %d appears %d times', ix, cnt)
@@ -534,7 +518,7 @@ def assert_no_duplicates (las, tab=None):
 def state_average_(las, weights=[0.5,0.5], charges=None, spins=None,
         smults=None, wfnsyms=None, lroots=None, lweights=None,
         assert_no_dupes=True):
-    ''' Transform LASCI/LASSCF object into state-average LASCI/LASSCF 
+    ''' Transform LASCI/LASSCF object into state-average LASCI/LASSCF
 
     Args:
         las: LASCI/LASSCF instance
@@ -563,7 +547,7 @@ def state_average_(las, weights=[0.5,0.5], charges=None, spins=None,
             identifies the point-group irreducible representation
             Defaults to all zeros (i.e., the totally-symmetric irrep)
         lroots: ndarray of shape (nroots,nfrags)
-            Number of local roots in each fragment for each global state. 
+            Number of local roots in each fragment for each global state.
             The corresponding local weights are set to [1/n,1/n,1/n,...].
             Note that this is transposed compared to the kwarg of kernel,
             in order to be consistent with the other kwargs of this function!
@@ -584,8 +568,8 @@ def state_average_(las, weights=[0.5,0.5], charges=None, spins=None,
     nfrags = las.nfrags
     if charges is None: charges = np.zeros ((nroots, nfrags), dtype=np.int32)
     if wfnsyms is None: wfnsyms = np.zeros ((nroots, nfrags), dtype=np.int32)
-    if spins is None: spins = np.asarray ([[n[0]-n[1] for n in las.nelecas_sub] for i in weights]) 
-    if smults is None: smults = np.abs (spins)+1 
+    if spins is None: spins = np.asarray ([[n[0]-n[1] for n in las.nelecas_sub] for i in weights])
+    if smults is None: smults = np.abs (spins)+1
     if lroots is not None and lweights is not None:
         raise RuntimeError ("lroots sets lweights: pass either or none but not both")
     elif lweights is None:
@@ -614,7 +598,7 @@ def state_average_(las, weights=[0.5,0.5], charges=None, spins=None,
         for ix, wfnsym in enumerate (wfnsyms_str.flat):
             try:
                 wfnsyms.flat[ix] = symm.irrep_name2id (las.mol.groupname, wfnsym)
-            except (TypeError, KeyError) as e:
+            except (TypeError, KeyError):
                 wfnsyms.flat[ix] = int (wfnsym)
     if nfrags == 1:
         charges = np.atleast_2d (np.squeeze (charges)).T
@@ -649,18 +633,18 @@ def state_average_(las, weights=[0.5,0.5], charges=None, spins=None,
         for iroot, row in enumerate (old_states):
             idx = np.all (new_states == row[None,:], axis=1)
             if np.count_nonzero (idx) == 1:
-                jroot = np.where (idx)[0][0] 
+                jroot = np.where (idx)[0][0]
                 log.debug ("Old state {} -> New state {}".format (iroot, jroot))
                 for ifrag in range (nfrags):
                     ci0[ifrag][jroot] = las.ci[ifrag][iroot]
             elif np.count_nonzero (idx) > 1:
                 raise RuntimeError ("Duplicate states specified?\n{}".format (idx))
-        las.ci = ci0 
+        las.ci = ci0
 
     las.converged = False
     return las
 
-@lib.with_doc(''' A version of lasci.state_average_ that creates a copy instead of modifying the 
+@lib.with_doc(''' A version of lasci.state_average_ that creates a copy instead of modifying the
     LASCI/LASSCF method instance in place.
 
     See lasci.state_average_ docstring below:\n\n''' + state_average_.__doc__)
@@ -697,7 +681,7 @@ def get_single_state_las (las, state=0):
 
 def kernel (las, mo_coeff=None, ci0=None, lroots=None, lweights=None, verbose=0,
                assert_no_dupes=False, _dry_run=False):
-    '''Self-consistently optimize the CI vectors of a LAS state with 
+    '''Self-consistently optimize the CI vectors of a LAS state with
     frozen orbitals using a fixed-point algorithm. "lasci_" (with the
     trailing underscore) sets self.mo_coeff from the kwarg if it is passed;
     "lasci" (without the trailing underscore) leaves self.mo_coeff unchanged.
@@ -708,7 +692,7 @@ def kernel (las, mo_coeff=None, ci0=None, lroots=None, lweights=None, verbose=0,
         ci0 : list (length nfrags) of list (length nroots) of ndarrays
             Contains CI vectors for initial guess
         lroots : ndarray of shape (nfrags,nroots)
-            Number of local roots in each fragment for each global state. 
+            Number of local roots in each fragment for each global state.
             The corresponding local weights are set to [1,0,0,0,...].
         lweights : list of length nfrags of list of length nroots of sequence
             Weights of local roots in each fragment for each global state.
@@ -761,7 +745,7 @@ def kernel (las, mo_coeff=None, ci0=None, lroots=None, lweights=None, verbose=0,
 
     h1eff, energy_core = las.h1e_for_cas (mo_coeff=mo_coeff,
         ncas=las.ncas, ncore=las.ncore)
-    eri_cas = las.get_h2cas (mo_coeff) 
+    eri_cas = las.get_h2cas (mo_coeff)
     if (ci0 is None or any ([c is None for c in ci0]) or
             any ([any ([c2 is None for c2 in c1]) for c1 in ci0])):
         ci0 = las.get_init_guess_ci (mo_coeff, ci0=ci0, eri_cas=eri_cas)
@@ -1008,11 +992,12 @@ class LASCINoSymm (casci.CASCI):
 
     def _init_fcibox (self, smult, nel):
         s = csf_solver (self.mol, smult=smult)
-        s.spin = nel[0] - nel[1] 
+        s.spin = nel[0] - nel[1]
         return get_h1e_zipped_fcisolver (state_average_n_mix (self, [s], [1.0]).fcisolver)
 
     @property
-    def nfrags (self): return len (self.ncas_sub)
+    def nfrags (self):
+        return len (self.ncas_sub)
 
     def get_mo_slice (self, idx, mo_coeff=None):
         if mo_coeff is None: mo_coeff = self.mo_coeff
@@ -1068,7 +1053,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
 
         Returns:
             casdm1frs: list of ndarray of shape (nroots, 2, ncas_sub[i], ncas_sub[i])
@@ -1079,7 +1064,7 @@ class LASCINoSymm (casci.CASCI):
         if ncas_sub is None: ncas_sub = self.ncas_sub
         if nelecas_sub is None: nelecas_sub = self.nelecas_sub
         if ci is None:
-            return [np.zeros ((self.nroots,2,ncas,ncas)) for ncas in ncas_sub] 
+            return [np.zeros ((self.nroots,2,ncas,ncas)) for ncas in ncas_sub]
         casdm1s = []
         for fcibox, ci_i, ncas, nelecas in zip (self.fciboxes, ci, ncas_sub, nelecas_sub):
             if ci_i is None:
@@ -1100,7 +1085,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
 
         Returns:
             casdm1fs: list of ndarray of shape (2, ncas_sub[i], ncas_sub[i])
@@ -1123,7 +1108,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             casdm1frs: sequence of ndarrays of shape (nroots, 2, ncas_sub[i], ncas_sub[i])
                 output of states_make_casdm1s_sub
 
@@ -1134,7 +1119,7 @@ class LASCINoSymm (casci.CASCI):
         '''
         if casdm1frs is None: casdm1frs = self.states_make_casdm1s_sub (ci=ci,
             ncas_sub=ncas_sub, nelecas_sub=nelecas_sub, **kwargs)
-        return np.stack ([np.stack ([linalg.block_diag (*[dm1rs[iroot][ispin] 
+        return np.stack ([np.stack ([linalg.block_diag (*[dm1rs[iroot][ispin]
                                                           for dm1rs in casdm1frs])
                                      for ispin in (0, 1)], axis=0)
                           for iroot in range (self.nroots)], axis=0)
@@ -1149,7 +1134,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
 
         Returns:
             casdm2fr: list of ndarray of shape [nroots,]+[ncas_sub[i]]*4
@@ -1174,7 +1159,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             casdm2fr: sequence of ndarrays of shape [nroots,] + [ncas_sub[i],]*4
                 output of states_make_casdm2_sub
 
@@ -1211,7 +1196,7 @@ class LASCINoSymm (casci.CASCI):
                 dm2aa, dm2ab, dm2bb = fcibox.states_make_rdm12s (ci_i, ncas, nelecas)[-1]
             casdm2s.append (np.stack ([dm2aa, dm2ab, dm2bb], axis=1))
         return casdm2s
-    
+
 
     def states_make_casdm3_sub (self, ci=None, ncas_sub=None, nelecas_sub=None, **kwargs):
         ''' Spin-separated 3-RDMs in the MO basis for each subspace in sequence, currently this
@@ -1266,8 +1251,8 @@ class LASCINoSymm (casci.CASCI):
         if ci is None: ci = self.ci
         if ncas_sub is None: ncas_sub = self.ncas_sub
         if nelecas_sub is None: nelecas_sub = self.nelecas_sub
-        if casdm1rs is None: casdm1rs = self.states_make_casdm1s (ci=ci, 
-            ncas_sub=ncas_sub, nelecas_sub=nelecas_sub, casdm1frs=casdm1frs, 
+        if casdm1rs is None: casdm1rs = self.states_make_casdm1s (ci=ci,
+            ncas_sub=ncas_sub, nelecas_sub=nelecas_sub, casdm1frs=casdm1frs,
             **kwargs)
         mo_core = mo_coeff[:,:self.ncore]
         mo_cas = mo_coeff[:,self.ncore:][:,:self.ncas]
@@ -1289,7 +1274,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             include_core: logical
                 If true, density of inactive orbitals is included on return
             casdm1s_sub: list of ndarray of shape (2, ncas_sub[i], ncas_sub[i])
@@ -1331,7 +1316,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             include_core: logical
                 If true, density of inactive orbitals is included on return
             casdm1fs: list of ndarray of shape (2, ncas_sub[i], ncas_sub[i])
@@ -1390,7 +1375,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
 
         Returns:
             casdm1s: ndarray of shape (2, ncas, ncas)
@@ -1412,7 +1397,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
 
         Returns:
             casdm1s: ndarray of shape (ncas, ncas)
@@ -1422,7 +1407,7 @@ class LASCINoSymm (casci.CASCI):
         return self.make_casdm1s (ci=ci, **kwargs).sum (0)
 
     def state_make_casdm1s(self, ci=None, state=0,  ncas_sub=None, nelecas_sub=None,
-        casdm1frs=None, **kwargs):
+            casdm1frs=None, **kwargs):
         ''' Get spin-separated, locally state-averaged 1-RDM of all active orbitals collectively
         for a single rootspace.
 
@@ -1434,7 +1419,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             casdm1frs: sequence of ndarrays of shape (nroots, 2, ncas_sub[i], ncas_sub[i])
                 output of states_make_casdm1s_sub
 
@@ -1445,13 +1430,13 @@ class LASCINoSymm (casci.CASCI):
         '''
         if casdm1frs is None: casdm1frs = self.states_make_casdm1s_sub (ci=ci,
             ncas_sub=ncas_sub, nelecas_sub=nelecas_sub, **kwargs)
-        casdm1s = np.stack([np.stack ([linalg.block_diag (*[dm1rs[iroot][ispin] 
+        casdm1s = np.stack([np.stack ([linalg.block_diag (*[dm1rs[iroot][ispin]
                                                             for dm1rs in casdm1frs])
                                         for ispin in (0, 1)], axis=0)
                             for iroot in range (self.nroots)], axis=0)
         return casdm1s[state]
-    
-    def state_make_casdm2(self, ci=None, state=0, ncas_sub=None, nelecas_sub=None, 
+
+    def state_make_casdm2(self, ci=None, state=0, ncas_sub=None, nelecas_sub=None,
             casdm1frs=None, casdm2fr=None, **kwargs):
         ''' Get spin-summed, locally state-averaged 2-RDM of all active orbitals for a single
         rootspace. The formulas for nonzero elements are (state=r):
@@ -1469,7 +1454,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             casdm1frs: sequence of ndarrays of shape [nroots,] + [ncas_sub[i],]*2
                 output of states_make_casdm1s_sub
             casdm2fr: sequence of ndarrays of shape [nroots,] + [ncas_sub[i],]*4
@@ -1489,7 +1474,7 @@ class LASCINoSymm (casci.CASCI):
         ncas = sum (ncas_sub)
         ncas_cum = np.cumsum ([0] + ncas_sub.tolist ())
         casdm2 = np.zeros ((ncas,ncas,ncas,ncas))
-        # Diagonal 
+        # Diagonal
         for isub, dm2_r in enumerate (casdm2fr):
             i = ncas_cum[isub]
             j = ncas_cum[isub+1]
@@ -1509,8 +1494,8 @@ class LASCINoSymm (casci.CASCI):
             casdm2[i:j, k:l, k:l, i:j] = -(np.multiply.outer (dma1, dma2)
                                            +np.multiply.outer (dmb1, dmb2)).transpose (0,3,2,1)
             casdm2[k:l, i:j, i:j, k:l] = casdm2[i:j, k:l, k:l, i:j].transpose (1,0,3,2)
-        return casdm2 
-     
+        return casdm2
+
     def make_casdm2s (self, ci=None, ncas_sub=None, nelecas_sub=None,
             casdm2rs=None, casdm2fs=None, casdm1frs=None, casdm2frs=None,
             **kwargs):
@@ -1562,7 +1547,7 @@ class LASCINoSymm (casci.CASCI):
         return casdm2s
 
 
-    def make_casdm2 (self, ci=None, ncas_sub=None, nelecas_sub=None, 
+    def make_casdm2 (self, ci=None, ncas_sub=None, nelecas_sub=None,
             casdm2r=None, casdm2f=None, casdm1frs=None, casdm2fr=None,
             **kwargs):
         ''' Get spin-summed, rootspace- and state-averaged 2-RDM of all active orbitals. The
@@ -1580,7 +1565,7 @@ class LASCINoSymm (casci.CASCI):
             ncas_sub: sequence of integers
                 number of orbitals in each fragment
             nelecas_sub: sequence of integers
-                number of orbitals in each fragment in the reference rootspace 
+                number of orbitals in each fragment in the reference rootspace
             casdm2r: ndarray of shape [nroots,] + [ncas,]*4
                 rootspace-separated 2-RDMs of the whole active space
             casdm2f: sequence of ndarrays of shape [ncas_sub[i],]*4
@@ -1595,7 +1580,7 @@ class LASCINoSymm (casci.CASCI):
                 Spin-summed 2-body reduced density matrices for all active orbitals, rootspace-
                 and state-averaged if applicable.
         '''
-        if casdm2r is not None: 
+        if casdm2r is not None:
             return np.einsum ('rijkl,r->ijkl', casdm2r, self.weights)
         if ci is None: ci = self.ci
         if ncas_sub is None: ncas_sub = self.ncas_sub
@@ -1609,7 +1594,7 @@ class LASCINoSymm (casci.CASCI):
         weights = self.weights
         dtype = np.result_type(*casdm2f, *casdm1frs)
         casdm2 = np.zeros ((ncas,ncas,ncas,ncas), dtype=dtype)
-        # Diagonal 
+        # Diagonal
         for isub, dm2 in enumerate (casdm2f):
             i = ncas_cum[isub]
             j = ncas_cum[isub+1]
@@ -1659,7 +1644,7 @@ class LASCINoSymm (casci.CASCI):
         weights = self.weights
         casdm3 = np.zeros ((ncas,ncas,ncas,ncas,ncas,ncas))
 
-        # Diagonal 
+        # Diagonal
         for isub, dm3 in enumerate (casdm3f):
             i = ncas_cum[isub]
             j = ncas_cum[isub+1]
@@ -1675,7 +1660,6 @@ class LASCINoSymm (casci.CASCI):
 
         # Off-diagonal
         # First 6 terms - combs of f1+f2+f3: dm1rs1=f1, dm1rs2=f2, dm1rs3=f3
-        from itertools import permutations
         for (isub1,dm1rs1),(isub2,dm1rs2),(isub3,dm1rs3) in combinations (enumerate(casdm1frs), 3):
             i = ncas_cum[isub1]
             j = ncas_cum[isub1+1]
@@ -1689,19 +1673,19 @@ class LASCINoSymm (casci.CASCI):
             dm1r = dma1r + dmb1r
             dm2r = dma2r + dmb2r
             dm3r = dma3r + dmb3r
-            
+
             # Term 1- 29a
             d1sigma = lib.einsum('r,rij,rkl,rmn->rijklmn',weights,dm1r,dm2r,dm3r)
             casdm3[i:j, i:j, k:l, k:l, m:n, m:n] += np.tensordot(weights, d1sigma, axes=1)
             #lib.einsum ('r,rij,rkl,rmn->ijklmn', weights, dm1r, dm2r, dm3r)
             _transpose_dm3_(i,j, i,j, k,l, k,l, m,n, m,n)
-            
+
             # Term 2- 29b
             d2sigma = (lib.einsum('r,rij,rkl,rmn->rijknml',weights,dm1r,dma2r,dma3r)
                        +lib.einsum('r,rij,rkl,rmn->rijknml',weights,dm1r,dmb2r,dmb3r))
             casdm3[i:j, i:j, k:l, m:n, m:n, k:l] -= np.tensordot(weights, d2sigma, axes=1)
             _transpose_dm3_(i,j, i,j, k,l, m,n, m,n, k,l)
-            
+
             # Term 3- 29c
             d3sigma = (lib.einsum('r,rij,rkl,rmn->rinkjml',weights,dma1r,dma2r,dma3r)
                        +lib.einsum('r,rij,rkl,rmn->rinkjml',weights,dmb1r,dmb2r,dmb3r))
@@ -1736,8 +1720,8 @@ class LASCINoSymm (casci.CASCI):
             j = ncas_cum[isub1+1]
             k = ncas_cum[isub2]
             l = ncas_cum[isub2+1]
-            
-            dma1r, dmb1r = dm1rs1[:,0], dm1rs1[:,1] 
+
+            dma1r, dmb1r = dm1rs1[:,0], dm1rs1[:,1]
             dm1r = dma1r + dmb1r
             dmaa2r, dmab2r, dmbb2r = dm2rs2[:,0], dm2rs2[:,1], dm2rs2[:,2]
 
@@ -1787,7 +1771,7 @@ class LASCINoSymm (casci.CASCI):
         weights = self.weights
         casdm3s = np.zeros ((4,ncas,ncas,ncas,ncas,ncas,ncas))
 
-        # Diagonal 
+        # Diagonal
         for isub, dm3 in enumerate (casdm3fs):
             i = ncas_cum[isub]
             j = ncas_cum[isub+1]
@@ -1802,10 +1786,9 @@ class LASCINoSymm (casci.CASCI):
             dmt[j0:j1, j2:j3, k0:k1, k2:k3, i0:i1, i2:i3] = d.transpose (2,3,4,5,0,1)
             dmt[j0:j1, j2:j3, i0:i1, i2:i3, k0:k1, k2:k3] = d.transpose (2,3,0,1,4,5)
 
-        
+
         # Off-diagonal
         # First 6 terms - combs of f1+f2+f3: dm1rs1=f1, dm1rs2=f2, dm1rs3=f3
-        from itertools import permutations
         for (isub1,dm1rs1),(isub2,dm1rs2),(isub3,dm1rs3) in combinations (enumerate(casdm1frs), 3):
             i = ncas_cum[isub1]
             j = ncas_cum[isub1+1]
@@ -1816,9 +1799,6 @@ class LASCINoSymm (casci.CASCI):
             dma1r, dmb1r = dm1rs1[:,0], dm1rs1[:,1]
             dma2r, dmb2r = dm1rs2[:,0], dm1rs2[:,1]
             dma3r, dmb3r = dm1rs3[:,0], dm1rs3[:,1]
-            dm1r = dma1r + dmb1r
-            dm2r = dma2r + dmb2r
-            dm3r = dma3r + dmb3r
 
             # Term 1- 29a
             d1sigma0 = lib.einsum('r,rij,rkl,rmn->rijklmn',weights,dma1r,dma2r,dma3r)
@@ -1932,7 +1912,7 @@ class LASCINoSymm (casci.CASCI):
             casdm3s[3][i:j, m:n, k:l, i:j, m:n, k:l] += np.tensordot(weights, d6sigma3, axes=1)
             _transpose_dm3_(casdm3s[3], i,j, m,n, k,l, i,j, m,n, k,l)
 
-        
+
         #Last 2 terms - combs of f1+f1+f2: dm1rs1=f1, dm2rs2=f2
 
         for isub1, isub2 in permutations (range (self.nfrags), 2):
@@ -1946,23 +1926,17 @@ class LASCINoSymm (casci.CASCI):
 
             dma1r, dmb1r = dm1rs1[:,0], dm1rs1[:,1]
             dmaa2r, dmab2r, dmbb2r = dm2rs2[:,0], dm2rs2[:,1], dm2rs2[:,2]
-        
+
             # Term 7 - 29g
             d4sigma0 = lib.einsum('r,rmn,rijkl->rijklmn',weights,dma1r,dmaa2r)
 
             d4sigma11 = lib.einsum('r,rmn,rijkl->rijklmn',weights,dmb1r,dmaa2r)
             d4sigma12 = lib.einsum('r,rmn,rijkl->rijmnkl',weights,dma1r,dmab2r)
             d4sigma13 = lib.einsum('r,rmn,rijkl->rmnijkl',weights,dma1r,dmab2r)
-            d4sigma14 = lib.einsum('r,rmn,rklij->rmnklij',weights,dma1r,dmab2r)
-            d4sigma15 = lib.einsum('r,rmn,rklij->rklmnij',weights,dma1r,dmab2r)
-            d4sigma16 = lib.einsum('r,rmn,rklij->rklijmn',weights,dmb1r,dmaa2r)
-            
+
             d4sigma21 = lib.einsum('r,rmn,rijkl->rijklmn',weights,dmb1r,dmab2r)
             d4sigma22 = lib.einsum('r,rmn,rijkl->rijmnkl',weights,dmb1r,dmab2r)
             d4sigma23 = lib.einsum('r,rmn,rijkl->rmnijkl',weights,dma1r,dmbb2r)
-            d4sigma24 = lib.einsum('r,rmn,rklij->rmnklij',weights,dma1r,dmbb2r)
-            d4sigma25 = lib.einsum('r,rmn,rklij->rklmnij',weights,dmb1r,dmab2r)
-            d4sigma26 = lib.einsum('r,rmn,rklij->rklijmn',weights,dmb1r,dmab2r)
 
             d4sigma3 = lib.einsum('r,rmn,rijkl->rijklmn',weights,dmb1r,dmbb2r)
 
@@ -1986,7 +1960,7 @@ class LASCINoSymm (casci.CASCI):
 
             # Term 8 - 29h
             d5sigma0 = lib.einsum('r,rmn,rijkl->rijknml',weights,dma1r,dmaa2r)
-            
+
             d5sigma14 = lib.einsum('r,rmn,rklij->rmlknij',weights,dma1r,dmab2r)
             d5sigma15 = lib.einsum('r,rmn,rklij->rknmlij',weights,dma1r,dmab2r)
 
@@ -2000,17 +1974,17 @@ class LASCINoSymm (casci.CASCI):
 
             casdm3s[1][k:l, i:j, i:j, k:l, i:j, i:j] -= np.tensordot (weights, d5sigma14, axes=1)
             casdm3s[1][i:j, k:l, k:l, i:j, i:j, i:j] -= np.tensordot (weights, d5sigma15, axes=1)
-            
+
             casdm3s[2][i:j, i:j, i:j, k:l, k:l, i:j] -= np.tensordot (weights, d5sigma21, axes=1)
             casdm3s[2][i:j, i:j, k:l, i:j, i:j, k:l] -= np.tensordot (weights, d5sigma22, axes=1)
 
             casdm3s[3][i:j, i:j, i:j, k:l, k:l, i:j] -= np.tensordot (weights, d5sigma3, axes=1)
             _transpose_dm3_(casdm3s[3],i,j, i,j, i,j, k,l, k,l, i,j)
-        
+
         return casdm3s
 
     def get_veff (self, mol=None, dm=None, hermi=1, dm1s=None, **kwargs):
-        '''Effective potential matrix from a density matrix 
+        '''Effective potential matrix from a density matrix
 
         Kwargs:
             mol : instance of :class:`Mole`
@@ -2052,7 +2026,7 @@ class LASCINoSymm (casci.CASCI):
             raise RuntimeError ("dm must have 2 or 3 dimensions")
 
     def states_energy_elec (self, mo_coeff=None, ncore=None, ncas=None,
-            ncas_sub=None, nelecas_sub=None, ci=None, h2eff=None, veff=None, 
+            ncas_sub=None, nelecas_sub=None, ci=None, h2eff=None, veff=None,
             casdm1frs=None, casdm2fr=None, veff_core=None, **kwargs):
         if mo_coeff is None: mo_coeff = self.mo_coeff
         if ncore is None: ncore = self.ncore
@@ -2088,7 +2062,7 @@ class LASCINoSymm (casci.CASCI):
         for idx, (dm1s, v) in enumerate (zip (casdm1rs, veff_rs)):
             casdm1fs = [dm[idx] for dm in casdm1frs]
             casdm2f = [dm[idx] for dm in casdm2fr]
-            
+
             # 1-body veff terms
             h1e = h1eff[None,:,:] + v/2
             e1 = np.dot (h1e.ravel (), dm1s.ravel ())
@@ -2133,7 +2107,7 @@ class LASCINoSymm (casci.CASCI):
         e1 = np.dot (h1e.ravel (), dm1s.ravel ())
 
         # 2-body cumulant terms
-        casdm1s = self.make_casdm1s (ci=ci, ncas_sub=ncas_sub, 
+        casdm1s = self.make_casdm1s (ci=ci, ncas_sub=ncas_sub,
             nelecas_sub=nelecas_sub, casdm1frs=casdm1frs)
         casdm1 = casdm1s.sum (0)
         casdm2 = self.make_casdm2 (ci=ci, ncas_sub=ncas_sub,
@@ -2146,7 +2120,6 @@ class LASCINoSymm (casci.CASCI):
         eri = eri.reshape ([ncas,]*4)
         e2 = np.tensordot (eri, casdm2, axes=4)/2
 
-        e0 = self.energy_nuc ()
         self._e1_test = e1
         self._e2_test = e2
         return e1 + e2
@@ -2432,7 +2405,7 @@ class LASCISymm (casci_symm.CASCI, LASCINoSymm):
                                       s=self._scf.get_ovlp ())
         mo_coeff = lib.tag_array (mo_coeff, orbsym=orbsym)
         return mo_coeff
-        
+
     @lib.with_doc(LASCINoSymm.localize_init_guess.__doc__)
     def localize_init_guess (self, frags_atoms, mo_coeff=None, spin=None, lo_coeff=None, fock=None,
                              mo_occ=None, freeze_cas_spaces=False, smults_f=None, nelec_f=None):
@@ -2466,7 +2439,7 @@ class LASCISymm (casci_symm.CASCI, LASCINoSymm):
         rsymm2 = []
         for m in np.unique (mo_occ):
             idx = (mo_occ==m)
-            l, sv, r = self._svd1 (mo_lspace, mo_rspace[:,idx], lsymm, rsymm[idx], s=s, 
+            l, sv, r = self._svd1 (mo_lspace, mo_rspace[:,idx], lsymm, rsymm[idx], s=s,
                                    rng=rngs[int(round(m))], **kwargs)
             mo_lvecs = l
             k = min (len (sv), np.count_nonzero (idx))
@@ -2501,4 +2474,3 @@ class LASCISymm (casci_symm.CASCI, LASCINoSymm):
         mo_lvecs = lib.tag_array (mo_lvecs, orbsym=lsymm)
         mo_rvecs = lib.tag_array (mo_rvecs, orbsym=rsymm)
         return _shift_svals (mo_lvecs, svals, mo_rvecs, rng)
-     

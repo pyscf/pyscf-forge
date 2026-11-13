@@ -14,7 +14,6 @@ def _get_minmax_occs (las, norb_f, nelec_f, smults_f, mo_occ):
     assert (nuomo >= 0)
     nelec = 2*ndomo + nsomo
     if (smults_f is not None) and ((smults_f.sum () - nfrag) <= nsomo):
-        spins_f = smults_f - 1
         rngs[:,1,0] = smults_f - 1
         rngs[:,1,1] = -(rngs[:,1,0] - rngs[:,1,0].sum ())
         assert ((rngs[:,1,:]>=0).all ())
@@ -23,7 +22,7 @@ def _get_minmax_occs (las, norb_f, nelec_f, smults_f, mo_occ):
         if (rngs[:,1,1]>=0).all ():
             subt = rngs[:,1,1]
         rngs[:,2,0] = (nelec_f - subt) // 2
-        rngs[:,2,1] = -(rngs[:,2,0] - rngs[:,2,0].sum ()) 
+        rngs[:,2,1] = -(rngs[:,2,0] - rngs[:,2,0].sum ())
     return rngs
 
 def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_cas_spaces=False,
@@ -84,7 +83,6 @@ def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_
     log = logger.new_logger (las, las.verbose)
     ncore, ncas, ncas_sub = las.ncore, las.ncas, las.ncas_sub
     nocc = ncore + ncas
-    nfrags = len (frags_orbs)
     nao, nmo = mo_coeff.shape
     unused_aos = np.ones (nao, dtype=np.bool_)
     for frag_orbs in frags_orbs: unused_aos[frag_orbs] = False
@@ -284,7 +282,7 @@ def interpret_frags_atoms (mol, frags_atoms, frags_by_AOs=False):
     if frags_atoms_int:
         if frags_by_AOs: return frags_atoms
         ao_offset = mol.offset_ao_by_atom ()
-        frags_orbs = [[orb for atom in frags_atoms 
+        frags_orbs = [[orb for atom in frags_atoms
                        for orb in list (range (ao_offset[atom,2], ao_offset[atom,3]))]
                       for frags_atoms in frags_atoms]
     elif frags_atoms_str:
@@ -292,4 +290,3 @@ def interpret_frags_atoms (mol, frags_atoms, frags_by_AOs=False):
     else:
         raise RuntimeError ('localize_init_guess requires either all integers or all strings to identify fragments')
     return frags_orbs
-

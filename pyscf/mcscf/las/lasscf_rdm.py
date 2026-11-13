@@ -27,7 +27,8 @@ class LASSCF_UnitaryGroupGenerators (lasscf_sync_o0.LASSCF_UnitaryGroupGenerator
         kappa = kappa - kappa.T
         return kappa
     @property
-    def ncsf_sub (self): return np.array ([0])
+    def ncsf_sub (self):
+        return np.array ([0])
 
 class LASSCFSymm_UnitaryGroupGenerators (LASSCF_UnitaryGroupGenerators):
     def __init__(self, las, mo_coeff, *args):
@@ -56,9 +57,9 @@ class LASSCF_HessianOperator (lasscf_sync_o0.LASSCF_HessianOperator):
         self.ncas_sub = ncas_sub
         self.nelecas_sub = nelecas_sub
         self.ncas = ncas = sum (ncas_sub)
-        self.nao = nao = mo_coeff.shape[0]
-        self.nmo = nmo = mo_coeff.shape[-1]
-        self.nocc = nocc = ncore + ncas
+        self.nao = mo_coeff.shape[0]
+        self.nmo = mo_coeff.shape[-1]
+        self.nocc = ncore + ncas
         self.nroots = nroots = las.nroots
         self.weights = las.weights
         self.bPpj = None
@@ -105,9 +106,11 @@ class LASSCF_HessianOperator (lasscf_sync_o0.LASSCF_HessianOperator):
         h2eff_sub = self._update_h2eff_sub (mo1, umat, h2eff_sub)
         return mo1, h2eff_sub
 
-    def get_grad (self): return self.ugg.pack (self.fock1 - self.fock1.T)
+    def get_grad (self):
+        return self.ugg.pack (self.fock1 - self.fock1.T)
 
-    def _get_Hdiag (self): return self._get_Horb_diag ()
+    def _get_Hdiag (self):
+        return self._get_Horb_diag ()
 
 def get_init_guess_rdm (las, mo_coeff=None, h2eff_sub=None):
     ''' fcibox.solver[i] members make_hdiag_csf and get_init_guess both have
@@ -202,19 +205,19 @@ def kernel (las, mo_coeff=None, casdm1frs=None, casdm2fr=None, conv_tol_grad=1e-
         g_vec = H_op.get_grad ()
         gx = H_op.get_gx ()
         prec_op = H_op.get_prec ()
-        prec = prec_op (np.ones_like (g_vec)) # Check for divergences
+        prec_op (np.ones_like (g_vec)) # Check for divergences
         norm_gorb = linalg.norm (g_vec) if g_vec.size else 0.0
         norm_gx = linalg.norm (gx) if gx.size else 0.0
         x0 = prec_op._matvec (-g_vec)
-        norm_xorb = linalg.norm (x0) if x0.size else 0.0
         lib.logger.info (las, 'LASSCF macro %d : E = %.15g ; |g_int| = %.15g ; |g_x| = %.15g',
             it, H_op.e_tot, norm_gorb, norm_gx)
         if ((norm_gorb < conv_tol_grad) or (norm_gorb < norm_gx/10)) and rdmjk_conv:
             converged = True
             break
         las.dump_chk (mo_coeff=mo_coeff, ci=[casdm1frs, casdm2fr])
-        H_op._init_eri_() # Take this part out of the true initialization b/c 
-                          # if I'm already converged I don't want to waste the cycles
+        # Take this part out of the true initialization b/c
+        # if I'm already converged I don't want to waste the cycles
+        H_op._init_eri_()
         t1 = log.timer ('LASSCF Hessian constructor', *t1)
         microit = [0]
         last_x = [0]
@@ -289,7 +292,7 @@ def kernel (las, mo_coeff=None, casdm1frs=None, casdm2fr=None, conv_tol_grad=1e-
     bmPu = getattr (h2eff_sub, 'bmPu', None)
     veff_a = np.stack ([las.fast_veffa ([d[state] for d in casdm1frs], bmPu, mo_coeff=mo_coeff)
         for state in range (las.nroots)], axis=0)
-    veff_c = (veff.sum (0) - np.einsum ('rsij,r->ij', veff_a, las.weights))/2 
+    veff_c = (veff.sum (0) - np.einsum ('rsij,r->ij', veff_a, las.weights))/2
     veff = veff_c[None,None,:,:] + veff_a
     veff = lib.tag_array (veff, c=veff_c, sa=np.einsum ('rsij,r->sij', veff, las.weights))
     e_states = las.energy_nuc () + np.array (las.states_energy_elec (
@@ -349,7 +352,7 @@ def canonicalize (las, mo_coeff=None, casdm1frs=None, casdm2fr=None, natorb_casd
 
 class RDMSolver (lib.StreamObject):
 
-    nroots=1 
+    nroots=1
     def __init__(self, mol, kernel=None, get_init_guess=None):
         self.mol = mol
         self.spin = None
@@ -390,7 +393,7 @@ class RDMSolver (lib.StreamObject):
             if (self.spin is None) or isinstance (nelec, (list, tuple, np.ndarray)):
                 nelec = _unpack_nelec (nelec)
                 smult = abs (nelec[0] - nelec[1]) + 1
-            else: 
+            else:
                 smult = self.spin + 1
         return csf_solver (self.mol, smult=smult)
 
@@ -513,7 +516,7 @@ class LASSCFNoSymm (lasscf_sync_o0.LASSCFNoSymm):
 
         self.converged, self.e_tot, self.e_states, self.mo_energy, self.mo_coeff, \
             self.e_cas, self.casdm1frs, self.casdm2fr, h2eff_sub, veff = \
-                kernel(self, mo_coeff, casdm1frs=casdm1frs, casdm2fr=casdm2fr, 
+                kernel(self, mo_coeff, casdm1frs=casdm1frs, casdm2fr=casdm2fr,
                     verbose=verbose, conv_tol_grad=conv_tol_grad)
 
         return self.e_tot, self.e_cas, self.casdm1frs, self.casdm2fr, self.mo_coeff, self.mo_energy, h2eff_sub, veff
@@ -523,18 +526,17 @@ def LASSCF (mf_or_mol, ncas_sub, nelecas_sub, **kwargs):
         mf = scf.RHF(mf_or_mol)
     else:
         mf = mf_or_mol
-    if mf.mol.symmetry: 
+    if mf.mol.symmetry:
         raise NotImplementedError ("point-group symmetry")
         #las = LASSCFSymm (mf, ncas_sub, nelecas_sub, **kwargs)
     else:
         las = LASSCFNoSymm (mf, ncas_sub, nelecas_sub, **kwargs)
     if getattr (mf, 'with_df', None):
-        las = lasci.density_fit (las, with_df = mf.with_df) 
+        las = lasci.density_fit (las, with_df = mf.with_df)
     return las
 
 
 if __name__ == '__main__':
-    from pyscf import gto, scf
     from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF as LASSCFRef
     xyz = '''H 0.0 0.0 0.0
              H 1.0 0.0 0.0
@@ -552,7 +554,7 @@ if __name__ == '__main__':
 
     mo = las.mo_coeff
     casdm1frs = las.states_make_casdm1s_sub ()
-    casdm2fr = las.states_make_casdm2_sub ()    
+    casdm2fr = las.states_make_casdm2_sub ()
 
     ugg_test = LASSCF_UnitaryGroupGenerators (las, mo)
     hop_test = LASSCF_HessianOperator (las, ugg_test, casdm1frs=casdm1frs,
@@ -560,7 +562,7 @@ if __name__ == '__main__':
 
     ugg_ref = las.get_ugg ()
     hop_ref = las.get_hop (ugg=ugg_ref)
-     
+
     g_test = hop_test.get_grad ()
     g_ref = hop_ref.get_grad ()[:g_test.size]
     print ('gradient test:', linalg.norm (g_test-g_ref), linalg.norm (g_ref))
@@ -582,4 +584,3 @@ if __name__ == '__main__':
     las_test = LASSCF (mf, (2,2), (2,2), spin_sub=(1,1))
     las_test.kernel (mo_loc)
     print ("RDM algorithm total energy:", las_test.e_tot)
-

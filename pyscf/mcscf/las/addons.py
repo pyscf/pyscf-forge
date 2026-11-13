@@ -199,7 +199,8 @@ def get_h1e_zipped_fcisolver (fcisolver):
             op = []
             for solver, my_args, _ in self._loop_solver (_solver_arg (h1)):
                 h1e = my_args[0]
-                op.append (solver.absorb_h1e (h1e, h2, norb, self._get_nelec (solver, nelec), fac) if h1 is not None else h2)
+                op.append (solver.absorb_h1e (h1e, h2, norb, self._get_nelec (solver, nelec), fac)
+                           if h1 is not None else h2)
             return op
 
         def states_contract_2e (self, h2, ci, norb, nelec, link_index=None):
@@ -223,7 +224,8 @@ def get_h1e_zipped_fcisolver (fcisolver):
             for solver, my_args, _ in self._loop_solver (_solver_arg (h1)):
                 h1e = my_args[0]
                 with temporary_env (solver, orbsym=self.orbsym):
-                    hdiag.append (solver.make_hdiag_csf (h1e, h2, norb, self._get_nelec (solver, nelec), max_memory=self.max_memory))
+                    hdiag.append (solver.make_hdiag_csf (h1e, h2, norb, self._get_nelec (solver, nelec),
+                                                         max_memory=self.max_memory))
             return hdiag
 
         # The below can conceivably be added to pyscf.mcscf.addons.StateAverageMixFCISolver in future
@@ -235,7 +237,7 @@ def get_h1e_zipped_fcisolver (fcisolver):
                     linkstr.append (solver.gen_linkstr (norb, self._get_nelec (solver, nelec), tril=tril)
                         if getattr (solver, 'gen_linkstr', None) else None)
             return linkstr
-                    
+
         def states_transform_ci_for_orbital_rotation (self, ci0, norb, nelec, umat):
             ci1 = []
             for solver, my_args, _ in self._loop_solver (_state_arg (ci0)):
@@ -244,7 +246,7 @@ def get_h1e_zipped_fcisolver (fcisolver):
                 try:
                     ci0_i = my_args[0].reshape (ndet)
                     ci1.append (solver.transform_ci_for_orbital_rotation (ci0_i, norb, ne, umat))
-                except ValueError as err:
+                except ValueError:
                     ci0_i = my_args[0].reshape ([-1,]+ndet)
                     ci1.append (np.stack ([solver.transform_ci_for_orbital_rotation (c, norb, ne, umat)
                                            for c in ci0_i], axis=0))
@@ -292,7 +294,6 @@ def addr_outer_product (norb_f, nelec_f):
 def _ci_outer_product (ci_f, norb_f, nelec_f):
     '''Compute outer-product CI vector for one space table from fragment LAS CI vectors.
     See "ci_outer_product"'''
-    nfrags = len (norb_f)
     neleca_f = [ne[0] for ne in nelec_f]
     nelecb_f = [ne[1] for ne in nelec_f]
     lroots_f = [1 if ci.ndim<3 else ci.shape[0] for ci in ci_f]
@@ -341,7 +342,7 @@ def _ci_outer_product (ci_f, norb_f, nelec_f):
                                         c1[idx].ravel ())
         try:
             skip = set (skip)
-        except TypeError as e:
+        except TypeError:
             skip = set ([skip])
         c1_dp = c1[idx][None,:]
         skipdims = 1
@@ -440,7 +441,6 @@ def ci_outer_product_generator (ci_fr, norb_f, nelec_fr):
         else:
             parse_nelec = lambda nelec: nelec
             spinless2ss = lambda vec, ne: vec
-        filtbra = lambda *args: False
         if iket is not None and oporder is not None:
             iket = space_p[iket]
             nelec_f_ket = nelec_fr[:,iket]
@@ -448,6 +448,8 @@ def ci_outer_product_generator (ci_fr, norb_f, nelec_fr):
                 nelec_f_bra = nelec_fr[:,ibra]
                 nhop_f = nelec_f_bra-nelec_f_ket
                 return np.sum (np.abs(nhop_f))>2*oporder
+        else:
+            filtbra = lambda *args: False
 
         for ibra, (dot, nelec_bra, nprods) in enumerate (dotter_r):
             if parse_nelec (nelec_bra) != parse_nelec (nelec_ket) or filtbra (ibra):
@@ -483,9 +485,7 @@ def ci_outer_product (ci_fr, norb_f, nelec_fr):
 
 def las2cas_civec (las):
     norb_f = las.ncas_sub
-    nelec_fr = [[_unpack_nelec (fcibox._get_nelec (solver, nelecas)) for solver in fcibox.fcisolvers] for fcibox, nelecas in zip (las.fciboxes, las.nelecas_sub)]
+    nelec_fr = [[_unpack_nelec (fcibox._get_nelec (solver, nelecas)) for solver in fcibox.fcisolvers]
+                for fcibox, nelecas in zip (las.fciboxes, las.nelecas_sub)]
     ci, nelec = ci_outer_product (las.ci, norb_f, nelec_fr)
     return ci, nelec
-
-
-

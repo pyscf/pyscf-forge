@@ -12,7 +12,7 @@ def get_h2eff_df (las, mo_coeff):
     naux = las.with_df.get_naoaux ()
     log.debug2 ("LAS DF ERIs: %d MB used of %d MB total available", lib.current_memory ()[0], las.max_memory)
     mem_eris = 8*(nao+nmo)*ncas*ncas*ncas / 1e6
-    mem_eris += 8*lib.num_threads ()*nao*nmo / 1e6 
+    mem_eris += 8*lib.num_threads ()*nao*nmo / 1e6
     mem_av = las.max_memory - lib.current_memory ()[0] - mem_eris
     mem_int = 16*naux*ncas*nao / 1e6
     mem_enough_int = mem_av > mem_int
@@ -119,6 +119,3 @@ def get_h2cas (las, mo_coeff=None):
     else:
         eri = ao2mo.full (las.mol, mo_cas, verbose=las.verbose, max_memory=las.max_memory)
     return ao2mo.restore (1, eri, ncas)
-
-
-

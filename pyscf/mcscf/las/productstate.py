@@ -162,7 +162,7 @@ class ProductStateFCISolver (StateAverageNMixFCISolver, lib.StreamObject):
                     raise RuntimeError ("{} roots > {} CSFs in fragment {} (nelec={}, smult={})".format (
                         snroots, solver.transformer.ncsf, ix, solver.nelec, solver.smult))
         return ci1
-                
+
     def _debug_csfs (self, log, ci0, ci1, norb_f, nelec_f, grad, nroots=None):
         if not all (_is_csf_solver(s) for s in self.fcisolvers):
             return
@@ -285,7 +285,7 @@ class ProductStateFCISolver (StateAverageNMixFCISolver, lib.StreamObject):
             # cancel off-diagonal energy double-counting
             e_i = energy_tot - np.tensordot (dm1s, v1_i, axes=3) # overcorrects
             # cancel h1eff double-counting
-            v1_i = v1_i[:,i:j,i:j] 
+            v1_i = v1_i[:,i:j,i:j]
             h1eff.append (f1[:,i:j,i:j]-v1_i)
             # cancel diagonal energy double-counting
             h1_i = h1[:,i:j,i:j] - v1_i # v1_i fixes overcorrect
@@ -377,4 +377,3 @@ class ImpureProductStateFCISolver (ProductStateFCISolver):
         for ix, (fcisolver, weights) in enumerate (zip (self.fcisolvers, lweights)):
             if len (weights) > 1:
                 self.fcisolvers[ix] = state_average_fcisolver (fcisolver, weights=weights)
-
