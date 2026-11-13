@@ -62,7 +62,7 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual (las.e_states[0], mc_df.e_states[0], 7)
         self.assertAlmostEqual (las.e_states[1], mc_df.e_states[1], 7)
 
-    def test_derivatives (self):
+    def test_grad_hess_vs_newton_casscf (self):
         np.random.seed(1)
         las = LASSCF (mf, (4,), (4,), spin_sub=(1,)).set (max_cycle_macro=1, ah_level_shift=0)
         las.state_average_(weights=[0.5,0.5], charges=[0,0], spins=[0,2], smults=[1,3]).run ()
@@ -111,7 +111,7 @@ class KnownValues(unittest.TestCase):
         # for H_co, H_oc, and H_cc to all be simultaneously correct given the
         # convention difference 
 
-    def test_derivatives_df (self):
+    def test_grad_hess_vs_newton_casscf_df (self):
         np.random.seed(1)
         las = LASSCF (mf_df, (4,), (4,), spin_sub=(1,)).set (max_cycle_macro=1, ah_level_shift=0)
         las.state_average_(weights=[0.5,0.5], charges=[0,0], spins=[0,2], smults=[1,3]).run ()

@@ -116,14 +116,14 @@ def tearDownModule():
 
 
 class KnownValues(unittest.TestCase):
-    def test_grad (self):
+    def test_grad_vs_state_specific (self):
         g_test = unroll_unpack (hop.get_grad ())
         g_ref = unroll_unpack (ss_2_sa_hx (hop_sing.get_grad (), hop_quin.get_grad ()))
         for lbl, g_t, g_r in zip (lbls, g_test, g_ref):
             with self.subTest (sector=lbl):
                 self.assertAlmostEqual (lib.fp (g_t), lib.fp (g_r), 9)
 
-    def test_hess (self):
+    def test_hess_vs_state_specific (self):
         for j in lbls:
             hx_test, hx_ref = examine_sector (j)
             for i, ht, hr in zip (lbls, hx_test, hx_ref):

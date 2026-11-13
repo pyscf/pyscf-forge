@@ -22,7 +22,7 @@ from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF as LASSCFRef
 from pyscf.mcscf.las.lasscf_rdm import LASSCF as LASSCFTest
 
 def setUpModule():
-    global mol, mf, las_test, las_ref, mo_loc
+    global mol, mf, mo_loc
     xyz = '''H 0.0 0.0 0.0
              H 1.0 0.0 0.0
              H 0.2 3.9 0.1
@@ -30,19 +30,25 @@ def setUpModule():
     mol = gto.M (atom = xyz, basis = '6-31g', output='/dev/null',
         verbose=lib.logger.INFO)
     mf = scf.RHF (mol).run ()
+    mo_loc = LASSCFRef (mf, (2,2), (2,2), spin_sub=(1,1)).localize_init_guess (((0,1),(2,3)),
+                                                                              mf.mo_coeff)
+
+def tearDownModule():
+    global mol, mf, mo_loc
+    mol.stdout.close ()
+    del mol, mf, mo_loc
+
+def _make_las ():
+    # New objects for each test, so that no test starts from another test's CI vectors
     las_ref = LASSCFRef (mf, (2,2), (2,2), spin_sub=(1,1))
     las_ref.chkfile = tempfile.NamedTemporaryFile ().name
     las_test = LASSCFTest (mf, (2,2), (2,2), spin_sub=(1,1))
     las_test.chkfile = tempfile.NamedTemporaryFile ().name
-    mo_loc = las_ref.localize_init_guess (((0,1),(2,3)), mf.mo_coeff)
-
-def tearDownModule():
-    global mol, mf, las_test, las_ref, mo_loc
-    mol.stdout.close ()
-    del mol, mf, las_test, las_ref, mo_loc
+    return las_ref, las_test
 
 class KnownValues(unittest.TestCase):
     def test_etot (self):
+        las_ref, las_test = _make_las ()
         las_ref.ah_level_shift = 1e-8
         las_ref.max_cycle_macro = 50
         las_ref.kernel ()
@@ -51,7 +57,8 @@ class KnownValues(unittest.TestCase):
         self.assertTrue (las_test.converged)
         self.assertAlmostEqual (las_test.e_tot, las_ref.e_tot, 6)
 
-    def test_derivs (self):
+    def test_grad_prec_hess_vs_lasscf_sync (self):
+        las_ref, las_test = _make_las ()
         las_ref.ah_level_shift = 1e-8
         las_ref.max_cycle_macro = 10
         las_ref.kernel (mo_loc, None)

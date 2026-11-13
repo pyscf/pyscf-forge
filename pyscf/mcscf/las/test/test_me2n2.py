@@ -76,7 +76,7 @@ class KnownValues(unittest.TestCase):
         self.assertTrue (las.converged)
         self.assertAlmostEqual (las.e_tot, mf_hs_df.e_tot, 8)
 
-    def test_derivatives (self):
+    def test_grad_hess_vs_newton_casscf (self):
         np.random.seed(1)
         las = LASSCF (mf, (4,), (4,), spin_sub=(1,)).set (max_cycle_macro=1, ah_level_shift=0).run ()
         ugg = las.get_ugg ()
@@ -126,7 +126,7 @@ class KnownValues(unittest.TestCase):
         # for H_co, H_oc, and H_cc to all be simultaneously correct given the
         # convention difference 
 
-    def test_derivatives_df (self):
+    def test_grad_hess_vs_newton_casscf_df (self):
         np.random.seed(1)
         las = LASSCF (mf_df, (4,), (4,), spin_sub=(1,)).set (max_cycle_macro=1, ah_level_shift=0).run ()
         ugg = las.get_ugg ()

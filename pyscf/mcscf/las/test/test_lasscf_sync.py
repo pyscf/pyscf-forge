@@ -66,8 +66,11 @@ def itsec (vorb, vci):
     yield vci[0][0]
     yield vci[1][0]
 
+# Regression fingerprints of the Newton-CG operators. test_hess_<out>_<in> checks the <out> block
+# of H x for x nonzero only in <in>; test_hess_from_<sector> checks every block of H x for x
+# nonzero only in that orbital-rotation sector.
 class KnownValues(unittest.TestCase):
-    def test_grad (self):
+    def test_grad_fingerprint (self):
         gorb0, gci0, gx0 = las.get_grad (ugg=ugg)
         grad0 = np.append (gorb0, gci0)
         grad1 = h_op.get_grad ()
@@ -77,11 +80,11 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual (lib.fp (gx0), 0.0, 9)
         self.assertAlmostEqual (lib.fp (gx1), 0.0, 9) 
 
-    def test_hessian (self):
+    def test_hess_fingerprint (self):
         hx = h_op._matvec (x)
         self.assertAlmostEqual (lib.fp (hx), 88.38116591527076, 7)
 
-    def test_horb_diag (self):
+    def test_hdiag_orb_fingerprint (self):
         hdiag = itsec (*ugg.unpack (h_op._get_Hdiag ()))
         #refs = np.zeros_like (x)
         #xp = x.copy ()
@@ -98,37 +101,37 @@ class KnownValues(unittest.TestCase):
             with self.subTest (sector=sec):
                 self.assertAlmostEqual (lib.fp (test), ref, 6)
 
-    def test_hc2 (self):
+    def test_hess_ci2_ci2 (self):
         xp = x.copy ()
         xp[:offs_ci2] = 0.0
         hx = h_op._matvec (xp)[offs_ci2:]
         self.assertAlmostEqual (lib.fp (hx), 1.0889277847142012, 9)
 
-    def test_hcc (self):
+    def test_hess_ci1_ci2 (self):
         xp = x.copy ()
         xp[:offs_ci2] = 0.0
         hx = h_op._matvec (xp)[offs_ci1:offs_ci2]
         self.assertAlmostEqual (lib.fp (hx), -0.00010213222170035406, 9)
 
-    def test_hco (self):
+    def test_hess_ci_orb (self):
         xp = x.copy ()
         xp[offs_ci1:] = 0.0
         hx = h_op._matvec (xp)[offs_ci1:]
         self.assertAlmostEqual (lib.fp (hx), 0.5539469718844992, 9)
 
-    def test_hoc (self):
+    def test_hess_orb_ci (self):
         xp = x.copy ()
         xp[:offs_ci1] = 0.0
         hx = h_op._matvec (xp)[:offs_ci1]
         self.assertAlmostEqual (lib.fp (hx), -0.3198013307575741, 9)
 
-    def test_hoo (self):
+    def test_hess_orb_orb (self):
         xp = x.copy ()
         xp[offs_ci1:] = 0.0
         hx = h_op._matvec (xp)[:offs_ci1]
         self.assertAlmostEqual (lib.fp (hx), 89.20958173580503, 7)
 
-    def test_h_xcv (self):
+    def test_hess_from_core_virtual (self):
         xorb0 = xorb.copy ()
         xorb0[ncore:nocc,:] = xorb0[:,ncore:nocc] = 0.0
         xp = ugg.pack (xorb0, xci0)
@@ -138,7 +141,7 @@ class KnownValues(unittest.TestCase):
             with self.subTest (sector=sec):
                 self.assertAlmostEqual (lib.fp (test), ref, 7)
 
-    def test_h_xaa (self):
+    def test_hess_from_active_active (self):
         xorb0 = np.zeros_like (xorb)
         xorb0[ncore:nocc,ncore:nocc] = xorb[ncore:nocc,ncore:nocc] 
         xp = ugg.pack (xorb0, xci0)
@@ -148,7 +151,7 @@ class KnownValues(unittest.TestCase):
             with self.subTest (sector=sec):
                 self.assertAlmostEqual (lib.fp (test), ref, 9)
 
-    def test_h_xua (self):
+    def test_hess_from_active_any (self):
         xorb0 = np.zeros_like (xorb)
         xorb0[ncore:nocc,:] = xorb[ncore:nocc,:] 
         xorb0[:,ncore:nocc] = xorb[:,ncore:nocc] 
@@ -159,7 +162,7 @@ class KnownValues(unittest.TestCase):
             with self.subTest (sector=sec):
                 self.assertAlmostEqual (lib.fp (test), ref, 8)
 
-    def test_prec (self):
+    def test_prec_fingerprint (self):
         M_op = h_op.get_prec ()
         Mx = M_op._matvec (x)
         self.assertAlmostEqual (lib.fp (Mx), 4.4223425940525, 6)
