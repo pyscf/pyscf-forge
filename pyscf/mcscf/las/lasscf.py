@@ -257,15 +257,12 @@ def ci_cycle (las, mo, ci0, veff, h2eff_sub, casdm1frs, log):
     if frozen_ci is None: frozen_ci = []
     # CI problems
     t1 = (lib.logger.process_clock(), lib.logger.perf_counter())
-    h1eff_sub = las.get_h1eff (mo, veff=veff, h2eff_sub=h2eff_sub, casdm1frs=casdm1frs)
+    ham_eff_sub = las.get_ham_eff_sub (mo, veff=veff, h2eff_sub=h2eff_sub, casdm1frs=casdm1frs)
     ncas_cum = np.cumsum ([0] + las.ncas_sub.tolist ()) + las.ncore
     e_cas = []
     ci1 = []
-    e0 = 0.0
-    for isub, (fcibox, ncas, nelecas, h1e, fcivec) in enumerate (zip (las.fciboxes, las.ncas_sub,
-                                                                      las.nelecas_sub, h1eff_sub,
-                                                                      ci0)):
-        eri_cas = las.get_h2eff_slice (h2eff_sub, isub, compact=8)
+    for isub, (fcibox, ncas, nelecas, (e0, h1e, eri_cas), fcivec) in enumerate (zip (
+            las.fciboxes, las.ncas_sub, las.nelecas_sub, ham_eff_sub, ci0)):
         max_memory = max(400, las.max_memory-lib.current_memory()[0])
         orbsym = getattr (mo, 'orbsym', None)
         if orbsym is not None:

@@ -138,6 +138,28 @@ def h1e_for_las (las, mo_coeff=None, ncas=None, ncore=None, nelecas=None, ci=Non
 
     return h1e_fr
 
+def get_ham_eff_sub (las, mo_coeff=None, h2eff_sub=None, **kwargs):
+    ''' Effective Hamiltonians of the fragment CI problems, as the LASSCF kernel's ci_cycle
+    passes them to each fragment's fcibox.kernel.
+
+    Takes the same arguments as get_h1eff (h1e_for_las), and passes them on to it.
+
+    Returns:
+        ham_eff_sub: list (length=nfrags) of tuples (h0, h1, h2)
+            h0: ndarray of shape (nroots,)
+                Constant energy for each state (always zero at present)
+            h1: ndarray of shape (nroots,2,ncas_sub[i],ncas_sub[i])
+                Spin-separated 1-body Hamiltonian for each state; output of get_h1eff
+            h2: ndarray
+                Electron-repulsion integrals of the fragment, with 8-fold permutation symmetry
+                packed (get_h2eff_slice with compact=8)
+    '''
+    if mo_coeff is None: mo_coeff = las.mo_coeff
+    if h2eff_sub is None: h2eff_sub = las.get_h2eff (mo_coeff)
+    h1e_fr = las.get_h1eff (mo_coeff, h2eff_sub=h2eff_sub, **kwargs)
+    return [(np.zeros (len (h1e)), h1e, las.get_h2eff_slice (h2eff_sub, ifrag, compact=8))
+            for ifrag, h1e in enumerate (h1e_fr)]
+
 def get_fock (las, mo_coeff=None, ci=None, eris=None, casdm1s=None, verbose=None, veff=None,
               dm1s=None):
     ''' f_pq = h_pq + (g_pqrs - g_psrq/2) D_rs, AO basis
@@ -1010,6 +1032,7 @@ class LASCINoSymm (casci.CASCI):
     get_sym_fr = get_sym_fr
     get_nelec_frs = get_nelec_frs
     get_h1eff = get_h1las = h1e_for_las = h1e_for_las
+    get_ham_eff_sub = get_ham_eff_sub
     get_h2eff = ao2mo = las_ao2mo.get_h2eff
     def _get_h2eff_df (self, mo_coeff):
         return las_ao2mo.get_h2eff_df (self, mo_coeff)

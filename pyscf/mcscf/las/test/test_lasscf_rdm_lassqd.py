@@ -25,12 +25,14 @@
 #      reports "not converged" after zero cycles.
 # lassqd also computes LAS-PDFT energies by monkeypatching the RDM makers of
 # get_mcpdft_child_class (las, ot). If any of this has to change, give lassqd an API first.
+# las.get_ham_eff_sub is that API for the capture step: test_get_ham_eff_sub checks that it
+# returns the Hamiltonians that capture records.
 
 import unittest
 import tempfile
 import h5py
 import numpy as np
-from pyscf import gto, scf, lib
+from pyscf import gto, scf, lib, ao2mo
 from pyscf.mcscf.las import lasscf_rdm, _DFLASCI
 from pyscf.mcscf.las.lasscf import LASSCF as LASSCF_CI
 from pyscf.mcpdft.laspdft import get_mcpdft_child_class
@@ -114,6 +116,20 @@ class KnownValues (unittest.TestCase):
         hams_garbage = capture (garbage_frag0=True)
         self.assertEqual (lib.fp (hams[1][1]), lib.fp (hams_garbage[1][1]))
         self.assertEqual (lib.fp (hams[1][2]), lib.fp (hams_garbage[1][2]))
+
+    def test_get_ham_eff_sub (self):
+        las = make_las ()
+        ham_eff_sub = las.get_ham_eff_sub (mo, casdm1frs=dm1)
+        self.assertEqual (len (ham_eff_sub), 2)
+        for ifrag, ((h0, h1, h2), (h0_ref, h1s_ref, h2_ref)) in enumerate (zip (ham_eff_sub,
+                                                                               capture ())):
+            with self.subTest (frag=ifrag):
+                self.assertEqual (h0.shape, (1,)) # one rootspace
+                self.assertEqual (h0[0], h0_ref)
+                self.assertEqual (h1.shape, (1,2,2,2)) # one rootspace
+                self.assertAlmostEqual (np.abs (h1[0] - h1s_ref).max (), 0, 12)
+                h2 = ao2mo.restore (1, h2, 2)
+                self.assertAlmostEqual (np.abs (h2 - h2_ref).max (), 0, 12)
 
     def test_replay (self):
         las = make_las ()
