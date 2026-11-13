@@ -1,7 +1,8 @@
 import unittest
 from pyscf import gto, scf, dft, mcpdft
 from pyscf.csf_fci import csf_solver
-from pyscf.mcscf.las.lasscf import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF, LASSCFNoSymm
+from pyscf.mcscf.las.lasci import LASCINoSymm
 from pyscf.mcpdft import laspdft
 
 class KnownValues(unittest.TestCase):
@@ -41,6 +42,44 @@ class KnownValues(unittest.TestCase):
         epdft2 = mc2.compute_pdft_energy_()[0]
         self.assertAlmostEqual (epdft2, mc.e_tot, 7)
 
+    def test_h4_constructors (self):
+        # laspdft.LASSCF and LASCI, also available as mcpdft.LASSCF and mcpdft.LASCI once laspdft
+        # is imported
+        self.assertIs (mcpdft.LASSCF, laspdft.LASSCFPDFT)
+        self.assertIs (mcpdft.LASCI, laspdft.LASCIPDFT)
+        mf = _h4_mf ()
+        mc = mcpdft.LASSCF (mf, 'tPBE', (2, 2), (2, 2), spin_sub=(1,1), grids_level=1)
+        self.assertIsInstance (mc, LASSCFNoSymm)
+        mo0 = mc.localize_init_guess (([0, 1] , [2, 3]))
+        mc.conv_tol_grad = 1e-6
+        mc.kernel (mo0)
+        self.assertTrue (mc.converged)
+        self.assertAlmostEqual (mc.e_tot, -2.285623046332528, 6)
+        with self.subTest ('from a LAS object'):
+            las = LASSCF (mf, (2, 2), (2, 2), spin_sub=(1,1))
+            las.lasci_(mc.mo_coeff, ci0=mc.ci)
+            mc2 = mcpdft.LASSCF (las, 'tPBE', grids_level=1)
+            self.assertEqual (list (mc2.ncas_sub), [2, 2])
+            self.assertIsNot (mc2.mo_coeff, las.mo_coeff)
+            self.assertAlmostEqual (mc2.compute_pdft_energy_()[0], mc.e_tot, 7)
+        with self.subTest ('LASCI'):
+            # At the converged LASSCF orbitals, LASCI-PDFT gives the LASSCF-PDFT energy
+            mc3 = mcpdft.LASCI (mf, 'tPBE', (2, 2), (2, 2), spin_sub=(1,1), grids_level=1)
+            self.assertIsInstance (mc3, LASCINoSymm)
+            self.assertNotIsInstance (mc3, LASSCFNoSymm)
+            mc3.kernel (mc.mo_coeff)
+            self.assertTrue (mc3.converged)
+            self.assertAlmostEqual (mc3.e_tot, mc.e_tot, 6)
+
+    def test_mcpdft_namespace_not_overwritten (self):
+        saved = mcpdft.LASCI
+        try:
+            mcpdft.LASCI = sentinel = object ()
+            laspdft._add_to_mcpdft_namespace ()
+            self.assertIs (mcpdft.LASCI, sentinel)
+        finally:
+            mcpdft.LASCI = saved
+
     def test_h4_state_average_cas_limit (self):
         # With one fragment, SA-LASSCF is SA-CASSCF, so SA-LAS-PDFT must equal SA-MC-PDFT
         mc, mc_ref = _h4_sa_cas_limit ()
@@ -64,6 +103,16 @@ class KnownValues(unittest.TestCase):
         for i in range (2):
             with self.subTest (state=i):
                 self.assertAlmostEqual (mc.e_states[i], mc_ref.e_states[i], 7)
+
+def _h4_mf ():
+    if 'h4_mf' not in _cache:
+        mol = gto.M (atom='''H -5.10574 2.01997 0.00000;
+                             H -4.29369 2.08633 0.00000;
+                             H -3.10185 2.22603 0.00000;
+                             H -2.29672 2.35095 0.00000''',
+                     basis='sto3g', verbose=0, output='/dev/null')
+        _cache['h4_mf'] = scf.ROHF (mol).newton ().run ()
+    return _cache['h4_mf']
 
 _cache = {}
 def _h4_sa_cas_limit ():
