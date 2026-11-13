@@ -238,6 +238,41 @@ class MixedSpinH6 (unittest.TestCase):
                     self.assertAlmostEqual (np.abs (dm3s[spin] - ref3[spin]).max (), 0, 10)
         mol6.stdout.close ()
 
+class StateAverage (unittest.TestCase):
+    '''State-averaged 2- and 3-RDMs against the weighted average of the FCI RDMs of each
+    rootspace's product state. The rootspaces differ in fragment spin from the reference and from
+    each other, and the weights are unequal. (Until fixed, make_casdm3 and make_casdm3s built the
+    diagonal blocks from the reference nelecas_sub without averaging over rootspaces, so they
+    raised an exception for any state average, and contracted the weights twice in the
+    off-diagonal blocks.)'''
+
+    def test_rdm23_h6_sto3g_state_average (self):
+        mol6 = gto.M (atom=generate_geom (natom=6), basis='sto-3g', verbose=0, output='/dev/null')
+        mf6 = scf.RHF (mol6).run ()
+        las = LASSCF (mf6, (2,2,2), (2,2,2))
+        las.state_average_(weights=[0.5,0.3,0.2], spins=[[0,0,0],[2,0,0],[0,-2,2]],
+                           smults=[[1,1,1],[3,1,1],[1,3,3]])
+        # Only consistency with the CI vectors matters, so skip orbital optimization
+        las.lasci (las.localize_init_guess (((0,1),(2,3),(4,5)), mf6.mo_coeff))
+        ref = {'dm2': 0, 'dm2s': 0, 'dm3': 0, 'dm3s': 0}
+        for r, w in enumerate (las.weights):
+            las1 = las.get_single_state_las (state=r)
+            las1.ci = [[ci_f[r]] for ci_f in las.ci]
+            ci, nelec = las2cas_civec (las1)
+            ci, nelec = ci[0], tuple (int (n) for n in nelec[0])
+            dm2s, dm3s = fci.direct_spin1.make_rdm123s (ci, 6, nelec)[1:]
+            dm3 = fci.direct_spin1.make_rdm123 (ci, 6, nelec)[2]
+            ref['dm2'] += w * (dm2s[0] + dm2s[1] + dm2s[1].transpose (2,3,0,1) + dm2s[2])
+            ref['dm2s'] += w * np.stack (dm2s)
+            ref['dm3'] += w * dm3
+            ref['dm3s'] += w * np.stack (dm3s)
+        for key, dm in (('dm2', las.make_casdm2 ()), ('dm2s', las.make_casdm2s ()),
+                        ('dm3', las.make_casdm3 ()), ('dm3s', las.make_casdm3s ())):
+            with self.subTest (key):
+                self.assertEqual (np.shape (dm), ref[key].shape)
+                self.assertAlmostEqual (np.abs (dm - ref[key]).max (), 0, 10)
+        mol6.stdout.close ()
+
 if __name__ == "__main__":
     print("Full Tests for LASSCF 3-RDMs")
     unittest.main()
