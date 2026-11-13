@@ -22,7 +22,7 @@ from itertools import product
 from pyscf import lib, gto, scf, dft, fci, mcscf, df
 from pyscf.tools import molden
 from c2h4n4_struct import structure as struct
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 
 def setUpModule():
     global mol, mol_symm, las, las_symm, las_ref, states, states_symm, weights, mo, mo_symm, lroots, _check_

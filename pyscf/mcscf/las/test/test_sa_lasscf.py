@@ -3,7 +3,7 @@ import numpy as np
 from scipy import linalg
 from pyscf import scf, lib, tools, mcscf
 from pyscf.mcscf.addons import state_average_mix
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 from pyscf.mcscf.newton_casscf import gen_g_hop, _pack_ci_get_H
 from c2h6n4_struct import structure as struct
 from pyscf.csf_fci import csf_solver

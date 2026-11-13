@@ -18,7 +18,7 @@ import unittest
 import tempfile
 import numpy as np
 from pyscf import lib, gto, scf
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF as LASSCFRef
+from pyscf.mcscf.las.lasscf import LASSCF as LASSCFRef
 from pyscf.mcscf.las.lasscf_rdm import LASSCF as LASSCFTest
 
 def setUpModule():

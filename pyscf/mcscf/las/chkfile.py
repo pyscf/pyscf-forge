@@ -134,7 +134,7 @@ def _dump_las_ci_(mc, chkdata, ci):
 
 if __name__=='__main__':
     from pyscf import gto, scf, mcscf
-    from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+    from pyscf.mcscf.las.lasscf import LASSCF
     xyz='''Li 0 0 0,
            H 2 0 0,
            Li 10 0 0,

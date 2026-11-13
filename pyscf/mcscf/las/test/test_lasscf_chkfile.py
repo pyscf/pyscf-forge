@@ -19,7 +19,7 @@ import tempfile
 import numpy as np
 from pyscf.tools import molden
 from pyscf import gto, scf, lib, mcscf
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 
 def setUpModule():
     global mf, las, las2

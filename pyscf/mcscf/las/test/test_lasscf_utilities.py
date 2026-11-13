@@ -25,7 +25,7 @@ from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.lasci import LASCI
 from pyscf.mcscf.las.addons import state_average_n_mix, state_average_n_mix_
 from pyscf.mcscf.las.addons import StateAverageNMixFCISolver
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 
 # Planar, so that each fragment is invariant under the Cs mirror plane
 xyz_near = 'H 0 0 0; H 0.74 0 0; H 0.3 2.0 0; H 1.2 2.3 0'

@@ -1,7 +1,7 @@
 import unittest
 from pyscf import gto, scf, dft, mcpdft
 from pyscf.csf_fci import csf_solver
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 from pyscf.mcpdft import laspdft
 
 class KnownValues(unittest.TestCase):

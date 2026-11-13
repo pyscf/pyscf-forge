@@ -1,6 +1,6 @@
 import unittest
 from pyscf import gto, scf, mcscf, lib
-from pyscf.mcscf.las import lasscf_sync_o0 as syn
+from pyscf.mcscf.las import lasscf as syn
 
 def setUpModule():
     global mf_c2h6n4, mf_c2h4n4

@@ -32,7 +32,7 @@ import h5py
 import numpy as np
 from pyscf import gto, scf, lib
 from pyscf.mcscf.las import lasscf_rdm, _DFLASCI
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF as LASSCF_CI
+from pyscf.mcscf.las.lasscf import LASSCF as LASSCF_CI
 from pyscf.mcpdft.laspdft import get_mcpdft_child_class
 
 def setUpModule():

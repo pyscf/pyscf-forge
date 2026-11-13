@@ -20,7 +20,7 @@ from pyscf import lib, gto, scf, dft, fci, mcscf, df
 from pyscf.mcscf import newton_casscf
 from pyscf.mcscf.addons import state_average_mix
 from me2n2_struct import structure as struct
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 from pyscf.csf_fci import csf_solver
 
 def setUpModule():

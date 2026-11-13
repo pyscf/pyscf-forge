@@ -20,7 +20,7 @@
 import unittest
 import numpy as np
 from pyscf import gto, scf, lo
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF
+from pyscf.mcscf.las.lasscf import LASSCF
 from pyscf.mcscf.las.lasscf_guess import interpret_frags_atoms
 
 frags_atoms = ((0,1),(2,3))

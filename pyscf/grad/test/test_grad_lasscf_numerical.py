@@ -20,7 +20,7 @@
 import unittest
 import numpy as np
 from pyscf import gto, scf, lib
-from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF, LASSCFNoSymm
+from pyscf.mcscf.las.lasscf import LASSCF, LASSCFNoSymm
 
 atoms = ['H', 'H', 'H', 'H']
 coords0 = np.array ([[0.0, 0.0,  0.0],

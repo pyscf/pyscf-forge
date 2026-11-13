@@ -6,16 +6,16 @@ import time
 import numpy as np
 from scipy import linalg, sparse
 from scipy.sparse import linalg as sparse_linalg
-from pyscf.mcscf.las import lasscf_sync_o0, _DFLASCI, addons, lasci
-from pyscf.mcscf.las.lasscf_sync_o0 import MicroIterInstabilityException
+from pyscf.mcscf.las import lasscf, _DFLASCI, addons, lasci
+from pyscf.mcscf.las.lasscf import MicroIterInstabilityException
 from pyscf.csf_fci import csf_solver
 from pyscf import lib, gto, scf, ao2mo
 from pyscf.fci.direct_spin1 import _unpack_nelec
 
-class LASSCF_UnitaryGroupGenerators (lasscf_sync_o0.LASSCF_UnitaryGroupGenerators):
+class LASSCF_UnitaryGroupGenerators (lasscf.LASSCF_UnitaryGroupGenerators):
     ''' spoof away CI degrees of freedom '''
     def __init__(self, las, mo_coeff, *args):
-        lasscf_sync_o0.LASSCF_UnitaryGroupGenerators.__init__(
+        lasscf.LASSCF_UnitaryGroupGenerators.__init__(
             self, las, mo_coeff, None)
     def _init_ci (self, las, mo_coeff, ci):
         pass
@@ -32,11 +32,11 @@ class LASSCF_UnitaryGroupGenerators (lasscf_sync_o0.LASSCF_UnitaryGroupGenerator
 
 class LASSCFSymm_UnitaryGroupGenerators (LASSCF_UnitaryGroupGenerators):
     def __init__(self, las, mo_coeff, *args):
-        lasscf_sync_o0.LASSCFSymm_UnitaryGroupGenerators.__init__(
+        lasscf.LASSCFSymm_UnitaryGroupGenerators.__init__(
             self, las, mo_coeff, None)
-    _init_orb = lasscf_sync_o0.LASSCFSymm_UnitaryGroupGenerators._init_orb
+    _init_orb = lasscf.LASSCFSymm_UnitaryGroupGenerators._init_orb
 
-class LASSCF_HessianOperator (lasscf_sync_o0.LASSCF_HessianOperator):
+class LASSCF_HessianOperator (lasscf.LASSCF_HessianOperator):
     def __init__(self, las, ugg, mo_coeff=None, casdm1frs=None, casdm2fr=None,
             ncore=None, ncas_sub=None, nelecas_sub=None, h2eff_sub=None, veff=None,
             do_init_eri=True, **kwargs):
@@ -90,12 +90,12 @@ class LASSCF_HessianOperator (lasscf_sync_o0.LASSCF_HessianOperator):
 
     def get_veff_prime (self, odm1s):
         # Spoof away CI by wrapping call
-        fn = lasscf_sync_o0.LASSCF_HessianOperator.get_veff_Heff
+        fn = lasscf.LASSCF_HessianOperator.get_veff_Heff
         return fn (self, odm1s, self._tdm1rs)[0]
 
     def orbital_response (self, kappa1, odm1s, ocm2, veff_prime):
         # Spoof away CI by wrapping call
-        fn = lasscf_sync_o0.LASSCF_HessianOperator.orbital_response
+        fn = lasscf.LASSCF_HessianOperator.orbital_response
         t1, t2 = self._tdm1rs, self._tcm2
         return fn (self, kappa1, odm1s, ocm2, t1, t2, veff_prime)
 
@@ -129,7 +129,7 @@ def rdm_cycle (las, mo_coeff, casdm1frs, veff, h2eff_sub, log, max_cycle_rdmjk=3
         my_veff = las.get_veff (dm=las.make_rdm1s (mo_coeff=mo_coeff, casdm1s_sub=casdm1fs))
         return my_veff
     converged = False
-    e_cas, fakeci = lasscf_sync_o0.ci_cycle (las, mo_coeff, None, veff, h2eff_sub, casdm1frs, log)
+    e_cas, fakeci = lasscf.ci_cycle (las, mo_coeff, None, veff, h2eff_sub, casdm1frs, log)
     casdm1frs = [f[0] for f in fakeci]
     casdm2fr = [f[1] for f in fakeci]
     veff = get_veff (casdm1frs)
@@ -140,7 +140,7 @@ def rdm_cycle (las, mo_coeff, casdm1frs, veff, h2eff_sub, log, max_cycle_rdmjk=3
         casdm1frs_old = casdm1frs
         casdm2fr_old = casdm2fr
         e_old = e_tot
-        e_cas, fakeci = lasscf_sync_o0.ci_cycle (las, mo_coeff, None, veff, h2eff_sub, casdm1frs, log)
+        e_cas, fakeci = lasscf.ci_cycle (las, mo_coeff, None, veff, h2eff_sub, casdm1frs, log)
         casdm1frs = [f[0] for f in fakeci]
         casdm2fr = [f[1] for f in fakeci]
         veff = get_veff (casdm1frs)
@@ -337,7 +337,7 @@ def canonicalize (las, mo_coeff=None, casdm1frs=None, casdm2fr=None, natorb_casd
     return mo_coeff, mo_ene, mo_occ, casdm1frs, casdm2fr, h2eff_sub
 
 
-# From lasscf_sync_o0.ci_cycle and lasscf_sync_o0.get_init_guess ci, I deduce that
+# From lasscf.ci_cycle and lasscf.get_init_guess ci, I deduce that
 # the fcibox class should have the following members:
 #   callable "_get_nelec"
 #   callable "kernel"
@@ -475,7 +475,7 @@ def _combine_init_guess_ci (las, ci0i, ci0g, norb, nelec, nroots):
         if ci0in.size != norb ** (2*n): return ci0g
     return ci0i
 
-class LASSCFNoSymm (lasscf_sync_o0.LASSCFNoSymm):
+class LASSCFNoSymm (lasscf.LASSCFNoSymm):
 
     def __init__(self, *args, **kwargs):
         self.casdm1frs = None
@@ -483,7 +483,7 @@ class LASSCFNoSymm (lasscf_sync_o0.LASSCFNoSymm):
         self.max_cycle_rdmjk = 3
         self.conv_tol_rdmjkddm = None
         self.conv_tol_rdmjkde = 1e-8
-        lasscf_sync_o0.LASSCFNoSymm.__init__(self, *args, **kwargs)
+        lasscf.LASSCFNoSymm.__init__(self, *args, **kwargs)
         self.max_cycle_micro = 3
 
     _ugg = LASSCF_UnitaryGroupGenerators
@@ -537,7 +537,7 @@ def LASSCF (mf_or_mol, ncas_sub, nelecas_sub, **kwargs):
 
 
 if __name__ == '__main__':
-    from pyscf.mcscf.las.lasscf_sync_o0 import LASSCF as LASSCFRef
+    from pyscf.mcscf.las.lasscf import LASSCF as LASSCFRef
     xyz = '''H 0.0 0.0 0.0
              H 1.0 0.0 0.0
              H 0.2 3.9 0.1

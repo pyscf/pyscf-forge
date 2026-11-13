@@ -30,7 +30,7 @@ Contains my modifications for SA-CASSCF gradients
 
 '''
 SV: added and modified for casscf.py for lasscf nuclear gradients
-Also check lasscf_sync_o0.py where a nuc_grad_method has been defined with a Gradients class!
+Also check pyscf/mcscf/las/lasscf.py where a nuc_grad_method has been defined with a Gradients class!
 '''
 
 from functools import reduce
