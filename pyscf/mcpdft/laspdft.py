@@ -32,6 +32,15 @@ class _LASPDFT(_PDFT):
     def multi_state(self, method='Lin'):
         raise NotImplementedError("MS-PDFT not available for the LAS wave functions.")
 
+def _has_lroots (ci):
+    '''Whether any fragment has more than one root in any rootspace'''
+    if ci is None: return False
+    for ci_f in ci:
+        for c in (ci_f or []):
+            if c is not None and np.asarray (c).ndim > 2 and len (c) > 1:
+                return True
+    return False
+
 def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
     from pyscf.mcscf.las.lasscf import LASSCFNoSymm
     mc_doc = (mc.__class__.__doc__ or 'No docstring for MC-SCF parent method')
@@ -50,16 +59,22 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
         # Have to pass this due to dump_chk, which won't work for LAS.
         def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
                                  grids_level=None, grids_attr=None, dump_chk=False, **kwargs):
+            # Neither applies to LASSI-PDFT (mrh), where e_states holds the LAS rootspace energies
+            # and local excitations are part of the model.
+            do_las = not getattr (self, 'DoLASSI', False)
+            if do_las and _has_lroots (self.ci if ci is None else ci):
+                raise NotImplementedError ('LAS-PDFT with more than one root in a fragment '
+                                           '(lroots > 1; see e_lexc)')
             e_tot, e_ot, e_states = _pdft_class.compute_pdft_energy_(self, mo_coeff=mo_coeff,
                     ci=ci, ot=ot, otxc=otxc, grids_level=grids_level, grids_attr=grids_attr,
                     dump_chk=False, **kwargs)
             # LAS isn't a StateAverageMCSCFSolver, so the parent treats nroots>1 like multi-root
             # CASCI: per-state energies in e_tot, e_states untouched (still the values from before
-            # the MC-SCF step). Store them in e_states as well. (Unlike SA-MC-PDFT, e_tot remains
-            # the per-state list rather than the weighted average.) Not for LASSI-PDFT (mrh), where
-            # e_states holds the LAS rootspace energies.
-            if self.nroots > 1 and not getattr (self, 'DoLASSI', False):
+            # the MC-SCF step). Like SA-MC-PDFT, store the per-state energies in e_states and
+            # their weighted average in e_tot.
+            if self.nroots > 1 and do_las:
                 self.e_states = list (e_states)
+                self.e_tot = e_tot = np.dot (self.e_states, self.weights)
             return e_tot, e_ot, e_states
 
         def analyze(self):

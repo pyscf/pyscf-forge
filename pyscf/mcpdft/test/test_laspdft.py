@@ -1,4 +1,5 @@
 import unittest
+import numpy as np
 from pyscf import gto, scf, dft, mcpdft
 from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.lasscf import LASSCF, LASSCFNoSymm
@@ -71,6 +72,13 @@ class KnownValues(unittest.TestCase):
             self.assertTrue (mc3.converged)
             self.assertAlmostEqual (mc3.e_tot, mc.e_tot, 6)
 
+    def test_lroots_not_implemented (self):
+        mf = _h4_mf ()
+        mc = mcpdft.LASCI (mf, 'tPBE', (2, 2), (2, 2), spin_sub=(1,1), grids_level=1)
+        mo0 = mc.localize_init_guess (([0, 1] , [2, 3]))
+        with self.assertRaises (NotImplementedError):
+            mc.kernel (mo0, lroots=np.array ([[2],[1]]))
+
     def test_mcpdft_namespace_not_overwritten (self):
         saved = mcpdft.LASCI
         try:
@@ -87,9 +95,10 @@ class KnownValues(unittest.TestCase):
         for i in range (2):
             with self.subTest (state=i):
                 self.assertAlmostEqual (mc.e_mcscf[i], mc_ref.e_mcscf[i], 7)
-                # NOTE: unlike MC-PDFT, LAS-PDFT stores the per-state energies in e_tot
-                self.assertAlmostEqual (mc.e_tot[i], mc_ref.e_states[i], 7)
+                self.assertAlmostEqual (mc.e_states[i], mc_ref.e_states[i], 7)
                 self.assertAlmostEqual (mc.e_ot[i], mc_ref.e_ot[i], 7)
+        # As in SA-MC-PDFT, e_tot is the weighted average
+        self.assertAlmostEqual (mc.e_tot, mc_ref.e_tot, 7)
         e_states = mc.compute_pdft_energy_ ()[2]
         for i in range (2):
             with self.subTest ('compute_pdft_energy_', state=i):
