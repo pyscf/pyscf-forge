@@ -15,12 +15,14 @@
 
 # Tests of LAS utility methods that the rest of this test suite doesn't otherwise check:
 # get_single_state_las (from mrh's tests/lasscf/test_utilities.py), h1e_for_las and its get_h1las
-# alias, get_sym_fr, make_rdm1_sub, LASSCF.lasci/lasci_ against LASCI.kernel, and
-# addons.state_average_n_mix_.
+# alias, get_sym_fr, make_rdm1_sub, LASSCF.lasci/lasci_ against LASCI.kernel,
+# addons.state_average_n_mix_, and the pyscf.mcscf.las.LASCI and LASSCF constructors.
 
 import unittest
 import numpy as np
 from pyscf import gto, scf, symm, mcscf
+from pyscf.mcscf import las as las_pkg
+from pyscf.mcscf.las import _DFLASCI, lasci, lasscf
 from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.lasci import LASCI
 from pyscf.mcscf.las.addons import state_average_n_mix, state_average_n_mix_
@@ -185,6 +187,30 @@ class KnownValues (unittest.TestCase):
         dm1_states = mc.fcisolver.states_make_rdm1 (mc.ci, mc.ncas, mc.nelecas)
         self.assertAlmostEqual (np.trace (dm1_states[0]), 4.0, 9)
         self.assertAlmostEqual (np.trace (dm1_states[1]), 3.0, 9)
+
+    def test_package_constructors (self):
+        # pyscf.mcscf.las.LASCI and LASSCF pick the symmetry and density-fitting classes like the
+        # module-level constructors
+        mf_df = mf.density_fit ().run ()
+        classes = {'LASCI': (lasci.LASCINoSymm, lasci.LASCISymm),
+                   'LASSCF': (lasscf.LASSCFNoSymm, lasscf.LASSCFSymm)}
+        for name, (cls_nosymm, cls_symm) in classes.items ():
+            for label, mf_or_mol, cls, is_df in (('nosymm', mf, cls_nosymm, False),
+                                                 ('symm', mf_symm, cls_symm, False),
+                                                 ('df', mf_df, cls_nosymm, True),
+                                                 ('mol', mf.mol, cls_nosymm, False)):
+                with self.subTest (name, mf_or_mol=label):
+                    las = getattr (las_pkg, name) (mf_or_mol, ncas_sub, nelecas_sub)
+                    self.assertIsInstance (las, cls)
+                    self.assertEqual (isinstance (las, _DFLASCI), is_df)
+                    if not is_df: self.assertIs (las.__class__, cls)
+        # Same result as the module-level constructor
+        las_ref, mo = _sa_las (LASCI, mf)
+        las_ref.kernel (mo)
+        las = las_pkg.LASCI (mf, ncas_sub, nelecas_sub)
+        las.state_average_(**sa_kwargs)
+        las.kernel (mo)
+        self.assertAlmostEqual (las.e_tot, las_ref.e_tot, 9)
 
 if __name__ == "__main__":
     print("Full Tests for LAS utility methods")
