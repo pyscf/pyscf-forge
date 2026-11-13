@@ -29,7 +29,11 @@ def get_level_shift (trust_radius, prec_op, g, tol=1e-8):
     assert (shift>=0), "{} {} {} {}".format (g, x, x0, shift)
     return shift
 
-def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
+def _ci_is_incomplete (ci):
+    return (ci is None or any ([c is None for c in ci]) or
+            any ([any ([c2 is None for c2 in c1]) for c1 in ci]))
+
+def kernel (las, mo_coeff=None, ci0=None, conv_tol_grad=1e-4,
         assert_no_dupes=False, verbose=lib.logger.NOTE):
     from pyscf.mcscf.las.lasci import _eig_inactive_virtual
     if mo_coeff is None: mo_coeff = las.mo_coeff
@@ -40,34 +44,12 @@ def kernel (las, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=1e-4,
     h2eff_sub = las.get_h2eff (mo_coeff)
     t1 = log.timer('integral transformation to LAS space', *t0)
 
-    # In the first cycle, I may pass casdm0_fr instead of ci0.
-    # Therefore, I need to work out this get_veff call separately.
-    # This is only for compatibility with the "old" algorithm
-    if ci0 is None and casdm0_fr is not None:
-        casdm0_sub = [np.einsum ('rsij,r->sij', dm, las.weights) for dm in casdm0_fr]
-        dm1_core = mo_coeff[:,:las.ncore] @ mo_coeff[:,:las.ncore].conjugate ().T
-        dm1s_sub = [np.stack ([dm1_core, dm1_core], axis=0)]
-        for idx, casdm1s in enumerate (casdm0_sub):
-            mo = las.get_mo_slice (idx, mo_coeff=mo_coeff)
-            moH = mo.conjugate ().T
-            dm1s_sub.append (np.tensordot (mo, np.dot (casdm1s, moH),
-                                           axes=((1),(1))).transpose (1,0,2))
-        dm1s_sub = np.stack (dm1s_sub, axis=0)
-        dm1s = dm1s_sub.sum (0)
-        veff = las.get_veff (dm=dm1s)
-        casdm1s_sub = casdm0_sub
-        casdm1frs = casdm0_fr
-    else:
-        if (ci0 is None or any ([c is None for c in ci0]) or
-          any ([any ([c2 is None for c2 in c1]) for c1 in ci0])):
-            ci0 = las.get_init_guess_ci (mo_coeff, h2eff_sub, ci0)
-        if (ci0 is None or any ([c is None for c in ci0]) or
-          any ([any ([c2 is None for c2 in c1]) for c1 in ci0])):
-            raise RuntimeError ("failed to populate get_init_guess")
-        casdm1frs = las.states_make_casdm1s_sub (ci=ci0)
-        casdm1s_sub = las.make_casdm1s_sub (ci=ci0, casdm1frs=casdm1frs)
-        dm1s = las.make_rdm1s (mo_coeff=mo_coeff, ci=ci0, casdm1s_sub=casdm1s_sub)
-        veff = las.get_veff (dm = dm1s)
+    if _ci_is_incomplete (ci0):
+        ci0 = las.get_init_guess_ci (mo_coeff, h2eff_sub, ci0)
+    casdm1frs = las._starting_casdm1frs (ci0)
+    casdm1s_sub = las.make_casdm1s_sub (ci=ci0, casdm1frs=casdm1frs)
+    dm1s = las.make_rdm1s (mo_coeff=mo_coeff, ci=ci0, casdm1s_sub=casdm1s_sub)
+    veff = las.get_veff (dm = dm1s)
     t1 = log.timer('LASSCF initial get_veff', *t1)
 
     ugg = None
@@ -1702,7 +1684,23 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         if ugg is None: ugg = self.get_ugg ()
         return self._hop (self, ugg, mo_coeff=mo_coeff, ci=ci, **kwargs)
 
-    def kernel(self, mo_coeff=None, ci0=None, casdm0_fr=None, conv_tol_grad=None,
+    def _starting_casdm1frs (self, ci0):
+        '''Fragment 1-RDMs, separated by rootspace, that the first macrocycle of the kernel
+        starts from. Developers can override this to start from something other than the guess
+        CI vectors.
+
+        Args:
+            ci0 : list of list of ndarrays
+                Guess CI vectors, after get_init_guess_ci has filled in any missing ones
+
+        Returns:
+            casdm1frs : list of ndarrays of shape (nroots,2,ncas_sub[i],ncas_sub[i])
+        '''
+        if _ci_is_incomplete (ci0):
+            raise RuntimeError ("failed to populate get_init_guess")
+        return self.states_make_casdm1s_sub (ci=ci0)
+
+    def kernel(self, mo_coeff=None, ci0=None, conv_tol_grad=None,
             assert_no_dupes=False, verbose=None, _kern=None):
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
@@ -1737,7 +1735,7 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
 
         self.converged, self.e_tot, self.e_states, self.mo_energy, self.mo_coeff, self.e_cas, \
                 self.ci, h2eff_sub, veff = _kern(mo_coeff=mo_coeff, ci0=ci0, verbose=verbose,
-                casdm0_fr=casdm0_fr, conv_tol_grad=conv_tol_grad, assert_no_dupes=assert_no_dupes)
+                conv_tol_grad=conv_tol_grad, assert_no_dupes=assert_no_dupes)
 
         self._finalize ()
         return self.e_tot, self.e_cas, self.ci, self.mo_coeff, self.mo_energy, h2eff_sub, veff
@@ -1820,7 +1818,7 @@ class LASSCFSymm (lasci.LASCISymm, LASSCFNoSymm):
     get_veff = LASSCFNoSymm.get_veff
     _ugg = LASSCFSymm_UnitaryGroupGenerators
 
-    def kernel(self, mo_coeff=None, ci0=None, casdm0_fr=None, verbose=None, assert_no_dupes=False):
+    def kernel(self, mo_coeff=None, ci0=None, verbose=None, assert_no_dupes=False):
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
         if ci0 is None:
@@ -1832,4 +1830,4 @@ class LASSCFSymm (lasci.LASCISymm, LASSCFNoSymm):
                                 "subspaces"))
         mo_coeff = self.mo_coeff = self.label_symmetry_(mo_coeff)
         return LASSCFNoSymm.kernel(self, mo_coeff=mo_coeff, ci0=ci0,
-            casdm0_fr=casdm0_fr, verbose=verbose, assert_no_dupes=assert_no_dupes)
+            verbose=verbose, assert_no_dupes=assert_no_dupes)
