@@ -40,11 +40,11 @@ def _unpack_state(state):
 def _symm_trans_casdm12(mc, ci, bra, ket):
     ncas, nelecas = mc.ncas, mc.nelecas
     dm1a, dm1b = direct_spin1.trans_rdm1s(ci[bra], ci[ket], ncas, nelecas)
-    
+
     dm1a = 0.5 * (dm1a + dm1a.conj().T)
     dm1b = 0.5 * (dm1b + dm1b.conj().T)
     casdm1s = np.stack((dm1a, dm1b), axis=0)
-    
+
     _, dm2 = direct_spin1.trans_rdm12(ci[bra], ci[ket], ncas, nelecas)
     casdm2 = 0.5 * (dm2 + dm2.transpose(1, 0, 3, 2))
     return casdm1s, casdm2
@@ -87,7 +87,7 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
             state = self.state
         ket, bra = _unpack_state(state)
         mc = self.base
-        
+
         casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
         t_casdm1s, t_casdm2 = _symm_trans_casdm12(mc, ci, bra, ket)
@@ -179,15 +179,15 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         with lib.temporary_env(self.base.veff2, vhf_c=vnocore):
             g_explicit = newton_casscf.gen_g_hop(
                 fcasscf, mo, ci[ket], self.base.veff2, verbose)[0]
-        
+
         gorb_explicit = g_explicit[: self.ngorb]
 
-        # explicit CI response 
+        # explicit CI response
         h2eff = self._lpdft_h2eff(mo=mo, ci=ci)
         hc_ket = direct_spin1.contract_2e(h2eff, ci[ket], self.base.ncas, self.base.nelecas)
         hc_bra = direct_spin1.contract_2e(h2eff, ci[bra], self.base.ncas, self.base.nelecas)
 
-        # implicit response 
+        # implicit response
         fcasscf_sa = self.make_fcasscf_sa()
         fcasscf_sa.get_hcore = lambda: feff1
         g_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)[0]
