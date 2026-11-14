@@ -38,21 +38,19 @@ def _unpack_state(state):
 
 
 def _symm_trans_casdm12(mc, ci, bra, ket):
-    """ creating the active space transition RMDs """
     ncas, nelecas = mc.ncas, mc.nelecas
-    dm1a, dm1b = direct_spin1.trans_rdm1s(ci[bra], ci[ket], ncas, nelecas) #alpha and beta transition density
-    #symmetrize them
+    dm1a, dm1b = direct_spin1.trans_rdm1s(ci[bra], ci[ket], ncas, nelecas)
+    
     dm1a = 0.5 * (dm1a + dm1a.conj().T)
     dm1b = 0.5 * (dm1b + dm1b.conj().T)
     casdm1s = np.stack((dm1a, dm1b), axis=0)
-    #2-rdm symmetrized
+    
     _, dm2 = direct_spin1.trans_rdm12(ci[bra], ci[ket], ncas, nelecas)
     casdm2 = 0.5 * (dm2 + dm2.transpose(1, 0, 3, 2))
     return casdm1s, casdm2
 
 
 def lpdft_trans_HellmanFeynman_dipole(mc, mo_coeff, ci, bra, ket, origin="Coord_Center"):
-    """ calculating the Hellmann-Feynmann direct transition dipole moment term here with transition density"""
     ncore, ncas = mc.ncore, mc.ncas
     nocc = ncore + ncas
     mo_cas = mo_coeff[:, ncore:nocc]
@@ -80,7 +78,6 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         ket, bra = _unpack_state(state)
         return lpdft_trans_HellmanFeynman_dipole(self.base, mo, ci, bra, ket, origin=origin)
 
-    # On-top gradient response aka the Hessian-vector product
     def get_otp_gradient_response(self, mo=None, ci=None, state=None):
         if mo is None:
             mo = self.base.mo_coeff
@@ -91,7 +88,7 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         ket, bra = _unpack_state(state)
         mc = self.base
         
-        casdm1s_0, casdm2_0 = mc.get_casdm12_0() #state-averaged zero-order densities
+        casdm1s_0, casdm2_0 = mc.get_casdm12_0()
 
         t_casdm1s, t_casdm2 = _symm_trans_casdm12(mc, ci, bra, ket)
         t_cascm2 = _dms.dm2_cumulant(t_casdm2, t_casdm1s)
@@ -108,7 +105,6 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         feff1_gt, feff2_gt = mc.get_pdft_feff(c_dm1s=dm1s_gt, c_cascm2=t_cascm2, **common)
         feff1_c, feff2_c = mc.get_pdft_feff(c_dm1s=dm1s_c, c_cascm2=zero_cascm2, **common)
 
-        # subtraction needed for effective 2-electron response object
         feff2 = copy.copy(feff2_gt)
         for attr in ("vhf_c", "papa", "ppaa", "j_pc", "k_pc"):
             va = getattr(feff2_gt, attr, None)
@@ -119,13 +115,11 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
                 except AttributeError:
                     pass
 
-        return feff1_gt - feff1_c, feff2  # returning corrected transition pair density
+        return feff1_gt - feff1_c, feff2
 
 
-    # wave function response
     def make_fcasscf_lpdft_trans(self, state=None, casscf_attr=None,
                                  fcisolver_attr=None):
-        """fcasscf fcisolver returns the symmetrised transition RDMs"""
         if state is None:
             state = self.state
         if casscf_attr is None:
@@ -222,7 +216,6 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         log.debug("L-PDFT TDM g_all ci:\n{}".format(g_all[self.ngorb:]))
         return g_all
 
-    # Lagrange-multiplier contraction with the dipole integrals
     def get_LdotJnuc(self, Lvec, state=None, verbose=None, mo=None, ci=None,
                      origin="Coord_Center", **kwargs):
         mc = self.base
