@@ -133,7 +133,8 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         fcisolver_attr["make_rdm12"] = lambda *a, **k: (casdm1, casdm2)
         fcisolver_attr["make_rdm1"] = lambda *a, **k: casdm1
         fcisolver_attr["make_rdm2"] = lambda *a, **k: casdm2
-        return sacasscf_grad.Gradients.make_fcasscf(self, state=ket, casscf_attr=casscf_attr, fcisolver_attr=fcisolver_attr)
+        return sacasscf_grad.Gradients.make_fcasscf(self, state=ket, casscf_attr=casscf_attr,
+                                                    fcisolver_attr=fcisolver_attr)
 
     def _lpdft_h2eff(self, mo=None, ci=None):   #effective active space LPDFT ham
         mc = self.base
@@ -288,7 +289,8 @@ class _LPDFTTransDipole(_LPDFT):
         if not hasattr(state, "__len__") or len(state) != 2:
             raise RuntimeError("Transition dipole requires two states")
         if state[0] == state[1]:
-            raise RuntimeError("Transition dipole requires two different states; use dip_moment() for a permanent dipole")
+            raise RuntimeError("Transition dipole requires two different states; "
+                               "use dip_moment() for a permanent dipole")
         return TransitionDipole(self).kernel(state=state, unit=unit, origin=origin)
 
 
