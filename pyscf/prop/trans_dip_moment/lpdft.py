@@ -189,9 +189,7 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         fcasscf_sa.get_hcore = lambda: feff1
         g_implicit = newton_casscf.gen_g_hop(fcasscf_sa, mo, ci, feff2, verbose)[0]
 
-        gmo_implicit, gci_implicit = self.unpack_uniq_var(g_implicit)
-
-        g_all = self.pack_uniq_var(gmo_implicit, gci_implicit)
+        g_all = g_implicit.copy ()
         g_all[: self.ngorb] += gorb_explicit
 
         gorb, gci = self.unpack_uniq_var(g_all)
