@@ -214,42 +214,9 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
     def get_LdotJnuc(self, Lvec, state=None, verbose=None, mo=None, ci=None,
                      origin="Coord_Center", **kwargs):
         mc = self.base
-        if mo is None:
-            mo = mc.mo_coeff
         if ci is None:
             ci = mc.ci
-        ncore, ncas, nelecas = mc.ncore, mc.ncas, mc.nelecas
-        nocc = ncore + ncas
-
-        Lorb, Lci = self.unpack_uniq_var(Lvec)  #orbital part
-
-        mo_core = mo[:, :ncore]
-        mo_cas = mo[:, ncore:nocc]
-        moL = np.dot(mo, Lorb)
-        moL_core = moL[:, :ncore]
-        moL_cas = moL[:, ncore:nocc]
-
-        casdm1s_0 = mc.get_casdm12_0(ci=ci)[0]
-        casdm1_0 = casdm1s_0[0] + casdm1s_0[1]
-
-        dmL_core = np.dot(moL_core, mo_core.conj().T) * 2
-        dmL_cas = reduce(np.dot, (moL_cas, casdm1_0, mo_cas.conj().T))
-        dmL_core += dmL_core.T
-        dmL_cas += dmL_cas.T
-
-        casdm1_transit = np.zeros((ncas, ncas))
-        for w, Lc, c in zip(mc.weights, Lci, ci):
-            d = direct_spin1.trans_rdm1(np.asarray(Lc).reshape(np.asarray(c).shape),   #ci part
-                                        c, ncas, nelecas)
-            casdm1_transit += w * (d + d.conj().T)
-        dm_cas_transit = reduce(np.dot, (mo_cas, casdm1_transit,
-                                         mo_cas.conj().T))
-
-        dm = dmL_core + dmL_cas + dm_cas_transit
-        center = get_guage_origin(mc.mol, origin)
-        with mc.mol.with_common_orig(center):
-            ao_dip = mc.mol.intor_symmetric("int1e_r", comp=3)
-        return -np.tensordot(ao_dip, dm).real
+        return super().get_LdotJnuc (Lvec, state=state, verbose=verbose, mo=mo, ci=ci, origin=origin, **kwargs)
 
     def convert_dipole(self, ham_response, LdotJnuc, mol_dip, unit="Debye"):
         ket, bra = _unpack_state(self.state)
