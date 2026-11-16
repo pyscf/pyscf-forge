@@ -13,6 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# This is longer than prop/trans_dip_moment/mspdft.py because of how the
+# underlying gradient classes are set up in PySCF :
+
+#   grad/mspdft.py already handles pairs of states (bra, ket), since it is used
+#   for MS-PDFT nonadiabatic couplings. The CMS-PDFT transition dipole can
+#   inherit almost everything and only override the dipole-specific parts.
+
+#   grad/lpdft.py only handles single states. The functions here that build the
+#   state-pair (transition) quantities are overridden explicitly
+#   (get_ham_response, get_otp_gradient_response, make_fcasscf_lpdft_trans and
+#   get_wfn_response)
+
 import copy
 from functools import reduce
 
