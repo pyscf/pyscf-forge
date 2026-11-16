@@ -93,7 +93,7 @@ class TransitionDipole(lpdft_dip.ElectricDipole):
         zero_casdm1s = np.zeros_like(t_casdm1s)
         zero_cascm2 = np.zeros_like(t_cascm2)
 
-        dm1s_gt = _dms.casdm1s_to_dm1s(mc, t_casdm1s, mo_coeff=mo)  # core and transitionn density
+        dm1s_gt = _dms.casdm1s_to_dm1s(mc, t_casdm1s, mo_coeff=mo)  # core and transition density
         dm1s_c = _dms.casdm1s_to_dm1s(mc, zero_casdm1s, mo_coeff=mo)  # core only density
 
         common = dict(mo=mo, ci=ci, casdm1s=casdm1s_0, casdm2=casdm2_0,
