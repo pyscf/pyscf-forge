@@ -31,10 +31,7 @@ from pyscf.prop.dip_moment import lpdft as lpdft_dip
 from pyscf.prop.dip_moment.mcpdft import get_guage_origin
 
 
-def _unpack_state(state):
-    if hasattr(state, "__len__"):
-        return state[0], state[1]
-    return state, state
+from pyscf.grad.mspdft import _unpack_state
 
 
 def _symm_trans_casdm12(mc, ci, bra, ket):
