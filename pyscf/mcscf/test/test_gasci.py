@@ -78,10 +78,11 @@ class TestGASRestrictions(unittest.TestCase):
 
     def test_c_global_determinant_arithmetic(self):
         lib = _gaslib.load_library()
-        lib.gas_det_addr.argtypes = [
+        self.assertEqual(lib.gas_det_addr.argtypes, [
             ctypes.POINTER(_gaslib.GasSpaceStruct), _gaslib.gas_bid_t,
             ctypes.c_uint32, ctypes.c_uint32,
-        ]
+        ])
+        self.assertIs(lib.gas_det_addr.restype, ctypes.c_uint64)
         nstr = (ctypes.c_uint32 * 2)()
         blocks = (_gaslib.GasBlock * 1)()
         gas = _gaslib.GasSpaceStruct()
@@ -418,6 +419,9 @@ class TestGASFCISolver(unittest.TestCase):
                 rng.normal(size=gas.ndet),
                 rng.normal(size=gas.ndet),
             )
+            workspace_bytes = gas.lib.fci_contract_gas_plan_workspace_bytes
+            self.assertEqual(workspace_bytes.argtypes, [ctypes.c_void_p])
+            self.assertIs(workspace_bytes.restype, ctypes.c_uint64)
             with fci_gas.GasContractPlan(gas, h2e) as plan:
                 for ci in vectors:
                     planned = plan.contract(ci)
@@ -429,6 +433,8 @@ class TestGASFCISolver(unittest.TestCase):
                         planned, through_solver, atol=1e-12, rtol=0)
                     numpy.testing.assert_allclose(
                         planned, one_shot, atol=1e-12, rtol=0)
+                self.assertGreater(workspace_bytes(plan._plan), 0)
+            self.assertIsNone(plan._plan)
 
     def test_borrowed_contract_plan_equivalent_specs_and_ownership(self):
         solver = fci_gas.FCISolver(
