@@ -3,7 +3,7 @@ from pyscf import fci
 from pyscf.fci import cistring
 from pyscf.mcscf import casci, casci_symm, df
 from pyscf.tools import dump_mat
-from pyscf import symm, gto, scf, ao2mo, lib
+from pyscf import symm, gto, scf, lib
 from pyscf.fci.direct_spin1 import _unpack_nelec
 from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.addons import state_average_n_mix, get_h1e_zipped_fcisolver, las2cas_civec
@@ -30,8 +30,15 @@ def LASCI (mf_or_mol, ncas_sub, nelecas_sub, **kwargs):
     return las
 
 def density_fit (las, auxbasis=None, with_df=None):
-    ''' Here I ONLY need to attach the tag and the df object because I put conditionals in
-        LASCINoSymm to make my life easier '''
+    '''Return a copy of las that uses density fitting, as an instance of a subclass of las's
+    class tagged with _DFLASCI. LASCINoSymm checks for the tag where DF needs different code.
+
+    Kwargs:
+        auxbasis : str
+            Auxiliary basis; if None, use las._scf.with_df's if it has one
+        with_df : DF object
+            If given, use it and ignore auxbasis
+    '''
     las_class = las.__class__
     if with_df is None:
         if (getattr(las._scf, 'with_df', None) and
@@ -48,6 +55,7 @@ def density_fit (las, auxbasis=None, with_df=None):
             self.with_df = with_df
             self._keys = self._keys.union(['with_df'])
             las_class.__init__(self, scf, ncas_sub, nelecas_sub)
+        cderi_ao2mo = las_ao2mo.cderi_ao2mo
     new_las = DFLASCI (las._scf, las.ncas_sub, las.nelecas_sub)
     new_las.__dict__.update (las.__dict__)
     return new_las
@@ -2186,23 +2194,6 @@ class LASCINoSymm (casci.CASCI):
         self._e1_test = e1
         self._e2_test = e2
         return e1 + e2
-
-    def cderi_ao2mo (self, mo_i, mo_j, compact=False):
-        assert (isinstance (self, _DFLASCI))
-        nmo_i, nmo_j = mo_i.shape[-1], mo_j.shape[-1]
-        if compact:
-            assert (nmo_i == nmo_j)
-            bPij = np.empty ((self.with_df.get_naoaux (), nmo_i*(nmo_i+1)//2), dtype=mo_i.dtype)
-        else:
-            bPij = np.empty ((self.with_df.get_naoaux (), nmo_i, nmo_j), dtype=mo_i.dtype)
-        ijmosym, mij_pair, moij, ijslice = ao2mo.incore._conc_mos (mo_i, mo_j, compact=compact)
-        b0 = 0
-        for eri1 in self.with_df.loop ():
-            b1 = b0 + eri1.shape[0]
-            eri2 = bPij[b0:b1]
-            eri2 = ao2mo._ao2mo.nr_e2 (eri1, moij, ijslice, aosym='s2', mosym=ijmosym, out=eri2)
-            b0 = b1
-        return bPij
 
     @lib.with_doc(kernel.__doc__)
     def kernel (self, mo_coeff=None, ci0=None, lroots=None, lweights=None, verbose=None,

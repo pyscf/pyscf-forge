@@ -119,3 +119,32 @@ def get_h2cas (las, mo_coeff=None):
     else:
         eri = ao2mo.full (las.mol, mo_cas, verbose=las.verbose, max_memory=las.max_memory)
     return ao2mo.restore (1, eri, ncas)
+
+def cderi_ao2mo (las, mo_i, mo_j, compact=False):
+    '''DF three-center integrals (P|ij) between two sets of MOs, for a DF LAS object.
+
+    Args:
+        mo_i : ndarray of shape (nao,nmo_i)
+        mo_j : ndarray of shape (nao,nmo_j)
+
+    Kwargs:
+        compact : logical
+            If True, mo_i and mo_j must be the same, and only i >= j is kept
+
+    Returns:
+        bPij : ndarray of shape (naux,nmo_i,nmo_j), or (naux,nmo_i*(nmo_i+1)//2) if compact
+    '''
+    nmo_i, nmo_j = mo_i.shape[-1], mo_j.shape[-1]
+    if compact:
+        assert (nmo_i == nmo_j)
+        bPij = np.empty ((las.with_df.get_naoaux (), nmo_i*(nmo_i+1)//2), dtype=mo_i.dtype)
+    else:
+        bPij = np.empty ((las.with_df.get_naoaux (), nmo_i, nmo_j), dtype=mo_i.dtype)
+    ijmosym, mij_pair, moij, ijslice = ao2mo.incore._conc_mos (mo_i, mo_j, compact=compact)
+    b0 = 0
+    for eri1 in las.with_df.loop ():
+        b1 = b0 + eri1.shape[0]
+        eri2 = bPij[b0:b1]
+        eri2 = ao2mo._ao2mo.nr_e2 (eri1, moij, ijslice, aosym='s2', mosym=ijmosym, out=eri2)
+        b0 = b1
+    return bPij
