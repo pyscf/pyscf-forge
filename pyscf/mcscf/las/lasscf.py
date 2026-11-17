@@ -1735,7 +1735,7 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
                 conv_tol_grad=conv_tol_grad, assert_no_dupes=assert_no_dupes)
 
         self._finalize ()
-        return self.e_tot, self.e_cas, self.ci, self.mo_coeff, self.mo_energy, h2eff_sub, veff
+        return self.e_tot, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     _ugg = LASSCF_UnitaryGroupGenerators
     def get_ugg (self, mo_coeff=None, ci=None):

@@ -2,7 +2,7 @@ from pyscf.mcscf.addons import StateAverageMCSCFSolver
 import numpy as np
 from pyscf.mcpdft.otfnal import transfnal, get_transfnal
 from pyscf.mcpdft.mcpdft import _get_e_decomp
-from pyscf.mcpdft.mcpdft import _PDFT, _mcscf_env
+from pyscf.mcpdft.mcpdft import _PDFT
 
 class _LASPDFT(_PDFT):
     'MC-PDFT energy for a LASSCF wavefunction'
@@ -26,9 +26,7 @@ def _has_lroots (ci):
     return False
 
 def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
-    from pyscf.mcscf.las.lasscf import LASSCFNoSymm
     mc_doc = (mc.__class__.__doc__ or 'No docstring for MC-SCF parent method')
-    _is_lasscf = isinstance (mc, LASSCFNoSymm)
 
     class PDFT(_pdft_class, mc.__class__):
         __doc__ = mc_doc + '\n\n' + _pdft_class.__doc__
@@ -70,20 +68,12 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
         # TODO: compatibility with MC-PDFT checkpoint dumping
         dump_chk = mc.__class__.dump_chk
 
-        # TODO: in pyscf/mcpdft/mcpdft.py::optimize_mcscf_, generalize the number
-        # of return arguments. Then the redefinition below will be unnecessary.
         def optimize_mcscf_(self, mo_coeff=None, ci0=None, **kwargs):
             '''Optimize the MC-SCF wave function underlying an MC-PDFT calculation.
             Has the same calling signature as the parent kernel method. '''
-
-            with _mcscf_env(self):
-                if _is_lasscf:
-                    self.e_mcscf, self.e_cas, self.ci, self.mo_coeff, self.mo_energy = \
-                        self._mc_class.kernel(self, mo_coeff, ci0=ci0, **kwargs)[:-2]
-                else: # LASCI.kernel returns (converged, e_tot, e_states, e_cas, e_lexc, ci)
-                    self.e_mcscf, self.e_cas, self.ci = \
-                        self._mc_class.kernel(self, mo_coeff, ci0=ci0, **kwargs)[1::2]
-                self.fcisolver.nroots = self.nroots
+            results = _pdft_class.optimize_mcscf_(self, mo_coeff=mo_coeff, ci0=ci0, **kwargs)
+            self.fcisolver.nroots = self.nroots
+            return results
 
     return PDFT
 

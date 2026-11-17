@@ -737,8 +737,14 @@ def kernel (las, mo_coeff=None, ci0=None, lroots=None, lweights=None, verbose=0,
             List of each state energy
         e_cas : list of length nroots
             List of the CAS space energy of each state
+        e_lexc : list (length nfrags) of list (length nroots) of ndarrays
+            Excitation energies of the local roots (see lroots)
         ci : list (length nfrags) of list (length nroots) of ndarrays
             Contains optimized CI vectors
+
+    The LASCI.kernel method stores all of these on the LAS object, and returns
+    (e_tot, e_cas, ci, mo_coeff, mo_energy), like CASCI.kernel. mo_coeff and mo_energy are
+    those of the LAS object, unchanged by this function.
     '''
     if assert_no_dupes: assert_no_duplicates (las)
     if lroots is not None and lweights is not None:
@@ -2218,7 +2224,7 @@ class LASCINoSymm (casci.CASCI):
         elif getattr (self, 'chkfile', None) is not None:
             lib.logger.warn (self, 'orbitals changed; chkfile not dumped!')
         self._finalize (method='LASCI')
-        return self.converged, self.e_tot, self.e_states, self.e_cas, e_lexc, self.ci
+        return self.e_tot, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 
     state_average = state_average
     state_average_ = state_average_
