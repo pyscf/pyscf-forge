@@ -1719,7 +1719,7 @@ static rdm_task_t *rdm_build_tasks(const gas_space_t *gas, uint32_t nthread,
 
                 for (uint32_t q = 0; q < row.n; q++) {
                         uint64_t w = block_cost[row.off + q];
-                        uint64_t want64 = (w + target - 1u) / target;
+                        uint64_t want64 = w / target + (w % target != 0u);
                         uint32_t by_rows = (na + RDM_MIN_ALPHA_TILE - 1u) /
                                            RDM_MIN_ALPHA_TILE;
                         uint32_t split = want64 > UINT32_MAX ?

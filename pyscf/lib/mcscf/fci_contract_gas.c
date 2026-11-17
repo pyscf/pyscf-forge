@@ -1962,7 +1962,7 @@ static gas_omp_task_t *build_omp_tasks(const gas_space_t *gas, uint32_t *ntask)
 
                 for (uint32_t q = 0; q < row.n; q++) {
                         uint64_t w = block_cost[row.off + q];
-                        uint64_t want64 = (w + target - 1u) / target;
+                        uint64_t want64 = w / target + (w % target != 0u);
                         uint32_t by_rows =
                                 (na + OMP_MIN_ALPHA_TILE - 1u) /
                                 OMP_MIN_ALPHA_TILE;
