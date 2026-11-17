@@ -95,6 +95,23 @@ class KnownValues(unittest.TestCase):
         self.assertAlmostEqual (np.trace (dm1_states[1]), 7.0, 9)
         self.assertAlmostEqual (np.trace (dm1_states[2]), 7.0, 9)
 
+    def test_loop_civecs_kwargs (self):
+        # Keyword arguments are split over the solvers only if they are tagged as per-state or
+        # per-solver arguments, independently of the positional arguments
+        fcisolver = mc.fcisolver
+        state_arg, solver_arg = fcisolver._state_args, fcisolver._solver_args
+        ci = state_arg (['c0', 'c1', 'c2'])
+        nelec = solver_arg (['n0', 'n1', 'n2'])
+        loop = fcisolver._loop_civecs (ci, mc.ncas, nelec, plain=None,
+                                       per_solver=solver_arg (['s0', 's1', 's2']))
+        loop = list (loop)
+        self.assertEqual (len (loop), 3)
+        for i, (solver, args, kwargs) in enumerate (loop):
+            with self.subTest (solver=i):
+                self.assertIs (solver, fcisolver.fcisolvers[i])
+                self.assertEqual (args, ['c{}'.format (i), mc.ncas, 'n{}'.format (i)])
+                self.assertEqual (kwargs, {'plain': None, 'per_solver': 's{}'.format (i)})
+
 if __name__ == "__main__":
     print("Full Tests for h1ezip")
     unittest.main()

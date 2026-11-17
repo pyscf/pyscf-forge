@@ -159,7 +159,7 @@ def get_h1e_zipped_fcisolver (fcisolver):
                         my_args.append (arg)
                 my_kwargs = {}
                 for key, item in kwargs.items ():
-                    if isinstance (arg, (_state_args, _solver_args)):
+                    if isinstance (item, (_state_args, _solver_args)):
                         my_kwargs[key] = item[i]
                     else:
                         my_kwargs[key] = item

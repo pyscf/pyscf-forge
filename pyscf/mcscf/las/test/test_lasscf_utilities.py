@@ -212,6 +212,22 @@ class KnownValues (unittest.TestCase):
         las.kernel (mo)
         self.assertAlmostEqual (las.e_tot, las_ref.e_tot, 9)
 
+    def test_combine_init_guess_ci (self):
+        # A stored CI vector of the wrong size is replaced by the guess, even if its size happens
+        # to be a multiple of the number of alpha strings
+        norb, nelec = 4, (2,1) # 6 alpha strings, 4 beta strings
+        ci0g = np.zeros ((6,4))
+        ci0g[0,0] = 1
+        for size in (6, 12, 25):
+            with self.subTest ('wrong size', size=size):
+                ci = lasci._combine_init_guess_ci (None, np.ones (size), ci0g, norb, nelec, 1)
+                self.assertEqual (ci.shape, (6,4))
+                self.assertAlmostEqual (np.abs (ci - ci0g).max (), 0, 14)
+        with self.subTest ('right size'):
+            ci0i = np.arange (24, dtype=float)
+            ci = lasci._combine_init_guess_ci (None, ci0i, ci0g, norb, nelec, 1)
+            self.assertAlmostEqual (np.abs (ci - ci0i.reshape (6,4)).max (), 0, 14)
+
 if __name__ == "__main__":
     print("Full Tests for LAS utility methods")
     unittest.main()

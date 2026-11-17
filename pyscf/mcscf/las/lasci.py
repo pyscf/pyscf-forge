@@ -568,9 +568,9 @@ def _combine_init_guess_ci (las, ci0i, ci0g, norb, nelec, nroots):
     nroots0 = 0
     ndet = tuple ([cistring.num_strings (norb, n) for n in nelec])
     ci0g = np.asarray (ci0g)
-    if isinstance (ci0g, np.ndarray) and ci0g.size % ndet[0]*ndet[1] == 0:
+    if isinstance (ci0g, np.ndarray) and ci0g.size % (ndet[0]*ndet[1]) == 0:
         ci0g = ci0g.reshape (-1, ndet[0], ndet[1])
-    if isinstance (ci0i, np.ndarray) and ci0i.size % ndet[0]*ndet[1] == 0:
+    if isinstance (ci0i, np.ndarray) and ci0i.size % (ndet[0]*ndet[1]) == 0:
         ci0i = ci0i.reshape (-1, ndet[0], ndet[1])
         nroots0 = ci0i.shape[0]
     if nroots0 == 0:
