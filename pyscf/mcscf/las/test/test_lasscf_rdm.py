@@ -18,8 +18,10 @@ import unittest
 import tempfile
 import numpy as np
 from pyscf import lib, gto, scf
+from pyscf.mcscf.las import lasscf_rdm, _DFLASCI
 from pyscf.mcscf.las.lasscf import LASSCF as LASSCFRef
 from pyscf.mcscf.las.lasscf_rdm import LASSCF as LASSCFTest
+from pyscf.mcpdft.laspdft import get_mcpdft_child_class
 
 def setUpModule():
     global mol, mf, mo_loc
@@ -47,6 +49,12 @@ def _make_las ():
     return las_ref, las_test
 
 class KnownValues(unittest.TestCase):
+    def test_factory (self):
+        self.assertIsInstance (LASSCFTest (mol, (2,2), (2,2)), lasscf_rdm.LASSCFNoSymm)
+        las_df = LASSCFTest (scf.RHF (mol).density_fit (), (2,2), (2,2))
+        self.assertIsInstance (las_df, lasscf_rdm.LASSCFNoSymm)
+        self.assertIsInstance (las_df, _DFLASCI)
+
     def test_etot (self):
         las_ref, las_test = _make_las ()
         las_ref.ah_level_shift = 1e-8
@@ -86,6 +94,39 @@ class KnownValues(unittest.TestCase):
             hx_test = hop_test._matvec (x_test)
             hx_ref = hop_ref._matvec (x_ref)[:hx_test.size]
             self.assertAlmostEqual (lib.fp (hx_test), lib.fp (hx_ref), 6)
+
+    def test_laspdft (self):
+        # The PDFT energy isn't variational, so the two LASSCF calculations must be converged
+        # tightly to agree to 6 places
+        las_ref, las_test = _make_las ()
+        las_ref.ah_level_shift = 1e-8
+        las_ref.max_cycle_macro = 50
+        las_ref.conv_tol_grad = 1e-7
+        las_ref.kernel ()
+        self.assertTrue (las_ref.converged)
+        pdft_ref = get_mcpdft_child_class (las_ref, 'tPBE', grids_level=1)
+        e_ref = pdft_ref.compute_pdft_energy_ ()
+        with self.subTest ('same wave function as the CI-based reference'):
+            las_test.mo_coeff = las_ref.mo_coeff
+            las_test.casdm1frs = las_ref.states_make_casdm1s_sub ()
+            las_test.casdm2fr = las_ref.states_make_casdm2_sub ()
+            e_test = get_mcpdft_child_class (las_test, 'tPBE',
+                                             grids_level=1).compute_pdft_energy_ ()
+            for x_test, x_ref in zip (e_test, e_ref):
+                self.assertAlmostEqual (np.ravel (x_test)[0], np.ravel (x_ref)[0], 10)
+        with self.subTest ('LAS-PDFT kernel'):
+            pdft_test = get_mcpdft_child_class (_make_las ()[1], 'tPBE', grids_level=1)
+            pdft_test.conv_tol_grad = 1e-7
+            e_tot, e_ot = pdft_test.kernel ()[:2]
+            self.assertTrue (pdft_test.converged)
+            self.assertAlmostEqual (pdft_test.e_mcscf[0], las_ref.e_tot, 6)
+            self.assertAlmostEqual (e_tot, e_ref[0], 6)
+            self.assertAlmostEqual (e_ot, e_ref[1], 6)
+
+    def test_kernel_ci0 (self):
+        las_test = _make_las ()[1]
+        with self.assertRaises (ValueError):
+            las_test.kernel (mo_loc, ci0=[[np.ones (1)], [np.ones (1)]])
 
 
 if __name__ == "__main__":

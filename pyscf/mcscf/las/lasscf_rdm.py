@@ -494,7 +494,26 @@ class LASSCFNoSymm (lasscf.LASSCFNoSymm):
     def _init_fcibox (self, smult, nel):
         return make_fcibox (self.mol, spin=nel[0]-nel[1], smult=smult)
 
-    def kernel(self, mo_coeff=None, casdm1frs=None, casdm2fr=None, conv_tol_grad=None, verbose=None):
+    def kernel(self, mo_coeff=None, casdm1frs=None, casdm2fr=None, conv_tol_grad=None, verbose=None,
+               ci0=None):
+        '''Optimize the orbitals and the fragment RDMs.
+
+        Kwargs:
+            mo_coeff : ndarray of shape (nao,nmo)
+            casdm1frs, casdm2fr : lists (length nfrags) of ndarrays
+                Guess fragment 1- and 2-RDMs, as stored in self.casdm1frs and self.casdm2fr
+            conv_tol_grad : float
+            verbose : int
+            ci0 : None
+                Accepted only so that callers of the LASSCF kernel (e.g., LAS-PDFT) work. This
+                class has no CI vectors.
+
+        Returns:
+            e_tot, e_cas, ci, mo_coeff, mo_energy, as LASSCF.kernel. ci is None; the RDMs are
+            stored in self.casdm1frs and self.casdm2fr.
+        '''
+        if ci0 is not None:
+            raise ValueError ('RDM-based LASSCF takes guess RDMs (casdm1frs, casdm2fr), not ci0')
         if mo_coeff is None:
             mo_coeff = self.mo_coeff
         else:
@@ -519,7 +538,20 @@ class LASSCFNoSymm (lasscf.LASSCFNoSymm):
                 kernel(self, mo_coeff, casdm1frs=casdm1frs, casdm2fr=casdm2fr,
                     verbose=verbose, conv_tol_grad=conv_tol_grad)
 
-        return self.e_tot, self.e_cas, self.casdm1frs, self.casdm2fr, self.mo_coeff, self.mo_energy, h2eff_sub, veff
+        return self.e_tot, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
+
+    # The RDMs of one LAS state, for LAS-PDFT, from the stored fragment RDMs instead of CI vectors
+    def state_make_casdm1s (self, ci=None, state=0, casdm1frs=None, **kwargs):
+        if casdm1frs is None: casdm1frs = self.casdm1frs
+        return lasscf.LASSCFNoSymm.state_make_casdm1s (self, ci=ci, state=state,
+                                                       casdm1frs=casdm1frs, **kwargs)
+
+    def state_make_casdm2 (self, ci=None, state=0, casdm1frs=None, casdm2fr=None, **kwargs):
+        if casdm1frs is None: casdm1frs = self.casdm1frs
+        if casdm2fr is None: casdm2fr = self.casdm2fr
+        return lasscf.LASSCFNoSymm.state_make_casdm2 (self, ci=ci, state=state,
+                                                      casdm1frs=casdm1frs, casdm2fr=casdm2fr,
+                                                      **kwargs)
 
 def LASSCF (mf_or_mol, ncas_sub, nelecas_sub, **kwargs):
     if isinstance(mf_or_mol, gto.Mole):

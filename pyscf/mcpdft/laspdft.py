@@ -86,7 +86,9 @@ def _instantiate(PDFT, mc, ot, **kwargs):
 
 def get_mcpdft_child_class(mc, ot, _pdft_class=_LASPDFT, **kwargs):
     PDFT = _get_mcpdft_child_class(mc, _pdft_class=_pdft_class)
-    if mc.ci is not None:
+    # Before the MC-SCF step there is only the one guess state. RDM-based LASSCF stores RDMs
+    # instead of CI vectors.
+    if mc.ci is not None or getattr (mc, 'casdm1frs', None) is not None:
         mc.fcisolver.nroots = mc.nroots
     else:
         mc.fcisolver.nroots = 1

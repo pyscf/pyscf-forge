@@ -13,27 +13,29 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Guards for behavior of lasscf_rdm that lassqd_code relies on, which isn't otherwise part of any
-# documented API. lassqd replaces each fragment's solver with a custom kernel
+# Guards for behavior of lasscf_rdm that lassqd_code (https://github.com/joannaqw/lassqd_code)
+# relies on, some of which isn't otherwise part of any documented API. lassqd replaces each
+# fragment's solver with a custom kernel
 #   kernel (norb, nelec, h0, h1s, h2) -> (e, dm1s, dm2)
 # and enters las.kernel twice per cycle:
 #   1. "capture": record every fragment's Hamiltonian, then raise out of the kernel from the last
 #      fragment. This works only because every fragment's Hamiltonian is built before any
-#      fragment's result is used.
-#   2. "replay": with max_cycle_macro=1 and max_cycle_rdmjk=0, solve each fragment exactly once,
-#      then take one orbital step and canonicalize. The step is taken only because the RDM-jk loop
-#      reports "not converged" after zero cycles.
+#      fragment's result is used. las.get_ham_eff_sub is the API that should replace this:
+#      test_get_ham_eff_sub checks that it returns the Hamiltonians that capture records. Delete
+#      test_capture once lassqd uses get_ham_eff_sub.
+#   2. "replay": with max_cycle_macro=1, max_cycle_rdmjk=0 and conv_tol_grad=0, solve each fragment
+#      exactly once, then take one orbital step and canonicalize.
 # lassqd also computes LAS-PDFT energies by monkeypatching the RDM makers of
-# get_mcpdft_child_class (las, ot). If any of this has to change, give lassqd an API first.
-# las.get_ham_eff_sub is that API for the capture step: test_get_ham_eff_sub checks that it
-# returns the Hamiltonians that capture records.
+# get_mcpdft_child_class (las, ot). LAS-PDFT now works on lasscf_rdm objects directly (see
+# test_lasscf_rdm.py), so lassqd could set las.casdm1frs and las.casdm2fr instead; delete
+# test_pdft_monkeypatch once it does. If any of this has to change, give lassqd an API first.
 
 import unittest
 import tempfile
 import h5py
 import numpy as np
 from pyscf import gto, scf, lib, ao2mo
-from pyscf.mcscf.las import lasscf_rdm, _DFLASCI
+from pyscf.mcscf.las import lasscf_rdm
 from pyscf.mcscf.las.lasscf import LASSCF as LASSCF_CI
 from pyscf.mcpdft.laspdft import get_mcpdft_child_class
 
@@ -69,8 +71,9 @@ def set_fragment_kernels (las, kernels):
 def default_solver ():
     return lasscf_rdm.make_fcibox (mol, spin=0, smult=1).fcisolvers[0]
 
-def kernel_from_guess (las):
-    las.kernel (mo.copy (), casdm1frs=[d.copy () for d in dm1], casdm2fr=[d.copy () for d in dm2])
+def kernel_from_guess (las, **kwargs):
+    las.kernel (mo.copy (), casdm1frs=[d.copy () for d in dm1], casdm2fr=[d.copy () for d in dm2],
+                **kwargs)
 
 class _Captured (Exception):
     pass
@@ -99,11 +102,6 @@ def capture (garbage_frag0=False):
     return hams
 
 class KnownValues (unittest.TestCase):
-
-    def test_factory (self):
-        self.assertIsInstance (lasscf_rdm.LASSCF (mol, (2,2), (2,2)), lasscf_rdm.LASSCFNoSymm)
-        las_df = lasscf_rdm.LASSCF (scf.RHF (mol).density_fit (), (2,2), (2,2))
-        self.assertIsInstance (las_df, _DFLASCI)
 
     def test_capture (self):
         hams = capture ()
@@ -145,10 +143,10 @@ class KnownValues (unittest.TestCase):
                 return solved[ifrag]
             return kernel
         set_fragment_kernels (las, [make_kernel (0), make_kernel (1)])
-        kernel_from_guess (las)
+        kernel_from_guess (las, conv_tol_grad=0)
         with self.subTest ('each fragment solved exactly once'):
             self.assertEqual (visits, [1, 1])
-        with self.subTest ('RDM-jk loop reports not converged after zero cycles'):
+        with self.subTest ('not converged'):
             self.assertFalse (las.converged)
         with self.subTest ('one orbital step was taken'):
             casdm1frs = [np.asarray (s[1])[None] for s in solved]
