@@ -155,7 +155,7 @@ struct gas_contract_plan {
 #endif
 };
 
-static inline void contract_zero(double *x, uint32_t n)
+static inline void contract_zero(double *x, uint64_t n)
 {
         memset(x, 0, (size_t)n * sizeof(*x));
 }
@@ -2064,7 +2064,7 @@ static void zero_alpha_range(const gas_space_t *gas, double *ci1,
                 gas_bid_t b = row.off + q;
                 uint32_t nb = gas->sector_nstr[gas->block[b].sb];
                 contract_zero(ci1 + gas->block[b].offset + (uint64_t)a0 * nb,
-                              (a1 - a0) * nb);
+                              (uint64_t)(a1 - a0) * nb);
         }
 }
 
@@ -2391,7 +2391,8 @@ int fci_contract_gas_plan_create(gas_contract_plan_t **out,
                                 const double *gos)
 {
         if (out == 0 || gas == 0 || eri == 0 || gos == 0 ||
-            gas->link_format != GAS_LINK_COMPRESSED) {
+            gas->link_format != GAS_LINK_COMPRESSED ||
+            gas->ndet > SIZE_MAX / sizeof(double)) {
                 return GAS_ERR_INVALID;
         }
         *out = 0;

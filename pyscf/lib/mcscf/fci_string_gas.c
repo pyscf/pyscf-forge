@@ -488,18 +488,18 @@ uint64_t gas_addr2str_sector(const gas_space_t *gas, gas_sid_t s, uint32_t addr)
         return str;
 }
 
-uint32_t gas_block_ndet(const gas_space_t *gas, gas_bid_t b)
+uint64_t gas_block_ndet(const gas_space_t *gas, gas_bid_t b)
 {
         const gas_block_t *blk = gas->block + b;
-        return gas->sector_nstr[blk->sa] * gas->sector_nstr[blk->sb];
+        return (uint64_t)gas->sector_nstr[blk->sa] * gas->sector_nstr[blk->sb];
 }
 
-uint32_t gas_det_addr(const gas_space_t *gas, gas_bid_t b,
+uint64_t gas_det_addr(const gas_space_t *gas, gas_bid_t b,
                       uint32_t ia, uint32_t ib)
 {
         const gas_block_t *blk = gas->block + b;
         uint32_t nb = gas->sector_nstr[blk->sb];
-        return blk->offset + ia * nb + ib;
+        return blk->offset + (uint64_t)ia * nb + ib;
 }
 
 gas_bid_t gas_find_block(const gas_space_t *gas, gas_sid_t sa, gas_sid_t sb)
@@ -777,16 +777,16 @@ static int fill_blocks_from_raw(gas_space_t *gas, const gas_u8_rows_t *blocks)
                 uint64_t nda = gas->sector_nstr[sa];
                 uint64_t ndb = gas->sector_nstr[sb];
                 uint64_t ndet = nda * ndb;
-                if (ndet > UINT32_MAX || off + ndet > UINT32_MAX) {
+                if (off > UINT64_MAX - ndet) {
                         return -1;
                 }
 
-                gas->block[b].offset = (uint32_t)off;
+                gas->block[b].offset = off;
                 gas->block[b].sa = (gas_sid_t)sa;
                 gas->block[b].sb = (gas_sid_t)sb;
                 off += ndet;
         }
-        gas->ndet = (uint32_t)off;
+        gas->ndet = off;
         return 0;
 }
 

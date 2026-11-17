@@ -113,6 +113,9 @@ static int hdiag_validate(const gas_space_t *gas, const double *h1e,
 
         size_t norb = (size_t)gas->norb_tot;
         size_t npair = norb * (norb + 1u) / 2u;
+        if (gas->ndet > SIZE_MAX / sizeof(*hdiag)) {
+                return GAS_ERR_MEMORY;
+        }
         size_t output_bytes = (size_t)gas->ndet * sizeof(*hdiag);
         if (memory_ranges_overlap(hdiag, output_bytes,
                                   h1e, norb * norb * sizeof(*h1e)) ||
@@ -355,7 +358,7 @@ static int build_tasks(const gas_space_t *gas,
         uint32_t threads = 1u;
 #endif
         uint64_t target_tasks = (uint64_t)threads * HDIAG_TASK_FACTOR;
-        uint64_t target_dets = ((uint64_t)gas->ndet + target_tasks - 1u) /
+        uint64_t target_dets = (gas->ndet + target_tasks - 1u) /
                                target_tasks;
         if (target_dets == 0u) target_dets = 1u;
 
