@@ -10,17 +10,6 @@ from pyscf.mcscf.las.addons import StateAverageNMixFCISolver
 from itertools import combinations
 
 
-def _is_csf_solver(solver):
-    '''Recognize real or complex CSF solvers without importing PBC modules.'''
-    if isinstance(solver, CSFFCISolver):
-        return True
-    transformer = getattr(solver, 'transformer', None)
-    return (transformer is not None
-            and hasattr(transformer, 'ncsf')
-            and callable(getattr(transformer, 'vec_det2csf', None))
-            and callable(getattr(transformer, 'printable_largest_csf', None)))
-
-
 # TODO: linkstr support
 class ProductStateFCISolver (StateAverageNMixFCISolver, lib.StreamObject):
     r'''Minimize the energy of a wave function of the form
@@ -156,7 +145,7 @@ class ProductStateFCISolver (StateAverageNMixFCISolver, lib.StreamObject):
             if snroots>na*nb:
                 raise RuntimeError ("{} roots > {} determinants in fragment {}".format (
                     snroots, na*nb, ix))
-            if _is_csf_solver(solver):
+            if isinstance (solver, CSFFCISolver):
                 solver.check_transformer_cache ()
                 if snroots>solver.transformer.ncsf:
                     raise RuntimeError ("{} roots > {} CSFs in fragment {} (nelec={}, smult={})".format (
@@ -164,7 +153,7 @@ class ProductStateFCISolver (StateAverageNMixFCISolver, lib.StreamObject):
         return ci1
 
     def _debug_csfs (self, log, ci0, ci1, norb_f, nelec_f, grad, nroots=None):
-        if not all (_is_csf_solver(s) for s in self.fcisolvers):
+        if not all (isinstance (s, CSFFCISolver) for s in self.fcisolvers):
             return
         if log.verbose < lib.logger.INFO: return
         transformers = [s.transformer for s in self.fcisolvers]
@@ -311,7 +300,7 @@ class ProductStateFCISolver (StateAverageNMixFCISolver, lib.StreamObject):
                 raise (e)
             except ValueError as e:
                 print ("frag=",ix,"nroots=",s.nroots,"no=",no,"ne=",nelec,'c.shape=',np.asarray(c).shape)
-                if _is_csf_solver(s):
+                if isinstance (s, CSFFCISolver):
                     print ("smult=",s.smult,"ncsf=",s.transformer.ncsf)
                 raise (e)
             dm1s_f.append ((i, j, np.asarray(a), np.asarray(b)))
