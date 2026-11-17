@@ -382,6 +382,33 @@ def canonicalize (las, mo_coeff=None, ci=None, casdm1fs=None, natorb_casdm1=None
     return mo_coeff, mo_ene, mo_occ, ci, h2eff_sub
 
 def get_init_guess_ci (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri_cas=None, gtype=None):
+    '''Guess CI vectors for every fragment in every LAS state (rootspace), using the guess named
+    by gtype:
+
+        'aufbau1' (default) : see get_init_guess_ci_aufbau1
+        'aufbau' : see get_init_guess_ci_aufbau0
+        'vac' : see get_init_guess_ci_vac
+
+    Args:
+        las : instance of :class:`LASCINoSymm`
+
+    Kwargs:
+        mo_coeff : ndarray of shape (nao,nmo)
+            MO coefficients; defaults to las.mo_coeff
+        h2eff_sub : ndarray of shape (nmo,ncas*ncas*(ncas+1)//2)
+            ERIs from las.get_h2eff; computed if eri_cas is also None
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Existing CI vectors. Entries that are None or have the wrong size are replaced by the
+            guess; see _combine_init_guess_ci.
+        eri_cas : ndarray of shape (ncas,ncas,ncas,ncas)
+            Active-space ERIs; computed from h2eff_sub if None
+        gtype : str
+            Type of guess; defaults to las.init_guess_ci
+
+    Returns:
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Guess CI vectors
+    '''
     if gtype is None: gtype = las.init_guess_ci
     if 'aufbau1' in gtype.lower ():
         return get_init_guess_ci_aufbau1 (las, mo_coeff=mo_coeff, h2eff_sub=h2eff_sub, ci0=ci0,
@@ -395,6 +422,24 @@ def get_init_guess_ci (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri_cas=Non
         raise NotImplementedError ("CI init guess of type {}".format (gtype))
 
 def get_init_guess_ci_aufbau0 (las, mo_coeff=None, ci0=None):
+    '''Aufbau guess: in each fragment, fill the spin-up and spin-down orbitals separately in
+    order, under the constraint of point-group symmetry if the orbitals have it. This uses no
+    Hamiltonian, so the guess depends only on the order of the active orbitals.
+
+    Args:
+        las : instance of :class:`LASCINoSymm`
+
+    Kwargs:
+        mo_coeff : ndarray of shape (nao,nmo)
+            MO coefficients; defaults to las.mo_coeff
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Existing CI vectors. Entries that are None or have the wrong size are replaced by the
+            guess; see _combine_init_guess_ci.
+
+    Returns:
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Guess CI vectors
+    '''
     if mo_coeff is None: mo_coeff = las.mo_coeff
     if ci0 is None: ci0 = [[None for i in range (las.nroots)] for j in range (las.nfrags)]
     ncore = las.ncore
@@ -413,6 +458,27 @@ def get_init_guess_ci_aufbau0 (las, mo_coeff=None, ci0=None):
     return ci0
 
 def get_init_guess_ci_aufbau1 (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri_cas=None):
+    '''Guess from the diagonal of each fragment's Hamiltonian, where the effective h1e of each
+    fragment comes from the aufbau guess (get_init_guess_ci_aufbau0) for every other fragment.
+
+    Args:
+        las : instance of :class:`LASCINoSymm`
+
+    Kwargs:
+        mo_coeff : ndarray of shape (nao,nmo)
+            MO coefficients; defaults to las.mo_coeff
+        h2eff_sub : ndarray of shape (nmo,ncas*ncas*(ncas+1)//2)
+            ERIs from las.get_h2eff; computed if eri_cas is also None
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Existing CI vectors. Entries that are None or have the wrong size are replaced by the
+            guess; see _combine_init_guess_ci.
+        eri_cas : ndarray of shape (ncas,ncas,ncas,ncas)
+            Active-space ERIs; computed from h2eff_sub if None
+
+    Returns:
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Guess CI vectors
+    '''
     if mo_coeff is None: mo_coeff = las.mo_coeff
     if ci0 is None: ci0 = [[None for i in range (las.nroots)] for j in range (las.nfrags)]
     ci1 = [[ci0_ij for ci0_ij in ci0_i] for ci0_i in ci0]
@@ -443,6 +509,27 @@ def get_init_guess_ci_aufbau1 (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri
     return ci0
 
 def get_init_guess_ci_vac (las, mo_coeff=None, h2eff_sub=None, ci0=None, eri_cas=None):
+    '''Guess from the diagonal of each fragment's Hamiltonian, where the effective h1e of each
+    fragment includes only the inactive (core) electrons, as if the other fragments were empty.
+
+    Args:
+        las : instance of :class:`LASCINoSymm`
+
+    Kwargs:
+        mo_coeff : ndarray of shape (nao,nmo)
+            MO coefficients; defaults to las.mo_coeff
+        h2eff_sub : ndarray of shape (nmo,ncas*ncas*(ncas+1)//2)
+            ERIs from las.get_h2eff; computed if eri_cas is also None
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Existing CI vectors. Entries that are None or have the wrong size are replaced by the
+            guess; see _combine_init_guess_ci.
+        eri_cas : ndarray of shape (ncas,ncas,ncas,ncas)
+            Active-space ERIs; computed from h2eff_sub if None
+
+    Returns:
+        ci0 : list (length nfrags) of list (length nroots) of ndarrays
+            Guess CI vectors
+    '''
     if mo_coeff is None: mo_coeff = las.mo_coeff
     if ci0 is None: ci0 = [[None for i in range (las.nroots)] for j in range (las.nfrags)]
     nmo = mo_coeff.shape[-1]
@@ -1052,14 +1139,6 @@ class LASCINoSymm (casci.CASCI):
         return las_ao2mo.get_h2eff_df (self, mo_coeff)
     get_h2cas = las_ao2mo.get_h2cas
     get_h2eff_slice = las_ao2mo.get_h2eff_slice
-    '''
-    def get_h2eff (self, mo_coeff=None):
-        if mo_coeff is None: mo_coeff = self.mo_coeff
-        if isinstance (self, _DFLASCI):
-            mo_cas = mo_coeff[:,self.ncore:][:,:self.ncas]
-            return self.with_df.ao2mo (mo_cas)
-        return self.ao2mo (mo_coeff)
-    '''
 
     get_fock = get_fock
     canonicalize = canonicalize

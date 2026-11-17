@@ -67,7 +67,6 @@ class KnownValues (unittest.TestCase):
 
     # The two smallbasis tests are smoke tests: they pass if nothing raises.
     def test_smallbasis (self):
-        # From https://github.com/MatthewRHermes/mrh/issues/187
         # Initialization
         mol = gto.M(verbose=0, output='/dev/null')
         mol.atom='''H -5.10574 2.01997 0.00000;
@@ -88,7 +87,6 @@ class KnownValues (unittest.TestCase):
         las.kernel(mo0)
 
     def test_smallbasis_symm (self):
-        # From https://github.com/MatthewRHermes/mrh/issues/187
         # Initialization
         mol = gto.M(verbose=0, output='/dev/null')
         mol.atom='''H -5 -2 0.00000;

@@ -37,9 +37,9 @@ def setUpModule():
     las.kernel ()
     # TODO: fix?
     #assert (las.converged)
-    las.mo_coeff = np.loadtxt (os.path.join (topdir, 'lasscf_sync_mo.dat'))
-    las.ci = [[np.loadtxt (os.path.join (topdir, 'lasscf_sync_ci0.dat'))],
-              [-np.loadtxt (os.path.join (topdir, 'lasscf_sync_ci1.dat')).T]]
+    las.mo_coeff = np.loadtxt (os.path.join (topdir, 'lasscf_hessian_mo.dat'))
+    las.ci = [[np.loadtxt (os.path.join (topdir, 'lasscf_hessian_ci0.dat'))],
+              [-np.loadtxt (os.path.join (topdir, 'lasscf_hessian_ci1.dat')).T]]
 
     ugg = las.get_ugg ()
     h_op = las.get_hop (ugg=ugg)

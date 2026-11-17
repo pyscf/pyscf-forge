@@ -1801,12 +1801,10 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         super().check_sanity ()
         self.get_ugg () # constructor encounters impossible states and raises error
 
-    #SV
     def nuc_grad_method(self):
         from pyscf.grad import lasscf
         return lasscf.Gradients(self)
 
-    #SV
     Gradients = nuc_grad_method
 
 class LASSCFSymm (lasci.LASCISymm, LASSCFNoSymm):

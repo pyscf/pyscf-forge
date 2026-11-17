@@ -57,7 +57,7 @@ class KnownValues(unittest.TestCase):
         self.assertTrue (las_test.converged)
         self.assertAlmostEqual (las_test.e_tot, las_ref.e_tot, 6)
 
-    def test_grad_prec_hess_vs_lasscf_sync (self):
+    def test_grad_prec_hess_vs_lasscf (self):
         las_ref, las_test = _make_las ()
         las_ref.ah_level_shift = 1e-8
         las_ref.max_cycle_macro = 10

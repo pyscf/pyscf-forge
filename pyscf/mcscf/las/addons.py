@@ -32,6 +32,24 @@ def get_sanmix_fcisolver (samix_fcisolver):
     return sanmix_fcisolver
 
 def state_average_n_mix (casscf, fcisolvers, weights=(0.5,0.5)):
+    '''Like pyscf.mcscf.addons.state_average_mix, but each solver's numbers of spin-up and
+    spin-down electrons come from the total number of electrons together with the solver's own
+    spin and charge attributes. This lets the solvers of one fragment differ in charge as well as
+    in spin.
+
+    Args:
+        casscf : instance of a CASSCF, CASCI or LAS class
+        fcisolvers : list of FCI solvers
+            Each may have attributes spin (2S; if None, the parity of the electron number) and
+            charge (default 0)
+
+    Kwargs:
+        weights : sequence of float
+            Weight of each solver's state(s) in the average
+
+    Returns:
+        sacasscf : a copy of casscf, whose fcisolver is the state-average-mix solver
+    '''
     sacasscf = state_average_mix (casscf, fcisolvers, weights=weights)
     sacasscf.fcisolver = get_sanmix_fcisolver (sacasscf.fcisolver)
     # Inject "charge" into "_keys" to suppress annoying warning msg
@@ -95,7 +113,20 @@ def get_aufbau_guess (solvers_r, norb, nelec_r, orbsym=None):
     return ci
 
 def get_h1e_zipped_fcisolver (fcisolver):
-    ''' Wrap a state-average-mix FCI solver to take a list of h1es to apply to each solver. '''
+    '''Wrap a state-average-mix FCI solver so that each of its solvers gets its own
+    one-electron Hamiltonian. This is how a LAS fragment's "fcibox" applies a different effective
+    h1e to each LAS state (rootspace), because the other fragments are in a different state in each
+    rootspace.
+
+    Args:
+        fcisolver : instance of StateAverageMixFCISolver
+            For example, the fcisolver of the return value of state_average_n_mix
+
+    Returns:
+        fcisolver : a copy of fcisolver whose kernel, approx_kernel and other methods take a list
+            of h1es (and of ecores), one per solver, in place of a single h1e. Also has
+            get_aufbau_guess. Returns fcisolver unchanged if it is already wrapped.
+    '''
 
     # Recursion protection
     if isinstance (fcisolver, H1EZipFCISolver):

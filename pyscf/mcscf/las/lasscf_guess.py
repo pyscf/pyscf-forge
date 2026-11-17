@@ -277,6 +277,22 @@ def localize_init_guess (las, frags_atoms, mo_coeff=None, spin=None, lo_coeff=No
                       smults_f=smults_f, nelec_f=nelec_f)
 
 def interpret_frags_atoms (mol, frags_atoms, frags_by_AOs=False):
+    '''Convert a fragment specification into a list of the AOs in each fragment.
+
+    Args:
+        mol : instance of :class:`Mole`
+        frags_atoms : list of list of int, or list of list of str
+            For each fragment, either atom indices (or AO indices, if frags_by_AOs), or AO labels
+            to be matched by mol.search_ao_label
+
+    Kwargs:
+        frags_by_AOs : logical
+            If True, integers in frags_atoms are AO indices rather than atom indices
+
+    Returns:
+        frags_orbs : list of list of int
+            AO indices of each fragment
+    '''
     frags_atoms_int = all ([all ([isinstance (i, (int,np.integer)) for i in j]) for j in frags_atoms])
     frags_atoms_str = all ([all ([isinstance (i, (str,np.character)) for i in j]) for j in frags_atoms])
     if frags_atoms_int:
