@@ -1,4 +1,3 @@
-from pyscf import ao2mo, lib
 from pyscf.mcscf.addons import StateAverageMCSCFSolver
 import numpy as np
 from pyscf.mcpdft.otfnal import transfnal, get_transfnal
@@ -9,25 +8,10 @@ class _LASPDFT(_PDFT):
     'MC-PDFT energy for a LASSCF wavefunction'
 
     def get_h2eff(self, mo_coeff=None):
-        'Compute the active space two-particle Hamiltonian.'
-        ncore = self.ncore
-        ncas = self.ncas
-        nocc = ncore + ncas
-        if mo_coeff is None:
-            mo_coeff = self.mo_coeff[:, ncore:nocc]
-        elif mo_coeff.shape[1] != ncas:
-            mo_coeff = mo_coeff[:, ncore:nocc]
-
-        if getattr(self._scf, '_eri', None) is not None:
-            eri = ao2mo.full(self._scf._eri, mo_coeff,
-                             max_memory=self.max_memory)
-        elif getattr (self, 'with_df', False):
-            eri = self.with_df.ao2mo(mo_coeff)
-
-        else:
-            eri = ao2mo.full(self.mol, mo_coeff, verbose=self.verbose,
-                             max_memory=self.max_memory)
-        return eri
+        '''The active-space ERIs (aa|aa). The LAS class's get_h2eff, used during the MC-SCF
+        step, returns (pa|aa) instead.'''
+        if mo_coeff is None: mo_coeff = self.mo_coeff
+        return self.get_h2cas(mo_coeff)
 
     def multi_state(self, method='Lin'):
         raise NotImplementedError("MS-PDFT not available for the LAS wave functions.")
