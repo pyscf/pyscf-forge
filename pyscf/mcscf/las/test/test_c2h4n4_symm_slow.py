@@ -53,7 +53,7 @@ class KnownValues(unittest.TestCase):
         las.kernel (mo_coeff)
         self.assertTrue (las.converged)
         self.assertAlmostEqual (las.e_tot, -295.44716017803967, 7)
-        
+
 
 if __name__ == "__main__":
     print("Full Tests for LASSCF c2h4n4 with symmetry")

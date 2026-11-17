@@ -75,10 +75,10 @@ class KnownValues (unittest.TestCase):
                     H -2.29672 2.35095 0.00000'''
         mol.basis='STO-6G'
         mol.build()
-        
+
         # Mean field calculation
         mf = scf.ROHF(mol).newton().run()
-        
+
         # LASSCF Calculations
         las = syn.LASSCF(mf,(2, 2),(2, 2),spin_sub=(1, 1))
         frag_atom_list = ([0, 1], [2, 3])
@@ -96,10 +96,10 @@ class KnownValues (unittest.TestCase):
         mol.basis='STO-6G'
         mol.symmetry='Cs'
         mol.build()
-        
+
         # Mean field calculation
         mf = scf.ROHF(mol).newton().run()
-        
+
         # LASSCF Calculations
         las = syn.LASSCF(mf,(2, 2),(2, 2),spin_sub=(1, 1))
         frag_atom_list = ([0, 1], [2, 3])

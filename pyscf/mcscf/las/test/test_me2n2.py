@@ -33,7 +33,7 @@ def setUpModule():
     mc = mcscf.CASSCF (mf, 4, 4).run ()
     mf_df = mf.density_fit (auxbasis = df.aug_etb (mol)).run ()
     mc_df = mcscf.CASSCF (mf_df, 4, 4).run ()
-    
+
     mol_hs = mol.copy ()
     mol_hs.spin = 4
     mol_hs.build ()

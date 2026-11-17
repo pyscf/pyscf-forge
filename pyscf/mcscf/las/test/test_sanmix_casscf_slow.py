@@ -10,20 +10,20 @@ def setUpModule():
     mf = scf.RHF (mol).set (conv_tol=1e-10).run ()
     mc = mcscf.CASSCF (mf, 8, 8).set (conv_tol=1e-10).run ()
     mc.ci = None
- 
+
     anion = csf_solver (mol, smult=1)
     anion.wfnsym = 'A1'
-    
+
     rad1 = csf_solver (mol, smult=2)
     rad1.spin = 1
     rad1.charge = 1
     rad1.wfnsym = 'E1x'
-    
+
     rad2 = csf_solver (mol, smult=2)
     rad2.spin = 1
     rad2.charge = 1
     rad2.wfnsym = 'E1y'
-    
+
     mc = state_average_n_mix (mc, [anion, rad1, rad2], [1.0/3.0,]*3)
     mc.kernel ()
 

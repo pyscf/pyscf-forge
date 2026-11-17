@@ -10,7 +10,7 @@ def structure (dnn1=0, dnn2=0, basis='6-31g', symmetry=False, **kwargs):
     mol = gto.M (atom = equilgeom, basis=basis, symmetry=True, spin=0)
     atoms = tuple(mol.atom_symbol (i) for i in range (mol.natm))
     coords = mol.atom_coords () * BOHR
-    
+
     idx_nn = np.asarray ([[0, 1], [8, 9]])
     nn_vec = coords[[1,8],:] - coords[[2,7],:]
     nn_equil = np.mean (np.linalg.norm (nn_vec, axis=1))

@@ -32,7 +32,7 @@ def setUpModule():
     from pyscf.tools import molden
     mc = mcscf.CASSCF (mf, 4, 4).run ()
     mc.analyze ()
-    
+
     las = LASSCF (mf, (2,2), (2,2))
     mo = las.localize_init_guess (([0,1],[2,3]), mc.mo_coeff, freeze_cas_spaces=True)
     las.kernel (mo)

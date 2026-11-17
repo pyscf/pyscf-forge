@@ -56,7 +56,7 @@ def setUpModule():
     mo_symm = las_symm.localize_init_guess (frags, mf_symm.mo_coeff)
     del a, frags
     #las.kernel (mo)
-    
+
     # State list contains a couple of different 4-frag interactions
     states  = {'charges': [[0,0,0,0],[1,1,-1,-1],[2,-1,-1,0],[1,0,0,-1],[1,1,-1,-1],[2,-1,-1,0],[1,0,0,-1]],
                'spins':   [[0,0,0,0],[1,1,-1,-1],[0,1,-1,0], [1,0,0,-1],[-1,-1,1,1],[0,-1,1,0], [-1,0,0,1]],
@@ -88,7 +88,7 @@ def _check_():
         las_ref[1].frozen = range (mo_symm.shape[1])
         las_ref[1].kernel ()
         assert (las_ref[1].converged)
-        
+
 def _lrootsout (las):
     lout = np.zeros_like (lroots)
     for i in range (4):

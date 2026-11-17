@@ -83,7 +83,7 @@ def examine_sector (internal):
         my_xorb[k:l,i:j] = xorb[k:l,i:j]
     x_sa = ugg.pack (my_xorb, my_xci)
     x_sing, x_quin = sa_2_ss_x (x_sa)
-    
+
     hxorb_test, hxci_test = ugg.unpack (hop (x_sa))
     hxorb_check, hxci_check = ugg.unpack (ss_2_sa_hx (hop_sing (x_sing), hop_quin (x_quin)))
 
@@ -129,7 +129,7 @@ class KnownValues(unittest.TestCase):
             for i, ht, hr in zip (lbls, hx_test, hx_ref):
                 with self.subTest (sector=(i,j)):
                     self.assertAlmostEqual (lib.fp (ht), lib.fp (hr), 9)
-                
+
 if __name__ == "__main__":
     print("Full Tests for LASSCF Newton-CG module functions state-averaging")
     unittest.main()
