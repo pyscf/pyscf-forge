@@ -43,10 +43,7 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
         # Have to pass this due to dump_chk, which won't work for LAS.
         def compute_pdft_energy_(self, mo_coeff=None, ci=None, ot=None, otxc=None,
                                  grids_level=None, grids_attr=None, dump_chk=False, **kwargs):
-            # Neither applies to LASSI-PDFT (mrh), where e_states holds the LAS rootspace energies
-            # and local excitations are part of the model.
-            do_las = not getattr (self, 'DoLASSI', False)
-            if do_las and _has_lroots (self.ci if ci is None else ci):
+            if _has_lroots (self.ci if ci is None else ci):
                 raise NotImplementedError ('LAS-PDFT with more than one root in a fragment '
                                            '(lroots > 1; see e_lexc)')
             e_tot, e_ot, e_states = _pdft_class.compute_pdft_energy_(self, mo_coeff=mo_coeff,
@@ -56,7 +53,7 @@ def _get_mcpdft_child_class(mc, _pdft_class=_LASPDFT):
             # CASCI: per-state energies in e_tot, e_states untouched (still the values from before
             # the MC-SCF step). Like SA-MC-PDFT, store the per-state energies in e_states and
             # their weighted average in e_tot.
-            if self.nroots > 1 and do_las:
+            if self.nroots > 1:
                 self.e_states = list (e_states)
                 self.e_tot = e_tot = np.dot (self.e_states, self.weights)
             return e_tot, e_ot, e_states
@@ -97,12 +94,7 @@ def _instantiate(PDFT, mc, ot, **kwargs):
     pdft._keys = pdft._keys.union(_keys)
     return pdft
 
-def get_mcpdft_child_class(mc, ot, DoLASSI=False, states=None,
-                           _pdft_class=_LASPDFT, **kwargs):
-    if DoLASSI:
-        raise NotImplementedError ('LASSI-PDFT is implemented in mrh '
-                                   '(mrh.my_pyscf.mcpdft.lassipdft)')
-
+def get_mcpdft_child_class(mc, ot, _pdft_class=_LASPDFT, **kwargs):
     PDFT = _get_mcpdft_child_class(mc, _pdft_class=_pdft_class)
     if mc.ci is not None:
         mc.fcisolver.nroots = mc.nroots
@@ -113,7 +105,7 @@ def get_mcpdft_child_class(mc, ot, DoLASSI=False, states=None,
 def _laspdft (las_class, mc_or_mf_or_mol, ot, ncas_sub=None, nelecas_sub=None, ncore=None,
               spin_sub=None, frozen=None, _get_mcpdft_child_class=None, **kwargs):
     '''Shared body of LASSCFPDFT and LASCIPDFT. _get_mcpdft_child_class defaults to
-    get_mcpdft_child_class; mrh passes its own, which adds LASSI-PDFT.'''
+    get_mcpdft_child_class; a caller can pass its own to build a different child class.'''
     import copy
     from pyscf import gto
     from pyscf.lib import logger
