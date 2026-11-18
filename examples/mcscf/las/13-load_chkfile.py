@@ -26,7 +26,7 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g', verbose=4, output='13-load_chkfile.log')
 mf = scf.RHF (mol).run ()
 
 mc = las.LASSCF (mf, (2, 2), (2, 2))
@@ -39,6 +39,9 @@ print ('E(LASSCF) =', mc.e_tot)
 # results into a new LAS object. The SCF calculation does not need to be repeated: passing a Mole
 # instead of an SCF object wraps it in an RHF object that is not run.
 mol = lib.chkfile.load_mol ('13-load_chkfile.chk')
+mol.verbose = 4
+mol.output = '13-load_chkfile_loaded.log'
+mol.build ()
 mc = las.LASSCF (mol, (2, 2), (2, 2))
 mc.load_chk_ (chkfile='13-load_chkfile.chk')
 print ('E(LASSCF) from the chkfile =', mc.e_tot)
