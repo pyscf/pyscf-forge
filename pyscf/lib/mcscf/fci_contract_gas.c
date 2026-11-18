@@ -115,8 +115,6 @@ typedef struct {
         uint16_t *op;
         size_t op_cap;
 
-        size_t arena_zeroed_upto;
-
         /* A hit is an alpha link whose destination address lies inside the
          * current alpha tile [a0,a1).
          * Building the list once per ABBA batch lets each beta tile reuse it
@@ -664,9 +662,6 @@ static int reserve_arena(gas_contract_ws_t *ws, size_t n)
         }
         ws->arena = p;
         ws->arena_cap = cap;
-        if (ws->arena_zeroed_upto > cap) {
-                ws->arena_zeroed_upto = cap;
-        }
         return GAS_SUCCESS;
 }
 
@@ -1710,9 +1705,8 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
 
         for (uint32_t b0 = 0; b0 < nb0; b0 += btile) {
                 uint32_t b1lim = nb0 - b0 < btile ? nb0 : b0 + btile;
-                /* Keep one invariant [op][full-btile][alpha] layout even for
-                 * the final partial beta tile.  Unused beta rows are never
-                 * read, while stable strides make earlier zero state reusable. */
+                /* Keep [op][full-btile][alpha] strides fixed for the last
+                 * beta tile; only its valid rows are packed and read. */
                 uint32_t t1_nbt = btile;
                 size_t dense_t1_elems = (size_t)nop * t1_nbt * nat;
                 size_t t1_elems = dense_t1_elems;
