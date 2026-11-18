@@ -115,10 +115,7 @@ typedef struct {
         uint16_t *op;
         size_t op_cap;
 
-        /* A hit is an alpha link whose destination address lies inside the
-         * current alpha tile [a0,a1).
-         * Building the list once per ABBA batch lets each beta tile reuse it
-         * instead of rescanning mostly-missing alpha links. */
+        /* Alpha links landing in the current destination tile [a0,a1). */
         gas_alpha_hit_t *alpha_hit;
         size_t alpha_hit_cap;
         uint32_t alpha_hit_n;
