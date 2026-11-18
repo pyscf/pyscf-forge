@@ -247,8 +247,6 @@ def kernel (las, mo_coeff=None, ci0=None, conv_tol_grad=1e-4,
 
     t0 = log.timer ('LASSCF kernel function', *t0)
 
-    las.dump_chk (mo_coeff=mo_coeff, ci=ci1)
-
     return converged, e_tot, e_states, mo_energy, mo_coeff, e_cas, ci1, h2eff_sub, veff
 
 def ci_cycle (las, mo, ci0, veff, h2eff_sub, casdm1frs, log):
@@ -1734,6 +1732,7 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
                 self.ci, h2eff_sub, veff = _kern(mo_coeff=mo_coeff, ci0=ci0, verbose=verbose,
                 conv_tol_grad=conv_tol_grad, assert_no_dupes=assert_no_dupes)
 
+        self.dump_chk ()
         self._finalize ()
         return self.e_tot, self.e_cas, self.ci, self.mo_coeff, self.mo_energy
 

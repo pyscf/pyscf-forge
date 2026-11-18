@@ -1,9 +1,9 @@
 from pyscf.scf.rohf import get_roothaan_fock
 from pyscf import fci
 from pyscf.fci import cistring
-from pyscf.mcscf import casci, casci_symm, df
+from pyscf.mcscf import casci, casci_symm
 from pyscf.tools import dump_mat
-from pyscf import symm, gto, scf, lib
+from pyscf import symm, gto, scf, lib, df
 from pyscf.fci.direct_spin1 import _unpack_nelec
 from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.addons import state_average_n_mix, get_h1e_zipped_fcisolver, las2cas_civec
@@ -1106,6 +1106,9 @@ class LASCINoSymm (casci.CASCI):
         self.weights = [1.0]
         self.e_states = [0.0]
         self.e_lexc = [[np.array ([0]),],]
+
+    def density_fit (self, auxbasis=None, with_df=None):
+        return density_fit (self, auxbasis=auxbasis, with_df=with_df)
 
     def copy (self):
         # semi-deep copy of nested lists

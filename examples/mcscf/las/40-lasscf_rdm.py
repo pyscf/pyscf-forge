@@ -77,8 +77,8 @@ for ifrag, (h0, h1, h2) in enumerate (mc.get_ham_eff_sub ()):
 
 # 2b. Plug my_kernel into the RDM algorithm
 mc_rdm = lasscf_rdm.LASSCF (mf, (2, 2), (2, 2))
-# make_fcibox wraps the function for one fragment; spin (2M) and smult (2S+1) give its state.
-mc_rdm.fciboxes = [lasscf_rdm.make_fcibox (mol, kernel=my_kernel, spin=0, smult=1)
+# make_fcibox wraps the function for one fragment
+mc_rdm.fciboxes = [lasscf_rdm.make_fcibox (mol, kernel=my_kernel)
                    for ifrag in range (2)]
 mc_rdm.kernel (mo0)
 print ('E(LASSCF), RDM algorithm, user-defined solver =', mc_rdm.e_tot)

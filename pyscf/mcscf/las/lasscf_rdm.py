@@ -461,6 +461,12 @@ class FCIBox (lib.StreamObject):
         return dm1a, dm1b
 
 def make_fcibox (mol, kernel=None, get_init_guess=None, spin=None, smult=None):
+    '''Wrap a user-supplied RDM solver for one fragment. If spin (2M) or smult (2S+1) is None,
+    the LASSCF kernel guesses it from the fragment's electrons, as LASCI.__init__ does. A
+    user-supplied kernel or get_init_guess is responsible for actually producing that state.'''
+    if (callable (kernel) or callable (get_init_guess)) and (spin is not None or smult is not None):
+        lib.logger.warn (mol, 'make_fcibox: spin=%s, smult=%s are only labels; the user-supplied '
+                         'kernel/get_init_guess must enforce them', spin, smult)
     s = RDMSolver (mol, kernel=kernel, get_init_guess=get_init_guess)
     s.spin = spin
     s.smult = smult
@@ -521,6 +527,12 @@ class LASSCFNoSymm (lasscf.LASSCFNoSymm):
         if verbose is None: verbose = self.verbose
         if conv_tol_grad is None: conv_tol_grad = self.conv_tol_grad
         log = lib.logger.new_logger(self, verbose)
+
+        # Solvers from make_fcibox may lack spin or smult; guess them as LASCI.__init__ does
+        for fcibox, nel in zip (self.fciboxes, self.nelecas_sub):
+            for solver in fcibox.fcisolvers:
+                if getattr (solver, 'spin', 0) is None: solver.spin = nel[0] - nel[1]
+                if getattr (solver, 'smult', 0) is None: solver.smult = abs (solver.spin) + 1
 
         if self.verbose >= lib.logger.WARN:
             self.check_sanity()

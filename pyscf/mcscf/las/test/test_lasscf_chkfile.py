@@ -22,7 +22,7 @@ from pyscf import gto, scf, lib, mcscf
 from pyscf.mcscf.las.lasscf import LASSCF
 
 def setUpModule():
-    global mf, las, las2
+    global mf, las, las2, las_kern, las1
     xyz='''Li 0 0 0,
            H 2 0 0,
            Li 10 0 0,
@@ -35,8 +35,17 @@ def setUpModule():
 
     las = LASSCF (mf, (2,2), (2,2))
     mo = las.localize_init_guess (([0,1],[2,3]), mc.mo_coeff, freeze_cas_spaces=True)
-    las.kernel (mo)
+    # Only the automatic dump at the end of the kernel writes this chkfile
+    with tempfile.NamedTemporaryFile() as chkfile:
+        las.chkfile = chkfile.name
+        las.kernel (mo)
+        las.chkfile = None
+        las1 = LASSCF (mf, (2,2), (2,2))
+        las1.load_chk_(chkfile=chkfile.name)
     assert (las.converged)
+    las_kern = {'e_tot': las.e_tot, 'e_states': list (las.e_states),
+                'converged': las.converged, 'mo_coeff': las.mo_coeff.copy (),
+                'ci': [c[0].copy () for c in las.ci]}
     las = las.state_average_(weights=[1,0,0,0,0],
                              charges=[[0,0],[1,-1],[1,-1],[-1,1],[-1,1]],
                              spins=[[0,0],[1,-1],[-1,1],[1,-1],[-1,1]],
@@ -49,9 +58,9 @@ def setUpModule():
         las2.load_chk_(chkfile=chkfile.name)
 
 def tearDownModule():
-    global mf, las, las2
+    global mf, las, las2, las_kern, las1
     mf.mol.stdout.close ()
-    del mf, las, las2
+    del mf, las, las2, las_kern, las1
 
 class KnownValues(unittest.TestCase):
     def test_config (self):
@@ -70,6 +79,16 @@ class KnownValues(unittest.TestCase):
         for i in range (2):
             for j in range (las.nroots):
                 self.assertAlmostEqual (lib.fp (las.ci[i][j]), lib.fp (las2.ci[i][j]), 9)
+
+    def test_kernel_dump (self):
+        # The chkfile written by LASSCF.kernel must hold the final results, not those from
+        # before the kernel ran
+        self.assertEqual (las_kern['e_tot'], las1.e_tot)
+        self.assertListEqual (las_kern['e_states'], list (las1.e_states))
+        self.assertTrue (las1.converged)
+        self.assertAlmostEqual (lib.fp (las_kern['mo_coeff']), lib.fp (las1.mo_coeff), 9)
+        for i in range (2):
+            self.assertAlmostEqual (lib.fp (las_kern['ci'][i]), lib.fp (las1.ci[i][0]), 9)
 
 if __name__ == "__main__":
     print("Full Tests for LASSCF chkfile")
