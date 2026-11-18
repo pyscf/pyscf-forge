@@ -27,17 +27,19 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g')
 mf = scf.RHF (mol).run ()
 
 mc = las.LASSCF (mf, (2, 2), (2, 2))
 mo0 = mc.localize_init_guess (([0, 1, 2], [9, 10, 11]), mf.mo_coeff)
 mc.kernel (mo0)
 
+# LAS "canonicalize" always generates natural orbitals in the active space, which cannot mix
+# orbitals between different fragments.
+mo_coeff, mo_energy, mo_occ = mc.canonicalize ()[:3]
 # mo_occ is 2 for inactive orbitals, the natural occupation numbers for active orbitals, and 0
 # for virtual orbitals. mo_energy holds the Fock-matrix eigenvalues of the inactive and virtual
 # orbitals, and zero for the active orbitals.
-mo_coeff, mo_energy, mo_occ = mc.canonicalize ()[:3]
 molden.from_mo (mol, '04-molden.molden', mo_coeff, ene=mo_energy, occ=mo_occ)
 
 # The active orbitals of fragment i are columns i0:i1 of mo_coeff below. To write only one
