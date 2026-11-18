@@ -29,7 +29,7 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g', verbose=4, output='16-density_fitting.log')
 frag_atom_list = ([0, 1, 2], [9, 10, 11])
 
 # Reference: no density fitting
@@ -42,12 +42,13 @@ print ('E(LASSCF) =', e_ref)
 # 1. Density-fitted SCF (default auxiliary basis): the LAS object inherits mf.with_df
 mf_df = scf.RHF (mol).density_fit ().run ()
 print ('DF error in E(RHF) =', mf_df.e_tot - mf.e_tot)
+# TODO: get rid of meaningless "does not have attributes" warning msg
 mc = las.LASSCF (mf_df, (2, 2), (2, 2))
 mc.kernel (mc.localize_init_guess (frag_atom_list, mf_df.mo_coeff))
 print ('E(DF-LASSCF), DF SCF =', mc.e_tot, '; error =', mc.e_tot - e_ref)
 
 # 2. Conventional SCF, density-fitted LAS only, with its own DF object
-mc = density_fit (las.LASSCF (mf, (2, 2), (2, 2)),
-                  with_df=df.DF (mol, auxbasis='def2-universal-jkfit'))
+mc = las.LASSCF (mf, (2, 2), (2, 2)).density_fit ()
 mc.kernel (mc.localize_init_guess (frag_atom_list, mf.mo_coeff))
 print ('E(DF-LASSCF), conventional SCF =', mc.e_tot, '; error =', mc.e_tot - e_ref)
+
