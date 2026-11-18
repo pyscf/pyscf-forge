@@ -40,7 +40,8 @@ enum {
         ABBA_WRITEBACK_TILE = 32,
         OMP_TASK_FACTOR = 32,
         OMP_MAX_ALPHA_SPLIT = 64,
-        OMP_MIN_ALPHA_TILE = 4
+        OMP_MIN_ALPHA_TILE = 4,
+        ABBA_PIPELINE_T1_BYTES = 256 * 1024
 };
 
 static const size_t BB_TRANSPOSE_MAX_ELEMS = 67108864u;
@@ -67,6 +68,16 @@ static uint32_t abba_beta_tile_size(uint32_t nb0, uint32_t nop, uint32_t na1)
         if (tile > nb0) {
                 tile = nb0;
         }
+        return (uint32_t)tile;
+}
+
+static uint32_t abba_pipeline_beta_tile_size(uint32_t nb0, uint32_t nop,
+                                             uint32_t na1)
+{
+        size_t denom = (size_t)nop * (size_t)na1 * sizeof(double);
+        size_t tile = denom == 0u ? nb0 : ABBA_PIPELINE_T1_BYTES / denom;
+        if (tile < 1u) tile = 1u;
+        if (tile > nb0) tile = nb0;
         return (uint32_t)tile;
 }
 
@@ -1602,6 +1613,99 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                 int64_t source = (int64_t)h->src_row + 1;
                 size_t slot = (size_t)h->op_index * nat + h->rel_addr;
                 ws->alpha_slot[slot] = h->sign < 0 ? -source : source;
+        }
+
+        /* Keep Y live across bounded T1 microtiles for a single consumer. */
+        if (npair == 1u) {
+                uint32_t pipeline_btile =
+                        abba_pipeline_beta_tile_size(nb0, nop, nat);
+                size_t pipeline_t1_elems =
+                        (size_t)nop * pipeline_btile * nat;
+                gas_bid_t bdst = (gas_bid_t)ws->pair[0].first;
+                gas_tid_t tidb = ws->pair[0].second;
+                const gas_link_table_t *tb = gas->table + tidb;
+                gas_sid_t bdst_sid = gas->block[bdst].sb;
+                uint32_t nb1 = gas->sector_nstr[bdst_sid];
+                double *dst = ci1 + gas->block[bdst].offset;
+                size_t y_elems = (size_t)nb1 * nat;
+                if (pipeline_t1_elems + y_elems <=
+                            ABBA_WORKSPACE_MAX_ELEMS &&
+                    reserve_arena(ws, pipeline_t1_elems + y_elems) ==
+                            GAS_SUCCESS) {
+                        double *t1 = ws->arena;
+                        double *y = ws->arena + pipeline_t1_elems;
+                        memset(y, 0, y_elems * sizeof(*y));
+                        for (uint32_t b0 = 0; b0 < nb0;
+                             b0 += pipeline_btile) {
+                                uint32_t b1lim = nb0 - b0 < pipeline_btile ?
+                                        nb0 : b0 + pipeline_btile;
+                                for (uint32_t io = 0; io < nop; io++) {
+                                        const int64_t *restrict slots =
+                                                ws->alpha_slot + (size_t)io * nat;
+                                        for (uint32_t ib0 = b0; ib0 < b1lim; ib0++) {
+                                                double *restrict t = t1 +
+                                                        ((size_t)io * pipeline_btile +
+                                                         (ib0 - b0)) * nat;
+                                                for (uint32_t ia = 0; ia < nat; ia++) {
+                                                        int64_t source = slots[ia];
+                                                        if (source > 0) {
+                                                                t[ia] = src[
+                                                                        (uint64_t)(source - 1) *
+                                                                        nb0 + ib0];
+                                                        } else if (source < 0) {
+                                                                t[ia] = -src[
+                                                                        (uint64_t)(-source - 1) *
+                                                                        nb0 + ib0];
+                                                        } else {
+                                                                t[ia] = 0.0;
+                                                        }
+                                                }
+                                        }
+                                }
+                                for (uint32_t ib0 = b0; ib0 < b1lim; ib0++) {
+                                        const gas_link_entry_t *rb = tb->link +
+                                                (uint64_t)ib0 * tb->nlink;
+                                        const double *tbase = t1 +
+                                                (size_t)(ib0 - b0) * nat;
+                                        uint32_t kb = 0u;
+                                        while (kb < tb->nlink) {
+                                                const gas_link_entry_t *eb0 = rb + kb;
+                                                if (kb + 1u < tb->nlink) {
+                                                        const gas_link_entry_t *eb1 =
+                                                                rb + kb + 1u;
+                                                        if (eb0->addr != eb1->addr) {
+                                                                double *restrict y0 = y +
+                                                                        (size_t)eb0->addr * nat;
+                                                                double *restrict y1 = y +
+                                                                        (size_t)eb1->addr * nat;
+                                                                abba_fused_ops_pair2x4(
+                                                                        y0, y1, tbase,
+                                                                        (size_t)pipeline_btile * nat,
+                                                                        gos, nnorb,
+                                                                        gas_link_ia(eb0),
+                                                                        gas_link_ia(eb1),
+                                                                        ws->op, nop,
+                                                                        (double)eb0->sign,
+                                                                        (double)eb1->sign, nat);
+                                                                kb += 2u;
+                                                                continue;
+                                                        }
+                                                }
+                                                double *restrict y0 = y +
+                                                        (size_t)eb0->addr * nat;
+                                                abba_fused_ops(
+                                                        y0, tbase,
+                                                        (size_t)pipeline_btile * nat,
+                                                        gos, nnorb, gas_link_ia(eb0),
+                                                        ws->op, nop,
+                                                        (double)eb0->sign, nat);
+                                                kb++;
+                                        }
+                                }
+                        }
+                        abba_transpose_add(dst, nb1, y, nat, nb1, a0);
+                        return GAS_BATCH_DONE;
+                }
         }
 
         for (uint32_t b0 = 0; b0 < nb0; b0 += btile) {
