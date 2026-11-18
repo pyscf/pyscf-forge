@@ -27,7 +27,7 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', spin=4, verbose=4)
+             basis='6-31g', spin=4, verbose=4, output='11-rohf_guess.log')
 mf = scf.ROHF (mol).run ()
 print ('E(ROHF) =', mf.e_tot)
 frag_atom_list = ([0, 1, 2], [9, 10, 11])
@@ -41,11 +41,12 @@ mo0 = mc.localize_init_guess (frag_atom_list, mf.mo_coeff, freeze_cas_spaces=Tru
 mc.kernel (mo0)
 print ('E(LASCI), SOMOs only, freeze_cas_spaces=True =', mc.e_tot)
 
-# 2. Doubly occupied orbitals in the active space too: add one doubly occupied orbital to each
-#    fragment, (3 orbitals, 3 alpha + 1 beta electrons). freeze_cas_spaces=True keeps the active
-#    space as a whole, but it lets the localization mix the doubly and singly occupied ROHF
-#    orbitals, so the guess no longer contains the ROHF determinant.
-mc = las.LASCI (mf, (3, 3), ((3, 1), (3, 1)), spin_sub=(3, 3))
+# 2. Doubly occupied and empty orbitals in the active space too: add one doubly occupied and one 
+#    virtual orbital to each fragment, (4 orbitals, 3 alpha + 1 beta electrons).
+#    freeze_cas_spaces=True keeps the active space as a whole, but it lets the localization mix
+#    ROHF orbitals with different occupancies, so the guess no longer contains the ROHF
+#    determinant.
+mc = las.LASCI (mf, (4, 4), ((3, 1), (3, 1)), spin_sub=(3, 3))
 mo0 = mc.localize_init_guess (frag_atom_list, mf.mo_coeff, freeze_cas_spaces=True)
 mc.kernel (mo0)
 print ('E(LASCI), with doubly occupied, freeze_cas_spaces=True =', mc.e_tot)
@@ -53,7 +54,7 @@ print ('E(LASCI), with doubly occupied, freeze_cas_spaces=True =', mc.e_tot)
 # 3. Passing mo_occ=mf.mo_occ only mixes orbitals with the same ROHF occupation (and implies
 #    freeze_cas_spaces=True). With the 'aufbau' CI guess, which occupies the orbitals of each
 #    fragment in order, the initial LAS state is the ROHF determinant.
-mc = las.LASCI (mf, (3, 3), ((3, 1), (3, 1)), spin_sub=(3, 3))
+mc = las.LASCI (mf, (4, 4), ((3, 1), (3, 1)), spin_sub=(3, 3))
 mc.init_guess_ci = 'aufbau'
 mo0 = mc.localize_init_guess (frag_atom_list, mf.mo_coeff, mo_occ=mf.mo_occ)
 mc.kernel (mo0)
