@@ -32,7 +32,7 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g')
 mf = scf.RHF (mol).run ()
 # Each fragment has the 2 electrons of an N=N pi bond in its pi and pi* orbitals, which can be
 # coupled into a singlet or a triplet.
@@ -68,4 +68,4 @@ print ('E(triplet-triplet, M=2) = {:.8f}; <S^2> = {:.4f}'.format (e_tt2, total_s
 
 # The M = 0 and M = 2 triplet-triplet states differ in energy only through the exchange
 # interaction between the fragments' spin densities, which is small for well-separated fragments.
-print ('E(TT, M=0) - E(TT, M=2) = {:.2e}'.format (e_tt0 - e_tt2))
+print ('E(TT, M=0) - E(TT, M=2) = {:.2e} Eh'.format (e_tt0 - e_tt2))
