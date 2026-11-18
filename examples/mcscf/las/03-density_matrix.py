@@ -26,7 +26,7 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g')
 mf = scf.RHF (mol).run ()
 
 # Triplet fragment 0 (M = +1) and singlet fragment 1

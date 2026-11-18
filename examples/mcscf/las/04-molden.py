@@ -32,7 +32,7 @@ mf = scf.RHF (mol).run ()
 
 mc = las.LASSCF (mf, (2, 2), (2, 2))
 mo0 = mc.localize_init_guess (([0, 1, 2], [9, 10, 11]), mf.mo_coeff)
-mc.kernel (mo0)
+mc.kernel (mo0) # TODO: verbose = 3 total energy output
 
 # LAS "canonicalize" always generates natural orbitals in the active space, which cannot mix
 # orbitals between different fragments.

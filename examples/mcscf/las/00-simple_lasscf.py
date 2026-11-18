@@ -37,4 +37,4 @@ mc.kernel (mo0)
 # For comparison, CASSCF with the same total active space. Since the LAS wave function is a
 # product of fragment wave functions, it is a variational approximation to this one.
 mc_cas = mcscf.CASSCF (mf, 4, 4)
-mc_cas.kernel (mc.mo_coeff)
+mc_cas.kernel (mc.mo_coeff) # TODO: verbose = 3 energy output

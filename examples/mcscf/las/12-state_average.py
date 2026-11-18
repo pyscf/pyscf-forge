@@ -36,7 +36,7 @@ mol = gto.M (atom='''H  -0.514649   3.409707   1.397652
                      N  -0.217158  -2.421838  -0.376701
                      N  -0.217158  -3.560141   0.655805
                      H   0.514649  -3.409707   1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g', verbose=4, output='12-state_average.log')
 mf = scf.RHF (mol).run ()
 
 # Each fragment is one half of the molecule, with 3 active orbitals (the radical orbital on C and

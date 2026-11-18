@@ -28,7 +28,7 @@ mol = gto.M (atom='''H -2.772250 -1.103953 0.0
                      N  1.761797 -0.508543 0.0
                      N  2.875835  0.058207 0.0
                      H  2.772250  1.103953 0.0''',
-             basis='6-31g', symmetry='Cs', verbose=4)
+             basis='6-31g', symmetry='Cs', verbose=4, output='15-symmetry.log')
 print ('Point group used:', mol.groupname, '(full point group: {})'.format (mol.topgroup))
 mf = scf.RHF (mol).run ()
 
