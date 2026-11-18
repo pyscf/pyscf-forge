@@ -113,6 +113,8 @@ typedef struct {
         gas_alpha_hit_t *alpha_hit;
         size_t alpha_hit_cap;
         uint32_t alpha_hit_n;
+        int64_t *alpha_slot;
+        size_t alpha_slot_cap;
 } gas_contract_ws_t;
 
 typedef enum {
@@ -613,6 +615,7 @@ static inline void contract_ws_free(gas_contract_ws_t *ws)
         free(ws->op_map);
         free(ws->op);
         free(ws->alpha_hit);
+        free(ws->alpha_slot);
         memset(ws, 0, sizeof(*ws));
 }
 
@@ -622,7 +625,8 @@ static inline uint64_t contract_ws_bytes(const gas_contract_ws_t *ws)
                (uint64_t)ws->pair_cap * sizeof(*ws->pair) +
                (uint64_t)ws->op_map_cap * sizeof(*ws->op_map) +
                (uint64_t)ws->op_cap * sizeof(*ws->op) +
-               (uint64_t)ws->alpha_hit_cap * sizeof(*ws->alpha_hit);
+               (uint64_t)ws->alpha_hit_cap * sizeof(*ws->alpha_hit) +
+               (uint64_t)ws->alpha_slot_cap * sizeof(*ws->alpha_slot);
 }
 
 static size_t contract_grow_capacity(size_t cap, size_t need)
@@ -670,6 +674,21 @@ static int reserve_alpha_hitlist(gas_contract_ws_t *ws, size_t n)
         }
         ws->alpha_hit = p;
         ws->alpha_hit_cap = cap;
+        return GAS_SUCCESS;
+}
+
+static int reserve_alpha_slots(gas_contract_ws_t *ws, size_t n)
+{
+        if (n <= ws->alpha_slot_cap) {
+                return GAS_SUCCESS;
+        }
+        size_t cap = contract_grow_capacity(ws->alpha_slot_cap, n);
+        int64_t *p = realloc(ws->alpha_slot, cap * sizeof(*p));
+        if (p == 0) {
+                return GAS_ERR_MEMORY;
+        }
+        ws->alpha_slot = p;
+        ws->alpha_slot_cap = cap;
         return GAS_SUCCESS;
 }
 
@@ -1567,6 +1586,23 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
         if (build_alpha_hitlist(ta, a0, a1, ws) != GAS_SUCCESS) {
                 return GAS_BATCH_FALLBACK;
         }
+        if (nat != 0u && nop > SIZE_MAX / nat) {
+                return GAS_BATCH_FALLBACK;
+        }
+        size_t alpha_slot_n = (size_t)nop * nat;
+        if (alpha_slot_n > SIZE_MAX / sizeof(*ws->alpha_slot)) {
+                return GAS_BATCH_FALLBACK;
+        }
+        if (reserve_alpha_slots(ws, alpha_slot_n) != GAS_SUCCESS) {
+                return GAS_BATCH_FALLBACK;
+        }
+        memset(ws->alpha_slot, 0, alpha_slot_n * sizeof(*ws->alpha_slot));
+        for (uint32_t ih = 0; ih < ws->alpha_hit_n; ih++) {
+                const gas_alpha_hit_t *h = ws->alpha_hit + ih;
+                int64_t source = (int64_t)h->src_row + 1;
+                size_t slot = (size_t)h->op_index * nat + h->rel_addr;
+                ws->alpha_slot[slot] = h->sign < 0 ? -source : source;
+        }
 
         for (uint32_t b0 = 0; b0 < nb0; b0 += btile) {
                 uint32_t b1lim = nb0 - b0 < btile ? nb0 : b0 + btile;
@@ -1580,18 +1616,22 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                     reserve_arena(ws, t1_elems) != GAS_SUCCESS) {
                         return GAS_BATCH_FALLBACK;
                 }
-                if (b0 == 0u) {
-                        memset(ws->arena, 0, t1_elems * sizeof(*ws->arena));
-                        ws->arena_zeroed_upto = t1_elems;
-                }
-                for (uint32_t ih = 0; ih < ws->alpha_hit_n; ih++) {
-                        const gas_alpha_hit_t *h = ws->alpha_hit + ih;
-                        const double *restrict src_row = src + (uint64_t)h->src_row * nb0;
-                        double *t = ws->arena +
-                                ((size_t)h->op_index * t1_nbt * nat + h->rel_addr);
-                        double sgn = (double)h->sign;
+                for (uint32_t io = 0; io < nop; io++) {
+                        const int64_t *restrict slots =
+                                ws->alpha_slot + (size_t)io * nat;
                         for (uint32_t ib0 = b0; ib0 < b1lim; ib0++) {
-                                t[(size_t)(ib0 - b0) * nat] = sgn * src_row[ib0];
+                                double *restrict t = ws->arena +
+                                        ((size_t)io * t1_nbt + (ib0 - b0)) * nat;
+                                for (uint32_t ia = 0; ia < nat; ia++) {
+                                        int64_t source = slots[ia];
+                                        if (source > 0) {
+                                                t[ia] = src[(uint64_t)(source - 1) * nb0 + ib0];
+                                        } else if (source < 0) {
+                                                t[ia] = -src[(uint64_t)(-source - 1) * nb0 + ib0];
+                                        } else {
+                                                t[ia] = 0.0;
+                                        }
+                                }
                         }
                 }
 
