@@ -26,7 +26,7 @@ mol = gto.M (atom='''H -0.145525  2.756831  1.397652
                      N -0.586282 -1.768962 -0.376701
                      N -0.586282 -2.907265  0.655805
                      H  0.145525 -2.756831  1.397652''',
-             basis='6-31g', verbose=4)
+             basis='6-31g')
 mf = scf.RHF (mol).run ()
 
 # Two fragments, each with 2 active orbitals (pi and pi* of N=N) and 2 active electrons
@@ -38,7 +38,6 @@ mc = las.LASCI (mf, (2, 2), (2, 2))
 frag_atom_list = ([0, 1, 2], [9, 10, 11])
 mo0 = mc.localize_init_guess (frag_atom_list, mf.mo_coeff)
 mc.kernel (mo0)
-print ('E(LASCI) =', mc.e_tot)
 
 # The CI vectors are stored per fragment, then per state: mc.ci[ifrag][istate]
 print ('Shape of the CI vector of fragment 0:', mc.ci[0][0].shape)
