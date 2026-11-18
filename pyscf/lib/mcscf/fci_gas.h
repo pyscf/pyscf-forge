@@ -52,7 +52,7 @@ typedef enum {
  * CI vector: offset + ia * nstr(beta) + ib.
  */
 typedef struct {
-        uint32_t offset;
+        uint64_t offset;
         gas_sid_t sa;
         gas_sid_t sb;
 } gas_block_t;
@@ -132,9 +132,9 @@ typedef struct {
         int *start;
         int na;
         int nb;
-        uint32_t ndet;
+        uint64_t ndet;
         uint16_t nsector;
-        uint16_t sector_padding;     /* 2 + 2 bytes align sector_nstr */
+        uint16_t sector_padding;
         uint32_t *sector_nstr;
         uint8_t *sector_occ;
         uint32_t *sector_stride;
@@ -163,10 +163,10 @@ typedef struct {
 
 _Static_assert(sizeof(void *) == 8, "fci_gas requires a 64-bit platform");
 _Static_assert(sizeof(gas_link_entry_t) == 8, "gas_link_entry_t must be 8 bytes");
-_Static_assert(sizeof(gas_block_t) == 8, "gas_block_t must be 8 bytes");
+_Static_assert(sizeof(gas_block_t) == 16, "gas_block_t must be 16 bytes");
 _Static_assert(sizeof(gas_row_t) == 8, "gas_row_t must be 8 bytes");
 _Static_assert(sizeof(gas_link_table_t) == 32, "gas_link_table_t must be 32 bytes");
-_Static_assert(sizeof(gas_space_t) == 168, "gas_space_t must be 168 bytes");
+_Static_assert(sizeof(gas_space_t) == 176, "gas_space_t must be 176 bytes");
 
 static inline uint16_t gas_link_pair_index(int p, int q)
 {
@@ -203,8 +203,8 @@ static inline uint16_t gas_link_ia(const gas_link_entry_t *e)
 
 uint32_t gas_str2addr_sector(const gas_space_t *gas, gas_sid_t s, uint64_t str);
 uint64_t gas_addr2str_sector(const gas_space_t *gas, gas_sid_t s, uint32_t addr);
-uint32_t gas_block_ndet(const gas_space_t *gas, gas_bid_t b);
-uint32_t gas_det_addr(const gas_space_t *gas, gas_bid_t b, uint32_t ia, uint32_t ib);
+uint64_t gas_block_ndet(const gas_space_t *gas, gas_bid_t b);
+uint64_t gas_det_addr(const gas_space_t *gas, gas_bid_t b, uint32_t ia, uint32_t ib);
 gas_bid_t gas_find_block(const gas_space_t *gas, gas_sid_t sa, gas_sid_t sb);
 gas_tid_t gas_find_table(const gas_space_t *gas, gas_sid_t src, gas_sid_t dst);
 const gas_link_table_t *gas_get_link_table(const gas_space_t *gas,

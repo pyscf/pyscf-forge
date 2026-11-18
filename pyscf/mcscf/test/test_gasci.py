@@ -18,6 +18,7 @@
 
 """Tests for GAS restriction handling, the GAS FCI solver, and GASCI."""
 
+import ctypes
 import io
 import unittest
 from unittest import mock
@@ -33,6 +34,7 @@ from pyscf.fci import cistring
 from pyscf.fci import direct_spin1
 from pyscf.fci import spin_op
 from pyscf.lib import logger
+from pyscf.mcscf import _gaslib
 from pyscf.mcscf import addons_gas
 from pyscf.mcscf import fci_gas
 from pyscf.mcscf import gasci
@@ -59,6 +61,97 @@ def make_integrals(norb):
 
 
 class TestGASRestrictions(unittest.TestCase):
+
+    def test_python_global_count_and_local_limit(self):
+        norb = (4,) + (2,) * 14
+        blocks = numpy.ones((1, 30), dtype=numpy.int32)
+        limits = addons_gas.check_kernel_limits(norb, (15, 15), blocks)
+        self.assertEqual(limits['ndet_estimate'], 2**32)
+
+        with self.assertRaisesRegex(ValueError, 'sector string count'):
+            addons_gas.check_kernel_limits(
+                (31, 31), (30, 30), [[15, 15, 15, 15]])
+        with self.assertRaisesRegex(ValueError, 'uint64_t'):
+            addons_gas.check_kernel_limits(
+                (31, 31, 1), (10, 10),
+                [[2, 8, 0, 2, 8, 0], [8, 2, 0, 8, 2, 0]])
+
+    def test_c_global_determinant_arithmetic(self):
+        lib = _gaslib.load_library()
+        self.assertEqual(lib.gas_det_addr.argtypes, [
+            ctypes.POINTER(_gaslib.GasSpaceStruct), _gaslib.gas_bid_t,
+            ctypes.c_uint32, ctypes.c_uint32,
+        ])
+        self.assertIs(lib.gas_det_addr.restype, ctypes.c_uint64)
+        nstr = (ctypes.c_uint32 * 2)()
+        blocks = (_gaslib.GasBlock * 1)()
+        gas = _gaslib.GasSpaceStruct()
+        gas.nsector = 2
+        gas.nblock = 1
+        gas.sector_nstr = nstr
+        gas.block = blocks
+        blocks[0].sa, blocks[0].sb = 0, 1
+        for na, nb in ((65535, 65537), (65536, 65536), (641, 6700417)):
+            nstr[0], nstr[1] = na, nb
+            for offset in (0, 2**32 - 1, 2**32, 2**32 + 1):
+                with self.subTest(na=na, nb=nb, offset=offset):
+                    blocks[0].offset = offset
+                    gas.ndet = offset + na * nb
+                    self.assertEqual(gas.ndet, offset + na * nb)
+                    self.assertEqual(
+                        lib.gas_block_ndet(ctypes.byref(gas), 0), na * nb)
+                    self.assertEqual(
+                        lib.gas_det_addr(ctypes.byref(gas), 0, 0, 0), offset)
+                    self.assertEqual(
+                        lib.gas_det_addr(ctypes.byref(gas), 0, na - 1, nb - 1),
+                        offset + na * nb - 1)
+
+    def test_c_constructor_prefix_overflow(self):
+        lib = _gaslib.load_library()
+        norb = numpy.asarray((18, 18), dtype=numpy.int32)
+        blocks = numpy.asarray([
+            (a, 18 - a, b, 18 - b)
+            for a in range(8, 11) for b in range(8, 11)
+        ], dtype=numpy.int32)
+        gas = _gaslib.GasSpaceStruct()
+        status = lib.gas_space_from_blocks(
+            ctypes.byref(gas), 2,
+            norb.ctypes.data_as(ctypes.POINTER(ctypes.c_int)), 18, 18,
+            len(blocks), blocks.ctypes.data_as(ctypes.POINTER(ctypes.c_int)))
+        try:
+            self.assertEqual(status, _gaslib.GAS_ERR_INVALID)
+        finally:
+            lib.gas_space_free(ctypes.byref(gas))
+
+    def test_c_vector_byte_overflow_rejected(self):
+        with fci_gas.GasSpace((2, 2), (2, 2), [[1, 1, 1, 1]]) as gas:
+            h1e, eri = make_integrals(4)
+            gos = numpy.ascontiguousarray(eri + eri.T)
+            hdiag = numpy.empty(gas.ndet)
+            ndet = gas.ndet
+            plan = ctypes.c_void_p()
+            try:
+                gas._gas.ndet = 2**61
+                self.assertEqual(gas.lib.fci_make_hdiag_gas(
+                    gas.c_ptr, _gaslib.double_ptr(h1e), _gaslib.double_ptr(eri),
+                    _gaslib.double_ptr(hdiag)), _gaslib.GAS_ERR_MEMORY)
+                status = gas.lib.fci_rdm_gas_plan_create(
+                    ctypes.byref(plan), gas.c_ptr)
+                if plan.value:
+                    gas.lib.fci_rdm_gas_plan_free(plan)
+                    plan = ctypes.c_void_p()
+                self.assertEqual(status, _gaslib.GAS_ERR_INVALID)
+                gas._gas.ndet = ndet
+                gas.compress_links()
+                gas._gas.ndet = 2**61
+                status = gas.lib.fci_contract_gas_plan_create(
+                    ctypes.byref(plan), gas.c_ptr,
+                    _gaslib.double_ptr(eri), _gaslib.double_ptr(gos))
+                if plan.value:
+                    gas.lib.fci_contract_gas_plan_free(plan)
+                self.assertEqual(status, _gaslib.GAS_ERR_INVALID)
+            finally:
+                gas._gas.ndet = ndet
 
     def test_nelec_spin_inference(self):
         cases = (
@@ -326,6 +419,9 @@ class TestGASFCISolver(unittest.TestCase):
                 rng.normal(size=gas.ndet),
                 rng.normal(size=gas.ndet),
             )
+            workspace_bytes = gas.lib.fci_contract_gas_plan_workspace_bytes
+            self.assertEqual(workspace_bytes.argtypes, [ctypes.c_void_p])
+            self.assertIs(workspace_bytes.restype, ctypes.c_uint64)
             with fci_gas.GasContractPlan(gas, h2e) as plan:
                 for ci in vectors:
                     planned = plan.contract(ci)
@@ -337,6 +433,8 @@ class TestGASFCISolver(unittest.TestCase):
                         planned, through_solver, atol=1e-12, rtol=0)
                     numpy.testing.assert_allclose(
                         planned, one_shot, atol=1e-12, rtol=0)
+                self.assertGreater(workspace_bytes(plan._plan), 0)
+            self.assertIsNone(plan._plan)
 
     def test_borrowed_contract_plan_equivalent_specs_and_ownership(self):
         solver = fci_gas.FCISolver(

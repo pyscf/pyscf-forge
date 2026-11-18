@@ -34,7 +34,8 @@ GAS_MAX_ORB = 63
 GAS_MAX_LOCAL_ORB = 31
 GAS_MAX_NGAS = 15
 GAS_MAX_SECTOR = 65534
-GAS_MAX_DET = 2**32 - 1
+GAS_MAX_SECTOR_NSTR = 2**32 - 1
+GAS_MAX_DET = 2**64 - 1
 GAS_MAX_BLOCK = 2**31 - 1
 GAS_RESTR_SPIN_SUPERGROUP = "spin-supergroup"
 GAS_RESTR_SUPERGROUP = "supergroup"
@@ -841,14 +842,14 @@ def check_kernel_limits(norb, nelec, blocks):
     if len(sectors) > GAS_MAX_SECTOR:
         raise ValueError("number of GAS sectors exceeds uint16_t kernel limit")
     for occ in sectors:
-        if _sector_string_count(norb, occ) > GAS_MAX_DET:
+        if _sector_string_count(norb, occ) > GAS_MAX_SECTOR_NSTR:
             raise ValueError("sector string count exceeds uint32_t kernel limit")
 
     ndet = 0
     for aocc, bocc in zip(alpha, beta):
         ndet += _sector_string_count(norb, aocc) * _sector_string_count(norb, bocc)
         if ndet > GAS_MAX_DET:
-            raise ValueError("determinant count exceeds uint32_t kernel limit")
+            raise ValueError("determinant count exceeds uint64_t kernel limit")
 
     return {
         "ngas": ngas,

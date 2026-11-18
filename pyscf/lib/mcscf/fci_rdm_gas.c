@@ -309,7 +309,8 @@ static int rdm_validate(const gas_space_t *gas,
                         const double *bra, const double *ket)
 {
         if (gas == 0 || bra == 0 || ket == 0 ||
-            gas->link_format != GAS_LINK_RAW || gas->norb_tot <= 0) {
+            gas->link_format != GAS_LINK_RAW || gas->norb_tot <= 0 ||
+            gas->ndet > SIZE_MAX / sizeof(*bra)) {
                 return GAS_ERR_INVALID;
         }
         return GAS_SUCCESS;
@@ -1718,7 +1719,7 @@ static rdm_task_t *rdm_build_tasks(const gas_space_t *gas, uint32_t nthread,
 
                 for (uint32_t q = 0; q < row.n; q++) {
                         uint64_t w = block_cost[row.off + q];
-                        uint64_t want64 = (w + target - 1u) / target;
+                        uint64_t want64 = w / target + (w % target != 0u);
                         uint32_t by_rows = (na + RDM_MIN_ALPHA_TILE - 1u) /
                                            RDM_MIN_ALPHA_TILE;
                         uint32_t split = want64 > UINT32_MAX ?
@@ -2163,7 +2164,8 @@ static void rdm12_parallel(gas_rdm_plan_t *plan,
 int fci_rdm_gas_plan_create(gas_rdm_plan_t **out, const gas_space_t *gas)
 {
         if (out == 0 || gas == 0 || gas->link_format != GAS_LINK_RAW ||
-            gas->norb_tot <= 0) return GAS_ERR_INVALID;
+            gas->norb_tot <= 0 ||
+            gas->ndet > SIZE_MAX / sizeof(double)) return GAS_ERR_INVALID;
         *out = 0;
         gas_rdm_plan_t *plan = calloc(1, sizeof(*plan));
         if (plan == 0) return GAS_ERR_MEMORY;

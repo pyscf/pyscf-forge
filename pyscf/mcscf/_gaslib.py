@@ -38,7 +38,7 @@ gas_tid_t = ctypes.c_uint32
 
 class GasBlock(ctypes.Structure):
     _fields_ = [
-        ("offset", ctypes.c_uint32),
+        ("offset", ctypes.c_uint64),
         ("sa", gas_sid_t),
         ("sb", gas_sid_t),
     ]
@@ -102,7 +102,7 @@ class GasSpaceStruct(ctypes.Structure):
         ("start", ctypes.POINTER(ctypes.c_int)),
         ("na", ctypes.c_int),
         ("nb", ctypes.c_int),
-        ("ndet", ctypes.c_uint32),
+        ("ndet", ctypes.c_uint64),
         ("nsector", ctypes.c_uint16),
         ("sector_padding", ctypes.c_uint16),
         ("sector_nstr", ctypes.POINTER(ctypes.c_uint32)),
@@ -171,7 +171,12 @@ def _configure_library(lib):
     lib.gas_str2addr_sector.restype = ctypes.c_uint32
 
     lib.gas_block_ndet.argtypes = [gas_p, gas_bid_t]
-    lib.gas_block_ndet.restype = ctypes.c_uint32
+    lib.gas_block_ndet.restype = ctypes.c_uint64
+
+    lib.gas_det_addr.argtypes = [
+        gas_p, gas_bid_t, ctypes.c_uint32, ctypes.c_uint32,
+    ]
+    lib.gas_det_addr.restype = ctypes.c_uint64
 
     lib.fci_make_hdiag_gas.argtypes = [gas_p, double_p, double_p, double_p]
     lib.fci_make_hdiag_gas.restype = ctypes.c_int
@@ -194,6 +199,9 @@ def _configure_library(lib):
 
     lib.fci_contract_gas_plan_free.argtypes = [ctypes.c_void_p]
     lib.fci_contract_gas_plan_free.restype = None
+
+    lib.fci_contract_gas_plan_workspace_bytes.argtypes = [ctypes.c_void_p]
+    lib.fci_contract_gas_plan_workspace_bytes.restype = ctypes.c_uint64
 
     lib.fci_rdm_gas_plan_create.argtypes = [rdm_plan_pp, gas_p]
     lib.fci_rdm_gas_plan_create.restype = ctypes.c_int

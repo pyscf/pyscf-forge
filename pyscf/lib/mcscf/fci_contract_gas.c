@@ -155,7 +155,7 @@ struct gas_contract_plan {
 #endif
 };
 
-static inline void contract_zero(double *x, uint32_t n)
+static inline void contract_zero(double *x, uint64_t n)
 {
         memset(x, 0, (size_t)n * sizeof(*x));
 }
@@ -1962,7 +1962,7 @@ static gas_omp_task_t *build_omp_tasks(const gas_space_t *gas, uint32_t *ntask)
 
                 for (uint32_t q = 0; q < row.n; q++) {
                         uint64_t w = block_cost[row.off + q];
-                        uint64_t want64 = (w + target - 1u) / target;
+                        uint64_t want64 = w / target + (w % target != 0u);
                         uint32_t by_rows =
                                 (na + OMP_MIN_ALPHA_TILE - 1u) /
                                 OMP_MIN_ALPHA_TILE;
@@ -2064,7 +2064,7 @@ static void zero_alpha_range(const gas_space_t *gas, double *ci1,
                 gas_bid_t b = row.off + q;
                 uint32_t nb = gas->sector_nstr[gas->block[b].sb];
                 contract_zero(ci1 + gas->block[b].offset + (uint64_t)a0 * nb,
-                              (a1 - a0) * nb);
+                              (uint64_t)(a1 - a0) * nb);
         }
 }
 
@@ -2391,7 +2391,8 @@ int fci_contract_gas_plan_create(gas_contract_plan_t **out,
                                 const double *gos)
 {
         if (out == 0 || gas == 0 || eri == 0 || gos == 0 ||
-            gas->link_format != GAS_LINK_COMPRESSED) {
+            gas->link_format != GAS_LINK_COMPRESSED ||
+            gas->ndet > SIZE_MAX / sizeof(double)) {
                 return GAS_ERR_INVALID;
         }
         *out = 0;
