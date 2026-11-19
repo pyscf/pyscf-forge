@@ -2,7 +2,7 @@ from pyscf import gto, scf, lib, symm
 from pyscf.mcscf import mc_ao2mo, mc1step
 from pyscf.mcscf import df as mc_df
 from pyscf.csf_fci.csfstring import ImpossibleCIvecError
-from pyscf.mcscf.las import _DFLASCI, lasci, lasscf_guess
+from pyscf.mcscf.las import _DFLASCI, lasci, localize
 from scipy.sparse import linalg as sparse_linalg
 from scipy import linalg
 import numpy as np
@@ -14,7 +14,7 @@ import numpy as np
 # or "fragment" subspaces, so that the orbital-optimization part scales no better than
 # CASSCF. Eventually to be modified into a true all-PySCF implementation of vLASSCF
 
-localize_init_guess=lasscf_guess._localize
+localize_init_guess=localize._localize
 
 class MicroIterInstabilityException (Exception):
     pass

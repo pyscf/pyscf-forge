@@ -7,7 +7,7 @@ from pyscf import symm, gto, scf, lib, df
 from pyscf.fci.direct_spin1 import _unpack_nelec
 from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.addons import state_average_n_mix, get_h1e_zipped_fcisolver, las2cas_civec
-from pyscf.mcscf.las import _DFLASCI, lasscf_guess, las_ao2mo
+from pyscf.mcscf.las import _DFLASCI, localize, las_ao2mo
 from pyscf.mcscf.las import chkfile
 from pyscf.mcscf.las.productstate import ImpureProductStateFCISolver, state_average_fcisolver
 from itertools import combinations, permutations, product
@@ -2308,7 +2308,7 @@ class LASCINoSymm (casci.CASCI):
     assert_no_duplicates = assert_no_duplicates
     get_init_guess_ci = get_init_guess_ci
     _combine_init_guess_ci = _combine_init_guess_ci
-    localize_init_guess=lasscf_guess.localize_init_guess
+    localize_init_guess=localize.localize_init_guess
 
     def _svd (self, mo_lspace, mo_rspace, s=None, mo_occ=None, rngs=None, **kwargs):
         log = lib.logger.new_logger (self, self.verbose)

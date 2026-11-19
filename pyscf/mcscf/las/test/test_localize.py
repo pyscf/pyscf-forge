@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 from pyscf import gto, scf, lo
 from pyscf.mcscf.las.lasscf import LASSCF
-from pyscf.mcscf.las.lasscf_guess import interpret_frags_atoms
+from pyscf.mcscf.las.localize import interpret_frags_atoms
 
 frags_atoms = ((0,1),(2,3))
 frags_labels = (['0 H', '1 H'], ['2 H', '3 H'])
