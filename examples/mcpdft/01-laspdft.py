@@ -21,7 +21,7 @@ mol = gto.M (atom='''H 0.0 0.0 0.0
                      H 0.0 0.0 0.74
                      H 3.0 0.0 0.0
                      H 3.0 0.0 0.74''',
-             basis='6-31g', verbose=4, output='01_laspdft.log')
+             basis='6-31g', verbose=4, output='01-laspdft.log')
 mf = scf.RHF (mol).run ()
 frag_atom_list = ([0, 1], [2, 3])
 
