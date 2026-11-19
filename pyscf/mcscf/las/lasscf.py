@@ -114,6 +114,9 @@ def kernel (las, mo_coeff=None, ci0=None, conv_tol_grad=1e-4,
         H_op.level_shift += floating_level_shift
         err = get_level_shift (las.trust_radius, prec_op, g_vec)
         assert (err < 1e-8), '{} {}'.format (floating_level_shift, err)
+        # TODO: apparently this check fails nondeterministically. Investigate and figure out if it
+        # matters. It's obviously just a math check intended to make sure that the level shift put
+        # us within the trust radius like it's supposed to.
         norm_gorb = linalg.norm (g_vec[:ugg.nvar_orb]) if ugg.nvar_orb else 0.0
         norm_gci = linalg.norm (g_vec[ugg.nvar_orb:]) if ugg.ncsf_sub.sum () else 0.0
         norm_gx = linalg.norm (gx) if gx.size else 0.0
