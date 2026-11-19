@@ -59,10 +59,10 @@ def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_
             Unused; retained for backwards compatibility I guess
         lo_coeff: ndarray of shape (nao, nao)
             Linear combinations of AOs that are localized and orthonormal
-        fock: ndarray of shape (nmo, nmo)
-            Effective 1-electron Hamiltonian matrix for recanonicalizing
-            the inactive and external sectors after the latter are
-            possibly distorted by the projection of the active orbitals
+        fock: ndarray of shape (nao, nao)
+            Effective 1-electron Hamiltonian matrix in the AO basis, used to
+            recanonicalize the inactive and external sectors and, unless
+            freeze_cas_spaces=True, to choose the inactive orbitals by aufbau
         ao_ovlp: ndarray of shape (nao, nao)
             Overlap matrix of the underlying AO basis
         freeze_cas_spaces: logical
@@ -70,8 +70,8 @@ def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_
             when localizing, which leaves the inactive and external sectors
             unchanged (to within numerical precision). Otherwise, active
             orbitals are projected into the localized-orbital space and
-            the inactive and external orbitals are reconstructed as closely
-            as possible using SVD.
+            the lowest-energy eigenvectors of fock in the orthogonal complement
+            of the active orbitals become the inactive orbitals (aufbau).
         mo_occ: ndarray of shape (nmo)
             If passed, only orbitals with the same occupancies are mixed with
             each other to localize them and freeze_cas_spaces is automatically
@@ -103,6 +103,7 @@ def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_
     has_orbsym = hasattr (mo_coeff, 'orbsym')
     mo_orbsym = getattr (mo_coeff, 'orbsym', np.zeros (nmo))
     mo_coeff = mo_coeff.copy () # Safety
+    mo_ref, mo_orbsym_ref = mo_coeff.copy (), mo_orbsym.copy ()
     if mo_occ is not None:
         freeze_cas_spaces = True
         mo_occ = mo_occ.copy ()
@@ -162,8 +163,26 @@ def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_
         else:
             null_coeff = np.hstack ([null_coeff, mo_proj[:,nlas:]])
 
-    # SVD of null space to pick inactive orbitals
-    if ncore > 0:
+    # Pick inactive orbitals
+    if not freeze_cas_spaces:
+        # The projected active orbitals don't respect the inactive/active/virtual partition of
+        # the input orbitals, so fill the null space by aufbau on fock instead. The SVD against
+        # all of the input orbitals only rotates the null space, to give it symmetry labels.
+        assert (null_coeff.shape[-1] + ncas == nmo)
+        mo_ref = tag_array (mo_ref, orbsym=mo_orbsym_ref)
+        mo_null = las._svd (null_coeff, mo_ref, s=ao_ovlp)[0]
+        orbsym_null = getattr (mo_null, 'orbsym', np.zeros (nmo-ncas, dtype=int))
+        e, c = las._eig (mo_null.conj ().T @ fock @ mo_null, 0, 0, orbsym_null)
+        idx = np.argsort (e)
+        mo_null = mo_null @ c[:,idx]
+        orbsym_null = orbsym_null[idx]
+        log.debug ('localize_init_guess: inactive-virtual fock gap = %.6g', (e[idx[ncore]] - e[idx[ncore-1]])
+                   if 0 < ncore < nmo-ncas else 0.0)
+        mo_coeff[:,:ncore], mo_coeff[:,nocc:] = mo_null[:,:ncore], mo_null[:,ncore:]
+        if has_orbsym:
+            mo_orbsym[:ncore] = orbsym_null[:ncore]
+            mo_orbsym[nocc:] = orbsym_null[ncore:]
+    elif ncore > 0:
         assert (null_coeff.shape[-1] + ncas == nmo)
         mo_core = tag_array (mo_coeff[:,:ncore], orbsym=mo_orbsym[:ncore])
         mocc_core = mo_occ[:ncore]
@@ -230,10 +249,10 @@ def localize_init_guess (las, frags_atoms, mo_coeff=None, spin=None, lo_coeff=No
             Unused; retained for backwards compatibility I guess
         lo_coeff: ndarray of shape (nao, nao)
             Linear combinations of AOs that are localized and orthonormal
-        fock: ndarray of shape (nmo, nmo)
-            Effective 1-electron Hamiltonian matrix for recanonicalizing
-            the inactive and external sectors after the latter are
-            possibly distorted by the projection of the active orbitals
+        fock: ndarray of shape (nao, nao)
+            Effective 1-electron Hamiltonian matrix in the AO basis, used to
+            recanonicalize the inactive and external sectors and, unless
+            freeze_cas_spaces=True, to choose the inactive orbitals by aufbau
         mo_occ: ndarray of shape (nmo)
             If passed, only orbitals with the same occupancies are mixed with
             each other to localize them and freeze_cas_spaces is automatically
@@ -243,8 +262,8 @@ def localize_init_guess (las, frags_atoms, mo_coeff=None, spin=None, lo_coeff=No
             when localizing, which leaves the inactive and external sectors
             unchanged (to within numerical precision). Otherwise, active
             orbitals are projected into the localized-orbital space and
-            the inactive and external orbitals are reconstructed as closely
-            as possible using SVD.
+            the lowest-energy eigenvectors of fock in the orthogonal complement
+            of the active orbitals become the inactive orbitals (aufbau).
         frags_by_AOs: logical
             If True, interpret integer frags_atoms as AOs rather than atoms
         smults_f: ndarray of ints of shape (nfrag,)
