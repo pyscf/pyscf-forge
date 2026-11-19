@@ -1,5 +1,5 @@
 class _DFLASCI: # Tag
-    pass
+    _keys = {'with_df'}
 
 # The constructors import their modules when called, because those modules import _DFLASCI from
 # this package.

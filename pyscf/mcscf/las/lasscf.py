@@ -1742,6 +1742,9 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
         if ci is None: ci = self.ci
         return self._ugg (self, mo_coeff, ci)
 
+    def _finalize(self, method='LASSCF'):
+        return super()._finalize (method=method)
+
     def fast_veffa (self, casdm1s_sub, bmPu, mo_coeff=None, ci=None):
         '''Compute the effective potential exerted by active electrons on the whole orbital space
         using integrals and density matrices stored in the MO basis. This only makes sense to

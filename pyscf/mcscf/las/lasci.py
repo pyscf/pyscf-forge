@@ -1155,11 +1155,11 @@ class LASCINoSymm (casci.CASCI):
             log.info (("Printing a maximum of 100 state energies;"
                        " increase self.verbose to see them all"))
         if nroots_prt > 1:
-            log.info ("%s state-average energy = %.15g", method, self.e_tot)
+            log.note ("%s state-average energy = %.15g", method, self.e_tot)
             for i, e in enumerate (self.e_states[:nroots_prt]):
                 log.info ("%s state %d energy = %.15g", method, i, e)
         else:
-            log.info ("%s energy = %.15g", method, self.e_tot)
+            log.note ("%s energy = %.15g", method, self.e_tot)
         return
 
     def states_make_casdm1s_sub (self, ci=None, ncas_sub=None, nelecas_sub=None, **kwargs):

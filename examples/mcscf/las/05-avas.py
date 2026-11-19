@@ -37,7 +37,7 @@ print ('AVAS active space: ({}e, {}o)'.format (nelecas, ncas))
 # Divide them into two fragments, one per N=N bond
 mc = las.LASSCF (mf, (2, 2), (2, 2))
 mo0 = mc.localize_init_guess (([0, 1, 2], [7, 8, 9]), mo_avas)
-mc.kernel (mo0) # TODO: verbose = 3 energy output
+mc.kernel (mo0)
 
 # For comparison, CASSCF in the same active space
 mc_cas = mcscf.CASSCF (mf, ncas, nelecas)

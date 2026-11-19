@@ -42,7 +42,6 @@ print ('E(LASSCF) =', e_ref)
 # 1. Density-fitted SCF (default auxiliary basis): the LAS object inherits mf.with_df
 mf_df = scf.RHF (mol).density_fit ().run ()
 print ('DF error in E(RHF) =', mf_df.e_tot - mf.e_tot)
-# TODO: get rid of meaningless "does not have attributes" warning msg
 mc = las.LASSCF (mf_df, (2, 2), (2, 2))
 mc.kernel (mc.localize_init_guess (frag_atom_list, mf_df.mo_coeff))
 print ('E(DF-LASSCF), DF SCF =', mc.e_tot, '; error =', mc.e_tot - e_ref)

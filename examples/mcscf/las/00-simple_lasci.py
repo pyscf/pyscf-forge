@@ -37,7 +37,7 @@ mc = las.LASCI (mf, (2, 2), (2, 2))
 # mf.mo_coeff onto the atoms of each fragment; see 01-localize_init_guess.py.
 frag_atom_list = ([0, 1, 2], [9, 10, 11])
 mo0 = mc.localize_init_guess (frag_atom_list, mf.mo_coeff)
-mc.kernel (mo0) # TODO: verbose = 3 total energy output
+mc.kernel (mo0)
 
 # The CI vectors are stored per fragment, then per state: mc.ci[ifrag][istate]
 print ('Shape of the CI vector of fragment 0:', mc.ci[0][0].shape)
