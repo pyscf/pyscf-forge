@@ -169,19 +169,20 @@ def _localize (las, frags_orbs, mo_coeff, spin, lo_coeff, fock, ao_ovlp, freeze_
         # the input orbitals, so fill the null space by aufbau on fock instead. The SVD against
         # all of the input orbitals only rotates the null space, to give it symmetry labels.
         assert (null_coeff.shape[-1] + ncas == nmo)
-        mo_ref = tag_array (mo_ref, orbsym=mo_orbsym_ref)
-        mo_null = las._svd (null_coeff, mo_ref, s=ao_ovlp)[0]
-        orbsym_null = getattr (mo_null, 'orbsym', np.zeros (nmo-ncas, dtype=int))
-        e, c = las._eig (mo_null.conj ().T @ fock @ mo_null, 0, 0, orbsym_null)
-        idx = np.argsort (e)
-        mo_null = mo_null @ c[:,idx]
-        orbsym_null = orbsym_null[idx]
-        log.debug ('localize_init_guess: inactive-virtual fock gap = %.6g', (e[idx[ncore]] - e[idx[ncore-1]])
-                   if 0 < ncore < nmo-ncas else 0.0)
-        mo_coeff[:,:ncore], mo_coeff[:,nocc:] = mo_null[:,:ncore], mo_null[:,ncore:]
-        if has_orbsym:
-            mo_orbsym[:ncore] = orbsym_null[:ncore]
-            mo_orbsym[nocc:] = orbsym_null[ncore:]
+        if nmo > ncas:
+            mo_ref = tag_array (mo_ref, orbsym=mo_orbsym_ref)
+            mo_null = las._svd (null_coeff, mo_ref, s=ao_ovlp)[0]
+            orbsym_null = getattr (mo_null, 'orbsym', np.zeros (nmo-ncas, dtype=int))
+            e, c = las._eig (mo_null.conj ().T @ fock @ mo_null, 0, 0, orbsym_null)
+            idx = np.argsort (e)
+            e, mo_null, orbsym_null = e[idx], mo_null @ c[:,idx], orbsym_null[idx]
+            if 0 < ncore < nmo-ncas:
+                log.debug ('localize_init_guess: inactive-virtual fock gap = %.6g',
+                           e[ncore] - e[ncore-1])
+            mo_coeff[:,:ncore], mo_coeff[:,nocc:] = mo_null[:,:ncore], mo_null[:,ncore:]
+            if has_orbsym:
+                mo_orbsym[:ncore] = orbsym_null[:ncore]
+                mo_orbsym[nocc:] = orbsym_null[ncore:]
     elif ncore > 0:
         assert (null_coeff.shape[-1] + ncas == nmo)
         mo_core = tag_array (mo_coeff[:,:ncore], orbsym=mo_orbsym[:ncore])
