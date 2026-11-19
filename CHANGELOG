@@ -3,6 +3,7 @@ PySCF-Forge (unreleased)
 * New features
   - XP-PCM (eXtreme-Pressure Polarizable Continuum Model): Pauli repulsion and cavitation
     decorators for SCF, analytical pressures for SCF and post-HF methods, XPCav nuclear gradients
+  - Localized active space methods: LASCI, LASSCF, LAS-PDFT; single-state LASSCF nuclear gradients
 
 
 PySCF-Forge 1.1.1 (2026-03-15)
