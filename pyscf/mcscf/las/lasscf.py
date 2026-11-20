@@ -33,8 +33,16 @@ localize_init_guess=localize._localize
 class MicroIterInstabilityException (Exception):
     pass
 
-def get_level_shift (trust_radius, prec_op, g, tol=1e-8):
+def get_level_shift (trust_radius, prec_op, g, tol=1e-8, log=None):
     x = prec_op (-g)
+    idx_neg = prec_op.Hdiag < 0
+    x_neg = linalg.norm (x[idx_neg])
+    x_pos = linalg.norm (x[~idx_neg])
+    if x_neg > x_pos:
+        if log is not None:
+            log.debug (("step vector dominated by negative-Hdiag D.O.F.: "
+                        "trust radius shift aborted"))
+        return 0
     g = linalg.norm (g)
     x = linalg.norm (x)
     if x <= trust_radius: return 0
@@ -121,16 +129,22 @@ def kernel (las, mo_coeff=None, ci0=None, conv_tol_grad=1e-4,
             assert (err < 1e-5), '{}'.format (err)
         gx = H_op.get_gx ()
         prec_op = H_op.get_prec ()
-        floating_level_shift = get_level_shift (las.trust_radius, prec_op, g_vec)
+        # There are two guards below to prevent the level shift from degrading the convergence.
+        # The first is in get_level_shift and is explained in its debug line. The second is
+        # the second pass if err >= 1e-8 branch below, which guards against the case that, i.e.,
+        # one particular element of Hdiag happens to be ~= -level_shift.
+        floating_level_shift = get_level_shift (las.trust_radius, prec_op, g_vec, log=log)
         if floating_level_shift > 0:
             log.debug ('Applying a floating level shift of %e', floating_level_shift)
         prec_op.Hdiag += floating_level_shift
         H_op.level_shift += floating_level_shift
         err = get_level_shift (las.trust_radius, prec_op, g_vec)
-        assert (err < 1e-8), '{} {}'.format (floating_level_shift, err)
-        # TODO: apparently this check fails nondeterministically. Investigate and figure out if it
-        # matters. It's obviously just a math check intended to make sure that the level shift put
-        # us within the trust radius like it's supposed to.
+        if err >= 1e-8:
+            log.warn (("Dynamical trust radius level shift failed; "
+                       "orbitals or CI vectors may be near a saddle point."))
+            log.debug ('Removing a floating level shift of %e', floating_level_shift)
+            prec_op.Hdiag -= floating_level_shift
+            H_op.level_shift -= floating_level_shift
         norm_gorb = linalg.norm (g_vec[:ugg.nvar_orb]) if ugg.nvar_orb else 0.0
         norm_gci = linalg.norm (g_vec[ugg.nvar_orb:]) if ugg.ncsf_sub.sum () else 0.0
         norm_gx = linalg.norm (gx) if gx.size else 0.0
