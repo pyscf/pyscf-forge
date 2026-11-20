@@ -15,8 +15,8 @@ from pyscf import gto, scf, symm
 from pyscf.mcscf import las
 
 # C2H4N4 at its equilibrium geometry (see 05-avas.py). Its full point group is C2h, but the C2
-# axis and the inversion center exchange the two H-N=N- fragments. Only the molecular plane maps
-# each fragment onto itself, so use the subgroup Cs. With symmetry=True or symmetry='C2h',
+# axis and the inversion center exchange the two H-N=N-CH fragments. Only the molecular plane
+# maps each fragment onto itself, so use the subgroup Cs. With symmetry=True or symmetry='C2h',
 # localize_init_guess fails, because the AOs of one fragment do not span a C2h-symmetric space.
 mol = gto.M (atom='''H -2.772250 -1.103953 0.0
                      N -2.875835 -0.058207 0.0
@@ -44,7 +44,7 @@ mf = scf.RHF (mol).run ()
 # converge.
 mc = las.LASSCF (mf, (4, 4), (4, 4))
 mo = mc.sort_mo ([13, 14, 16, 18, 23, 24, 33, 34], mf.mo_coeff)
-mo0 = mc.localize_init_guess (([0, 1, 2], [7, 8, 9]), mo)
+mo0 = mc.localize_init_guess (([0, 1, 2, 3, 4], [5, 6, 7, 8, 9]), mo)
 mc.kernel (mo0)
 print ('E(LASSCF, Cs) =', mc.e_tot)
 
