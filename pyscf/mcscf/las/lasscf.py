@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from pyscf import gto, scf, lib, symm
+from pyscf import __config__
 from pyscf.mcscf import mc_ao2mo, mc1step
 from pyscf.mcscf import df as mc_df
 from pyscf.csf_fci.csfstring import ImpossibleCIvecError
@@ -1698,6 +1699,13 @@ def get_grad_ci (las, mo_coeff=None, ci=None, h1eff_sub=None, h2eff_sub=None, ve
 
 class LASSCFNoSymm (lasci.LASCINoSymm):
 
+    max_cycle_micro = getattr(__config__, 'mcscf_las_lasscf_LASSCF_max_cycle_micro', 5)
+    min_cycle_macro = getattr(__config__, 'mcscf_las_lasscf_LASSCF_min_cycle_macro', 0)
+    ah_level_shift = getattr(__config__, 'mcscf_las_lasscf_LASSCF_ah_level_shift', 1e-8)
+    trust_radius = getattr(__config__, 'mcscf_las_lasscf_LASSCF_trust_radius', np.pi)
+
+    _keys = {'max_cycle_micro', 'min_cycle_macro', 'ah_level_shift', 'trust_radius'}
+
     get_grad = get_grad
     get_grad_orb = get_grad_orb
     get_grad_ci = get_grad_ci
@@ -1829,6 +1837,11 @@ class LASSCFNoSymm (lasci.LASCINoSymm):
 
     def dump_flags (self, verbose=None, _method_name='LASSCF'):
         super().dump_flags (verbose=verbose, _method_name=_method_name)
+        log = lib.logger.new_logger (self, verbose)
+        log.info ('max_cycle_micro = %d', self.max_cycle_micro)
+        log.info ('min_cycle_macro = %d', self.min_cycle_macro)
+        log.info ('ah_level_shift = %g', self.ah_level_shift)
+        log.info ('trust_radius = %g', self.trust_radius)
 
     def check_sanity (self):
         super().check_sanity ()
@@ -1844,6 +1857,7 @@ class LASSCFSymm (lasci.LASCISymm, LASSCFNoSymm):
 
     as_scanner = mc1step.as_scanner
     get_veff = LASSCFNoSymm.get_veff
+    dump_flags = LASSCFNoSymm.dump_flags
     _ugg = LASSCFSymm_UnitaryGroupGenerators
 
     def kernel(self, mo_coeff=None, ci0=None, verbose=None, assert_no_dupes=False):

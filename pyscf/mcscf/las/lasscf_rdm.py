@@ -24,6 +24,7 @@ from pyscf.mcscf.las import lasscf, _DFLASCI, addons, lasci
 from pyscf.mcscf.las.lasscf import MicroIterInstabilityException
 from pyscf.csf_fci import csf_solver
 from pyscf import lib, gto, scf, ao2mo
+from pyscf import __config__
 from pyscf.fci.direct_spin1 import _unpack_nelec
 
 class LASSCF_UnitaryGroupGenerators (lasscf.LASSCF_UnitaryGroupGenerators):
@@ -497,14 +498,17 @@ def _combine_init_guess_ci (las, ci0i, ci0g, norb, nelec, nroots):
 
 class LASSCFNoSymm (lasscf.LASSCFNoSymm):
 
+    max_cycle_micro = getattr(__config__, 'mcscf_las_lasscf_rdm_LASSCF_max_cycle_micro', 3)
+    max_cycle_rdmjk = getattr(__config__, 'mcscf_las_lasscf_rdm_LASSCF_max_cycle_rdmjk', 3)
+    conv_tol_rdmjkddm = getattr(__config__, 'mcscf_las_lasscf_rdm_LASSCF_conv_tol_rdmjkddm', None)
+    conv_tol_rdmjkde = getattr(__config__, 'mcscf_las_lasscf_rdm_LASSCF_conv_tol_rdmjkde', 1e-8)
+
+    _keys = {'max_cycle_rdmjk', 'conv_tol_rdmjkddm', 'conv_tol_rdmjkde', 'casdm1frs', 'casdm2fr'}
+
     def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.casdm1frs = None
         self.casdm2fr = None
-        self.max_cycle_rdmjk = 3
-        self.conv_tol_rdmjkddm = None
-        self.conv_tol_rdmjkde = 1e-8
-        lasscf.LASSCFNoSymm.__init__(self, *args, **kwargs)
-        self.max_cycle_micro = 3
 
     _ugg = LASSCF_UnitaryGroupGenerators
     _hop = LASSCF_HessianOperator

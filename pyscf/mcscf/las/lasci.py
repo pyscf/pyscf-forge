@@ -18,6 +18,7 @@ from pyscf.fci import cistring
 from pyscf.mcscf import casci, casci_symm
 from pyscf.tools import dump_mat
 from pyscf import symm, gto, scf, lib, df
+from pyscf import __config__
 from pyscf.fci.direct_spin1 import _unpack_nelec
 from pyscf.csf_fci import csf_solver
 from pyscf.mcscf.las.addons import state_average_n_mix, get_h1e_zipped_fcisolver, las2cas_civec
@@ -67,7 +68,6 @@ def density_fit (las, auxbasis=None, with_df=None):
     class DFLASCI (las_class, _DFLASCI):
         def __init__(self, scf, ncas_sub, nelecas_sub):
             self.with_df = with_df
-            self._keys = self._keys.union(['with_df'])
             las_class.__init__(self, scf, ncas_sub, nelecas_sub)
         cderi_ao2mo = las_ao2mo.cderi_ao2mo
     new_las = DFLASCI (las._scf, las.ncas_sub, las.nelecas_sub)
@@ -1073,8 +1073,18 @@ class LASCINoSymm (casci.CASCI):
     get_smults_fr = get_smults_fr
     get_nelec_frs = get_nelec_frs
 
+    init_guess_ci = getattr(__config__, 'mcscf_las_lasci_LASCI_init_guess_ci', 'aufbau1')
+    conv_tol_grad = getattr(__config__, 'mcscf_las_lasci_LASCI_conv_tol_grad', 1e-4)
+    conv_tol_self = getattr(__config__, 'mcscf_las_lasci_LASCI_conv_tol_self', 1e-10)
+    max_cycle_macro = getattr(__config__, 'mcscf_las_lasci_LASCI_max_cycle_macro', 50)
+
+    _keys = {
+        'init_guess_ci', 'conv_tol_grad', 'conv_tol_self', 'max_cycle_macro',
+        'ncas_sub', 'nelecas_sub', 'frozen', 'frozen_ci', 'chkfile', 'fciboxes', 'nroots',
+        'weights', 'e_states', 'e_lexc', 'states_converged',
+    }
+
     def __init__(self, mf, ncas, nelecas, ncore=None, spin_sub=None, frozen=None, frozen_ci=None, **kwargs):
-        self.init_guess_ci = 'aufbau1'
         if isinstance(ncas,int):
             ncas = [ncas]
         ncas_tot = sum (ncas)
@@ -1099,17 +1109,6 @@ class LASCINoSymm (casci.CASCI):
         assert (len (self.nelecas_sub) == self.nfrags)
         self.frozen = frozen
         self.frozen_ci = frozen_ci
-        self.conv_tol_grad = 1e-4
-        self.conv_tol_self = 1e-10
-        self.ah_level_shift = 1e-8
-        self.max_cycle_macro = 50
-        self.max_cycle_micro = 5
-        self.min_cycle_macro = 0
-        self.trust_radius = np.pi
-        keys = set(('e_states', 'fciboxes', 'nroots', 'weights', 'ncas_sub', 'nelecas_sub',
-                    'conv_tol_grad', 'conv_tol_self', 'max_cycle_macro', 'max_cycle_micro',
-                    'ah_level_shift', 'states_converged', 'chkfile', 'e_lexc', 'trust_radius'))
-        self._keys = set(self.__dict__.keys()).union(keys)
         self.fciboxes = []
         if isinstance(spin_sub,int):
             self.fciboxes.append(self._init_fcibox(spin_sub,self.nelecas_sub[0]))
@@ -2383,7 +2382,6 @@ class LASCINoSymm (casci.CASCI):
             log.info ('LAS %d : (%de+%de, %do)', i, ne[0], ne[1], no)
         log.info ('nroots = %d', self.nroots)
         log.info ('max_cycle_macro = %d', self.max_cycle_macro)
-        log.info ('max_cycle_micro = %d', self.max_cycle_micro)
         log.info ('conv_tol_grad = %s', self.conv_tol_grad)
         log.info ('max_memory %d MB (current use %d MB)', self.max_memory,
                   lib.current_memory()[0])
