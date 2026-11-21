@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright 2014-2019 The PySCF Developers. All Rights Reserved.
+# Copyright 2014-2026 The PySCF Developers. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,11 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Author: Qiming Sun <osirpt.sun@gmail.com>
+# Authors: Shreya Verma <shreyav@uchicago.edu>
+#          Matthew R. Hermes <mrhermes@uchicago.edu>
+#          Qiming Sun <osirpt.sun@gmail.com> (pyscf/grad/casscf.py,
+#              on which this module is based)
 #
 
 '''
-CASSCF analytical nuclear gradients
+LASSCF analytical nuclear gradients
 
 Ref.
 J. Comput. Chem., 5, 589
