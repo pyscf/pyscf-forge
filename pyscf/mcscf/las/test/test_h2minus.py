@@ -1,0 +1,53 @@
+# Copyright 2014-2026 The PySCF Developers. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+from pyscf import gto, scf, lib
+from pyscf.mcscf.las import lasscf as syn
+
+def setUpModule():
+    global mol, mf
+    xyz = '''H 0.0 0.0 0.0
+             H 1.0 0.0 0.0'''
+    mol = gto.M (atom = xyz, basis = '6-31g',
+                 output='/dev/null',
+                 verbose=0,
+                 charge=-1, spin=1)
+    mf = scf.RHF (mol).run ()
+
+def tearDownModule():
+    global mol, mf
+    mf.stdout.close ()
+    del mol, mf
+
+class KnownValues (unittest.TestCase):
+
+    def test_state_average_charge_hop (self):
+        las_syn = syn.LASSCF (mf, (2,2), ((1,1),(1,0)), spin_sub=(1,2))
+        mo_loc = las_syn.localize_init_guess (((0,),(1,)), mf.mo_coeff)
+        las_syn.state_average_(weights=[.5,]*2,
+                               spins=[[0,1],[1,0]],
+                               smults=[[1,2],[2,1]],
+                               charges=[[0,0],[1,-1]])
+        las_syn.kernel (mo_loc)
+        self.assertTrue (las_syn.converged)
+        # The two states are related by symmetry, so they are degenerate
+        e_ref = -0.7842586280243123
+        for i, e_test in enumerate (las_syn.e_states):
+            with self.subTest (state=i):
+                self.assertAlmostEqual (e_test, e_ref, 7)
+
+if __name__ == "__main__":
+    print ("Full Tests for H2-")
+    unittest.main()
