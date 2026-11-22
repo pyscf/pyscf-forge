@@ -652,7 +652,11 @@ static int reserve_arena(gas_contract_ws_t *ws, size_t n)
         if (n <= ws->arena_cap) {
                 return GAS_SUCCESS;
         }
+        if (n > SIZE_MAX / sizeof(*ws->arena)) {
+                return GAS_ERR_MEMORY;
+        }
         size_t cap = contract_grow_capacity(ws->arena_cap, n);
+        if (cap > SIZE_MAX / sizeof(*ws->arena)) cap = n;
         double *p = realloc(ws->arena, cap * sizeof(*p));
         if (p == 0) {
                 return GAS_ERR_MEMORY;
@@ -670,7 +674,11 @@ static int reserve_alpha_hitlist(gas_contract_ws_t *ws, size_t n)
         if (n <= ws->alpha_hit_cap) {
                 return GAS_SUCCESS;
         }
+        if (n > SIZE_MAX / sizeof(*ws->alpha_hit)) {
+                return GAS_ERR_MEMORY;
+        }
         size_t cap = contract_grow_capacity(ws->alpha_hit_cap, n);
+        if (cap > SIZE_MAX / sizeof(*ws->alpha_hit)) cap = n;
         gas_alpha_hit_t *p = realloc(ws->alpha_hit, cap * sizeof(*p));
         if (p == 0) {
                 return GAS_ERR_MEMORY;
@@ -685,7 +693,11 @@ static int reserve_alpha_slots(gas_contract_ws_t *ws, size_t n)
         if (n <= ws->alpha_slot_cap) {
                 return GAS_SUCCESS;
         }
+        if (n > SIZE_MAX / sizeof(*ws->alpha_slot)) {
+                return GAS_ERR_MEMORY;
+        }
         size_t cap = contract_grow_capacity(ws->alpha_slot_cap, n);
+        if (cap > SIZE_MAX / sizeof(*ws->alpha_slot)) cap = n;
         int64_t *p = realloc(ws->alpha_slot, cap * sizeof(*p));
         if (p == 0) {
                 return GAS_ERR_MEMORY;
@@ -1581,19 +1593,47 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                 return GAS_BATCH_DONE;
         }
 
+        if (nop > SIZE_MAX / nat) {
+                return GAS_BATCH_FALLBACK;
+        }
+        size_t alpha_slot_n = (size_t)nop * nat;
+        /* Even one beta row must fit before preparing the alpha map. */
+        if (alpha_slot_n > ABBA_WORKSPACE_MAX_ELEMS ||
+            alpha_slot_n > SIZE_MAX / sizeof(*ws->alpha_slot)) {
+                return GAS_BATCH_FALLBACK;
+        }
         uint32_t btile = abba_beta_tile_size(nb0, nop, nat);
         if (btile == 0u) {
                 return GAS_BATCH_DONE;
         }
-
+        uint32_t pipeline_btile = 0u;
+        size_t pipeline_t1_elems = 0u;
+        if (npair == 1u) {
+                gas_bid_t bdst = (gas_bid_t)ws->pair[0].first;
+                uint32_t nb1 = gas->sector_nstr[gas->block[bdst].sb];
+                uint32_t tile = abba_pipeline_beta_tile_size(nb0, nop, nat);
+                if (tile <= ABBA_WORKSPACE_MAX_ELEMS / alpha_slot_n &&
+                    nb1 <= ABBA_WORKSPACE_MAX_ELEMS / nat) {
+                        size_t t1_elems = alpha_slot_n * tile;
+                        size_t y_elems = (size_t)nb1 * nat;
+                        if (t1_elems <= ABBA_WORKSPACE_MAX_ELEMS - y_elems &&
+                            reserve_arena(ws, t1_elems + y_elems) == GAS_SUCCESS) {
+                                pipeline_btile = tile;
+                                pipeline_t1_elems = t1_elems;
+                        }
+                }
+        }
+        size_t t1_elems = 0u;
+        if (pipeline_btile == 0u) {
+                if (btile > ABBA_WORKSPACE_MAX_ELEMS / alpha_slot_n) {
+                        return GAS_BATCH_FALLBACK;
+                }
+                t1_elems = alpha_slot_n * btile;
+                if (reserve_arena(ws, t1_elems) != GAS_SUCCESS) {
+                        return GAS_BATCH_FALLBACK;
+                }
+        }
         if (build_alpha_hitlist(ta, a0, a1, ws) != GAS_SUCCESS) {
-                return GAS_BATCH_FALLBACK;
-        }
-        if (nat != 0u && nop > SIZE_MAX / nat) {
-                return GAS_BATCH_FALLBACK;
-        }
-        size_t alpha_slot_n = (size_t)nop * nat;
-        if (alpha_slot_n > SIZE_MAX / sizeof(*ws->alpha_slot)) {
                 return GAS_BATCH_FALLBACK;
         }
         if (reserve_alpha_slots(ws, alpha_slot_n) != GAS_SUCCESS) {
@@ -1609,10 +1649,6 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
 
         /* Keep Y live across bounded T1 microtiles for a single consumer. */
         if (npair == 1u) {
-                uint32_t pipeline_btile =
-                        abba_pipeline_beta_tile_size(nb0, nop, nat);
-                size_t pipeline_t1_elems =
-                        (size_t)nop * pipeline_btile * nat;
                 gas_bid_t bdst = (gas_bid_t)ws->pair[0].first;
                 gas_tid_t tidb = ws->pair[0].second;
                 const gas_link_table_t *tb = gas->table + tidb;
@@ -1620,10 +1656,7 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                 uint32_t nb1 = gas->sector_nstr[bdst_sid];
                 double *dst = ci1 + gas->block[bdst].offset;
                 size_t y_elems = (size_t)nb1 * nat;
-                if (pipeline_t1_elems + y_elems <=
-                            ABBA_WORKSPACE_MAX_ELEMS &&
-                    reserve_arena(ws, pipeline_t1_elems + y_elems) ==
-                            GAS_SUCCESS) {
+                if (pipeline_btile != 0u) {
                         double *t1 = ws->arena;
                         double *y = ws->arena + pipeline_t1_elems;
                         memset(y, 0, y_elems * sizeof(*y));
@@ -1705,12 +1738,6 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                 /* Keep [op][full-btile][alpha] strides fixed for the last
                  * beta tile; only its valid rows are packed and read. */
                 uint32_t t1_nbt = btile;
-                size_t dense_t1_elems = (size_t)nop * t1_nbt * nat;
-                size_t t1_elems = dense_t1_elems;
-                if (t1_elems > ABBA_WORKSPACE_MAX_ELEMS ||
-                    reserve_arena(ws, t1_elems) != GAS_SUCCESS) {
-                        return GAS_BATCH_FALLBACK;
-                }
                 for (uint32_t io = 0; io < nop; io++) {
                         const int64_t *restrict slots =
                                 ws->alpha_slot + (size_t)io * nat;
@@ -1737,8 +1764,9 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                         gas_sid_t bdst_sid = gas->block[bdst].sb;
                         uint32_t nb1 = gas->sector_nstr[bdst_sid];
                         double *dst = ci1 + gas->block[bdst].offset;
-                        size_t y_elems = (size_t)nb1 * nat;
-                        int use_tile = t1_elems + y_elems <= ABBA_WORKSPACE_MAX_ELEMS &&
+                        size_t y_elems = nb1 <= ABBA_WORKSPACE_MAX_ELEMS / nat ?
+                                         (size_t)nb1 * nat : ABBA_WORKSPACE_MAX_ELEMS;
+                        int use_tile = y_elems <= ABBA_WORKSPACE_MAX_ELEMS - t1_elems &&
                                        reserve_arena(ws, t1_elems + y_elems) == GAS_SUCCESS;
                         double *t1 = ws->arena;
 
