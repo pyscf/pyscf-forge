@@ -21,6 +21,9 @@
 
 #include <stdint.h>
 
+/* Increment for incompatible changes to the GAS C/Python ABI. */
+#define GAS_ABI_VERSION 1u
+
 enum {
         GAS_MAX_ORB = 63,
         GAS_MAX_LOCAL_ORB = 31,
@@ -201,6 +204,7 @@ static inline uint16_t gas_link_ia(const gas_link_entry_t *e)
         return e->op;
 }
 
+uint32_t gas_get_abi_version(void);
 uint32_t gas_str2addr_sector(const gas_space_t *gas, gas_sid_t s, uint64_t str);
 uint64_t gas_addr2str_sector(const gas_space_t *gas, gas_sid_t s, uint32_t addr);
 uint64_t gas_block_ndet(const gas_space_t *gas, gas_bid_t b);
