@@ -23,6 +23,9 @@ import os
 from pathlib import Path
 
 
+# Increment for incompatible changes to the GAS C/Python ABI.
+GAS_ABI_VERSION = 1
+
 GAS_SUCCESS = 0
 GAS_ERR_INVALID = -1
 GAS_ERR_MEMORY = -2
@@ -134,6 +137,24 @@ class GasMemoryReport(ctypes.Structure):
 
 def double_ptr(array):
     return array.ctypes.data_as(ctypes.POINTER(ctypes.c_double))
+
+
+def _check_abi_version(lib):
+    try:
+        get_version = lib.gas_get_abi_version
+    except AttributeError:
+        pass
+    else:
+        get_version.argtypes = []
+        get_version.restype = ctypes.c_uint32
+        if get_version() == GAS_ABI_VERSION:
+            return
+    raise RuntimeError(
+        "Incompatible libfci_gas.so ABI:\n"
+        f"  Expected ABI version: {GAS_ABI_VERSION}\n"
+        f"  Library: {lib._name}\n"
+        "  Please rebuild pyscf-forge to match the Python interface."
+    )
 
 
 def _configure_library(lib):
@@ -264,6 +285,7 @@ def load_library(path=None, reload=False):
             from pyscf import lib as pyscf_lib
             lib = pyscf_lib.load_library("libfci_gas")
 
+    _check_abi_version(lib)
     lib = _configure_library(lib)
     if path is None:
         _LIB = lib

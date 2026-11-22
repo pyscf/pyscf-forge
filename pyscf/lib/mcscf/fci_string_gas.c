@@ -21,6 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+uint32_t gas_get_abi_version(void)
+{
+        return GAS_ABI_VERSION;
+}
+
 #ifdef _OPENMP
 static const uint64_t LINK_BUILD_PARALLEL_MIN = 1048576u;
 #endif
