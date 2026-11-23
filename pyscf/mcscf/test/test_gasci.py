@@ -413,6 +413,7 @@ class TestGASFCISolver(unittest.TestCase):
         h2e = fci_gas.absorb_h1e(
             self.h1e, self.eri, self.norb, self.nelec, fac=0.5)
 
+        # Use one thread to retain multi-consumer batches for materialized T1 reuse.
         with lib.with_omp_threads(1), solver.make_space(
                 self.norb, self.nelec, compress_links=True) as gas:
             rng = numpy.random.default_rng(31)
@@ -450,7 +451,7 @@ class TestGASFCISolver(unittest.TestCase):
         h1e, eri = make_integrals(norb)
         h2e = fci_gas.absorb_h1e(h1e, eri, norb, nelec, fac=0.5)
 
-        # Keep the full alpha tile for the default pipeline microtiles.
+        # Use one thread to exercise multiple pipeline microtiles and a partial tail.
         with lib.with_omp_threads(1), solver.make_space(
                 norb, nelec, compress_links=True) as gas:
             rng = numpy.random.default_rng(32)
