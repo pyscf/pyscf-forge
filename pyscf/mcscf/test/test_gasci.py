@@ -27,6 +27,7 @@ import numpy
 
 from pyscf import ao2mo
 from pyscf import gto
+from pyscf import lib
 from pyscf import mcscf
 from pyscf import scf
 from pyscf.fci import addons as fci_addons
@@ -412,11 +413,13 @@ class TestGASFCISolver(unittest.TestCase):
         h2e = fci_gas.absorb_h1e(
             self.h1e, self.eri, self.norb, self.nelec, fac=0.5)
 
-        with solver.make_space(
+        # Use one thread to retain multi-consumer batches for materialized T1 reuse.
+        with lib.with_omp_threads(1), solver.make_space(
                 self.norb, self.nelec, compress_links=True) as gas:
             rng = numpy.random.default_rng(31)
             vectors = (
                 rng.normal(size=gas.ndet),
+                numpy.zeros(gas.ndet),
                 rng.normal(size=gas.ndet),
             )
             workspace_bytes = gas.lib.fci_contract_gas_plan_workspace_bytes
@@ -429,12 +432,42 @@ class TestGASFCISolver(unittest.TestCase):
                         h2e, ci, self.norb, self.nelec, plan=plan)
                     one_shot = solver.contract_2e(
                         h2e, ci, self.norb, self.nelec)
+                    full_ci = fci_gas.gas2fci(ci, gas)
+                    reference = fci_gas.fci2gas(
+                        direct_spin1.contract_2e(
+                            h2e, full_ci, self.norb, self.nelec), gas)
+                    numpy.testing.assert_allclose(
+                        planned, reference, atol=1e-11, rtol=0)
                     numpy.testing.assert_allclose(
                         planned, through_solver, atol=1e-12, rtol=0)
                     numpy.testing.assert_allclose(
                         planned, one_shot, atol=1e-12, rtol=0)
                 self.assertGreater(workspace_bytes(plan._plan), 0)
             self.assertIsNone(plan._plan)
+
+    def test_contract_plan_pipeline_tiles(self):
+        norb, nelec = 8, (3, 3)
+        solver = fci_gas.FCISolver(gas_orbs=(norb,))
+        h1e, eri = make_integrals(norb)
+        h2e = fci_gas.absorb_h1e(h1e, eri, norb, nelec, fac=0.5)
+
+        # Use one thread to exercise multiple pipeline microtiles and a partial tail.
+        with lib.with_omp_threads(1), solver.make_space(
+                norb, nelec, compress_links=True) as gas:
+            rng = numpy.random.default_rng(32)
+            vectors = (
+                rng.normal(size=gas.ndet),
+                numpy.zeros(gas.ndet),
+                rng.normal(size=gas.ndet),
+            )
+            with fci_gas.GasContractPlan(gas, h2e) as plan:
+                for ci in vectors:
+                    full_ci = fci_gas.gas2fci(ci, gas)
+                    reference = fci_gas.fci2gas(
+                        direct_spin1.contract_2e(
+                            h2e, full_ci, norb, nelec), gas)
+                    numpy.testing.assert_allclose(
+                        plan.contract(ci), reference, atol=1e-11, rtol=0)
 
     def test_borrowed_contract_plan_equivalent_specs_and_ownership(self):
         solver = fci_gas.FCISolver(

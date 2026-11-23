@@ -40,7 +40,8 @@ enum {
         ABBA_WRITEBACK_TILE = 32,
         OMP_TASK_FACTOR = 32,
         OMP_MAX_ALPHA_SPLIT = 64,
-        OMP_MIN_ALPHA_TILE = 4
+        OMP_MIN_ALPHA_TILE = 4,
+        ABBA_PIPELINE_T1_BYTES = 256 * 1024
 };
 
 static const size_t BB_TRANSPOSE_MAX_ELEMS = 67108864u;
@@ -67,6 +68,16 @@ static uint32_t abba_beta_tile_size(uint32_t nb0, uint32_t nop, uint32_t na1)
         if (tile > nb0) {
                 tile = nb0;
         }
+        return (uint32_t)tile;
+}
+
+static uint32_t abba_pipeline_beta_tile_size(uint32_t nb0, uint32_t nop,
+                                             uint32_t na1)
+{
+        size_t denom = (size_t)nop * (size_t)na1 * sizeof(double);
+        size_t tile = denom == 0u ? nb0 : ABBA_PIPELINE_T1_BYTES / denom;
+        if (tile < 1u) tile = 1u;
+        if (tile > nb0) tile = nb0;
         return (uint32_t)tile;
 }
 
@@ -104,15 +115,12 @@ typedef struct {
         uint16_t *op;
         size_t op_cap;
 
-        size_t arena_zeroed_upto;
-
-        /* A hit is an alpha link whose destination address lies inside the
-         * current alpha tile [a0,a1).
-         * Building the list once per ABBA batch lets each beta tile reuse it
-         * instead of rescanning mostly-missing alpha links. */
+        /* Alpha links landing in the current destination tile [a0,a1). */
         gas_alpha_hit_t *alpha_hit;
         size_t alpha_hit_cap;
         uint32_t alpha_hit_n;
+        int64_t *alpha_slot;
+        size_t alpha_slot_cap;
 } gas_contract_ws_t;
 
 typedef enum {
@@ -613,6 +621,7 @@ static inline void contract_ws_free(gas_contract_ws_t *ws)
         free(ws->op_map);
         free(ws->op);
         free(ws->alpha_hit);
+        free(ws->alpha_slot);
         memset(ws, 0, sizeof(*ws));
 }
 
@@ -622,7 +631,8 @@ static inline uint64_t contract_ws_bytes(const gas_contract_ws_t *ws)
                (uint64_t)ws->pair_cap * sizeof(*ws->pair) +
                (uint64_t)ws->op_map_cap * sizeof(*ws->op_map) +
                (uint64_t)ws->op_cap * sizeof(*ws->op) +
-               (uint64_t)ws->alpha_hit_cap * sizeof(*ws->alpha_hit);
+               (uint64_t)ws->alpha_hit_cap * sizeof(*ws->alpha_hit) +
+               (uint64_t)ws->alpha_slot_cap * sizeof(*ws->alpha_slot);
 }
 
 static size_t contract_grow_capacity(size_t cap, size_t need)
@@ -642,16 +652,17 @@ static int reserve_arena(gas_contract_ws_t *ws, size_t n)
         if (n <= ws->arena_cap) {
                 return GAS_SUCCESS;
         }
+        if (n > SIZE_MAX / sizeof(*ws->arena)) {
+                return GAS_ERR_MEMORY;
+        }
         size_t cap = contract_grow_capacity(ws->arena_cap, n);
+        if (cap > SIZE_MAX / sizeof(*ws->arena)) cap = n;
         double *p = realloc(ws->arena, cap * sizeof(*p));
         if (p == 0) {
                 return GAS_ERR_MEMORY;
         }
         ws->arena = p;
         ws->arena_cap = cap;
-        if (ws->arena_zeroed_upto > cap) {
-                ws->arena_zeroed_upto = cap;
-        }
         return GAS_SUCCESS;
 }
 
@@ -663,13 +674,36 @@ static int reserve_alpha_hitlist(gas_contract_ws_t *ws, size_t n)
         if (n <= ws->alpha_hit_cap) {
                 return GAS_SUCCESS;
         }
+        if (n > SIZE_MAX / sizeof(*ws->alpha_hit)) {
+                return GAS_ERR_MEMORY;
+        }
         size_t cap = contract_grow_capacity(ws->alpha_hit_cap, n);
+        if (cap > SIZE_MAX / sizeof(*ws->alpha_hit)) cap = n;
         gas_alpha_hit_t *p = realloc(ws->alpha_hit, cap * sizeof(*p));
         if (p == 0) {
                 return GAS_ERR_MEMORY;
         }
         ws->alpha_hit = p;
         ws->alpha_hit_cap = cap;
+        return GAS_SUCCESS;
+}
+
+static int reserve_alpha_slots(gas_contract_ws_t *ws, size_t n)
+{
+        if (n <= ws->alpha_slot_cap) {
+                return GAS_SUCCESS;
+        }
+        if (n > SIZE_MAX / sizeof(*ws->alpha_slot)) {
+                return GAS_ERR_MEMORY;
+        }
+        size_t cap = contract_grow_capacity(ws->alpha_slot_cap, n);
+        if (cap > SIZE_MAX / sizeof(*ws->alpha_slot)) cap = n;
+        int64_t *p = realloc(ws->alpha_slot, cap * sizeof(*p));
+        if (p == 0) {
+                return GAS_ERR_MEMORY;
+        }
+        ws->alpha_slot = p;
+        ws->alpha_slot_cap = cap;
         return GAS_SUCCESS;
 }
 
@@ -1559,39 +1593,167 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                 return GAS_BATCH_DONE;
         }
 
+        if (nop > SIZE_MAX / nat) {
+                return GAS_BATCH_FALLBACK;
+        }
+        size_t alpha_slot_n = (size_t)nop * nat;
+        /* Even one beta row must fit before preparing the alpha map. */
+        if (alpha_slot_n > ABBA_WORKSPACE_MAX_ELEMS ||
+            alpha_slot_n > SIZE_MAX / sizeof(*ws->alpha_slot)) {
+                return GAS_BATCH_FALLBACK;
+        }
         uint32_t btile = abba_beta_tile_size(nb0, nop, nat);
         if (btile == 0u) {
                 return GAS_BATCH_DONE;
         }
-
+        uint32_t pipeline_btile = 0u;
+        size_t pipeline_t1_elems = 0u;
+        if (npair == 1u) {
+                gas_bid_t bdst = (gas_bid_t)ws->pair[0].first;
+                uint32_t nb1 = gas->sector_nstr[gas->block[bdst].sb];
+                uint32_t tile = abba_pipeline_beta_tile_size(nb0, nop, nat);
+                if (tile <= ABBA_WORKSPACE_MAX_ELEMS / alpha_slot_n &&
+                    nb1 <= ABBA_WORKSPACE_MAX_ELEMS / nat) {
+                        size_t t1_elems = alpha_slot_n * tile;
+                        size_t y_elems = (size_t)nb1 * nat;
+                        if (t1_elems <= ABBA_WORKSPACE_MAX_ELEMS - y_elems &&
+                            reserve_arena(ws, t1_elems + y_elems) == GAS_SUCCESS) {
+                                pipeline_btile = tile;
+                                pipeline_t1_elems = t1_elems;
+                        }
+                }
+        }
+        size_t t1_elems = 0u;
+        if (pipeline_btile == 0u) {
+                if (btile > ABBA_WORKSPACE_MAX_ELEMS / alpha_slot_n) {
+                        return GAS_BATCH_FALLBACK;
+                }
+                t1_elems = alpha_slot_n * btile;
+                if (reserve_arena(ws, t1_elems) != GAS_SUCCESS) {
+                        return GAS_BATCH_FALLBACK;
+                }
+        }
         if (build_alpha_hitlist(ta, a0, a1, ws) != GAS_SUCCESS) {
                 return GAS_BATCH_FALLBACK;
+        }
+        if (reserve_alpha_slots(ws, alpha_slot_n) != GAS_SUCCESS) {
+                return GAS_BATCH_FALLBACK;
+        }
+        memset(ws->alpha_slot, 0, alpha_slot_n * sizeof(*ws->alpha_slot));
+        for (uint32_t ih = 0; ih < ws->alpha_hit_n; ih++) {
+                const gas_alpha_hit_t *h = ws->alpha_hit + ih;
+                int64_t source = (int64_t)h->src_row + 1;
+                size_t slot = (size_t)h->op_index * nat + h->rel_addr;
+                ws->alpha_slot[slot] = h->sign < 0 ? -source : source;
+        }
+
+        /* Keep Y live across bounded T1 microtiles for a single consumer. */
+        if (npair == 1u) {
+                gas_bid_t bdst = (gas_bid_t)ws->pair[0].first;
+                gas_tid_t tidb = ws->pair[0].second;
+                const gas_link_table_t *tb = gas->table + tidb;
+                gas_sid_t bdst_sid = gas->block[bdst].sb;
+                uint32_t nb1 = gas->sector_nstr[bdst_sid];
+                double *dst = ci1 + gas->block[bdst].offset;
+                size_t y_elems = (size_t)nb1 * nat;
+                if (pipeline_btile != 0u) {
+                        double *t1 = ws->arena;
+                        double *y = ws->arena + pipeline_t1_elems;
+                        memset(y, 0, y_elems * sizeof(*y));
+                        for (uint32_t b0 = 0; b0 < nb0;
+                             b0 += pipeline_btile) {
+                                uint32_t b1lim = nb0 - b0 < pipeline_btile ?
+                                        nb0 : b0 + pipeline_btile;
+                                for (uint32_t io = 0; io < nop; io++) {
+                                        const int64_t *restrict slots =
+                                                ws->alpha_slot + (size_t)io * nat;
+                                        for (uint32_t ib0 = b0; ib0 < b1lim; ib0++) {
+                                                double *restrict t = t1 +
+                                                        ((size_t)io * pipeline_btile +
+                                                         (ib0 - b0)) * nat;
+                                                for (uint32_t ia = 0; ia < nat; ia++) {
+                                                        int64_t source = slots[ia];
+                                                        if (source > 0) {
+                                                                t[ia] = src[
+                                                                        (uint64_t)(source - 1) *
+                                                                        nb0 + ib0];
+                                                        } else if (source < 0) {
+                                                                t[ia] = -src[
+                                                                        (uint64_t)(-source - 1) *
+                                                                        nb0 + ib0];
+                                                        } else {
+                                                                t[ia] = 0.0;
+                                                        }
+                                                }
+                                        }
+                                }
+                                for (uint32_t ib0 = b0; ib0 < b1lim; ib0++) {
+                                        const gas_link_entry_t *rb = tb->link +
+                                                (uint64_t)ib0 * tb->nlink;
+                                        const double *tbase = t1 +
+                                                (size_t)(ib0 - b0) * nat;
+                                        uint32_t kb = 0u;
+                                        while (kb < tb->nlink) {
+                                                const gas_link_entry_t *eb0 = rb + kb;
+                                                if (kb + 1u < tb->nlink) {
+                                                        const gas_link_entry_t *eb1 =
+                                                                rb + kb + 1u;
+                                                        if (eb0->addr != eb1->addr) {
+                                                                double *restrict y0 = y +
+                                                                        (size_t)eb0->addr * nat;
+                                                                double *restrict y1 = y +
+                                                                        (size_t)eb1->addr * nat;
+                                                                abba_fused_ops_pair2x4(
+                                                                        y0, y1, tbase,
+                                                                        (size_t)pipeline_btile * nat,
+                                                                        gos, nnorb,
+                                                                        gas_link_ia(eb0),
+                                                                        gas_link_ia(eb1),
+                                                                        ws->op, nop,
+                                                                        (double)eb0->sign,
+                                                                        (double)eb1->sign, nat);
+                                                                kb += 2u;
+                                                                continue;
+                                                        }
+                                                }
+                                                double *restrict y0 = y +
+                                                        (size_t)eb0->addr * nat;
+                                                abba_fused_ops(
+                                                        y0, tbase,
+                                                        (size_t)pipeline_btile * nat,
+                                                        gos, nnorb, gas_link_ia(eb0),
+                                                        ws->op, nop,
+                                                        (double)eb0->sign, nat);
+                                                kb++;
+                                        }
+                                }
+                        }
+                        abba_transpose_add(dst, nb1, y, nat, nb1, a0);
+                        return GAS_BATCH_DONE;
+                }
         }
 
         for (uint32_t b0 = 0; b0 < nb0; b0 += btile) {
                 uint32_t b1lim = nb0 - b0 < btile ? nb0 : b0 + btile;
-                /* Keep one invariant [op][full-btile][alpha] layout even for
-                 * the final partial beta tile.  Unused beta rows are never
-                 * read, while stable strides make earlier zero state reusable. */
+                /* Keep [op][full-btile][alpha] strides fixed for the last
+                 * beta tile; only its valid rows are packed and read. */
                 uint32_t t1_nbt = btile;
-                size_t dense_t1_elems = (size_t)nop * t1_nbt * nat;
-                size_t t1_elems = dense_t1_elems;
-                if (t1_elems > ABBA_WORKSPACE_MAX_ELEMS ||
-                    reserve_arena(ws, t1_elems) != GAS_SUCCESS) {
-                        return GAS_BATCH_FALLBACK;
-                }
-                if (b0 == 0u) {
-                        memset(ws->arena, 0, t1_elems * sizeof(*ws->arena));
-                        ws->arena_zeroed_upto = t1_elems;
-                }
-                for (uint32_t ih = 0; ih < ws->alpha_hit_n; ih++) {
-                        const gas_alpha_hit_t *h = ws->alpha_hit + ih;
-                        const double *restrict src_row = src + (uint64_t)h->src_row * nb0;
-                        double *t = ws->arena +
-                                ((size_t)h->op_index * t1_nbt * nat + h->rel_addr);
-                        double sgn = (double)h->sign;
+                for (uint32_t io = 0; io < nop; io++) {
+                        const int64_t *restrict slots =
+                                ws->alpha_slot + (size_t)io * nat;
                         for (uint32_t ib0 = b0; ib0 < b1lim; ib0++) {
-                                t[(size_t)(ib0 - b0) * nat] = sgn * src_row[ib0];
+                                double *restrict t = ws->arena +
+                                        ((size_t)io * t1_nbt + (ib0 - b0)) * nat;
+                                for (uint32_t ia = 0; ia < nat; ia++) {
+                                        int64_t source = slots[ia];
+                                        if (source > 0) {
+                                                t[ia] = src[(uint64_t)(source - 1) * nb0 + ib0];
+                                        } else if (source < 0) {
+                                                t[ia] = -src[(uint64_t)(-source - 1) * nb0 + ib0];
+                                        } else {
+                                                t[ia] = 0.0;
+                                        }
+                                }
                         }
                 }
 
@@ -1602,8 +1764,9 @@ static gas_batch_status_t contract_abba_batch_alpha_tile(
                         gas_sid_t bdst_sid = gas->block[bdst].sb;
                         uint32_t nb1 = gas->sector_nstr[bdst_sid];
                         double *dst = ci1 + gas->block[bdst].offset;
-                        size_t y_elems = (size_t)nb1 * nat;
-                        int use_tile = t1_elems + y_elems <= ABBA_WORKSPACE_MAX_ELEMS &&
+                        size_t y_elems = nb1 <= ABBA_WORKSPACE_MAX_ELEMS / nat ?
+                                         (size_t)nb1 * nat : ABBA_WORKSPACE_MAX_ELEMS;
+                        int use_tile = y_elems <= ABBA_WORKSPACE_MAX_ELEMS - t1_elems &&
                                        reserve_arena(ws, t1_elems + y_elems) == GAS_SUCCESS;
                         double *t1 = ws->arena;
 
